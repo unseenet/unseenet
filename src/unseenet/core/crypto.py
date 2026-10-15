@@ -19,6 +19,7 @@ SIG_PREFIX = "ed25519:"
 PURPOSE_ARTICLE = "UNSEENET-ARTICLE-1"
 PURPOSE_MEMBER = "UNSEENET-MEMBER-1"
 PURPOSE_APPROVAL = "UNSEENET-APPROVAL-1"
+PURPOSE_INBOX_SENDER = "UNSEENET-INBOX-SENDER-1"
 
 
 class CryptoError(ValueError):
@@ -111,6 +112,13 @@ def verify(pk: bytes, purpose: str, message: bytes, signature: bytes) -> bool:
         return True
     except nacl.exceptions.BadSignatureError:
         return False
+
+
+def open_sealed_with(identity: "Identity", box: bytes) -> bytes:
+    try:
+        return identity.open_sealed(box)
+    except nacl.exceptions.CryptoError as exc:
+        raise CryptoError("cannot open sealed box") from exc
 
 
 def seal_to(pk: bytes, message: bytes) -> bytes:

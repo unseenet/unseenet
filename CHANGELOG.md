@@ -7,6 +7,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Protocol
+- Draft UN-RFC 0009 (inbox groups and local groups), 0011 (node
+  information and operator contact) and 0012 (retention, archive nodes
+  and history).
+
+### Added
+- Inbox groups: private messages sealed to the recipient and signed with a
+  one-time key, with a verified sender inside. Every identity gets a
+  personal inbox (`inbox@<fingerprint>`).
+- Local groups that are never replicated between nodes.
+- `LIST UNSEENET.NODEINFO` and an `[operator]` section in `node.toml`.
+- TUI: `m` private message, `o` node information and "write to operator",
+  private replies, inbox at the top of the group list.
+- CLI: `group-create --type inbox --local`.
+
 ## [0.1.0] - 2026-10-15
 
 First public release. Pre-alpha: expect breaking changes.

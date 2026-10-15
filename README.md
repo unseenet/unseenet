@@ -123,7 +123,9 @@ the node to connect to (its `.onion` address). Then:
 | `g` | browse the node's groups and subscribe |
 | `n` / `r` | new post / reply (Ctrl+S sends) |
 | `c` | create a group (open, moderated, channel or closed) |
-| `k` | show your key, so a group owner can invite you |
+| `m` | send a private message - only the recipient can read it |
+| `o` | about this node, and write to its operator |
+| `k` | show your key, so others can write to you or invite you |
 | `i` | invite someone to a closed group you own |
 | `j` | join a group by ID or `unseenet:join` link |
 | `F5` | refresh (also happens every 30 seconds) |
@@ -184,8 +186,9 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 - [ ] Chat view in the TUI
 - [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)
 - [ ] Low-latency chat delivery (UN-RFC 0008)
-- [ ] Inbox groups: private messages, operator contact, moderation submissions (UN-RFC 0009)
-- [ ] Node information and operator contact (UN-RFC 0011)
+- [x] Inbox groups: private messages and operator contact (UN-RFC 0009)
+- [x] Node information and operator contact (UN-RFC 0011)
+- [ ] Moderation submissions via inbox (UN-RFC 0009 section 3)
 - [ ] Archive nodes (UN-RFC 0012)
 - [ ] Node discovery (UN-RFC 0010)
 - [ ] Independent security review

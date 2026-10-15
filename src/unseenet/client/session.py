@@ -15,8 +15,9 @@ from pathlib import Path
 
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
-from ..core.groups import (decrypt_article, encrypted_article, encryption_epoch, make_key_update,
-                           make_manifest, open_envelope, short_group_id, split_group_id)
+from ..core.groups import (INBOX_SCHEME, decrypt_article, encrypted_article, encryption_epoch,
+                           inbox_article, make_key_update, make_manifest, open_envelope,
+                           open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
 from ..core.tor import TorProcess
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -46,6 +47,9 @@ class Message:
     readable: bool = True
     error: str | None = None
     raw: bytes = field(default=b"", repr=False)
+    private: bool = False                 # an inbox message (UN-RFC 0009)
+    sender_key: str | None = None         # verified sender of a private message
+    reply_inbox: str | None = None
 
     @property
     def author_fp(self) -> str:
@@ -217,10 +221,14 @@ class Session:
         self.save()
 
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
-                           min_pow: int = DEFAULT_POW) -> str:
+                           min_pow: int = DEFAULT_POW, local: bool = False,
+                           retention_days: int | None = None) -> str:
         owner = self.identity()
+        if retention_days is None:
+            retention_days = 30 if gtype == "inbox" else 90
         art = make_manifest(owner, name, gtype, title=title, description=description,
-                            min_pow=min_pow, pow_bits=DEFAULT_POW)
+                            min_pow=min_pow, local=local, retention_days=retention_days,
+                            pow_bits=DEFAULT_POW)
         await self._post_article(art)
         entry = {"type": gtype, "owner": True, "keys": {}}
         if gtype == "closed":
@@ -240,6 +248,88 @@ class Session:
         art = make_key_update(self.identity(), group_id, epoch, keys,
                               [crypto.key_from_text(member_key)], grant_only=True, pow_bits=DEFAULT_POW)
         await self._post_article(art)
+
+    # ------------------------------------------------------------------
+    # inboxes and private messages (UN-RFC 0009)
+    # ------------------------------------------------------------------
+    @property
+    def my_inbox(self) -> str:
+        return personal_inbox_id(self.identity().public_key)
+
+    async def ensure_inbox(self) -> str:
+        """Make sure this identity's personal inbox exists on the node and is subscribed."""
+        gid = self.my_inbox
+        entry = self.group_entry(gid)
+        if not entry.get("owner"):
+            async def exists(c: Client) -> bool:
+                try:
+                    await c.group(gid)
+                    return True
+                except NNTPError:
+                    return False
+            if not await self._call(exists):
+                art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
+                                    min_pow=DEFAULT_POW, pow_bits=DEFAULT_POW)
+                await self._post_article(art)
+            entry.update({"type": "inbox", "owner": True})
+        if gid not in self.data["subscribed"]:
+            self.data["subscribed"].insert(0, gid)
+        self.save()
+        return gid
+
+    async def inbox_owner(self, group_id: str) -> bytes:
+        """The owner key of an inbox, from its manifest on the node."""
+        entry = self.group_entry(group_id)
+        if not entry.get("owner_key"):
+            subscribed = group_id in self.data["subscribed"]
+            await self.fetch_group(group_id)        # reads the manifest
+            if not subscribed:                      # do not keep someone else's inbox around
+                self.cache.pop(group_id, None)
+                self._raw.pop(group_id, None)
+                self._high.pop(group_id, None)
+        if not entry.get("owner_key"):
+            raise SessionError("that inbox does not exist on this node")
+        if entry.get("type") != "inbox":
+            raise SessionError("that group is not an inbox")
+        return crypto.key_from_text(entry["owner_key"])
+
+    async def send_private(self, group_id: str, subject: str, body: str, *,
+                           owner_key: bytes | None = None, references: list[str] | None = None,
+                           anonymous: bool = False) -> str:
+        """Send a message to an inbox. Only its owner can read it."""
+        owner_key = owner_key or await self.inbox_owner(group_id)
+        sender = None if anonymous else self.identity()
+        loop = asyncio.get_running_loop()
+        art = await loop.run_in_executor(None, lambda: inbox_article(
+            group_id, owner_key, from_name="" if anonymous else self.display_name(),
+            subject=subject, body=body, sender=sender,
+            reply_inbox=None if anonymous else self.my_inbox,
+            references=references, pow_bits=DEFAULT_POW))
+        return await self._post_article(art)
+
+    def reply_target(self, msg: "Message") -> str | None:
+        """Where a reply to a private message goes."""
+        if msg.reply_inbox:
+            return msg.reply_inbox
+        if msg.sender_key:
+            return personal_inbox_id(crypto.key_from_text(msg.sender_key))
+        return None
+
+    async def node_info(self) -> dict:
+        """UN-RFC 0011 node information, or {} if the node does not offer it."""
+        async def run(c: Client) -> dict:
+            if c.capability("UNSEENET-NODEINFO") is None:
+                return {}
+            lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
+            return json.loads(lines[0]) if lines else {}
+        return await self._call(run)
+
+    def _identity_for_fingerprint(self, fp: str) -> crypto.Identity | None:
+        for entry in self.data["identities"].values():
+            ident = crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
+            if ident.fingerprint == fp:
+                return ident
+        return None
 
     # ------------------------------------------------------------------
     # reading
@@ -352,13 +442,36 @@ class Session:
             msg.date = parse_date(art["Date"])
         except (TypeError, ValueError):
             pass
-        if "Encrypted" in art:
+        if art.get("Encrypted", "").strip() == INBOX_SCHEME:
+            msg.encrypted = msg.private = True
+            self._open_private(msg, art, group_id)
+        elif "Encrypted" in art:
             msg.encrypted = True
             msg.raw = raw
             self._decrypt_into(msg, art, entry)
         else:
             msg.subject, msg.from_name, msg.body = art["Subject"], art["From"], art.body
         return msg
+
+    def _open_private(self, msg: Message, art: Article, group_id: str) -> None:
+        owner = self._identity_for_fingerprint(split_group_id(group_id)[1])
+        if owner is None:
+            msg.readable = False
+            msg.subject = "(private message for the inbox owner)"
+            return
+        try:
+            inner, sender = open_inbox_article(art, owner)
+        except ArticleError as err:
+            msg.readable, msg.error, msg.subject = False, str(err), "(unreadable private message)"
+            return
+        msg.subject, msg.body = inner.get("Subject", ""), inner.body
+        msg.reply_inbox = inner.get("Reply-Inbox")
+        if sender is None:
+            msg.from_name, msg.author_key = "anonymous", ""
+        else:
+            msg.sender_key = crypto.key_to_text(sender)
+            msg.author_key = msg.sender_key          # show the real sender, not the one-time key
+            msg.from_name = inner.get("From", "")
 
     def _decrypt_into(self, msg: Message, art: Article, entry: dict) -> None:
         key_hex = entry["keys"].get(str(encryption_epoch(art)))

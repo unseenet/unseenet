@@ -60,6 +60,7 @@ def load_node_config(path: Path | None):
                       new_groups=node.get("new_groups", "accept"),
                       trusted_owners=node.get("trusted_owners", []),
                       require_peer_auth=node.get("require_peer_auth", False),
+                      operator=data.get("operator", {}),
                       peers=peers)
 
 
@@ -232,6 +233,7 @@ async def c_group_create(app: App, args) -> None:
     owner = app.identity(args.identity)
     art = make_manifest(owner, args.name, args.type, title=args.title or "",
                         description=args.description or "", min_pow=args.min_pow,
+                        local=args.local, retention_days=30 if args.type == "inbox" else 90,
                         pow_bits=DEFAULT_POW)
     await app.post(art)
     group_id = art.group
@@ -345,7 +347,8 @@ def client_main(argv=None) -> None:
     s.add_argument("pattern", nargs="?", default="*")
     s = sub.add_parser("group-create", help="create a group you own")
     s.add_argument("name")
-    s.add_argument("--type", choices=["open", "moderated", "channel", "closed"], default="open")
+    s.add_argument("--type", choices=["open", "moderated", "channel", "closed", "inbox"], default="open")
+    s.add_argument("--local", action="store_true", help="never replicated to other nodes (UN-RFC 0009)")
     s.add_argument("--title")
     s.add_argument("--description")
     s.add_argument("--min-pow", type=int, default=20)

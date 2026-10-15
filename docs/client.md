@@ -73,13 +73,42 @@ After that the connection is reused.
 | ++r++ | Reply to the selected post |
 | ++ctrl+s++ | Send (in the compose window) |
 | ++c++ | Create a group |
-| ++k++ | Show your key (give it to a group owner to be invited) |
+| ++m++ | Send a private message (pre-filled with the selected post's author) |
+| ++o++ | About this node - and write to its operator |
+| ++k++ | Show your key (share it to get private messages or invitations) |
 | ++i++ | Invite someone to a closed group you own |
 | ++j++ | Join a group by ID or `unseenet:join` link |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
 
-Unread posts are marked with ●. Posts in closed groups are marked with ◈.
+Unread posts are marked with ●. Posts in closed groups are marked with ◈,
+private messages with ✉.
+
+## Private messages
+
+Every identity has a personal **inbox**. The client creates it on the
+node the first time you connect, and it is shown at the top of the group
+list as *✉ Private messages*.
+
+- To write to someone, press ++m++ and paste their key (they find it with
+  ++k++). If you have a post by them selected, their key is filled in.
+- Only the recipient can read the message. The node cannot, and it does
+  not even learn who sent it: the message is sealed to the recipient's key
+  and signed with a key that is used only once.
+- Inside the sealed message you prove who you are, so the recipient sees
+  your name marked **verified**.
+- Press ++r++ on a private message to reply privately.
+
+The recipient's inbox has to be on the node you use, or on a node it is
+replicated to.
+
+## Contacting a node's operator
+
+Press ++o++ to see who runs the node and its policy: which groups it
+accepts, how long it keeps posts, the minimum postage and what it logs.
+If the operator has set up a contact inbox, **Write to operator** sends
+them a private message. Use it to report abuse, ask for a group to be
+carried, or just say thanks.
 
 ## Joining a closed group
 

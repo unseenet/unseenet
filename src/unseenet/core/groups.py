@@ -11,10 +11,12 @@ from . import crypto
 from .article import Article, ArticleError, new_article
 from .encoding import DS, H, b32, b64, b64decode
 
-GROUP_TYPES = ("open", "moderated", "channel", "closed")
+GROUP_TYPES = ("open", "moderated", "channel", "closed", "inbox")
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+_-]*(\.[a-z0-9][a-z0-9+_-]*)*$")
 _FP_RE = re.compile(r"^[a-z2-7]{16}$")
 ENC_SCHEME = "xchacha20poly1305"
+INBOX_SCHEME = "sealedbox"
+INBOX_NAME = "inbox"            # personal inbox: inbox@<fp> (UN-RFC 0009, 2.2)
 
 
 # --- group IDs (section 1) -------------------------------------------------
@@ -69,6 +71,8 @@ class Manifest:
     retention_days: int = 90
     title: str = ""
     description: str = ""
+    local: bool = False
+    submissions: str | None = None
     message_id: str = ""
     raw: dict = field(default_factory=dict)
 
@@ -89,6 +93,7 @@ class Manifest:
                 min_pow=int(data.get("min_pow", 0)),
                 retention_days=int(data.get("retention_days", 90)),
                 title=data.get("title", ""), description=data.get("description", ""),
+                local=data.get("local") is True, submissions=data.get("submissions"),
                 message_id=art.message_id, raw=data,
             )
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
@@ -119,6 +124,7 @@ class Manifest:
 def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int = 1,
                   title: str = "", description: str = "", moderators=(), posters=(),
                   min_pow: int = 0, retention_days: int = 90, sealed: str | None = None,
+                  local: bool = False, submissions: str | None = None,
                   pow_bits: int = 18) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
@@ -135,6 +141,10 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["posters"] = list(posters)
     if sealed:
         data["sealed"] = sealed
+    if local:
+        data["local"] = True
+    if submissions:
+        data["submissions"] = submissions
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
@@ -251,11 +261,77 @@ def verify_member_signature(art: Article, member_pk: bytes) -> bool:
     return crypto.verify(member_pk, crypto.PURPOSE_MEMBER, art.canonical(), sig)
 
 
+# --- inbox groups (UN-RFC 0009) ----------------------------------------------
+
+def personal_inbox_id(pk: bytes) -> str:
+    return make_group_id(INBOX_NAME, pk)
+
+
+def _sender_message(group_id: str, outer_key_text: str, inner_canonical: bytes) -> bytes:
+    return (group_id.encode() + b"\x00" + outer_key_text.encode() + b"\x00" + inner_canonical)
+
+
+def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: str, body: str,
+                  sender: crypto.Identity | None = None, reply_inbox: str | None = None,
+                  references: list[str] | None = None, content_type: str | None = None,
+                  pow_bits: int = 18) -> Article:
+    """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3)."""
+    if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
+        raise ValueError("owner key does not match the inbox's group ID")
+    one_time = crypto.Identity.generate()
+    headers = [("From", from_name), ("Subject", subject),
+               ("Content-Type", content_type or "text/plain; charset=utf-8")]
+    if reply_inbox:
+        headers.append(("Reply-Inbox", reply_inbox))
+    if sender is not None:
+        headers.append(("Sender-Key", sender.key_text))
+    inner = Article(headers, body)
+    if sender is not None:
+        msg = _sender_message(group_id, one_time.key_text, inner.canonical())
+        inner.set("Sender-Signature", sender.sign_text(crypto.PURPOSE_INBOX_SENDER, msg))
+    box = crypto.seal_to(owner_pk, inner.to_bytes())
+    outer_body = "\n".join(textwrap.wrap(b64(box), 76)) + "\n"
+    art = new_article(group_id, None, outer_body, references=references,
+                      extra=[("Encrypted", INBOX_SCHEME)])
+    return art.finalize(one_time, pow_bits)
+
+
+def open_inbox_article(art: Article, owner: crypto.Identity) -> tuple[Article, bytes | None]:
+    """Decrypt an inbox article. Returns (inner article, verified sender key or None).
+
+    Raises ArticleError if it cannot be opened or a claimed sender does not verify.
+    """
+    if art.get("Encrypted", "").strip() != INBOX_SCHEME:
+        raise ArticleError("syntax", "not an inbox article")
+    try:
+        blob = crypto.open_sealed_with(owner, b64decode("".join(art.body.split())))
+    except (crypto.CryptoError, ValueError) as exc:
+        raise ArticleError("signature", "cannot decrypt inbox article") from exc
+    inner = Article.from_bytes(blob)
+    if "Sender-Key" not in inner:
+        return inner, None
+    try:
+        sender = crypto.key_from_text(inner["Sender-Key"])
+        sig = crypto.sig_from_text(inner["Sender-Signature"])
+    except (KeyError, crypto.CryptoError) as exc:
+        raise ArticleError("signature", "bad sender signature") from exc
+    unsigned = Article([h for h in inner.headers if h[0].lower() != "sender-signature"], inner.body)
+    msg = _sender_message(art.group, art["Author-Key"], unsigned.canonical())
+    if not crypto.verify(sender, crypto.PURPOSE_INBOX_SENDER, msg, sig):
+        raise ArticleError("signature", "sender signature does not verify")
+    return inner, sender
+
+
 # --- posting rules for ordinary articles (section 5) -------------------------
 
 def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes]) -> None:
     """Raise ArticleError('permission') unless the article may be posted."""
     pk = art.author_key
+    if manifest.type == "inbox":
+        # Anyone may write; nodes can only check the form (UN-RFC 0009, 2.4).
+        if art.get("Encrypted", "").strip() != INBOX_SCHEME:
+            raise ArticleError("permission", "inbox articles must be sealed to the owner")
+        return
     if manifest.type == "closed":
         if "Encrypted" not in art:
             raise ArticleError("permission", "closed group requires encryption")

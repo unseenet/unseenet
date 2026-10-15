@@ -106,3 +106,44 @@ def test_vault_saves_are_private_and_fast(tmp_path):
         v.save()
     assert time.time() - t < 1.0          # no key derivation per save
     assert Vault.open(tmp_path / "v.vault", "pw", **KDF).data["x"] == 1
+
+
+async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    from unseenet.core import crypto
+    from unseenet.core.groups import make_manifest
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    operator = crypto.Identity.generate()
+    contact = make_manifest(operator, "operator", "inbox", local=True, pow_bits=10)
+    node = Node(Store(), NodeConfig(name="testnode", min_pow=8, forward_delay=(0, 0),
+                                    operator={"key": operator.key_text, "contact": contact.group}))
+    node.accept(contact.to_bytes())
+    server = await node.serve("127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.add_node(f"127.0.0.1:{port}")
+    s.save()
+
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        # the personal inbox is created and listed
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        assert app.session.my_inbox in app.groups
+        await pilot.press("o")
+        await pilot.pause(0.5)
+        await pilot.click("#ok")                      # "Write to operator"
+        await pilot.pause(0.4)
+        await pilot.press(*"Hej")
+        await pilot.click("#body")
+        await pilot.press(*"Tak for noden")
+        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: len(node.store.numbers(contact.group)) == 2, 400)
+        raw = node.store.by_number(contact.group, 2)[1]
+        assert b"Tak for noden" not in raw
+        await pilot.press("q")
+    server.close()

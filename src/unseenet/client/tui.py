@@ -25,6 +25,8 @@ from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, Li
 
 from .. import __version__
 from ..core.vault import Vault, VaultError
+from ..core import crypto
+from ..core.groups import personal_inbox_id
 from .session import GroupInfo, Message, Session, SessionError, default_vault_path
 
 REFRESH_SECONDS = 30
@@ -144,15 +146,18 @@ class SetupDialog(Dialog):
 class ComposeDialog(Dialog):
     BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "send", "Send")]
 
-    def __init__(self, group: GroupInfo, subject: str = "", quote: str = "", is_reply: bool = False):
+    def __init__(self, group: GroupInfo, subject: str = "", quote: str = "", is_reply: bool = False,
+                 heading: str | None = None):
         super().__init__()
         self.group, self.subject, self.quote, self.is_reply = group, subject, quote, is_reply
+        self.heading = heading
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog compose"):
             kind = "Reply in" if self.is_reply else "New post in"
             lock = "  ◈ encrypted" if self.group.type == "closed" else ""
-            yield Label(f"{kind} {self.group.short}{lock}", classes="title")
+            yield Label(self.heading or f"{kind} {self.group.short}{lock}", classes="title",
+                        markup=False)
             yield Input(value=self.subject, placeholder="Subject", id="subject")
             yield TextArea(self.quote, id="body", soft_wrap=True)
             yield Label("Ctrl+S to send. Sending takes a moment: the post carries a small "
@@ -187,8 +192,12 @@ class CreateGroupDialog(Dialog):
             yield Select([("Open - anyone can read and post", "open"),
                           ("Moderated - posts need a moderator", "moderated"),
                           ("Channel - only you post", "channel"),
-                          ("Closed - members only, encrypted", "closed")],
+                          ("Closed - members only, encrypted", "closed"),
+                          ("Inbox - anyone writes, only you read", "inbox")],
                          value="open", allow_blank=False, id="type")
+            yield Select([("Replicated to other nodes", "everywhere"),
+                          ("Only on this node (local)", "local")],
+                         value="everywhere", allow_blank=False, id="where")
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
@@ -201,7 +210,8 @@ class CreateGroupDialog(Dialog):
             self.app.notify("A name is required", severity="error")
             return
         self.dismiss((name, self.query_one("#type", Select).value,
-                      self.query_one("#title", Input).value.strip()))
+                      self.query_one("#title", Input).value.strip(),
+                      self.query_one("#where", Select).value == "local"))
 
 
 class InputDialog(Dialog):
@@ -236,6 +246,45 @@ class InfoDialog(Dialog):
             yield Input(value=self.text, id="value")   # an Input so it can be selected and copied
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
+
+
+class NodeInfoDialog(Dialog):
+    """UN-RFC 0011 node information; can start a message to the operator."""
+
+    def __init__(self, info: dict, address: str):
+        super().__init__()
+        self.info, self.address = info, address
+
+    def compose(self) -> ComposeResult:
+        i, p = self.info, self.info.get("policy", {})
+        can_write = bool(i.get("contact") and i.get("operator"))
+        lines = [f"Address:   {self.address}"]
+        if not i:
+            lines.append("This node publishes no information about itself.")
+        else:
+            lines += [f"Name:      {i.get('name', '')}",
+                      f"Software:  {i.get('software', '')}"]
+            if i.get("description"):
+                lines.append(f"About:     {i['description']}")
+            lines += ["",
+                      f"New groups:       {p.get('new_groups', '?')}",
+                      f"Kept for:         {p.get('retention_days', '?')} days",
+                      f"Minimum postage:  {p.get('min_pow', '?')} bits",
+                      f"Logs:             {p.get('logging', '?')}",
+                      "",
+                      ("Operator:  " + i["operator"]) if i.get("operator") else "No operator contact given."]
+        with Vertical(classes="dialog"):
+            yield Label("About this node", classes="title")
+            yield Static("\n".join(lines), markup=False)
+            yield Label("The node states this itself; the protocol does not enforce it.", classes="hint")
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                if can_write:
+                    yield Button("Write to operator", variant="primary", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        self.dismiss(True)
 
 
 class BrowseDialog(Dialog):
@@ -293,6 +342,8 @@ class UnseenetApp(App):
         Binding("c", "create_group", "Create"),
         Binding("i", "invite", "Invite"),
         Binding("j", "join", "Join", show=False),
+        Binding("m", "message", "Message"),
+        Binding("o", "node_info", "Node"),
         Binding("k", "show_key", "My key"),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
@@ -307,6 +358,7 @@ class UnseenetApp(App):
         self.current_group: str | None = None
         self.messages: dict[str, Message] = {}
         self.current_message: Message | None = None
+        self._inbox_ready = False
 
     # --- layout ---
     def compose(self) -> ComposeResult:
@@ -407,6 +459,13 @@ class UnseenetApp(App):
         except (SessionError, OSError, ConnectionError) as exc:
             self.set_status(f"Offline ({exc}) - showing saved posts")
             return
+        if not self._inbox_ready:
+            try:
+                await s.ensure_inbox()
+                self._inbox_ready = True
+                available = {g.group_id: g for g in await s.list_groups()}
+            except (SessionError, OSError, ConnectionError) as exc:
+                self.set_status(f"Could not set up your inbox: {exc}")
         groups = self._groups_from_vault(available)
         self.groups = groups
         for gid in groups:
@@ -431,12 +490,17 @@ class UnseenetApp(App):
         await lv.clear()
         for gid, g in self.groups.items():
             unread = self.session.unread_count(gid)
-            lock = "◈ " if g.type == "closed" else "  "
-            label = Label(f"{lock}{g.short}" + (f" ({unread})" if unread else ""),
+            label = Label(self._group_label(g) + (f" ({unread})" if unread else ""),
                           classes="unread" if unread else "", markup=False)
             await lv.append(ListItem(label, name=gid))
         if index is not None and index < len(self.groups):
             lv.index = index
+
+    def _group_label(self, g: GroupInfo) -> str:
+        if g.group_id == self.session.my_inbox:
+            return "✉ Private messages"
+        mark = {"closed": "◈ ", "inbox": "✉ "}.get(g.type or "", "  ")
+        return f"{mark}{g.short}"
 
     @on(ListView.Selected, "#groups")
     def _group_selected(self, event: ListView.Selected) -> None:
@@ -483,7 +547,9 @@ class UnseenetApp(App):
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
             subject = ("  " * (depth - 1) + "└ " if depth else "") + (m.subject or "(no subject)")
-            if m.encrypted and m.readable:
+            if m.private:
+                subject = "✉ " + subject
+            elif m.encrypted and m.readable:
                 subject = "◈ " + subject
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(f"{m.from_name} ({m.author_fp})"), date,
@@ -499,10 +565,11 @@ class UnseenetApp(App):
         g = self.groups.get(gid)
         total = len(self.session.cache.get(gid, {}))
         unread = self.session.unread_count(gid)
-        kind = {"closed": "◈ closed, encrypted", "moderated": "moderated",
-                "channel": "channel", "open": "open"}.get(g.type if g else None, "")
+        kind = {"closed": "◈ closed, encrypted", "moderated": "moderated", "channel": "channel",
+                "open": "open", "inbox": "✉ inbox - only the owner can read"}.get(g.type if g else None, "")
+        name = self._group_label(g).strip() if g else gid
         self.query_one("#threads-title", Static).update(
-            f"{g.short if g else gid}  ·  {kind}  ·  {total} posts, {unread} unread")
+            f"{name}  ·  {kind}  ·  {total} posts, {unread} unread")
 
     @on(DataTable.RowHighlighted, "#threads")
     def _row(self, event: DataTable.RowHighlighted) -> None:
@@ -511,9 +578,14 @@ class UnseenetApp(App):
             return
         self.current_message = msg
         date = msg.date.astimezone().strftime("%A %d %B %Y %H:%M") if msg.date else ""
-        head = (f"[b]{escape(msg.subject)}[/b]\nFrom: {escape(msg.from_name)}  ·  "
-                f"key {escape(msg.author_key[:24])}…  ({msg.author_fp})\nDate: {date}"
-                + ("\n◈ end-to-end encrypted" if msg.encrypted else ""))
+        if msg.private and msg.readable and not msg.sender_key:
+            who = "anonymous (the sender did not identify themselves)"
+        else:
+            who = (f"{escape(msg.from_name)}  ·  key {escape(msg.author_key[:24])}…  ({msg.author_fp})"
+                   + ("  ·  verified" if msg.sender_key else ""))
+        note = ("\n✉ private message - only you can read it" if msg.private
+                else "\n◈ end-to-end encrypted" if msg.encrypted else "")
+        head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
         self.query_one("#article-head", Static).update(head)
         body = msg.body if msg.readable else (msg.error or msg.subject)
         self.query_one("#article-body", Static).update("\n" + body)
@@ -550,7 +622,72 @@ class UnseenetApp(App):
             return
         subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
         quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in m.body.rstrip().split("\n")) + "\n"
+        if m.private:
+            target = self.session.reply_target(m)
+            if not target:
+                self.notify("Anonymous message - there is nobody to reply to", severity="warning")
+                return
+            key = crypto.key_from_text(m.sender_key) if m.sender_key and not m.reply_inbox else None
+            self.compose_private(target, f"Private reply to {m.from_name}", subject, quote,
+                                 owner_key=key, references=[*m.references, m.message_id])
+            return
         self.compose_post(g, subject, quote, references=[*m.references, m.message_id])
+
+    @work(group="post")
+    async def compose_private(self, target: str, heading: str, subject: str = "", quote: str = "",
+                              owner_key: bytes | None = None,
+                              references: list[str] | None = None) -> None:
+        g = GroupInfo(target, type="inbox")
+        result = await self.push_screen_wait(ComposeDialog(
+            g, subject, quote, bool(references), heading=heading + "  ✉ only they can read it"))
+        if not result:
+            return
+        subject, body = result
+        self.set_status("Sending (computing postage) ...")
+        try:
+            await self.session.send_private(target, subject, body, owner_key=owner_key,
+                                            references=references)
+        except (SessionError, OSError, ConnectionError, ValueError) as exc:
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.notify("Private message sent")
+        self.set_status("")
+
+    @work(group="dialog")
+    async def action_message(self) -> None:
+        m = self.current_message
+        known = (m.sender_key or m.author_key) if m and m.readable else ""
+        if m and m.private and not m.sender_key:
+            known = ""
+        key = await self.push_screen_wait(InputDialog(
+            "Private message", "Paste the recipient's key (they find it with k). "
+            "Only they will be able to read the message.", "ed25519:...", value=known))
+        if not key:
+            return
+        try:
+            owner = crypto.key_from_text(key)
+        except crypto.CryptoError:
+            self.notify("That is not a valid key", severity="error")
+            return
+        self.compose_private(personal_inbox_id(owner), f"Private message to {key[:20]}…",
+                             owner_key=owner)
+
+    @work(group="dialog")
+    async def action_node_info(self) -> None:
+        try:
+            info = await self.session.node_info()
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Cannot reach node: {exc}", severity="error")
+            return
+        if not await self.push_screen_wait(NodeInfoDialog(info, self.session.node or "")):
+            return
+        try:
+            operator = crypto.key_from_text(info["operator"])
+        except (KeyError, crypto.CryptoError):
+            self.notify("The node gives no valid operator key", severity="error")
+            return
+        self.compose_private(info["contact"], f"Message to the operator of {info.get('name', 'this node')}",
+                             owner_key=operator)
 
     @work(group="post")
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
@@ -585,10 +722,10 @@ class UnseenetApp(App):
         result = await self.push_screen_wait(CreateGroupDialog())
         if not result:
             return
-        name, gtype, title = result
+        name, gtype, title, local = result
         self.set_status(f"Creating {name} ...")
         try:
-            gid = await self.session.create_group(name, gtype, title)
+            gid = await self.session.create_group(name, gtype, title, local=local)
         except (SessionError, ValueError, OSError, ConnectionError) as exc:
             self.notify(f"Could not create group: {exc}", severity="error", timeout=8)
             return
@@ -637,7 +774,7 @@ class UnseenetApp(App):
         self.refresh_groups()
 
     def action_show_key(self) -> None:
-        self.push_screen(InfoDialog("Your key - give it to a group owner to be invited",
+        self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
                                     self.session.identity().key_text))
 
     def action_refresh(self) -> None:

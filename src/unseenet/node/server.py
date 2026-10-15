@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .. import __version__
+from ..core.groups import canonical_json
 from ..core import crypto
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import Manifest, check_permitted, parse_key_update
@@ -39,6 +40,8 @@ class NodeConfig:
     peers: list[PeerConfig] = field(default_factory=list)
     forward_delay: tuple[float, float] = (0.0, 60.0)  # UN-RFC 0005, section 5.5
     require_peer_auth: bool = False
+    # UN-RFC 0011: who runs this node and how to reach them
+    operator: dict = field(default_factory=dict)   # key, contact, description, logging
 
 
 def wildmat(pattern: str, text: str) -> bool:
@@ -67,8 +70,12 @@ class Node:
     # Acceptance pipeline
     # ------------------------------------------------------------------
     def accept(self, raw: bytes, source: str | None = None,
-               now: datetime | None = None) -> Article:
-        """Validate and store an article. Raises ArticleError with an RFC 0005 reason."""
+               now: datetime | None = None, from_peer: bool = False) -> Article:
+        """Validate and store an article. Raises ArticleError with an RFC 0005 reason.
+
+        ``from_peer`` is true for articles pushed by another node (IHAVE/TAKETHIS),
+        authenticated or not; ``source`` names the peer when it authenticated.
+        """
         art = Article.from_bytes(raw)
         validate_structure(art, raw_size=len(raw), max_size=self.config.max_size, now=now)
         if self.store.seen(art.message_id):
@@ -81,6 +88,8 @@ class Node:
         if not is_manifest:
             if manifest is None:
                 raise ArticleError("group", "group not carried")
+            if manifest.local and from_peer:
+                raise ArticleError("group", "local group: never accepted from peers")
             retention = min(self.config.retention_days, manifest.retention_days)
             if parse_date(art["Date"]) < now - timedelta(days=retention):
                 raise ArticleError("date", "older than retention")
@@ -92,7 +101,7 @@ class Node:
             raise ArticleError("postage", f"need {required} bits")
 
         if is_manifest:
-            self._accept_manifest(art, manifest, raw)
+            self._accept_manifest(art, manifest, raw, from_peer)
         elif ctl:
             self._accept_control(art, manifest, raw)
         else:
@@ -103,11 +112,14 @@ class Node:
         log.info("accepted %s in %s", art.message_id, art.group)
         return art
 
-    def _accept_manifest(self, art: Article, current: Manifest | None, raw: bytes) -> None:
+    def _accept_manifest(self, art: Article, current: Manifest | None, raw: bytes,
+                         from_peer: bool = False) -> None:
         m = Manifest.from_article(art)
+        if m.local and from_peer:
+            raise ArticleError("group", "local group: never accepted from peers")
         if current is not None:
-            if m.type != current.type or m.owner != current.owner:
-                raise ArticleError("permission", "manifest may not change type or owner")
+            if m.type != current.type or m.owner != current.owner or m.local != current.local:
+                raise ArticleError("permission", "manifest may not change type, owner or locality")
         elif not self._allow_new_group(m):
             raise ArticleError("group", "node does not accept this new group")
         self.store.add(art, raw)
@@ -160,12 +172,29 @@ class Node:
             raise ArticleError("permission", "article was cancelled")
 
     def _enqueue(self, art: Article, source: str | None) -> None:
+        manifest = self.store.manifest(art.group)
+        if manifest is not None and manifest.local:
+            return                       # local groups never leave this node (UN-RFC 0009, 4)
         lo, hi = self.config.forward_delay
         for peer in self.config.peers:
             if peer.name != source and wildmat(peer.groups, art.group):
                 self.store.enqueue(peer.name, art.message_id, time.time() + random.uniform(lo, hi))
         for event in self._listeners:
             event.set()
+
+    def node_info(self) -> dict:
+        cfg = self.config
+        op = cfg.operator or {}
+        info = {"v": 1, "name": cfg.name, "software": f"unseenet {__version__}",
+                "policy": {"new_groups": cfg.new_groups, "min_pow": cfg.min_pow,
+                           "retention_days": cfg.retention_days, "max_size": cfg.max_size,
+                           "archive": False,
+                           "logging": op.get("logging", "accepted articles only, no reading activity")}}
+        for key in ("operator", "contact", "description"):
+            value = op.get("key" if key == "operator" else key)
+            if value:
+                info[key] = value
+        return info
 
     # ------------------------------------------------------------------
     # ONNTP server
@@ -221,7 +250,7 @@ class Session:
             if cmd == "LIST":
                 cmd = "LIST_" + (args[0].upper() if args else "ACTIVE")
                 args = args[1:]
-            handler = getattr(self, "cmd_" + cmd.lower(), None)
+            handler = getattr(self, "cmd_" + cmd.lower().replace(".", "_"), None)
             if handler is None:
                 self.send("500 unknown command")
                 continue
@@ -233,7 +262,8 @@ class Session:
         self.send("101 capability list follows")
         for cap in ("VERSION 2", "READER", "POST", "IHAVE", "STREAMING", "AUTHINFO USER",
                     "LIST ACTIVE NEWSGROUPS", "NEWNEWS", "UNSEENET 1",
-                    f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}"):
+                    f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
+                    "UNSEENET-NODEINFO"):
             self.send(cap)
         self.send(".")
 
@@ -276,6 +306,12 @@ class Session:
         for gid, _, _, desc in self.node.store.groups():
             if wildmat(pattern, gid):
                 self.send(f"{gid}\t{desc}")
+        self.send(".")
+
+    async def cmd_list_unseenet_nodeinfo(self, args):
+        """UN-RFC 0011: who runs this node and its policy."""
+        self.send("215 node information follows")
+        self.send(canonical_json(self.node.node_info()))
         self.send(".")
 
     # --- group navigation ---
@@ -370,9 +406,9 @@ class Session:
         self.send(".")
 
     # --- posting ---
-    def _try_accept(self, raw: bytes) -> ArticleError | None:
+    def _try_accept(self, raw: bytes, from_peer: bool = False) -> ArticleError | None:
         try:
-            self.node.accept(raw, source=self.peer)
+            self.node.accept(raw, source=self.peer, from_peer=from_peer)
             return None
         except ArticleError as err:
             log.debug("rejected: %s", err)
@@ -405,7 +441,7 @@ class Session:
         self.send("335 send it")
         await self.writer.drain()
         raw = await read_block(self.reader, self.node.config.max_size + 1024)
-        self.send("235 transferred" if self._try_accept(raw) is None else "437 rejected")
+        self.send("235 transferred" if self._try_accept(raw, from_peer=True) is None else "437 rejected")
 
     async def cmd_check(self, args):
         if not args or not self._peer_allowed():
@@ -420,4 +456,4 @@ class Session:
         if self.node.config.require_peer_auth and not self.peer:
             self.send(f"439 {args[0]}")
             return
-        self.send(f"{239 if self._try_accept(raw) is None else 439} {args[0]}")
+        self.send(f"{239 if self._try_accept(raw, from_peer=True) is None else 439} {args[0]}")

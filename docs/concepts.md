@@ -49,6 +49,11 @@ change. The owner chooses the group's type when creating it:
 | **Moderated** | anyone | moderators, or with a moderator's approval | no |
 | **Channel** | anyone | the owner and chosen posters | no |
 | **Closed** | members only | members only | yes, end to end |
+| **Inbox** | the owner only | anyone | yes, sealed to the owner |
+
+A group can also be **local**: it then exists on one node only and is
+never replicated. That is used for things like the contact inbox of a
+node's operator.
 
 ## Closed groups
 
@@ -66,6 +71,27 @@ secret.
 When a member is removed, the owner starts a new **epoch** with a new
 secret. Removed members keep what they already received - no system can
 take that back - but cannot read anything new.
+
+## Inboxes and private messages
+
+An inbox is the opposite of a closed group: anyone can write, only the
+owner can read. Each message is sealed to the owner's key, so nodes see
+neither the content nor - because the outer message is signed with a key
+used only once - who sent it. Inside, the sender can sign with their real
+key so the owner knows who wrote.
+
+Every identity has a personal inbox called `inbox@<fingerprint>`, so
+knowing someone's key is enough to write to them. Inboxes are also how
+you contact a node's operator, and how posts reach the moderators of a
+moderated group.
+
+## How long posts travel
+
+A post only travels between nodes while it is younger than the group's
+and the node's retention period (90 days by default). After that, nodes
+refuse it, so old posts never circulate, however long the network runs.
+Archive nodes that keep history longer are being specified in
+[UN-RFC 0012](spec/un-rfc-0012.md).
 
 ## Postage
 

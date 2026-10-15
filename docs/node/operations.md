@@ -9,6 +9,29 @@ sudo systemctl restart unseenet-node
 
 The onion address does not change on restart or update.
 
+## Operator contact
+
+Give your users a private way to reach you. You need an identity of your
+own - your normal one, or a separate "operator" identity - in a client
+vault on your own computer.
+
+1. Create a **local inbox** called `operator` on your node, with the
+   identity you want to receive messages with. With the command line client:
+   ```bash
+   unseenet --vault operator.vault id-new operator --display "Node operator"
+   unseenet --vault operator.vault node-add <your-node>.onion
+   unseenet --vault operator.vault group-create operator --type inbox --local
+   unseenet --vault operator.vault whoami          # shows your key
+   ```
+   `--local` keeps it on this node: messages to you are never replicated.
+2. Add an `[operator]` section to `node.toml` with your key and the
+   group ID it printed (see [Configuration](configuration.md#operator)),
+   and restart the node.
+3. Read your messages with `unseenet-tui --vault operator.vault`.
+
+Only your identity can read the messages. The node stores them encrypted,
+so not even someone who seizes the node can read them.
+
 ## Backup
 
 To move or restore a node with the **same onion address**, you need:

@@ -48,6 +48,25 @@ password = "shared-secret"
 This only affects **new** groups. Groups the node already carries keep
 working, and posts in them are checked against the group's own rules.
 
+## `[operator]`
+
+Who runs the node and how to reach them ([UN-RFC 0011](../spec/un-rfc-0011.md)).
+Clients show it when the user presses ++o++. All keys are optional.
+
+| Key | Meaning |
+|-----|---------|
+| `key` | Your identity key (`ed25519:...`) as operator |
+| `contact` | Group ID of your contact inbox, see [Operations](operations.md#operator-contact) |
+| `description` | A few words about the node |
+| `logging` | What the node logs (shown to users) |
+
+```toml
+[operator]
+key = "ed25519:det5dxev..."
+contact = "operator@ph5fc5hop5232qsz"
+description = "Andreas' test node in Denmark"
+```
+
 ## `[[peer]]`
 
 One section per peer. See [Peering](peering.md).
