@@ -7,6 +7,7 @@ encrypted vault (UN-RFC 0007); articles are cached in memory only.
 from __future__ import annotations
 
 import asyncio
+import re
 import base64
 import json
 from dataclasses import dataclass, field
@@ -365,8 +366,35 @@ class Session:
         except (OSError, ConnectionError, SessionError):
             node = DEFAULT_POW
         if group_min is None and group_id:
-            group_min = int(self.manifest_data(group_id).get("min_pow", 0))
+            manifest = self.manifest_data(group_id)
+            # A group joined before manifests were kept has none cached yet; the
+            # network default is the safe guess (the node will say if it wants more).
+            group_min = int(manifest.get("min_pow", 0)) if manifest else DEFAULT_POW
         return max(node, group_min or 0)
+
+    async def _post_with_postage(self, group_id: str, build) -> Article:
+        """Build with ``build(bits)`` and post; if the node asks for more postage
+        ("need N bits"), rebuild once with N and post again. Returns the posted article."""
+        bits = await self.required_pow(group_id)
+        loop = asyncio.get_running_loop()
+        art = await loop.run_in_executor(None, lambda: build(bits))
+        try:
+            await self._post_article(art)
+            return art
+        except SessionError as exc:
+            m = re.search(r"need (\d+) bits", str(exc))
+            if not m or int(m.group(1)) <= bits or int(m.group(1)) > 28:
+                raise
+            need = int(m.group(1))
+        self.status(f"Node wants {need} bits of postage, computing again ...")
+        art = await loop.run_in_executor(None, lambda: build(need))
+        await self._post_article(art)
+        entry = self.data["groups"].get(group_id)
+        if entry is not None:                      # remember it for next time
+            entry.setdefault("manifest", {})
+            if int(entry["manifest"].get("min_pow", 0)) < need:
+                entry["manifest"]["min_pow"] = need
+        return art
 
     async def remove_group(self, group_id: str, reason: str = "") -> None:
         """UN-RFC 0013: remove a group you own from the whole network. Final."""
@@ -456,14 +484,12 @@ class Session:
             owner_key = owner_key or owner_from_manifest
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
-        bits = await self.required_pow(group_id)
-        loop = asyncio.get_running_loop()
-        art = await loop.run_in_executor(None, lambda: inbox_article(
+        art = await self._post_with_postage(group_id, lambda bits: inbox_article(
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, pow_bits=bits))
-        msgid = await self._post_article(art)
+        msgid = art.message_id
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
                              # where it falls among received messages: dates are rounded to
@@ -760,22 +786,22 @@ class Session:
                    references: list[str] | None = None) -> str:
         author = self.identity()
         entry = self.group_entry(group_id)
-        bits = await self.required_pow(group_id)
-        loop = asyncio.get_running_loop()
         if entry.get("type") == "closed":
             if not entry["keys"]:
                 raise SessionError("you are not a member of this closed group")
             epoch = max(int(e) for e in entry["keys"])
             keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
-            # postage is CPU work; keep the UI responsive
-            art = await loop.run_in_executor(None, lambda: encrypted_article(
-                group_id, epoch, keys, author, from_name=self.display_name(),
-                subject=subject, body=body, references=references, pow_bits=bits))
+
+            def build(bits):                       # postage is CPU work: runs in a thread
+                return encrypted_article(
+                    group_id, epoch, keys, author, from_name=self.display_name(),
+                    subject=subject, body=body, references=references, pow_bits=bits)
         else:
-            art = new_article(group_id, subject, body, from_name=self.display_name(),
-                              references=references)
-            await loop.run_in_executor(None, lambda: art.finalize(author, bits))
-        msgid = await self._post_article(art)
+            def build(bits):
+                art = new_article(group_id, subject, body, from_name=self.display_name(),
+                                  references=references)
+                return art.finalize(author, bits)
+        msgid = (await self._post_with_postage(group_id, build)).message_id
         marks = self.data["read"].setdefault(group_id, [])   # your own posts are read
         marks.append(msgid)
         self.save()

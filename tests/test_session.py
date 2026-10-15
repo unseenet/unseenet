@@ -155,3 +155,32 @@ async def test_group_rules_and_updates(tmp_path, monkeypatch):
     for s in (owner, reader):
         await s.close()
     server.close()
+
+
+async def test_post_without_cached_manifest_meets_group_postage(tmp_path, monkeypatch):
+    """A group joined before manifests were cached (or whose manifest was never
+    fetched) must still get enough postage: the group asks more than the node."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def session(name):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        s.new_identity(name, name.title())
+        s.add_node(addr)
+        return s
+
+    owner, reader = session("owner"), session("reader")
+    gid = await owner.create_group("strict", "open", min_pow=11)
+    reader.subscribe(gid)
+    await reader.fetch_group(gid)
+    reader.data["groups"][gid].pop("manifest", None)   # as in an older vault
+    await reader.post(gid, "Hej", "Det virker\n")
+    assert int(reader.manifest_data(gid)["min_pow"]) == 11   # learned from the node
+    await reader.post(gid, "Igen", "Og nu i første forsøg\n")
+    bodies = [m.body for m in await owner.fetch_group(gid)]
+    assert "Det virker\n" in bodies and "Og nu i første forsøg\n" in bodies
+    for s in (owner, reader):
+        await s.close()
+    server.close()
