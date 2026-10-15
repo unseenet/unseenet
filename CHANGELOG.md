@@ -41,6 +41,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   messages are kept encrypted next to the vault.
 
 ### Fixed
+- TUI: an error in a background task (refreshing, fetching, saving) could
+  close the whole program. Such errors are now shown as a message and
+  written to `unseenet-tui-errors.log` next to the vault.
+- TUI: the group list jumped back to the top on every refresh. The cursor
+  and scroll position now stay where you left them.
+- TUI: selecting a group that had just been removed could fail.
 - TUI: creating a group with an invalid name closed the dialog and lost what
   was typed. Names are now checked as you type, with the reason shown, and
   the dialog stays open until the name is valid.

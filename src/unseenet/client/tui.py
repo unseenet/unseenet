@@ -12,9 +12,12 @@ import argparse
 import asyncio
 import os
 import re
+import traceback
+from datetime import datetime
 from pathlib import Path
 
 from textual import on, work
+from textual.worker import Worker, WorkerState
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from rich.text import Text
@@ -515,7 +518,7 @@ class UnseenetApp(App):
             pass
 
     # --- startup ---
-    @work(exclusive=True, group="startup")
+    @work(exclusive=True, group="startup", exit_on_error=False)
     async def start(self) -> None:
         passphrase = os.environ.get("UNSEENET_PASSPHRASE")
         error = ""
@@ -575,7 +578,7 @@ class UnseenetApp(App):
             self._render_threads()
         self.set_status(f"{loaded} saved posts available offline - connecting ...")
 
-    @work(exclusive=True, group="groups")
+    @work(exclusive=True, group="groups", exit_on_error=False)
     async def refresh_groups(self) -> None:
         s = self.session
         try:
@@ -613,6 +616,10 @@ class UnseenetApp(App):
         tree.show_root = False
         def folder_key(node) -> str:
             return str(node.label).split(" (")[0].split(".*")[0]
+        cursor = tree.cursor_node
+        keep = (cursor.data if cursor is not None and cursor.data is not None
+                else ("folder", folder_key(cursor)) if cursor is not None else None)
+        scroll_y = tree.scroll_y
         was_open = {folder_key(n) for n in tree.root.children if n.children and n.is_expanded}
         known = {folder_key(n) for n in tree.root.children if n.children}
         tree.clear()
@@ -625,11 +632,12 @@ class UnseenetApp(App):
             return text
 
         select = None
+        nodes: dict = {}
         groups = list(self.groups.values())
         mine = [g for g in groups if g.group_id == self.session.my_inbox]
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
-            select = node if g.group_id == self.current_group else select
+            nodes[g.group_id] = node
         contacts = self.session.contacts()
         if contacts:
             total = sum(self.session.unread_from(k) for k, _ in contacts)
@@ -637,13 +645,13 @@ class UnseenetApp(App):
             if total:
                 folder.stylize("bold")
             cnode = tree.root.add(folder, expand="Contacts" in was_open or "Contacts" not in known)
+            nodes[("folder", "Contacts")] = cnode
             for key, name in contacts:
                 unread = self.session.unread_from(key)
                 text = Text(f"• {name}" + (f" ({unread})" if unread else ""))
                 if unread:
                     text.stylize("bold")
-                leaf = cnode.add_leaf(text, data=CONTACT + key)
-                select = leaf if self.current_group == CONTACT + key else select
+                nodes[CONTACT + key] = cnode.add_leaf(text, data=CONTACT + key)
         for top, items in by_hierarchy([g for g in groups if g not in mine]):
             parent = tree.root
             if top:
@@ -652,11 +660,18 @@ class UnseenetApp(App):
                 if unread:
                     folder.stylize("bold")
                 parent = tree.root.add(folder, expand=top in was_open or top not in known)
+                nodes[("folder", top)] = parent
             for g in items:
-                node = parent.add_leaf(label(g), data=g.group_id)
-                select = node if g.group_id == self.current_group else select
-        if select is not None:
-            tree.move_cursor(select)
+                nodes[g.group_id] = parent.add_leaf(label(g), data=g.group_id)
+        # Put the cursor back where it was (or on the current group); the tree computes
+        # line numbers on its next refresh, so do it after that.
+        select = nodes.get(keep) or nodes.get(self.current_group)
+
+        def restore() -> None:
+            if select is not None and select.line >= 0:
+                tree.move_cursor(select, animate=False)
+            tree.scroll_to(y=scroll_y, animate=False)
+        self.call_after_refresh(restore)
 
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
@@ -669,7 +684,7 @@ class UnseenetApp(App):
         if isinstance(event.node.data, str):
             self.select_group(event.node.data)
 
-    @work(exclusive=True, group="fetch")
+    @work(exclusive=True, group="fetch", exit_on_error=False)
     async def select_group(self, gid: str) -> None:
         self.current_group = gid
         self.current_message = None
@@ -681,19 +696,23 @@ class UnseenetApp(App):
             self._render_threads()
             self.query_one("#threads", DataTable).focus()
             return
-        self.query_one("#threads-title", Static).update(f"{self.groups[gid].short} - loading ...")
+        g = self.groups.get(gid) or GroupInfo(gid)
+        self.query_one("#threads-title", Static).update(f"{g.short} - loading ...")
         try:
             await self.session.fetch_group(gid)
         except SessionError as exc:
             if "removed by its owner" in str(exc):
-                self.notify(f"{self.groups[gid].short} was removed by its owner. "
+                self.notify(f"{g.short} was removed by its owner. "
                             "Use 'Unsubscribe from group' (Ctrl+P) to forget it.",
                             severity="warning", timeout=10)
             else:
                 self.set_status(f"{exc}")
         except (OSError, ConnectionError) as exc:
             self.set_status(f"Offline ({exc}) - showing saved posts")
-        self.groups[gid].type = self.session.group_entry(gid).get("type")
+        if self.current_group != gid:            # the user moved on, or the group was removed
+            return
+        if gid in self.groups:
+            self.groups[gid].type = self.session.group_entry(gid).get("type")
         self._render_threads()
         self.query_one("#threads", DataTable).focus()
 
@@ -801,7 +820,7 @@ class UnseenetApp(App):
             table.update_cell(msg.message_id, "flag", " ")
             self._render_title()
 
-    @work(exclusive=True, group="save")
+    @work(exclusive=True, group="save", exit_on_error=False)
     async def _save_soon(self) -> None:
         await asyncio.sleep(2)
         self.session.save()
@@ -862,7 +881,7 @@ class UnseenetApp(App):
             return
         self.compose_post(g, subject, quote, references=[*m.references, m.message_id])
 
-    @work(group="post")
+    @work(group="post", exit_on_error=False)
     async def compose_private(self, target: str, heading: str, subject: str = "", quote: str = "",
                               owner_key: bytes | None = None,
                               references: list[str] | None = None) -> None:
@@ -885,7 +904,7 @@ class UnseenetApp(App):
         if self._current_contact():
             self._render_threads()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_message(self) -> None:
         m = self.current_message
         known = (m.sender_key or m.author_key) if m and m.readable else ""
@@ -904,7 +923,7 @@ class UnseenetApp(App):
         self.compose_private(personal_inbox_id(owner), f"Private message to {key[:20]}…",
                              owner_key=owner)
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_node_info(self) -> None:
         try:
             info = await self.session.node_info()
@@ -921,7 +940,7 @@ class UnseenetApp(App):
         self.compose_private(info["contact"], f"Message to the operator of {info.get('name', 'this node')}",
                              owner_key=operator)
 
-    @work(group="post")
+    @work(group="post", exit_on_error=False)
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
                            references: list[str] | None = None) -> None:
         result = await self.push_screen_wait(ComposeDialog(g, subject, quote, bool(references),
@@ -938,7 +957,7 @@ class UnseenetApp(App):
         self.notify("Sent")
         self.select_group(g.group_id)
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_browse(self) -> None:
         self.set_status("Fetching group list ...")
         try:
@@ -950,7 +969,7 @@ class UnseenetApp(App):
         await self.push_screen_wait(BrowseDialog(groups))
         self.refresh_groups()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_create_group(self) -> None:
         result = await self.push_screen_wait(CreateGroupDialog())
         if not result:
@@ -966,7 +985,7 @@ class UnseenetApp(App):
         self.current_group = gid
         self.refresh_groups()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_invite(self) -> None:
         g = self._need_group()
         if not g:
@@ -988,7 +1007,7 @@ class UnseenetApp(App):
         await self.push_screen_wait(InfoDialog(
             "Invitation sent - share this with them", f"unseenet:join?g={g.group_id}&n={self.session.node}"))
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_join(self) -> None:
         value = await self.push_screen_wait(InputDialog(
             "Join a group", "Paste a group ID or an unseenet:join link.", "dk.snak@... or unseenet:join?g=..."))
@@ -1009,6 +1028,23 @@ class UnseenetApp(App):
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
                                     self.session.identity().key_text))
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """A failing background task is reported and logged, never fatal."""
+        if event.state != WorkerState.ERROR:
+            return
+        err = event.worker.error
+        log = self.vault_path.resolve().parent / "unseenet-tui-errors.log"
+        try:
+            with open(log, "a") as f:
+                f.write(f"--- {datetime.now().isoformat(timespec='seconds')} "
+                        f"in {event.worker.name}\n")
+                f.write("".join(traceback.format_exception(type(err), err, err.__traceback__)))
+            where = f" - details in {log.name}"
+        except OSError:
+            where = ""
+        self.notify(f"Something went wrong ({type(err).__name__}: {err}){where}",
+                    severity="error", timeout=10)
 
     def get_system_commands(self, screen):
         """Everything the keys do is also in the command palette (Ctrl+P)."""
@@ -1049,7 +1085,7 @@ class UnseenetApp(App):
         for title, help_text, callback in commands:
             yield SystemCommand(title, help_text, callback)
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_add_contact(self) -> None:
         m = self.current_message
         mine = self.session.identity().key_text
@@ -1075,7 +1111,7 @@ class UnseenetApp(App):
         await self._render_groups()
         self._render_threads()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_rename_contact(self) -> None:
         key = self._current_contact()
         if not key:
@@ -1088,7 +1124,7 @@ class UnseenetApp(App):
             await self._render_groups()
             self._render_title()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_remove_contact(self) -> None:
         key = self._current_contact()
         if not key:
@@ -1104,7 +1140,7 @@ class UnseenetApp(App):
         await self._render_groups()
         self.select_group(self.session.my_inbox)
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_signature(self) -> None:
         text = await self.push_screen_wait(SignatureDialog(self.session.signature_template()))
         if text is None:
@@ -1116,7 +1152,7 @@ class UnseenetApp(App):
             return
         self.notify("Signature saved" if text.strip() else "Signature removed")
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_unsubscribe(self) -> None:
         g = self._need_group()
         if not g:
@@ -1135,7 +1171,7 @@ class UnseenetApp(App):
         self.notify(f"Unsubscribed from {g.short}")
         self.refresh_groups()
 
-    @work(group="dialog")
+    @work(group="dialog", exit_on_error=False)
     async def action_remove_group(self) -> None:
         g = self._need_group()
         if not g:

@@ -266,3 +266,57 @@ async def test_tui_contact_conversation(tmp_path, monkeypatch):
         assert rows[0].startswith("Sonia (datter) ✓") and rows[1] == "You"
         await pilot.press("q")
     server.close()
+
+
+async def _app_with_groups(tmp_path, monkeypatch, names):
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
+    await s.ensure_inbox()
+    for n in names:
+        await s.create_group(n, "open", min_pow=10)
+    await s.close()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    return UnseenetApp(vault_path), server
+
+
+async def test_tui_tree_cursor_survives_refresh(tmp_path, monkeypatch):
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak", "dk.teknik", "alt.test"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 4, 300)
+        await pilot.pause(0.5)
+        tree = app.query_one("#groups")
+        tree.focus()
+        target = next(n for n in tree.root.children if n.children)   # the dk.* folder
+        leaf = target.children[-1]
+        tree.move_cursor(leaf)
+        await pilot.pause(0.2)
+        before = tree.cursor_node.data
+        app.refresh_groups()
+        await pilot.pause(1.5)
+        assert tree.cursor_node is not None and tree.cursor_node.data == before
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_background_error_is_reported_not_fatal(tmp_path, monkeypatch):
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+
+        async def boom(gid):
+            raise RuntimeError("simulated failure")
+        app.session.fetch_group = boom
+        app.select_group(next(iter(app.groups)))
+        await pilot.pause(0.8)
+        assert app.return_code is None and app.is_running            # still alive
+        log = tmp_path / "unseenet-tui-errors.log"
+        assert "simulated failure" in log.read_text()
+        await pilot.press("q")
+    server.close()
