@@ -107,9 +107,13 @@ The protocol is designed to be extended without breaking old software:
 | 0005 | ONNTP: Transport and Peering over Onion Services | Standards Track |
 | 0006 | Proof-of-Work Postage                         | Standards Track |
 | 0007 | Protecting Data at Rest                       | Informational   |
+| 0009 | Inbox Groups and Local Groups                 | Standards Track |
+| 0011 | Node Information and Operator Contact         | Standards Track |
+| 0012 | Retention, Archive Nodes and History          | Standards Track |
 
 Reserved for future work: 0008 (low-latency chat delivery),
-0009 (moderation submission queue), 0010 (node discovery).
+0010 (node discovery). The moderation submission queue first reserved
+as 0009 is covered by UN-RFC 0009 section 3.
 
 # 7. Author's Address
 

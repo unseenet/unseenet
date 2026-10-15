@@ -95,6 +95,9 @@ authority; this code is just one implementation.
 | [0005](rfc/un-rfc-0005.md) | ONNTP: Transport and Peering over Onion Services |
 | [0006](rfc/un-rfc-0006.md) | Proof-of-Work Postage |
 | [0007](rfc/un-rfc-0007.md) | Protecting Data at Rest |
+| [0009](rfc/un-rfc-0009.md) | Inbox Groups and Local Groups *(draft)* |
+| [0011](rfc/un-rfc-0011.md) | Node Information and Operator Contact *(draft)* |
+| [0012](rfc/un-rfc-0012.md) | Retention, Archive Nodes and History *(draft)* |
 
 Want to change the protocol or build something compatible? Read
 [UN-RFC 0000](rfc/un-rfc-0000.md) for how.
@@ -181,7 +184,9 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 - [ ] Chat view in the TUI
 - [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)
 - [ ] Low-latency chat delivery (UN-RFC 0008)
-- [ ] Moderation submission queue (UN-RFC 0009)
+- [ ] Inbox groups: private messages, operator contact, moderation submissions (UN-RFC 0009)
+- [ ] Node information and operator contact (UN-RFC 0011)
+- [ ] Archive nodes (UN-RFC 0012)
 - [ ] Node discovery (UN-RFC 0010)
 - [ ] Independent security review
 - [ ] A second, independent implementation
