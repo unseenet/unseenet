@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<path d="M14,44 Q64,4 114,44" fill="none" stroke="#e8f3ef" stroke-opacity=".28" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 9"/>
+<line x1="9.4" y1="72.9" x2="36.2" y2="84.9" stroke="#34d399" stroke-opacity=".55" stroke-width="2.5"/>
+<line x1="36.2" y1="84.9" x2="64.0" y2="92.0" stroke="#34d399" stroke-opacity=".55" stroke-width="2.5"/>
+<line x1="64.0" y1="92.0" x2="91.8" y2="84.9" stroke="#34d399" stroke-opacity=".55" stroke-width="2.5"/>
+<line x1="91.8" y1="84.9" x2="118.6" y2="72.9" stroke="#34d399" stroke-opacity=".55" stroke-width="2.5"/>
+<line x1="26.0" y1="51.6" x2="9.4" y2="72.9" stroke="#e8f3ef" stroke-width="5" stroke-linecap="round"/>
+<line x1="45.0" y1="59.4" x2="36.2" y2="84.9" stroke="#e8f3ef" stroke-width="5" stroke-linecap="round"/>
+<line x1="64.0" y1="62.0" x2="64.0" y2="92.0" stroke="#e8f3ef" stroke-width="5" stroke-linecap="round"/>
+<line x1="83.0" y1="59.4" x2="91.8" y2="84.9" stroke="#e8f3ef" stroke-width="5" stroke-linecap="round"/>
+<line x1="102.0" y1="51.6" x2="118.6" y2="72.9" stroke="#e8f3ef" stroke-width="5" stroke-linecap="round"/>
+<path d="M14.0,44.0 L16.5,45.8 L19.0,47.4 L21.5,49.0 L24.0,50.5 L26.5,51.9 L29.0,53.2 L31.5,54.4 L34.0,55.5 L36.5,56.6 L39.0,57.5 L41.5,58.4 L44.0,59.1 L46.5,59.8 L49.0,60.4 L51.5,60.9 L54.0,61.3 L56.5,61.6 L59.0,61.8 L61.5,62.0 L64.0,62.0 L66.5,62.0 L69.0,61.8 L71.5,61.6 L74.0,61.3 L76.5,60.9 L79.0,60.4 L81.5,59.8 L84.0,59.1 L86.5,58.4 L89.0,57.5 L91.5,56.6 L94.0,55.5 L96.5,54.4 L99.0,53.2 L101.5,51.9 L104.0,50.5 L106.5,49.0 L109.0,47.4 L111.5,45.8 L114.0,44.0" fill="none" stroke="#e8f3ef" stroke-width="7" stroke-linecap="round"/>
+<circle cx="9.4" cy="72.9" r="5" fill="#34d399"/>
+<circle cx="36.2" cy="84.9" r="5" fill="#34d399"/>
+<circle cx="64.0" cy="92.0" r="6.5" fill="#34d399"/>
+<circle cx="91.8" cy="84.9" r="5" fill="#34d399"/>
+<circle cx="118.6" cy="72.9" r="5" fill="#34d399"/>
+</svg>

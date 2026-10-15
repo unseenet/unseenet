@@ -5,6 +5,8 @@
   </picture>
 </p>
 
+**📖 Documentation: [andlo.github.io/unseenet](https://andlo.github.io/unseenet/)**
+
 **Usenet, unseen.** A decentralized, encrypted discussion network in the
 spirit of old Usenet and BBSes — groups and chats you can reach by
 running one program from a USB stick, carried between independently run
@@ -135,7 +137,9 @@ curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-
 ```
 
 It installs Tor and the node as a systemd service and prints the node's
-`.onion` address. To peer with a friend's node, add a `[[peer]]` section
+`.onion` address. The full guide - configuration, peering, backup,
+security and troubleshooting - is in the
+[documentation](https://andlo.github.io/unseenet/node/install/). To peer with a friend's node, add a `[[peer]]` section
 to `/home/unseenet/node.toml` on both nodes (same `password`, each using
 the other's `name` and address) and restart with
 `systemctl restart unseenet-node`.
@@ -184,7 +188,7 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 
 Ideas, criticism and code are welcome. Protocol changes go through the
 UN-RFC process; code changes through ordinary pull requests. See
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for architecture and design
+[docs/development.md](docs/development.md) for architecture and design
 decisions.
 
 ## På dansk

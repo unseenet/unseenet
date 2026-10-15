@@ -1,0 +1,76 @@
+site_name: Unseenet
+site_description: Usenet, unseen - a decentralized, encrypted discussion network over Tor onion services
+site_url: https://andlo.github.io/unseenet/
+repo_url: https://github.com/andlo/unseenet
+repo_name: andlo/unseenet
+edit_uri: edit/main/docs/
+copyright: Code Apache-2.0 · Specification and logo CC BY 4.0
+
+theme:
+  name: material
+  logo: img/icon.svg
+  favicon: img/favicon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: green
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: green
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  # No Google Fonts: a privacy project should not make readers' browsers call Google.
+  font: false
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Using the client: client.md
+      - Concepts: concepts.md
+  - Running a node:
+      - Installation: node/install.md
+      - Configuration: node/configuration.md
+      - Peering: node/peering.md
+      - Operations: node/operations.md
+      - Your responsibility: node/responsibility.md
+  - Specification:
+      - The UN-RFC series: spec/index.md
+      - "0000 Process": spec/un-rfc-0000.md
+      - "0001 Architecture": spec/un-rfc-0001.md
+      - "0002 Article format": spec/un-rfc-0002.md
+      - "0003 Identities and crypto": spec/un-rfc-0003.md
+      - "0004 Groups": spec/un-rfc-0004.md
+      - "0005 ONNTP transport": spec/un-rfc-0005.md
+      - "0006 Proof-of-work postage": spec/un-rfc-0006.md
+      - "0007 Data at rest": spec/un-rfc-0007.md
+  - Development: development.md

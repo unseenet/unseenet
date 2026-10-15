@@ -22,7 +22,7 @@ about the implementation and the reasoning around it.
 
 ```
 rfc/                    The UN-RFC series (normative spec)
-docs/DEVELOPMENT.md     This file
+docs/development.md     This file
 src/unseenet/
   core/
     encoding.py         b32/b64, H(), DS()                  UN-RFC 0003 §1
