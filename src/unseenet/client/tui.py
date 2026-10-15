@@ -37,6 +37,8 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
                       default_vault_path, split_signature)
 
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
+REPO_URL = "https://github.com/andlo/unseenet"
+DOCS_URL = "https://andlo.github.io/unseenet/"
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
 
 
@@ -472,6 +474,45 @@ class EditGroupDialog(Dialog):
                       "view": view, "low_latency": fast, "min_pow": min_pow})
 
 
+class AboutDialog(Dialog):
+    """F1: what this program is, and where the project lives."""
+
+    def compose(self) -> ComposeResult:
+        text = (
+            f"Unseenet {__version__}\n"
+            "\n"
+            "Discussion groups the old Usenet way, carried over Tor. Nodes, run by\n"
+            "anyone, replicate groups to each other; this client talks to one of\n"
+            "them and keeps everything in a single encrypted vault, so it can live\n"
+            "on a USB stick and leave nothing behind.\n"
+            "\n"
+            "Every post is signed, paid for with a little proof of work instead of\n"
+            "an account, and closed groups and private messages are encrypted end\n"
+            "to end. No central server, no company, no ads.\n"
+            "\n"
+            "The protocol is written down as open UN-RFCs, so anyone can build a\n"
+            "compatible node or client. Free software, Apache License 2.0.\n"
+            "\n"
+            f"Source:         {REPO_URL}\n"
+            f"Documentation:  {DOCS_URL}"
+        )
+        with Vertical(classes="dialog"):
+            yield Label("About Unseenet", classes="title")
+            yield Static(text, markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button("GitHub", id="repo")
+                yield Button("Documentation", variant="primary", id="docs")
+
+    @on(Button.Pressed, "#repo")
+    def _repo(self) -> None:
+        self.app.open_url(REPO_URL)
+
+    @on(Button.Pressed, "#docs")
+    def _docs(self) -> None:
+        self.app.open_url(DOCS_URL)
+
+
 class NodeInfoDialog(Dialog):
     """UN-RFC 0011 node information; can start a message to the operator."""
 
@@ -590,6 +631,7 @@ class UnseenetApp(App):
         Binding("v", "toggle_view", "Chat/threads"),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
+        Binding("f1", "about", "About"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -1135,6 +1177,9 @@ class UnseenetApp(App):
         self.compose_private(personal_inbox_id(owner), f"Private message to {key[:20]}…",
                              owner_key=owner)
 
+    def action_about(self) -> None:
+        self.push_screen(AboutDialog())
+
     @work(group="dialog", exit_on_error=False)
     async def action_node_info(self) -> None:
         try:
@@ -1295,6 +1340,8 @@ class UnseenetApp(App):
     def get_system_commands(self, screen):
         """Everything the keys do is also in the command palette (Ctrl+P)."""
         yield from super().get_system_commands(screen)
+        yield SystemCommand("About Unseenet", "The client, the project, source and documentation  [F1]",
+                            self.action_about)
         if self.session is None:
             return
         commands = [

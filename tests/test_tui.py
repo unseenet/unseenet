@@ -343,6 +343,8 @@ async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
     app = UnseenetApp(tmp_path / "me.vault")
     async with app.run_test(size=(140, 40)) as pilot:
+        # unlocking runs in the background; selecting before it is done is a race
+        assert await wait_for(pilot, lambda: app.session is not None and gid in app.groups, 300)
         app.select_group(gid)
         # the rules are shown the first time
         assert await wait_for(pilot, lambda: isinstance(app.screen, GroupInfoDialog), 300)
@@ -390,4 +392,30 @@ async def test_tui_chat_updates_by_push(tmp_path, monkeypatch):
             "Friend: Er du der?" in str(ln.text) for ln in app.query_one("#chat-log").lines), 100)
         await pilot.press("q")
     await friend.close()
+    server.close()
+
+
+async def test_tui_about_screen(tmp_path, monkeypatch):
+    from unseenet.client.tui import AboutDialog, DOCS_URL, REPO_URL
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF))
+    s.new_identity("andreas", "Andreas")
+    s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    opened = []
+    app = UnseenetApp(vault_path)
+    monkeypatch.setattr(app, "open_url", lambda url, **kw: opened.append(url))
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None)
+        await pilot.press("f1")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, AboutDialog))
+        await pilot.click("#repo")
+        await pilot.click("#docs")
+        await pilot.pause(0.1)
+        assert opened == [REPO_URL, DOCS_URL]
+        await pilot.press("escape")
+        assert await wait_for(pilot, lambda: not isinstance(app.screen, AboutDialog))
     server.close()
