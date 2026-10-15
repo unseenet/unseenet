@@ -52,6 +52,10 @@ Then restart both: `sudo systemctl restart unseenet-node`.
 4. Bob's node checks the post like any other and, if accepted, queues it
    for **its** peers.
 
+In groups whose owner chose **fast delivery** (chat groups,
+[UN-RFC 0008](../spec/un-rfc-0008.md)), step 3 has no random delay: the
+post is offered to peers at once.
+
 Duplicate posts are recognized by their content-derived ID, so a post
 never loops, however the nodes are connected.
 

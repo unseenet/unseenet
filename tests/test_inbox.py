@@ -187,3 +187,43 @@ async def test_contacts_and_conversation(tmp_path, monkeypatch):
     assert again.contact_name(b_key) == "Min datter"
     await b.close()
     server.close()
+
+
+async def test_push_and_low_latency(tmp_path, monkeypatch):
+    """UN-RFC 0008: watchers hear about new articles at once; chat groups skip the delay."""
+    import asyncio
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=BITS, forward_delay=(30, 60),
+                                    peers=[PeerConfig(name="p", address="127.0.0.1:1")]))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    a = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    a.new_identity("a", "A"); a.add_node(addr)
+    b = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    b.new_identity("b", "B"); b.add_node(addr)
+    chat = await a.create_group("chat.venner", "open", view="chat", low_latency=True, min_pow=9)
+    slow = await a.create_group("dk.snak", "open", min_pow=9)
+
+    heard = []
+    got = asyncio.Event()
+
+    async def on_new(gid, msgid):
+        heard.append((gid, msgid))
+        got.set()
+    watcher = asyncio.create_task(b.watch(on_new))
+    await asyncio.sleep(0.3)
+    msgid = await a.post(chat, "hej", "Hej!\n")
+    await asyncio.wait_for(got.wait(), timeout=3)
+    assert (chat, msgid) in heard
+
+    import time
+    queue = dict(node.store.db.execute("SELECT message_id, not_before FROM peer_queue WHERE peer='p'"))
+    assert queue[msgid] <= time.time() + 0.5            # chat: forwarded at once
+    slow_id = await a.post(slow, "hej", "Hej\n")
+    queue = dict(node.store.db.execute("SELECT message_id, not_before FROM peer_queue WHERE peer='p'"))
+    assert queue[slow_id] >= time.time() + 25            # discussion: random delay kept
+
+    watcher.cancel()
+    for s in (a, b):
+        await s.close()
+    server.close()

@@ -40,6 +40,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   directions, ordered as sent and received. Copies of sent private
   messages are kept encrypted next to the vault.
 
+- Chat (UN-RFC 0008, draft): chat view for any group or conversation
+  (`v`), with an input line; owners can mark a group as a chat and enable
+  fast delivery (no random forwarding delay). Push: `XUN-WATCH` on nodes,
+  and the TUI keeps a second connection so new posts appear at once.
+- Postage now follows the group and node minimums instead of a fixed
+  20 bits, so cheap chat groups are actually faster to post in.
+- Group rules (UN-RFC 0014, draft): a charter in the signed manifest,
+  shown on first visit and after changes (`?`); owners edit title,
+  description, rules, view and delivery from the TUI.
+
 ### Fixed
 - TUI: an error in a background task (refreshing, fetching, saving) could
   close the whole program. Such errors are now shown as a message and

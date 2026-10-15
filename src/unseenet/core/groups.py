@@ -73,6 +73,9 @@ class Manifest:
     description: str = ""
     local: bool = False
     submissions: str | None = None
+    rules: str = ""                      # UN-RFC 0014
+    view: str = "threads"                # UN-RFC 0008
+    low_latency: bool = False            # UN-RFC 0008
     message_id: str = ""
     raw: dict = field(default_factory=dict)
 
@@ -94,6 +97,8 @@ class Manifest:
                 retention_days=int(data.get("retention_days", 90)),
                 title=data.get("title", ""), description=data.get("description", ""),
                 local=data.get("local") is True, submissions=data.get("submissions"),
+                rules=str(data.get("rules", "")), view=data.get("view", "threads"),
+                low_latency=data.get("low_latency") is True,
                 message_id=art.message_id, raw=data,
             )
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
@@ -125,6 +130,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   title: str = "", description: str = "", moderators=(), posters=(),
                   min_pow: int = 0, retention_days: int = 90, sealed: str | None = None,
                   local: bool = False, submissions: str | None = None,
+                  rules: str = "", view: str | None = None, low_latency: bool = False,
                   pow_bits: int = 18) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
@@ -145,6 +151,25 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["local"] = True
     if submissions:
         data["submissions"] = submissions
+    if rules:
+        data["rules"] = rules
+    if view:
+        data["view"] = view
+    if low_latency:
+        data["low_latency"] = True
+    return manifest_article(owner, group_id, data, pow_bits)
+
+
+MAX_RULES = 8192
+VIEWS = ("threads", "chat")
+
+
+def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18) -> Article:
+    """Sign a manifest from its JSON fields (used for new and updated manifests)."""
+    if len(data.get("rules", "")) > MAX_RULES:
+        raise ValueError(f"rules are limited to {MAX_RULES} characters")
+    if data.get("view", "threads") not in VIEWS:
+        raise ValueError("view must be 'threads' or 'chat'")
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)

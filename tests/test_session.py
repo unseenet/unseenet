@@ -1,5 +1,7 @@
 """Client session against a local node: open and closed groups, invites, read marks."""
 
+import pytest
+
 import unseenet.client.session as sess
 from unseenet.client.session import Session
 from unseenet.core.store import Store
@@ -111,3 +113,45 @@ def test_signatures(tmp_path):
         raise AssertionError("five lines accepted")
     except sess.SessionError:
         pass
+
+
+async def test_group_rules_and_updates(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def session(name):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        s.new_identity(name, name.title())
+        s.add_node(addr)
+        return s
+
+    owner, reader = session("owner"), session("reader")
+    gid = await owner.create_group("dk.snak", "open", title="Snak", rules="Vær søde ved hinanden.",
+                                   min_pow=10)
+    reader.subscribe(gid)
+    await reader.fetch_group(gid)
+    assert reader.manifest_data(gid)["rules"] == "Vær søde ved hinanden."
+    assert reader.rules_unseen(gid)
+    reader.mark_rules_seen(gid)
+    assert not reader.rules_unseen(gid)
+
+    # only the owner can change it; a change raises the serial and shows the rules again
+    with pytest.raises(sess.SessionError):
+        await reader.update_group(gid, rules="hacked")
+    new = await owner.update_group(gid, rules="Vær søde. Ingen reklamer.", view="chat")
+    assert new["serial"] == 2 and new["type"] == "open" and new["title"] == "Snak"
+    await reader.fetch_group(gid)
+    assert reader.manifest_data(gid)["rules"] == "Vær søde. Ingen reklamer."
+    assert reader.manifest_data(gid)["view"] == "chat" and reader.rules_unseen(gid)
+    with pytest.raises(sess.SessionError):
+        await owner.update_group(gid, type="closed")      # type can never change
+
+    # postage follows the group: a cheap chat group, a node with its own minimum
+    chat = await owner.create_group("chat.venner", "open", view="chat", low_latency=True, min_pow=9)
+    assert await owner.required_pow(chat) == 9
+    assert await owner.required_pow(gid) == 10
+    for s in (owner, reader):
+        await s.close()
+    server.close()

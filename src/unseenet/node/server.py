@@ -59,6 +59,26 @@ class Node:
         self.store = store
         self.config = config or NodeConfig()
         self._listeners: list[asyncio.Event] = []
+        self._watchers: list[tuple[str, asyncio.Queue]] = []   # UN-RFC 0008 section 2
+
+    def watch(self, pattern: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        self._watchers.append((pattern, queue))
+        return queue
+
+    def unwatch(self, queue: asyncio.Queue) -> None:
+        self._watchers = [(p, q) for p, q in self._watchers if q is not queue]
+
+    def _notify_watchers(self, art: Article) -> None:
+        number = self.store.number_of(art.message_id)
+        if number is None:
+            return
+        for pattern, queue in self._watchers:
+            if wildmat(pattern, art.group):
+                try:
+                    queue.put_nowait((art.group, number, art.message_id))
+                except asyncio.QueueFull:
+                    pass                      # a slow watcher catches up by polling
 
     def subscribe(self) -> asyncio.Event:
         """An event that is set whenever a new article is queued for peers."""
@@ -115,6 +135,7 @@ class Node:
             check_permitted(art, manifest, self.store.epochs(art.group))
             self.store.add(art, raw)
         self._enqueue(art, source)
+        self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
         return art
 
@@ -209,6 +230,8 @@ class Node:
         if not force and manifest is not None and manifest.local:
             return                       # local groups never leave this node (UN-RFC 0009, 4)
         lo, hi = self.config.forward_delay
+        if manifest is not None and manifest.low_latency:
+            lo = hi = 0.0                # chat groups: no random delay (UN-RFC 0008, 3.2)
         for peer in self.config.peers:
             if peer.name != source and wildmat(peer.groups, art.group):
                 self.store.enqueue(peer.name, art.message_id, time.time() + random.uniform(lo, hi))
@@ -283,7 +306,7 @@ class Session:
             if cmd == "LIST":
                 cmd = "LIST_" + (args[0].upper() if args else "ACTIVE")
                 args = args[1:]
-            handler = getattr(self, "cmd_" + cmd.lower().replace(".", "_"), None)
+            handler = getattr(self, "cmd_" + cmd.lower().replace(".", "_").replace("-", "_"), None)
             if handler is None:
                 self.send("500 unknown command")
                 continue
@@ -296,7 +319,7 @@ class Session:
         for cap in ("VERSION 2", "READER", "POST", "IHAVE", "STREAMING", "AUTHINFO USER",
                     "LIST ACTIVE NEWSGROUPS", "NEWNEWS", "UNSEENET 1",
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
-                    "UNSEENET-NODEINFO"):
+                    "UNSEENET-NODEINFO", "UNSEENET-WATCH"):
             self.send(cap)
         self.send(".")
 
@@ -340,6 +363,38 @@ class Session:
             if wildmat(pattern, gid):
                 self.send(f"{gid}\t{desc}")
         self.send(".")
+
+    async def cmd_xun_watch(self, args):
+        """UN-RFC 0008: tell the client about new articles until it sends DONE."""
+        pattern = args[0] if args else "*"
+        queue = self.node.watch(pattern)
+        self.send("290 watching")
+        await self.writer.drain()
+        line_task = asyncio.ensure_future(self.reader.readline())
+        get_task = asyncio.ensure_future(queue.get())
+        try:
+            while True:
+                done, _ = await asyncio.wait({line_task, get_task}, timeout=300,
+                                             return_when=asyncio.FIRST_COMPLETED)
+                if not done:
+                    self.send("293 keepalive")
+                if get_task in done:
+                    group, number, msgid = get_task.result()
+                    self.send(f"291 {group} {number} {msgid}")
+                    get_task = asyncio.ensure_future(queue.get())
+                await self.writer.drain()
+                if line_task in done:
+                    line = line_task.result()
+                    if not line:
+                        raise ConnectionError("client went away while watching")
+                    if line.strip().upper() == b"DONE":
+                        self.send("292 done")
+                        return
+                    line_task = asyncio.ensure_future(self.reader.readline())
+        finally:
+            self.node.unwatch(queue)
+            for task in (line_task, get_task):
+                task.cancel()
 
     async def cmd_list_unseenet_nodeinfo(self, args):
         """UN-RFC 0011: who runs this node and its policy."""

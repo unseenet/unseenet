@@ -23,19 +23,25 @@ from textual.binding import Binding
 from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.markup import escape
-from textual.screen import ModalScreen
-from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, Select, Static,
-                             TextArea, Tree)
+from textual.screen import ModalScreen, Screen
+from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, RichLog, Select,
+                             Static, TextArea, Tree)
 
 from .. import __version__
 from ..core.vault import Vault, VaultError
+from ..nntp import NNTPError
 from ..core import crypto
 from ..core.groups import personal_inbox_id
+from . import session as _session_module
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
                       default_vault_path, split_signature)
 
-REFRESH_SECONDS = 30
+REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
+
+
+def sess_default_pow() -> int:
+    return _session_module.DEFAULT_POW
 
 
 def group_name_problem(name: str) -> str | None:
@@ -77,6 +83,9 @@ Screen { background: $surface; }
 #threads { height: 45%; }
 #article { height: 1fr; padding: 0 1; border-top: solid $primary-darken-2; }
 #article-head { color: $text-muted; }
+#chat { height: 1fr; display: none; }
+#chat-log { height: 1fr; padding: 0 1; }
+#chat-input { margin: 0 1; }
 #status { height: 1; background: $boost; color: $text-muted; padding: 0 1; }
 .unread { text-style: bold; }
 
@@ -186,10 +195,10 @@ class ComposeDialog(Dialog):
     BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "send", "Send")]
 
     def __init__(self, group: GroupInfo, subject: str = "", quote: str = "", is_reply: bool = False,
-                 heading: str | None = None, signature: str = ""):
+                 heading: str | None = None, signature: str = "", has_rules: bool = False):
         super().__init__()
         self.group, self.subject, self.quote, self.is_reply = group, subject, quote, is_reply
-        self.heading, self.signature = heading, signature
+        self.heading, self.signature, self.has_rules = heading, signature, has_rules
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog compose"):
@@ -201,8 +210,9 @@ class ComposeDialog(Dialog):
             text = self.quote + (("\n" if self.quote else "\n\n") + SIG_SEPARATOR + self.signature
                                  if self.signature else "")
             yield TextArea(text, id="body", soft_wrap=True)
-            yield Label("Ctrl+S to send. Sending takes a moment: the post carries a small "
-                        "proof-of-work.", classes="hint")
+            yield Label(("This group has rules - press Esc and ? to read them.  " if self.has_rules
+                         else "") + "Ctrl+S to send. Sending takes a moment: the post carries a "
+                        "small proof-of-work.", classes="hint")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Send", variant="primary", id="ok")
@@ -258,6 +268,12 @@ class SignatureDialog(Dialog):
         self.dismiss(text)
 
 
+DELIVERY_CHOICES = [("Discussion - shown as threads", "threads"),
+                    ("Chat - shown as a conversation", "chat"),
+                    ("Chat, fast delivery - gives up some anonymity", "fastchat")]
+DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": ("chat", True)}
+
+
 GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
                    "e.g. dk.snak or andlo.test. The first part is the hierarchy.")
 
@@ -277,10 +293,16 @@ class CreateGroupDialog(Dialog):
             yield Select([("Replicated to other nodes", "everywhere"),
                           ("Only on this node (local)", "local")],
                          value="everywhere", allow_blank=False, id="where")
+            yield Select(DELIVERY_CHOICES, value="threads", allow_blank=False, id="view")
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
+            yield Label("Rules (optional) - shown to people before they post:", classes="hint")
+            yield TextArea("", id="rules", soft_wrap=True)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Create", variant="primary", id="ok")
+
+    def on_mount(self) -> None:
+        self.query_one("#rules", TextArea).styles.height = 6
 
     @on(Input.Changed, "#name")
     def _check_name(self, event: Input.Changed) -> None:
@@ -298,9 +320,12 @@ class CreateGroupDialog(Dialog):
             self.app.notify(f"Group name: {problem}", severity="error")
             self.query_one("#name", Input).focus()
             return
-        self.dismiss((name, self.query_one("#type", Select).value,
-                      self.query_one("#title", Input).value.strip(),
-                      self.query_one("#where", Select).value == "local"))
+        view, fast = DELIVERY[self.query_one("#view", Select).value]
+        self.dismiss({"name": name, "gtype": self.query_one("#type", Select).value,
+                      "title": self.query_one("#title", Input).value.strip(),
+                      "local": self.query_one("#where", Select).value == "local",
+                      "rules": self.query_one("#rules", TextArea).text.strip(),
+                      "view": view, "low_latency": fast})
 
 
 class InputDialog(Dialog):
@@ -356,6 +381,95 @@ class ConfirmDialog(Dialog):
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
         self.dismiss(True)
+
+
+class GroupInfoDialog(Dialog):
+    """Title, type, owner and rules of a group (UN-RFC 0014)."""
+
+    def __init__(self, gid: str, data: dict, owner_label: str, can_edit: bool, first_time: bool):
+        super().__init__()
+        self.gid, self.data, self.owner_label = gid, data, owner_label
+        self.can_edit, self.first_time = can_edit, first_time
+
+    def compose(self) -> ComposeResult:
+        d = self.data
+        kinds = {"open": "open - anyone can read and post", "moderated": "moderated",
+                 "channel": "channel - only chosen people post", "closed": "closed - members only, encrypted",
+                 "inbox": "inbox - anyone writes, only the owner reads"}
+        lines = [f"Group:     {self.gid}",
+                 f"Type:      {kinds.get(d.get('type', ''), d.get('type', '?'))}",
+                 f"Owner:     {self.owner_label}",
+                 f"Shown as:  {d.get('view', 'threads')}"
+                 + ("   ⚡ fast delivery (less anonymity about who posts from where)"
+                    if d.get("low_latency") else ""),
+                 f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
+                 + ("     Local to one node" if d.get("local") else ""),
+                 f"Version:   {d.get('serial', 1)}"]
+        if d.get("description"):
+            lines += ["", d["description"]]
+        with Vertical(classes="dialog"):
+            yield Label(("Before you post - the rules of " if self.first_time and d.get("rules")
+                         else "About ") + (d.get("title") or self.gid.rpartition("@")[0]),
+                        classes="title", markup=False)
+            yield Static("\n".join(lines), markup=False)
+            yield Label("Rules" if d.get("rules") else "This group has no rules.", classes="title")
+            if d.get("rules"):
+                with VerticalScroll(id="rules-view"):
+                    yield Static(d["rules"], markup=False)
+            with Horizontal(classes="buttons"):
+                if self.can_edit:
+                    yield Button("Edit group", id="edit")
+                yield Button("OK" if self.first_time else "Close", variant="primary", id="cancel")
+
+    def on_mount(self) -> None:
+        if self.data.get("rules"):
+            self.query_one("#rules-view").styles.max_height = 14
+
+    @on(Button.Pressed, "#edit")
+    def _edit(self) -> None:
+        self.dismiss("edit")
+
+
+class EditGroupDialog(Dialog):
+    """Owner: change title, description, rules, view and delivery (a new manifest)."""
+
+    def __init__(self, data: dict):
+        super().__init__()
+        self.data = data
+
+    def compose(self) -> ComposeResult:
+        d = self.data
+        current = "fastchat" if d.get("low_latency") else d.get("view", "threads")
+        with Vertical(classes="dialog compose"):
+            yield Label(f"Edit {d.get('name', '')} - every node gets the new version", classes="title",
+                        markup=False)
+            yield Input(value=d.get("title", ""), placeholder="Title", id="title")
+            yield Input(value=d.get("description", ""), placeholder="Description (one paragraph)",
+                        id="description")
+            yield Select(DELIVERY_CHOICES, value=current, allow_blank=False, id="view")
+            yield Input(value=str(d.get("min_pow", 0)), placeholder="Minimum postage in bits (16-24)",
+                        id="min_pow")
+            yield Label("Rules - shown to people before their first post:", classes="hint")
+            yield TextArea(d.get("rules", ""), id="body", soft_wrap=True)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Publish", variant="primary", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        try:
+            min_pow = int(self.query_one("#min_pow", Input).value.strip() or 0)
+        except ValueError:
+            self.app.notify("Postage must be a number", severity="error")
+            return
+        if not 0 <= min_pow <= 28:
+            self.app.notify("Postage between 0 and 28 bits, please", severity="error")
+            return
+        view, fast = DELIVERY[self.query_one("#view", Select).value]
+        self.dismiss({"title": self.query_one("#title", Input).value.strip(),
+                      "description": self.query_one("#description", Input).value.strip(),
+                      "rules": self.query_one("#body", TextArea).text.strip(),
+                      "view": view, "low_latency": fast, "min_pow": min_pow})
 
 
 class NodeInfoDialog(Dialog):
@@ -472,6 +586,8 @@ class UnseenetApp(App):
         Binding("k", "show_key", "My key"),
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
+        Binding("question_mark", "group_info", "About group", show=False),
+        Binding("v", "toggle_view", "Chat/threads"),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
         Binding("q", "quit", "Quit"),
@@ -500,6 +616,9 @@ class UnseenetApp(App):
                 with VerticalScroll(id="article"):
                     yield Static("", id="article-head")
                     yield Static("", id="article-body", markup=False)
+                with Vertical(id="chat"):
+                    yield RichLog(id="chat-log", wrap=True, markup=False, highlight=False)
+                    yield Input(placeholder="Write a message - Enter sends", id="chat-input")
         yield Static("", id="status", markup=False)
         yield Footer()
 
@@ -590,6 +709,7 @@ class UnseenetApp(App):
             try:
                 await s.ensure_inbox()
                 self._inbox_ready = True
+                self.watch_loop()
                 available = {g.group_id: g for g in await s.list_groups()}
             except (SessionError, OSError, ConnectionError) as exc:
                 self.set_status(f"Could not set up your inbox: {exc}")
@@ -694,7 +814,7 @@ class UnseenetApp(App):
             except (SessionError, OSError, ConnectionError) as exc:
                 self.set_status(f"Offline ({exc}) - showing saved messages")
             self._render_threads()
-            self.query_one("#threads", DataTable).focus()
+            self.query_one("#chat-input" if self.view_of(gid) == "chat" else "#threads").focus()
             return
         g = self.groups.get(gid) or GroupInfo(gid)
         self.query_one("#threads-title", Static).update(f"{g.short} - loading ...")
@@ -714,7 +834,10 @@ class UnseenetApp(App):
         if gid in self.groups:
             self.groups[gid].type = self.session.group_entry(gid).get("type")
         self._render_threads()
-        self.query_one("#threads", DataTable).focus()
+        self.query_one("#chat-input" if self.view_of(gid) == "chat" else "#threads").focus()
+        if self.session.rules_unseen(gid) and isinstance(self.screen, Screen) \
+                and not isinstance(self.screen, ModalScreen):
+            self.action_group_info(first_time=True)
 
     # --- threads ---
     def _threaded(self, msgs: list[Message]) -> list[tuple[Message, int]]:
@@ -754,10 +877,97 @@ class UnseenetApp(App):
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
+        mode = self.view_of(gid)
+        self._apply_view(mode)
+        if mode == "chat":
+            chron = [m for m, _ in rows] if gid and gid.startswith(CONTACT) \
+                else sorted((m for m, _ in rows), key=lambda m: m.number)
+            self._render_chat(chron)
+            return
         if keep in self.messages:
             table.move_cursor(row=table.get_row_index(keep))
         elif gid and gid.startswith(CONTACT) and rows:
             table.move_cursor(row=len(rows) - 1)                  # newest at the bottom
+
+    # --- chat view (UN-RFC 0008 section 5) ---
+    def view_of(self, gid: str | None) -> str:
+        if not gid or gid == self.session.my_inbox:
+            return "threads"
+        views = self.session.data.setdefault("views", {})
+        if gid in views:
+            return views[gid]
+        if gid.startswith(CONTACT):
+            return "chat"
+        return self.session.manifest_data(gid).get("view", "threads")
+
+    def _apply_view(self, mode: str) -> None:
+        chat = mode == "chat"
+        self.query_one("#threads").display = not chat
+        self.query_one("#article").display = not chat
+        self.query_one("#chat").display = chat
+
+    def _render_chat(self, msgs: list[Message]) -> None:
+        log = self.query_one("#chat-log", RichLog)
+        log.clear()
+        mine = self.session.identity().key_text
+        changed = False
+        for m in msgs:
+            own = m.author_key == mine
+            who = "You" if own else (self.session.contact_name(m.author_key) or m.from_name or "anonymous")
+            when = m.date.astimezone().strftime("%H:%M") if m.date else "     "
+            text = split_signature(m.body)[0].rstrip() if m.readable else f"({m.subject})"
+            line = Text(f"{when} ", style="dim")
+            line.append(who, style="bold green" if own else "bold")
+            if not own and self.session.contact_name(m.author_key):
+                line.append(" ✓", style="green")
+            line.append(": " + text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
+            log.write(line)
+            if not self.session.is_read(m):
+                self.session.mark_read(m, save=False)
+                changed = True
+        if changed:
+            self._save_soon()
+
+    def action_toggle_view(self) -> None:
+        gid = self.current_group
+        if not gid or gid == self.session.my_inbox:
+            self.notify("Private messages are always shown as a list; open a contact for a chat",
+                        severity="warning")
+            return
+        new = "threads" if self.view_of(gid) == "chat" else "chat"
+        self.session.data.setdefault("views", {})[gid] = new
+        self.session.save()
+        self._render_threads()
+        if new == "chat":
+            self.query_one("#chat-input").focus()
+
+    @on(Input.Submitted, "#chat-input")
+    def _chat_submit(self, event: Input.Submitted) -> None:
+        text = event.value.strip()
+        if not text or not self.current_group:
+            return
+        event.input.value = ""
+        self.send_chat(self.current_group, text)
+
+    @work(group="post", exit_on_error=False)
+    async def send_chat(self, gid: str, text: str) -> None:
+        subject = text.split("\n", 1)[0][:60] + ("…" if len(text) > 60 else "")
+        self.set_status("Sending (computing postage) ...")
+        try:
+            if gid.startswith(CONTACT):
+                key = gid[len(CONTACT):]
+                owner = crypto.key_from_text(key)
+                await self.session.send_private(personal_inbox_id(owner), subject, text, owner_key=owner)
+            else:
+                await self.session.post(gid, subject, text)
+                await self.session.fetch_group(gid)
+        except (SessionError, OSError, ConnectionError, ValueError) as exc:
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            self.query_one("#chat-input", Input).value = text       # give the text back
+            return
+        self.set_status("")
+        if self.current_group == gid:
+            self._render_threads()
 
     def _who(self, m: Message) -> str:
         if m.from_name == "You" and m.author_key == self.session.identity().key_text:
@@ -784,8 +994,10 @@ class UnseenetApp(App):
         kind = {"closed": "◈ closed, encrypted", "moderated": "moderated", "channel": "channel",
                 "open": "open", "inbox": "✉ inbox - only the owner can read"}.get(g.type if g else None, "")
         name = self._group_label(g).strip() if g else gid
+        fast = "  ·  ⚡ fast delivery" if self.session.manifest_data(gid).get("low_latency") else ""
+        rules = "  ·  ? rules" if self.session.manifest_data(gid).get("rules") else ""
         self.query_one("#threads-title", Static).update(
-            f"{name}  ·  {kind}  ·  {total} posts, {unread} unread")
+            f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}")
 
     @on(DataTable.RowHighlighted, "#threads")
     def _row(self, event: DataTable.RowHighlighted) -> None:
@@ -943,8 +1155,9 @@ class UnseenetApp(App):
     @work(group="post", exit_on_error=False)
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
                            references: list[str] | None = None) -> None:
-        result = await self.push_screen_wait(ComposeDialog(g, subject, quote, bool(references),
-                                                           signature=self.session.signature()))
+        result = await self.push_screen_wait(ComposeDialog(
+            g, subject, quote, bool(references), signature=self.session.signature(),
+            has_rules=bool(self.session.manifest_data(g.group_id).get("rules"))))
         if not result:
             return
         subject, body = result
@@ -974,10 +1187,12 @@ class UnseenetApp(App):
         result = await self.push_screen_wait(CreateGroupDialog())
         if not result:
             return
-        name, gtype, title, local = result
-        self.set_status(f"Creating {name} ...")
+        self.set_status(f"Creating {result['name']} ...")
         try:
-            gid = await self.session.create_group(name, gtype, title, local=local)
+            gid = await self.session.create_group(
+                result["name"], result["gtype"], result["title"], local=result["local"],
+                rules=result["rules"], view=result["view"], low_latency=result["low_latency"],
+                min_pow=16 if result["low_latency"] else sess_default_pow())
         except (SessionError, ValueError, OSError, ConnectionError) as exc:
             self.notify(f"Could not create group: {exc}", severity="error", timeout=8)
             return
@@ -1046,6 +1261,37 @@ class UnseenetApp(App):
         self.notify(f"Something went wrong ({type(err).__name__}: {err}){where}",
                     severity="error", timeout=10)
 
+    # --- push (UN-RFC 0008 section 2) ---
+    @work(group="watch", exclusive=True, exit_on_error=False)
+    async def watch_loop(self) -> None:
+        """Keep a second connection open so new posts show up at once."""
+        while True:
+            try:
+                if await self.session.watch(self._on_push) is False:
+                    return                         # the node cannot push; polling only
+            except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError):
+                pass
+            await asyncio.sleep(15)                # reconnect after a pause
+
+    async def _on_push(self, gid: str, message_id: str) -> None:
+        s = self.session
+        if gid in s.data["subscribed"] or gid == s.my_inbox:
+            self.run_worker(self._fetch_and_show(gid), group="push", exit_on_error=False)
+
+    async def _fetch_and_show(self, gid: str) -> None:
+        s = self.session
+        before = s.unread_count(gid)
+        try:
+            await s.fetch_group(gid)
+        except (SessionError, OSError, ConnectionError):
+            return
+        current = self.current_group or ""
+        if current == gid or (current.startswith(CONTACT) and gid == s.my_inbox):
+            self._render_threads()
+        elif gid == s.my_inbox and s.unread_count(gid) > before:
+            self.notify("New private message")
+        await self._render_groups()
+
     def get_system_commands(self, screen):
         """Everything the keys do is also in the command palette (Ctrl+P)."""
         yield from super().get_system_commands(screen)
@@ -1068,6 +1314,11 @@ class UnseenetApp(App):
              self.action_show_key),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
              self.action_signature),
+            ("About this group", "Its rules, type, owner and settings  [?]", self.action_group_info),
+            ("Switch chat / threads", "Show the current group as a chat or as threads  [v]",
+             self.action_toggle_view),
+            ("Edit group", "Owner: change title, description, rules, view and delivery",
+             self.action_edit_group),
             ("Add contact", "Give the selected author, or any key, a name of your own  [a]",
              self.action_add_contact),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
@@ -1084,6 +1335,52 @@ class UnseenetApp(App):
         ]
         for title, help_text, callback in commands:
             yield SystemCommand(title, help_text, callback)
+
+    def _owner_label(self, data: dict) -> str:
+        key = data.get("owner", "")
+        if key == self.session.identity().key_text:
+            return "you"
+        name = self.session.contact_name(key)
+        return f"{name} ✓  ({key[:28]}…)" if name else f"{key[:36]}…"
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_group_info(self, first_time: bool = False) -> None:
+        g = self._need_group()
+        if not g:
+            return
+        data = self.session.manifest_data(g.group_id)
+        if not data:
+            self.notify("Nothing known about this group yet - try again after a refresh",
+                        severity="warning")
+            return
+        owner = bool(self.session.group_entry(g.group_id).get("owner"))
+        result = await self.push_screen_wait(GroupInfoDialog(
+            g.group_id, data, self._owner_label(data), owner, first_time))
+        if data.get("rules"):
+            self.session.mark_rules_seen(g.group_id)
+        if result == "edit":
+            self.action_edit_group()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_edit_group(self) -> None:
+        g = self._need_group()
+        if not g:
+            return
+        if not self.session.group_entry(g.group_id).get("owner"):
+            self.notify("Only the group's owner can change it", severity="warning")
+            return
+        changes = await self.push_screen_wait(EditGroupDialog(self.session.manifest_data(g.group_id)))
+        if not changes:
+            return
+        self.set_status("Publishing the new version of the group ...")
+        try:
+            await self.session.update_group(g.group_id, **changes)
+        except (SessionError, OSError, ConnectionError, ValueError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.session.mark_rules_seen(g.group_id)
+        self.notify("Group updated")
+        self._render_threads()
 
     @work(group="dialog", exit_on_error=False)
     async def action_add_contact(self) -> None:

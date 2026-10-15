@@ -82,6 +82,8 @@ After that the connection is reused.
 | ++q++ | Quit |
 | ++s++ | Edit your signature |
 | ++a++ | Add the selected post's author as a contact |
+| ++v++ | Switch between chat and threads for the current group |
+| ++question-mark++ | About this group: its rules, type and owner |
 | ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
 
 Groups are shown by **hierarchy**, the part of the name before the first
@@ -92,6 +94,39 @@ large hierarchies start folded.
 
 Unread posts are marked with ●. Posts in closed groups are marked with ◈,
 private messages with ✉.
+
+## Chat
+
+Any group - and any conversation with a contact - can be shown as a
+**chat**: messages in order, newest at the bottom, and an input line
+where ++enter++ sends. Press ++v++ to switch between chat and threads;
+the client remembers your choice per group. Conversations with contacts
+open as a chat.
+
+A group's owner can mark it as a chat, so it opens that way for
+everybody, and can choose **fast delivery** (⚡ in the title). Nodes then
+pass its messages on immediately instead of waiting a random time. That
+makes the chat quick across nodes, but gives up some of the protection
+of *where* a message was posted from - fine for friends chatting, less
+so for sensitive discussions. Closed groups stay end-to-end encrypted
+either way.
+
+New posts arrive by **push**: the client keeps a second connection to
+the node, which tells it about new messages as soon as they arrive. On
+the same node a chat is practically instant.
+
+## Group rules
+
+A group's owner can write **rules** - the group's charter. They are part
+of the group's signed settings, so everyone sees the same rules and only
+the owner can change them. The client shows them the first time you open
+the group, and again whenever the owner changes them. Press
+++question-mark++ to read them at any time; "? rules" in the title means
+the group has some.
+
+Owners change the title, description, rules, view and delivery with
+**Edit group** in the command palette (or the button in the ++question-mark++
+window). Every node gets the new version.
 
 ## Leaving and removing groups
 

@@ -104,6 +104,10 @@ class Store:
         row = self.db.execute("SELECT raw FROM tombstones WHERE message_id=?", (message_id,)).fetchone()
         return row[0] if row else None
 
+    def number_of(self, message_id: str) -> int | None:
+        row = self.db.execute("SELECT number FROM articles WHERE message_id=?", (message_id,)).fetchone()
+        return row[0] if row else None
+
     def get_meta(self, message_id: str) -> tuple[str, str] | None:
         row = self.db.execute("SELECT group_id, author_key FROM articles WHERE message_id=?",
                               (message_id,)).fetchone()

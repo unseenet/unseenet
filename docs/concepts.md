@@ -72,6 +72,14 @@ When a member is removed, the owner starts a new **epoch** with a new
 secret. Removed members keep what they already received - no system can
 take that back - but cannot read anything new.
 
+## Rules and chat groups
+
+A group's settings - signed by its owner - can also carry its **rules**
+(the charter), a hint that it is a **chat** rather than a discussion, and
+**fast delivery**: nodes then forward its messages without the random
+delay that otherwise hides where a message entered the network.
+See [UN-RFC 0008](spec/un-rfc-0008.md) and [UN-RFC 0014](spec/un-rfc-0014.md).
+
 ## Inboxes and private messages
 
 An inbox is the opposite of a closed group: anyone can write, only the

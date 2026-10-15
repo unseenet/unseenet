@@ -15,9 +15,10 @@ from pathlib import Path
 
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
-from ..core.groups import (INBOX_SCHEME, decrypt_article, encrypted_article, encryption_epoch,
-                           inbox_article, make_key_update, make_manifest, open_envelope,
-                           open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
+from ..core.groups import (INBOX_SCHEME, MAX_RULES, VIEWS, decrypt_article, encrypted_article,
+                           encryption_epoch, inbox_article, make_key_update, make_manifest,
+                           manifest_article, open_envelope, open_inbox_article, personal_inbox_id,
+                           short_group_id, split_group_id)
 from ..core.tor import TorProcess
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -188,24 +189,47 @@ class Session:
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)
     # ------------------------------------------------------------------
-    async def _connect(self) -> Client:
+    async def _connect(self, quiet: bool = False) -> Client:
         address = self.node
         if not address:
             raise SessionError("no node configured")
+        status = (lambda *_: None) if quiet else self.status
         socks = None
         if address.split(":")[0].endswith(".onion"):
             if self.tor is None:
                 tor_dir = self.vault.path.resolve().parent / "unseenet-tor"
                 tor = TorProcess(tor_dir, TorProcess.find_binary())
-                self.status("Starting Tor ...")
+                status("Starting Tor ...")
                 await tor.start()
                 self.tor = tor
             socks = self.tor.socks_port
-        self.status(f"Connecting to {address} ...")
+        status(f"Connecting to {address} ...")
         client = await Client.connect(address, socks)
         await client.fetch_capabilities()
-        self.status(f"Connected to {address}")
+        status(f"Connected to {address}")
         return client
+
+    async def watch(self, on_new, pattern: str = "*") -> bool:
+        """Listen for new articles (UN-RFC 0008) on a second connection.
+
+        Calls ``on_new(group_id, message_id)`` for each one. Returns False at once if the
+        node cannot push; otherwise runs until the connection fails (raises).
+        Watching "*" tells the node nothing about which groups you follow.
+        """
+        client = await self._connect(quiet=True)
+        try:
+            if client.capability("UNSEENET-WATCH") is None:
+                return False
+            await client.command(f"XUN-WATCH {pattern}", (290,))
+            while True:
+                line = await client.reader.readline()
+                if not line:
+                    raise ConnectionError("node closed the watch connection")
+                parts = line.decode("utf-8", "replace").split()
+                if parts and parts[0] == "291" and len(parts) >= 4:
+                    await on_new(parts[1], parts[3])
+        finally:
+            client.writer.close()
 
     async def _call(self, fn):
         """Run ``fn(client)`` with one reconnect attempt on a broken connection."""
@@ -264,22 +288,85 @@ class Session:
 
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
                            min_pow: int = DEFAULT_POW, local: bool = False,
-                           retention_days: int | None = None) -> str:
+                           retention_days: int | None = None, rules: str = "",
+                           view: str | None = None, low_latency: bool = False) -> str:
         owner = self.identity()
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
-                            pow_bits=DEFAULT_POW)
+                            rules=rules, view=view, low_latency=low_latency,
+                            pow_bits=await self.required_pow(None))
         await self._post_article(art)
-        entry = {"type": gtype, "owner": True, "keys": {}}
+        entry = {"type": gtype, "owner": True, "keys": {}, "manifest": json.loads(art.body),
+                 "owner_key": owner.key_text}
         if gtype == "closed":
             keys = crypto.GroupKeys.generate()
-            await self._post_article(make_key_update(owner, art.group, 1, keys, [], pow_bits=DEFAULT_POW))
+            await self._post_article(make_key_update(owner, art.group, 1, keys, [],
+                                                     pow_bits=await self.required_pow(art.group, min_pow)))
             entry["keys"]["1"] = keys.secret.hex()
         self.data["groups"][art.group] = entry
         self.subscribe(art.group)
         return art.group
+
+    def manifest_data(self, group_id: str) -> dict:
+        """The newest manifest seen for a group ({} if none yet)."""
+        return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))
+
+    async def update_group(self, group_id: str, **changes) -> dict:
+        """Publish a new manifest with a higher serial (owner only).
+
+        Allowed changes: title, description, rules, view, low_latency, min_pow, retention_days.
+        Type, owner and locality can never change (UN-RFC 0004, 4).
+        """
+        entry = self.data["groups"].get(group_id, {})
+        if not entry.get("owner"):
+            raise SessionError("only the owner can change a group")
+        data = self.manifest_data(group_id)
+        if not data:
+            raise SessionError("the group's manifest has not been fetched yet")
+        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow", "retention_days"}
+        for key, value in changes.items():
+            if key not in allowed:
+                raise SessionError(f"{key} cannot be changed")
+            if value in (None, "", False) and key in ("title", "description", "rules", "low_latency"):
+                data.pop(key, None)
+            else:
+                data[key] = value
+        if len(data.get("rules", "")) > MAX_RULES:
+            raise SessionError(f"rules are limited to {MAX_RULES} characters")
+        if data.get("view", "threads") not in VIEWS:
+            raise SessionError("view must be threads or chat")
+        data["serial"] = int(data.get("serial", 1)) + 1
+        art = manifest_article(self.identity(), group_id, data, await self.required_pow(None))
+        await self._post_article(art)
+        entry.update({"manifest": data, "title": data.get("title", "")})
+        self.save()
+        return data
+
+    def rules_unseen(self, group_id: str) -> bool:
+        """True if the group has rules the reader has not seen in this version."""
+        data = self.manifest_data(group_id)
+        if not data.get("rules"):
+            return False
+        return self.data.setdefault("rules_seen", {}).get(group_id, 0) < int(data.get("serial", 1))
+
+    def mark_rules_seen(self, group_id: str) -> None:
+        self.data.setdefault("rules_seen", {})[group_id] = int(self.manifest_data(group_id).get("serial", 1))
+        self.save()
+
+    async def required_pow(self, group_id: str | None, group_min: int | None = None) -> int:
+        """Postage to attach: max(node minimum, group minimum) - UN-RFC 0008 section 4."""
+        async def node_min(c: Client) -> int:
+            value = c.capability("UNSEENET-MINPOW")
+            return int(value) if value and value.strip().isdigit() else DEFAULT_POW
+        try:
+            node = await self._call(node_min)
+        except (OSError, ConnectionError, SessionError):
+            node = DEFAULT_POW
+        if group_min is None and group_id:
+            group_min = int(self.manifest_data(group_id).get("min_pow", 0))
+        return max(node, group_min or 0)
 
     async def remove_group(self, group_id: str, reason: str = "") -> None:
         """UN-RFC 0013: remove a group you own from the whole network. Final."""
@@ -290,8 +377,9 @@ class Session:
             raise SessionError("your personal inbox cannot be removed")
         art = new_article(group_id, None, reason or "Removed by its owner.\n",
                           extra=[("Control", "rmgroup")])
+        bits = await self.required_pow(None)
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, lambda: art.finalize(self.identity(), DEFAULT_POW))
+        await loop.run_in_executor(None, lambda: art.finalize(self.identity(), bits))
         await self._post_article(art)
         self.forget_group(group_id)
 
@@ -311,7 +399,8 @@ class Session:
         epoch = max(int(e) for e in entry["keys"])
         keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
         art = make_key_update(self.identity(), group_id, epoch, keys,
-                              [crypto.key_from_text(member_key)], grant_only=True, pow_bits=DEFAULT_POW)
+                              [crypto.key_from_text(member_key)], grant_only=True,
+                              pow_bits=await self.required_pow(group_id))
         await self._post_article(art)
 
     # ------------------------------------------------------------------
@@ -334,7 +423,7 @@ class Session:
                     return False
             if not await self._call(exists):
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
-                                    min_pow=DEFAULT_POW, pow_bits=DEFAULT_POW)
+                                    min_pow=DEFAULT_POW, pow_bits=await self.required_pow(None))
                 await self._post_article(art)
             entry.update({"type": "inbox", "owner": True})
         if gid not in self.data["subscribed"]:
@@ -362,14 +451,18 @@ class Session:
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False) -> str:
         """Send a message to an inbox. Only its owner can read it."""
+        if not self.manifest_data(group_id):
+            owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
+            owner_key = owner_key or owner_from_manifest
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
+        bits = await self.required_pow(group_id)
         loop = asyncio.get_running_loop()
         art = await loop.run_in_executor(None, lambda: inbox_article(
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
-            references=references, pow_bits=DEFAULT_POW))
+            references=references, pow_bits=bits))
         msgid = await self._post_article(art)
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
@@ -567,8 +660,12 @@ class Session:
         ctl = art.control
         if ctl and ctl[0] == "manifest":
             data = json.loads(art.body)
-            entry["type"] = data.get("type")
-            entry["owner_key"] = data.get("owner")
+            if int(data.get("serial", 0)) >= int(entry.get("manifest", {}).get("serial", 0)):
+                entry["manifest"] = data            # the newest one wins (UN-RFC 0004, 3.2)
+                entry["type"] = data.get("type")
+                entry["owner_key"] = data.get("owner")
+                if data.get("title"):
+                    entry["title"] = data["title"]
             return None
         if ctl and ctl[0] in ("key-update", "key-grant"):
             opened = open_envelope(art, me)
@@ -663,6 +760,7 @@ class Session:
                    references: list[str] | None = None) -> str:
         author = self.identity()
         entry = self.group_entry(group_id)
+        bits = await self.required_pow(group_id)
         loop = asyncio.get_running_loop()
         if entry.get("type") == "closed":
             if not entry["keys"]:
@@ -672,11 +770,11 @@ class Session:
             # postage is CPU work; keep the UI responsive
             art = await loop.run_in_executor(None, lambda: encrypted_article(
                 group_id, epoch, keys, author, from_name=self.display_name(),
-                subject=subject, body=body, references=references, pow_bits=DEFAULT_POW))
+                subject=subject, body=body, references=references, pow_bits=bits))
         else:
             art = new_article(group_id, subject, body, from_name=self.display_name(),
                               references=references)
-            await loop.run_in_executor(None, lambda: art.finalize(author, DEFAULT_POW))
+            await loop.run_in_executor(None, lambda: art.finalize(author, bits))
         msgid = await self._post_article(art)
         marks = self.data["read"].setdefault(group_id, [])   # your own posts are read
         marks.append(msgid)

@@ -95,10 +95,12 @@ authority; this code is just one implementation.
 | [0005](rfc/un-rfc-0005.md) | ONNTP: Transport and Peering over Onion Services |
 | [0006](rfc/un-rfc-0006.md) | Proof-of-Work Postage |
 | [0007](rfc/un-rfc-0007.md) | Protecting Data at Rest |
+| [0008](rfc/un-rfc-0008.md) | Chat Groups and Low-Latency Delivery *(draft)* |
 | [0009](rfc/un-rfc-0009.md) | Inbox Groups and Local Groups *(draft)* |
 | [0011](rfc/un-rfc-0011.md) | Node Information and Operator Contact *(draft)* |
 | [0012](rfc/un-rfc-0012.md) | Retention, Archive Nodes and History *(draft)* |
 | [0013](rfc/un-rfc-0013.md) | Removing Groups *(draft)* |
+| [0014](rfc/un-rfc-0014.md) | Group Rules (Charters) *(draft)* |
 
 Want to change the protocol or build something compatible? Read
 [UN-RFC 0000](rfc/un-rfc-0000.md) for how.
@@ -131,6 +133,8 @@ the node to connect to (its `.onion` address). Then:
 | `j` | join a group by ID or `unseenet:join` link |
 | `F5` | refresh (also happens every 30 seconds) |
 | `a` | add the author of a post as a contact; contacts get their own conversation view |
+| `v` | switch a group between chat and threads |
+| `?` | the group's rules and settings |
 | `s` | edit your signature |
 | `Ctrl+P` | command palette - every action by name |
 
@@ -189,7 +193,8 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 - [ ] Pull catch-up between nodes (NEWNEWS)
 - [ ] Chat view in the TUI
 - [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)
-- [ ] Low-latency chat delivery (UN-RFC 0008)
+- [x] Chat view, push and fast-delivery chat groups (UN-RFC 0008)
+- [x] Group rules / charters (UN-RFC 0014)
 - [x] Inbox groups: private messages and operator contact (UN-RFC 0009)
 - [x] Node information and operator contact (UN-RFC 0011)
 - [ ] Moderation submissions via inbox (UN-RFC 0009 section 3)

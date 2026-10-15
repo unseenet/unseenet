@@ -254,16 +254,17 @@ async def test_tui_contact_conversation(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: bool(app.session.contacts()), 100)
         key = b.identity().key_text
         app.select_group("contact:" + key)
-        assert await wait_for(pilot, lambda: len(app.messages) == 1, 100)
-        await pilot.press("n")
-        await pilot.pause(0.3)
-        await pilot.press(*"Ja")
-        await pilot.click("#body")
-        await pilot.press(*"Jeg kommer")
-        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: app.current_group == "contact:" + key
+                              and app.focused is not None and app.focused.id == "chat-input", 100)
+        assert app.view_of(app.current_group) == "chat"          # conversations open as a chat
+        assert app.focused.id == "chat-input"
+        await pilot.press(*"Jeg kommer", "enter")
         assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
         rows = [app._who(m) for m in app.messages.values()]
         assert rows[0].startswith("Sonia (datter) ✓") and rows[1] == "You"
+        lines = [str(line.text) for line in app.query_one("#chat-log").lines]
+        assert any("Sonia (datter)" in ln and "Kan du hente mig?" in ln for ln in lines)
+        assert any("You: Jeg kommer" in ln for ln in lines)
         await pilot.press("q")
     server.close()
 
@@ -319,4 +320,74 @@ async def test_tui_background_error_is_reported_not_fatal(tmp_path, monkeypatch)
         log = tmp_path / "unseenet-tui-errors.log"
         assert "simulated failure" in log.read_text()
         await pilot.press("q")
+    server.close()
+
+
+async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    from unseenet.client.tui import GroupInfoDialog
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    owner = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    owner.new_identity("o", "Owner"); owner.add_node(addr)
+    gid = await owner.create_group("chat.venner", "open", view="chat", low_latency=True,
+                                   rules="Kun hyggesnak.", min_pow=9)
+    await owner.post(gid, "hej", "Hej alle!\n")
+    await owner.close()
+
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr); me.subscribe(gid); me.save()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        app.select_group(gid)
+        # the rules are shown the first time
+        assert await wait_for(pilot, lambda: isinstance(app.screen, GroupInfoDialog), 300)
+        await pilot.press("escape")
+        await pilot.pause(0.3)
+        assert not app.session.rules_unseen(gid)
+        assert app.view_of(gid) == "chat"                       # the owner's hint
+        assert "fast delivery" in str(app.query_one("#threads-title").render())
+        app.query_one("#chat-input").focus()
+        await pilot.press(*"Hej med dig", "enter")
+        assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
+        lines = [str(line.text) for line in app.query_one("#chat-log").lines]
+        assert any("Owner: Hej alle!" in ln for ln in lines)
+        assert any("You: Hej med dig" in ln for ln in lines)
+        # v switches to threads and back
+        app.query_one("#groups").focus()
+        await pilot.press("v")
+        await pilot.pause(0.2)
+        assert app.view_of(gid) == "threads" and app.query_one("#threads").display
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_chat_updates_by_push(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    friend = Session(Vault.open(tmp_path / "f.vault", "pw", **KDF), status=lambda *_: None)
+    friend.new_identity("f", "Friend"); friend.add_node(addr)
+    gid = await friend.create_group("chat.venner", "open", view="chat", low_latency=True, min_pow=9)
+
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr); me.subscribe(gid); me.save()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: app._inbox_ready and app.current_group == gid, 300)
+        await pilot.pause(0.5)
+        await friend.post(gid, "hej", "Er du der?\n")          # no refresh: push must bring it
+        assert await wait_for(pilot, lambda: any(
+            "Friend: Er du der?" in str(ln.text) for ln in app.query_one("#chat-log").lines), 100)
+        await pilot.press("q")
+    await friend.close()
     server.close()
