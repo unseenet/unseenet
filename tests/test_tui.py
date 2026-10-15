@@ -57,3 +57,52 @@ async def test_tui_create_group_and_post(tmp_path, monkeypatch):
         assert "Fra TUI" in msg.body
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_shows_brackets_literally(tmp_path, monkeypatch):
+    """Posts are user content: '[b]' or '[/x]' must never be parsed as markup."""
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("x", "Name [with] [/brackets]")
+    s.add_node(f"127.0.0.1:{port}")
+    gid = await s.create_group("dk.test", "open", title="[x] title", min_pow=10)
+    await s.post(gid, "Subject [b]", "Body [/b] [link=x] [/]\n")
+    s.data["read"] = {}
+    s.save()
+    await s.close()
+
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.messages) == 1)
+        app.query_one("#threads").focus()
+        await pilot.press("down", "up")
+        await pilot.pause(0.3)
+        await pilot.press("g")
+        await pilot.pause(0.5)
+        await pilot.press("escape")
+        await pilot.pause(0.3)
+        assert app.return_code is None
+        await pilot.press("q")
+    server.close()
+
+
+def test_vault_saves_are_private_and_fast(tmp_path):
+    import os
+    import time
+    v = Vault.open(tmp_path / "v.vault", "pw", **KDF)
+    v.data["x"] = 1
+    v.save()
+    assert oct(os.stat(tmp_path / "v.vault").st_mode & 0o777) == "0o600"
+    t = time.time()
+    for _ in range(20):
+        v.save()
+    assert time.time() - t < 1.0          # no key derivation per save
+    assert Vault.open(tmp_path / "v.vault", "pw", **KDF).data["x"] == 1

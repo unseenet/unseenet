@@ -16,7 +16,9 @@ from pathlib import Path
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.markup import escape
 from textual.screen import ModalScreen
 from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, ListItem, ListView,
                              Select, Static, TextArea)
@@ -240,7 +242,8 @@ class BrowseDialog(Dialog):
         with Vertical(classes="dialog"):
             yield Label("Groups on this node", classes="title")
             yield Label("Enter: subscribe / unsubscribe.  Esc: close.", classes="hint")
-            items = [ListItem(Label(self._label(g)), id=f"g{i}") for i, g in enumerate(self.groups)]
+            items = [ListItem(Label(self._label(g), markup=False), id=f"g{i}")
+                     for i, g in enumerate(self.groups)]
             if not items:
                 items = [ListItem(Label("No groups yet - press c in the main view to create one."))]
             yield ListView(*items, id="browse-list")
@@ -306,12 +309,12 @@ class UnseenetApp(App):
                 yield Static("Groups", id="groups-title")
                 yield ListView(id="groups")
             with Vertical():
-                yield Static("Select a group", id="threads-title")
+                yield Static("Select a group", id="threads-title", markup=False)
                 yield DataTable(id="threads", cursor_type="row", zebra_stripes=True)
                 with VerticalScroll(id="article"):
                     yield Static("", id="article-head")
-                    yield Static("", id="article-body")
-        yield Static("", id="status")
+                    yield Static("", id="article-body", markup=False)
+        yield Static("", id="status", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -354,9 +357,9 @@ class UnseenetApp(App):
                 return
             if "display" in result:
                 name = result["display"].lower().replace(" ", "-")
-                await asyncio.to_thread(s.new_identity, name, result["display"])
+                s.new_identity(name, result["display"])
             if "node" in result:
-                await asyncio.to_thread(s.add_node, result["node"])
+                s.add_node(result["node"])
         ident = s.identity()
         self.sub_title = f"{s.display_name()} ({ident.fingerprint[:4]})  -  {s.node}"
         self.refresh_groups()
@@ -402,7 +405,7 @@ class UnseenetApp(App):
             unread = self.session.unread_count(gid)
             lock = "◈ " if g.type == "closed" else "  "
             label = Label(f"{lock}{g.short}" + (f" ({unread})" if unread else ""),
-                          classes="unread" if unread else "")
+                          classes="unread" if unread else "", markup=False)
             await lv.append(ListItem(label, name=gid))
         if index is not None and index < len(self.groups):
             lv.index = index
@@ -455,7 +458,8 @@ class UnseenetApp(App):
             if m.encrypted and m.readable:
                 subject = "◈ " + subject
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
-            table.add_row(flag, subject, f"{m.from_name} ({m.author_fp})", date, key=m.message_id)
+            table.add_row(flag, Text(subject), Text(f"{m.from_name} ({m.author_fp})"), date,
+                          key=m.message_id)
         self._render_title()
         if keep in self.messages:
             table.move_cursor(row=table.get_row_index(keep))
@@ -479,8 +483,9 @@ class UnseenetApp(App):
             return
         self.current_message = msg
         date = msg.date.astimezone().strftime("%A %d %B %Y %H:%M") if msg.date else ""
-        head = (f"[b]{msg.subject}[/b]\nFrom: {msg.from_name}  ·  key {msg.author_key[:24]}…  "
-                f"({msg.author_fp})\nDate: {date}" + ("\n◈ end-to-end encrypted" if msg.encrypted else ""))
+        head = (f"[b]{escape(msg.subject)}[/b]\nFrom: {escape(msg.from_name)}  ·  "
+                f"key {escape(msg.author_key[:24])}…  ({msg.author_fp})\nDate: {date}"
+                + ("\n◈ end-to-end encrypted" if msg.encrypted else ""))
         self.query_one("#article-head", Static).update(head)
         body = msg.body if msg.readable else (msg.error or msg.subject)
         self.query_one("#article-body", Static).update("\n" + body)
@@ -494,7 +499,7 @@ class UnseenetApp(App):
     @work(exclusive=True, group="save")
     async def _save_soon(self) -> None:
         await asyncio.sleep(2)
-        await asyncio.to_thread(self.session.save)
+        self.session.save()
         await self._render_groups()
 
     # --- actions ---
@@ -613,7 +618,7 @@ class UnseenetApp(App):
 
     async def action_quit(self) -> None:
         if self.session:
-            await asyncio.to_thread(self.session.save)
+            self.session.save()
             await self.session.close()
         self.exit()
 
