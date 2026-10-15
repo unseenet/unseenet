@@ -50,6 +50,14 @@ CREATE TABLE IF NOT EXISTS cancels (
     group_id   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tombstones (       -- UN-RFC 0013
+    group_id   TEXT PRIMARY KEY,
+    at         INTEGER NOT NULL,
+    reason     TEXT NOT NULL,                   -- "owner" or "operator"
+    message_id TEXT,                            -- the rmgroup article, for owner removals
+    raw        BLOB
+);
+
 CREATE TABLE IF NOT EXISTS peer_queue (
     peer       TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -91,6 +99,9 @@ class Store:
 
     def get(self, message_id: str) -> bytes | None:
         row = self.db.execute("SELECT raw FROM articles WHERE message_id=?", (message_id,)).fetchone()
+        if row:
+            return row[0]
+        row = self.db.execute("SELECT raw FROM tombstones WHERE message_id=?", (message_id,)).fetchone()
         return row[0] if row else None
 
     def get_meta(self, message_id: str) -> tuple[str, str] | None:
@@ -164,6 +175,31 @@ class Store:
     def epochs(self, group_id: str) -> dict[int, bytes]:
         return {e: crypto.key_from_text(k) for e, k in self.db.execute(
             "SELECT epoch, member_key FROM epochs WHERE group_id=?", (group_id,))}
+
+    # --- removal (UN-RFC 0013) ---
+    def tombstone(self, group_id: str) -> str | None:
+        row = self.db.execute("SELECT reason FROM tombstones WHERE group_id=?", (group_id,)).fetchone()
+        return row[0] if row else None
+
+    def add_tombstone(self, group_id: str, reason: str, message_id: str | None = None,
+                      raw: bytes | None = None) -> None:
+        self.db.execute("INSERT OR REPLACE INTO tombstones VALUES (?, ?, ?, ?, ?)",
+                        (group_id, int(time.time()), reason, message_id, raw))
+        self.db.commit()
+
+    def lift_tombstone(self, group_id: str) -> bool:
+        cur = self.db.execute("DELETE FROM tombstones WHERE group_id=? AND reason='operator'", (group_id,))
+        self.db.commit()
+        return cur.rowcount > 0
+
+    def remove_group(self, group_id: str) -> int:
+        """Delete a group's manifest and articles. Returns the number of articles deleted."""
+        cur = self.db.execute("DELETE FROM articles WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM groups WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM epochs WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM cancels WHERE group_id=?", (group_id,))
+        self.db.commit()
+        return cur.rowcount
 
     # --- cancels ---
     def add_cancel(self, target: str, author_key: str, group_id: str) -> None:

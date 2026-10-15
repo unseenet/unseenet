@@ -14,7 +14,7 @@ from .. import __version__
 from ..core.groups import canonical_json
 from ..core import crypto
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
-from ..core.groups import Manifest, check_permitted, parse_key_update
+from ..core.groups import Manifest, check_permitted, parse_key_update, split_group_id
 from ..core.store import Store
 from ..nntp import MAX_LINE, dot_stuff, read_block
 
@@ -83,8 +83,14 @@ class Node:
         now = now or datetime.now(timezone.utc)
         ctl = art.control
         is_manifest = ctl == ["manifest"]
+        removed = self.store.tombstone(art.group)
+        if removed:
+            raise ArticleError("group", "group was removed by its owner" if removed == "owner"
+                               else "group was dropped by this node")
 
         manifest = self.store.manifest(art.group)
+        if ctl == ["rmgroup"]:
+            return self._accept_rmgroup(art, manifest, raw, source, from_peer)
         if not is_manifest:
             if manifest is None:
                 raise ArticleError("group", "group not carried")
@@ -111,6 +117,33 @@ class Node:
         self._enqueue(art, source)
         log.info("accepted %s in %s", art.message_id, art.group)
         return art
+
+    def _accept_rmgroup(self, art: Article, manifest: Manifest | None, raw: bytes,
+                        source: str | None, from_peer: bool) -> Article:
+        """UN-RFC 0013: the owner removes the group from the network."""
+        author = art.author_key
+        if manifest is not None:
+            if author != manifest.owner:
+                raise ArticleError("permission", "only the group's owner can remove it")
+            if manifest.local and from_peer:
+                raise ArticleError("group", "local group: never accepted from peers")
+        elif crypto.fingerprint(author) != split_group_id(art.group)[1]:
+            raise ArticleError("permission", "only the group's owner can remove it")
+        if art.proven_pow() < self.config.min_pow:          # exempt from the group's own minimum
+            raise ArticleError("postage", f"need {self.config.min_pow} bits")
+        local = manifest is not None and manifest.local
+        self.store.remember(art.message_id)
+        self.store.add_tombstone(art.group, "owner", art.message_id, raw)
+        deleted = self.store.remove_group(art.group)
+        if not local:
+            self._enqueue(art, source, force=True)
+        log.info("group %s removed by its owner (%d articles deleted)", art.group, deleted)
+        return art
+
+    def drop_group(self, group_id: str) -> int:
+        """UN-RFC 0013 section 3: the operator stops carrying a group on this node."""
+        self.store.add_tombstone(group_id, "operator")
+        return self.store.remove_group(group_id)
 
     def _accept_manifest(self, art: Article, current: Manifest | None, raw: bytes,
                          from_peer: bool = False) -> None:
@@ -171,9 +204,9 @@ class Node:
             self.store.remember(art.message_id)
             raise ArticleError("permission", "article was cancelled")
 
-    def _enqueue(self, art: Article, source: str | None) -> None:
+    def _enqueue(self, art: Article, source: str | None, force: bool = False) -> None:
         manifest = self.store.manifest(art.group)
-        if manifest is not None and manifest.local:
+        if not force and manifest is not None and manifest.local:
             return                       # local groups never leave this node (UN-RFC 0009, 4)
         lo, hi = self.config.forward_delay
         for peer in self.config.peers:
@@ -316,6 +349,11 @@ class Session:
 
     # --- group navigation ---
     async def cmd_group(self, args):
+        removed = self.node.store.tombstone(args[0]) if args else None
+        if removed:
+            self.send("411 no such group (removed by its owner)" if removed == "owner"
+                      else "411 no such group (dropped by this node)")
+            return
         if not args or self.node.store.manifest(args[0]) is None:
             self.send("411 no such group")
             return

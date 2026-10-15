@@ -92,6 +92,20 @@ large hierarchies start folded.
 Unread posts are marked with ●. Posts in closed groups are marked with ◈,
 private messages with ✉.
 
+## Leaving and removing groups
+
+In the command palette (++ctrl+p++):
+
+- **Unsubscribe from group** stops following a group and deletes its saved
+  posts from your computer. The group stays on the network.
+- **Remove group from the network** is for groups **you own**: every node
+  deletes the group and its posts, and the name can never be used again -
+  not even by you. Use it for a typo in a name or a group nobody uses.
+  Copies people have already saved cannot be deleted.
+
+If the owner removes a group you follow, the client tells you, and you
+can unsubscribe.
+
 ## Signature
 
 Press ++s++ to set a signature. It is added at the bottom of the compose

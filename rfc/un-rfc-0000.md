@@ -110,6 +110,7 @@ The protocol is designed to be extended without breaking old software:
 | 0009 | Inbox Groups and Local Groups                 | Standards Track |
 | 0011 | Node Information and Operator Contact         | Standards Track |
 | 0012 | Retention, Archive Nodes and History          | Standards Track |
+| 0013 | Removing Groups                               | Standards Track |
 
 Reserved for future work: 0008 (low-latency chat delivery),
 0010 (node discovery). The moderation submission queue first reserved

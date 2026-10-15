@@ -29,6 +29,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `{key}` and `{fp}`; not quoted in replies; shown dimmed (`s` in the TUI).
 - UN-RFC 0002: informative section on signature and quoting conventions.
 
+- Removing groups (UN-RFC 0013, draft): the owner removes a group from the
+  whole network with a signed `rmgroup`; nodes delete it and keep a
+  tombstone so it cannot return. Operators drop a group from their own
+  node with `unseenet-node --drop-group` (reversible with `--undrop-group`).
+- TUI: "Unsubscribe from group" and "Remove group from the network" in the
+  command palette.
+
 ### Fixed
 - TUI: creating a group with an invalid name closed the dialog and lost what
   was typed. Names are now checked as you type, with the reason shown, and

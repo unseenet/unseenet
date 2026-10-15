@@ -333,6 +333,27 @@ class InfoDialog(Dialog):
                 yield Button("Close", variant="primary", id="cancel")
 
 
+class ConfirmDialog(Dialog):
+    def __init__(self, title: str, text: str, confirm: str = "OK", danger: bool = False):
+        super().__init__()
+        self.title_, self.text, self.confirm, self.danger = title, text, confirm, danger
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label(self.title_, classes="title", markup=False)
+            yield Static(self.text, markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button(self.confirm, variant="error" if self.danger else "primary", id="ok")
+
+    def on_mount(self) -> None:
+        self.query_one("#cancel").focus()
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        self.dismiss(True)
+
+
 class NodeInfoDialog(Dialog):
     """UN-RFC 0011 node information; can start a message to the operator."""
 
@@ -638,7 +659,14 @@ class UnseenetApp(App):
         self.query_one("#threads-title", Static).update(f"{self.groups[gid].short} - loading ...")
         try:
             await self.session.fetch_group(gid)
-        except (SessionError, OSError, ConnectionError) as exc:
+        except SessionError as exc:
+            if "removed by its owner" in str(exc):
+                self.notify(f"{self.groups[gid].short} was removed by its owner. "
+                            "Use 'Unsubscribe from group' (Ctrl+P) to forget it.",
+                            severity="warning", timeout=10)
+            else:
+                self.set_status(f"{exc}")
+        except (OSError, ConnectionError) as exc:
             self.set_status(f"Offline ({exc}) - showing saved posts")
         self.groups[gid].type = self.session.group_entry(gid).get("type")
         self._render_threads()
@@ -936,6 +964,10 @@ class UnseenetApp(App):
             ("Private messages", "Open your inbox", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
              self.action_mark_all_read),
+            ("Unsubscribe from group", "Stop following the current group and forget it locally",
+             self.action_unsubscribe),
+            ("Remove group from the network", "Delete a group you own from every node - final",
+             self.action_remove_group),
         ]
         for title, help_text, callback in commands:
             yield SystemCommand(title, help_text, callback)
@@ -951,6 +983,51 @@ class UnseenetApp(App):
             self.notify(str(exc), severity="error")
             return
         self.notify("Signature saved" if text.strip() else "Signature removed")
+
+    @work(group="dialog")
+    async def action_unsubscribe(self) -> None:
+        g = self._need_group()
+        if not g:
+            return
+        if g.group_id == self.session.my_inbox:
+            self.notify("Your private messages cannot be unsubscribed", severity="warning")
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Unsubscribe from {g.short}?",
+                "You stop following the group, and its saved posts are deleted from this "
+                "computer. The group stays on the network; you can subscribe again with g.",
+                "Unsubscribe")):
+            return
+        self.session.forget_group(g.group_id)
+        self.current_group = None
+        self.notify(f"Unsubscribed from {g.short}")
+        self.refresh_groups()
+
+    @work(group="dialog")
+    async def action_remove_group(self) -> None:
+        g = self._need_group()
+        if not g:
+            return
+        if not self.session.group_entry(g.group_id).get("owner"):
+            self.notify("Only the group's owner can remove it. You can unsubscribe instead.",
+                        severity="warning")
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Remove {g.short} from the network?",
+                "Every node deletes the group and all its posts, and the name can never be "
+                "used again - not even by you. This cannot be undone.\n\n"
+                "Copies people have already saved cannot be deleted.",
+                "Remove for good", danger=True)):
+            return
+        self.set_status(f"Removing {g.short} ...")
+        try:
+            await self.session.remove_group(g.group_id)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not removed: {exc}", severity="error", timeout=8)
+            return
+        self.current_group = None
+        self.notify(f"{g.short} removed")
+        self.refresh_groups()
 
     def action_open_inbox(self) -> None:
         gid = self.session.my_inbox

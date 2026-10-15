@@ -98,6 +98,7 @@ authority; this code is just one implementation.
 | [0009](rfc/un-rfc-0009.md) | Inbox Groups and Local Groups *(draft)* |
 | [0011](rfc/un-rfc-0011.md) | Node Information and Operator Contact *(draft)* |
 | [0012](rfc/un-rfc-0012.md) | Retention, Archive Nodes and History *(draft)* |
+| [0013](rfc/un-rfc-0013.md) | Removing Groups *(draft)* |
 
 Want to change the protocol or build something compatible? Read
 [UN-RFC 0000](rfc/un-rfc-0000.md) for how.

@@ -116,7 +116,23 @@ def node_main(argv=None) -> None:
     p.add_argument("--no-tor", action="store_true", help="local only, for development")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"unseenet-node {__version__}")
+    p.add_argument("--drop-group", metavar="GROUP_ID",
+                   help="stop carrying a group on this node, delete its posts, and exit")
+    p.add_argument("--undrop-group", metavar="GROUP_ID",
+                   help="allow a group dropped with --drop-group again, and exit")
     args = p.parse_args(argv)
+    if args.drop_group or args.undrop_group:
+        from .node.server import Node
+        node = Node(Store(Path(args.data) / "articles.sqlite"))
+        if args.drop_group:
+            n = node.drop_group(args.drop_group)
+            print(f"Dropped {args.drop_group} from this node ({n} posts deleted). "
+                  "Peers are not told; it is your node's decision only.")
+        else:
+            ok = node.store.lift_tombstone(args.undrop_group)
+            print(f"{args.undrop_group} may be carried again." if ok else
+                  "Not dropped by this node (groups removed by their owner cannot be restored).")
+        return
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(name)s %(message)s")
     try:

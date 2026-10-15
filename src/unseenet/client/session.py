@@ -272,6 +272,29 @@ class Session:
         self.subscribe(art.group)
         return art.group
 
+    async def remove_group(self, group_id: str, reason: str = "") -> None:
+        """UN-RFC 0013: remove a group you own from the whole network. Final."""
+        entry = self.data["groups"].get(group_id, {})
+        if not entry.get("owner"):
+            raise SessionError("only the owner can remove a group")
+        if group_id == self.my_inbox:
+            raise SessionError("your personal inbox cannot be removed")
+        art = new_article(group_id, None, reason or "Removed by its owner.\n",
+                          extra=[("Control", "rmgroup")])
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: art.finalize(self.identity(), DEFAULT_POW))
+        await self._post_article(art)
+        self.forget_group(group_id)
+
+    def forget_group(self, group_id: str) -> None:
+        """Unsubscribe and delete everything stored locally about a group."""
+        if group_id in self.data["subscribed"]:
+            self.data["subscribed"].remove(group_id)
+        for store in (self.data["groups"], self.data["read"], self.cache, self._raw, self._high):
+            store.pop(group_id, None)
+        self.save()
+        self.save_offline()
+
     async def invite(self, group_id: str, member_key: str) -> None:
         entry = self.data["groups"].get(group_id)
         if not entry or not entry.get("owner") or entry.get("type") != "closed":
@@ -378,6 +401,8 @@ class Session:
             try:
                 _, low, high = await c.group(group_id)
             except NNTPError as exc:
+                if "removed by its owner" in exc.text:
+                    raise SessionError("removed by its owner") from exc
                 raise SessionError("group not carried by this node") from exc
             start = max(low, self._high.get(group_id, 0) + 1)
             fetched = []

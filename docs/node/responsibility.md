@@ -18,7 +18,8 @@ node is open to anyone.
 - **Closed groups are unreadable to you.** You carry ciphertext. You can
   still refuse to carry a closed group.
 - **Cancels work.** An author, or a group's owner or moderators, can
-  withdraw a post, and nodes delete it.
+  withdraw a post, and nodes delete it. An owner can also remove a whole
+  group from the network.
 
 ## What you should do
 
@@ -27,9 +28,9 @@ node is open to anyone.
   node open to strangers, consider `trusted`, and say publicly which groups
   you carry.
 - **Act on problems.** If a group carries content you do not want to
-  host, stop carrying it: remove it from your peers' `groups` patterns and
-  ask the owner to cancel the posts. (A command to drop a group from a node
-  is planned.)
+  host, drop it from your node with `--drop-group` (see
+  [Operations](operations.md#dropping-a-group)). The node deletes it and
+  refuses it from then on.
 - **Know the law where you live.** Hosting other people's content is
   treated differently from country to country. Unseenet's design reduces
   the risk; it does not remove your responsibility.

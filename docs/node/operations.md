@@ -32,6 +32,23 @@ vault on your own computer.
 Only your identity can read the messages. The node stores them encrypted,
 so not even someone who seizes the node can read them.
 
+## Dropping a group
+
+To stop carrying a group on your node - whoever owns it:
+
+```bash
+sudo -u unseenet /home/unseenet/unseenet/.venv/bin/unseenet-node \
+  --data /home/unseenet/node-data --drop-group spam.stuff@ab3k5x7qwe2rtz4m
+```
+
+The group and its posts are deleted, and the node refuses the group from
+then on, also if peers send it again. Your peers are not told: it is your
+node's decision only. To allow it again, use `--undrop-group` with the same
+group ID. (A group removed by its **owner** is gone for good and cannot be
+restored.)
+
+The command works while the node is running.
+
 ## Backup
 
 To move or restore a node with the **same onion address**, you need:
