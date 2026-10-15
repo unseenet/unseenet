@@ -188,3 +188,36 @@ async def test_tui_signature_added_and_not_quoted(tmp_path, monkeypatch):
         await pilot.press("escape")
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_create_group_rejects_bad_name_and_keeps_dialog(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    from unseenet.client.tui import CreateGroupDialog
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.add_node(f"127.0.0.1:{port}")
+    s.save()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        await pilot.press("c")
+        await pilot.pause(0.3)
+        await pilot.press(*"andlo,test")
+        await pilot.click("#ok")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, CreateGroupDialog)          # still open
+        assert app.screen.query_one("#name").value == "andlo,test"  # nothing lost
+        assert "','" in str(app.screen.query_one("#name-help").render())
+        name = app.screen.query_one("#name")
+        name.value = "andlo.test"
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: any(g.startswith("andlo.test@") for g in app.groups), 300)
+        await pilot.press("q")
+    server.close()

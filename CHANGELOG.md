@@ -29,6 +29,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `{key}` and `{fp}`; not quoted in replies; shown dimmed (`s` in the TUI).
 - UN-RFC 0002: informative section on signature and quoting conventions.
 
+### Fixed
+- TUI: creating a group with an invalid name closed the dialog and lost what
+  was typed. Names are now checked as you type, with the reason shown, and
+  the dialog stays open until the name is valid.
+
 ## [0.1.0] - 2026-10-15
 
 First public release. Pre-alpha: expect breaking changes.

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import re
 from pathlib import Path
 
 from textual import on, work
@@ -31,6 +32,21 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
                       default_vault_path, split_signature)
 
 REFRESH_SECONDS = 30
+
+
+def group_name_problem(name: str) -> str | None:
+    """Why a group name is not valid (UN-RFC 0004 section 1), or None."""
+    if len(name) > 128:
+        return "at most 128 characters"
+    bad = sorted({c for c in name if not re.match(r"[a-z0-9.+_-]", c)})
+    if bad:
+        shown = " ".join("space" if c == " " else repr(c) for c in bad)
+        return f"these characters are not allowed: {shown}"
+    if name.startswith(".") or name.endswith(".") or ".." in name:
+        return "a dot must sit between two parts"
+    if any(not part[0].isalnum() for part in name.split(".")):
+        return "each part must start with a letter or digit"
+    return None
 
 
 def by_hierarchy(groups: list[GroupInfo]) -> list[tuple[str, list[GroupInfo]]]:
@@ -238,11 +254,16 @@ class SignatureDialog(Dialog):
         self.dismiss(text)
 
 
+GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
+                   "e.g. dk.snak or andlo.test. The first part is the hierarchy.")
+
+
 class CreateGroupDialog(Dialog):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label("Create a group", classes="title")
-            yield Input(placeholder="Name, e.g. dk.snak (lowercase, dots)", id="name")
+            yield Input(placeholder="Name, e.g. dk.snak", id="name")
+            yield Label(GROUP_NAME_HELP, id="name-help", classes="hint", markup=False)
             yield Select([("Open - anyone can read and post", "open"),
                           ("Moderated - posts need a moderator", "moderated"),
                           ("Channel - only you post", "channel"),
@@ -257,11 +278,21 @@ class CreateGroupDialog(Dialog):
                 yield Button("Cancel", id="cancel")
                 yield Button("Create", variant="primary", id="ok")
 
+    @on(Input.Changed, "#name")
+    def _check_name(self, event: Input.Changed) -> None:
+        help_label = self.query_one("#name-help", Label)
+        name = event.value.strip().lower()
+        problem = group_name_problem(name) if name else None
+        help_label.update(f"Not valid yet: {problem}" if problem else GROUP_NAME_HELP)
+        help_label.set_class(bool(problem), "error")
+
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
         name = self.query_one("#name", Input).value.strip().lower()
-        if not name:
-            self.app.notify("A name is required", severity="error")
+        problem = group_name_problem(name) if name else "a name is required"
+        if problem:                       # stay open, keep what was typed
+            self.app.notify(f"Group name: {problem}", severity="error")
+            self.query_one("#name", Input).focus()
             return
         self.dismiss((name, self.query_one("#type", Select).value,
                       self.query_one("#title", Input).value.strip(),
