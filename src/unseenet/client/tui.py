@@ -32,6 +32,7 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
                       default_vault_path, split_signature)
 
 REFRESH_SECONDS = 30
+CONTACT = "contact:"          # tree data prefix for a contact's conversation
 
 
 def group_name_problem(name: str) -> str | None:
@@ -467,6 +468,7 @@ class UnseenetApp(App):
         Binding("o", "node_info", "Node"),
         Binding("k", "show_key", "My key"),
         Binding("s", "signature", "Signature", show=False),
+        Binding("a", "add_contact", "Add contact", show=False),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
         Binding("q", "quit", "Quit"),
@@ -597,7 +599,7 @@ class UnseenetApp(App):
             except (SessionError, OSError, ConnectionError):
                 pass
         await self._render_groups()
-        if self.current_group in groups:
+        if self.current_group in groups or self._current_contact():
             self._render_threads()
         elif groups:
             self.select_group(next(iter(groups)))
@@ -609,9 +611,10 @@ class UnseenetApp(App):
     async def _render_groups(self) -> None:
         tree = self.query_one("#groups", Tree)
         tree.show_root = False
-        was_open = {str(n.label).split(".*")[0] for n in tree.root.children
-                    if n.children and n.is_expanded}
-        known = {str(n.label).split(".*")[0] for n in tree.root.children if n.children}
+        def folder_key(node) -> str:
+            return str(node.label).split(" (")[0].split(".*")[0]
+        was_open = {folder_key(n) for n in tree.root.children if n.children and n.is_expanded}
+        known = {folder_key(n) for n in tree.root.children if n.children}
         tree.clear()
 
         def label(g: GroupInfo) -> Text:
@@ -627,6 +630,20 @@ class UnseenetApp(App):
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
             select = node if g.group_id == self.current_group else select
+        contacts = self.session.contacts()
+        if contacts:
+            total = sum(self.session.unread_from(k) for k, _ in contacts)
+            folder = Text("Contacts" + (f" ({total})" if total else ""))
+            if total:
+                folder.stylize("bold")
+            cnode = tree.root.add(folder, expand="Contacts" in was_open or "Contacts" not in known)
+            for key, name in contacts:
+                unread = self.session.unread_from(key)
+                text = Text(f"• {name}" + (f" ({unread})" if unread else ""))
+                if unread:
+                    text.stylize("bold")
+                leaf = cnode.add_leaf(text, data=CONTACT + key)
+                select = leaf if self.current_group == CONTACT + key else select
         for top, items in by_hierarchy([g for g in groups if g not in mine]):
             parent = tree.root
             if top:
@@ -656,6 +673,14 @@ class UnseenetApp(App):
     async def select_group(self, gid: str) -> None:
         self.current_group = gid
         self.current_message = None
+        if gid.startswith(CONTACT):
+            try:
+                await self.session.fetch_group(self.session.my_inbox)
+            except (SessionError, OSError, ConnectionError) as exc:
+                self.set_status(f"Offline ({exc}) - showing saved messages")
+            self._render_threads()
+            self.query_one("#threads", DataTable).focus()
+            return
         self.query_one("#threads-title", Static).update(f"{self.groups[gid].short} - loading ...")
         try:
             await self.session.fetch_group(gid)
@@ -690,12 +715,16 @@ class UnseenetApp(App):
     def _render_threads(self) -> None:
         gid = self.current_group
         s = self.session
-        msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
+        if gid and gid.startswith(CONTACT):
+            rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
+        else:
+            msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
+            rows = self._threaded(msgs)
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
         self.messages = {}
-        for m, depth in self._threaded(msgs):
+        for m, depth in rows:
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
             subject = ("  " * (depth - 1) + "└ " if depth else "") + (m.subject or "(no subject)")
@@ -704,15 +733,31 @@ class UnseenetApp(App):
             elif m.encrypted and m.readable:
                 subject = "◈ " + subject
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
-            table.add_row(flag, Text(subject), Text(f"{m.from_name} ({m.author_fp})"), date,
-                          key=m.message_id)
+            table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
         if keep in self.messages:
             table.move_cursor(row=table.get_row_index(keep))
+        elif gid and gid.startswith(CONTACT) and rows:
+            table.move_cursor(row=len(rows) - 1)                  # newest at the bottom
+
+    def _who(self, m: Message) -> str:
+        if m.from_name == "You" and m.author_key == self.session.identity().key_text:
+            return "You"
+        petname = self.session.contact_name(m.author_key)
+        if petname:
+            return f"{petname} ✓ ({m.author_fp})"         # your own name for a key you know
+        return f"{m.from_name} ({m.author_fp})"
 
     def _render_title(self) -> None:
         gid = self.current_group
         if not gid:
+            return
+        if gid.startswith(CONTACT):
+            key = gid[len(CONTACT):]
+            msgs = self.session.conversation(key)
+            self.query_one("#threads-title", Static).update(
+                f"✉ {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
+                f"{self.session.unread_from(key)} unread  ·  only the two of you can read them")
             return
         g = self.groups.get(gid)
         total = len(self.session.cache.get(gid, {}))
@@ -733,8 +778,10 @@ class UnseenetApp(App):
         if msg.private and msg.readable and not msg.sender_key:
             who = "anonymous (the sender did not identify themselves)"
         else:
+            petname = self.session.contact_name(msg.author_key)
             who = (f"{escape(msg.from_name)}  ·  key {escape(msg.author_key[:24])}…  ({msg.author_fp})"
-                   + ("  ·  verified" if msg.sender_key else ""))
+                   + ("  ·  verified" if msg.sender_key else "")
+                   + (f"  ·  your contact [b]{escape(petname)}[/b]" if petname else ""))
         note = ("\n✉ private message - only you can read it" if msg.private
                 else "\n◈ end-to-end encrypted" if msg.encrypted else "")
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
@@ -762,19 +809,42 @@ class UnseenetApp(App):
 
     # --- actions ---
     def _need_group(self) -> GroupInfo | None:
-        if not self.current_group:
+        if not self.current_group or self.current_group not in self.groups:
             self.notify("Select a group first", severity="warning")
             return None
         return self.groups[self.current_group]
 
+    def _current_contact(self) -> str | None:
+        gid = self.current_group or ""
+        return gid[len(CONTACT):] if gid.startswith(CONTACT) else None
+
+    def _write_to_contact(self, key: str, subject: str = "", quote: str = "",
+                          references: list[str] | None = None) -> None:
+        name = self.session.contact_name(key) or key[:20]
+        owner = crypto.key_from_text(key)
+        self.compose_private(personal_inbox_id(owner), f"Message to {name}", subject, quote,
+                             owner_key=owner, references=references)
+
     def action_new_post(self) -> None:
+        contact = self._current_contact()
+        if contact:
+            self._write_to_contact(contact)
+            return
         g = self._need_group()
         if g:
             self.compose_post(g)
 
     def action_reply(self) -> None:
-        g = self._need_group()
+        contact = self._current_contact()
         m = self.current_message
+        if contact:
+            if not m:
+                self._write_to_contact(contact)
+                return
+            subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
+            self._write_to_contact(contact, subject, references=[*m.references, m.message_id])
+            return
+        g = self._need_group()
         if not g or not m or not m.readable:
             self.notify("Select a post to reply to", severity="warning")
             return
@@ -812,6 +882,8 @@ class UnseenetApp(App):
             return
         self.notify("Private message sent")
         self.set_status("")
+        if self._current_contact():
+            self._render_threads()
 
     @work(group="dialog")
     async def action_message(self) -> None:
@@ -960,6 +1032,11 @@ class UnseenetApp(App):
              self.action_show_key),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
              self.action_signature),
+            ("Add contact", "Give the selected author, or any key, a name of your own  [a]",
+             self.action_add_contact),
+            ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
+            ("Remove contact", "Forget the selected contact (your messages stay)",
+             self.action_remove_contact),
             ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
             ("Private messages", "Open your inbox", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
@@ -971,6 +1048,61 @@ class UnseenetApp(App):
         ]
         for title, help_text, callback in commands:
             yield SystemCommand(title, help_text, callback)
+
+    @work(group="dialog")
+    async def action_add_contact(self) -> None:
+        m = self.current_message
+        mine = self.session.identity().key_text
+        key = m.author_key if m and m.readable and m.author_key and m.author_key != mine else ""
+        key = await self.push_screen_wait(InputDialog(
+            "Add contact", "The person's key. If you had a post by them selected, it is filled in.",
+            "ed25519:...", value=key))
+        if not key:
+            return
+        suggestion = self.session.contact_name(key) or (m.from_name if m and m.author_key == key else "")
+        name = await self.push_screen_wait(InputDialog(
+            "Name this contact", "A name of your own choosing. Only you see it, and nobody can "
+            "pretend to be this contact under it: it is tied to the key.", "e.g. Sonia",
+            value=suggestion))
+        if not name:
+            return
+        try:
+            self.session.add_contact(key.strip(), name)
+        except (SessionError, crypto.CryptoError) as exc:
+            self.notify(f"Not added: {exc}", severity="error")
+            return
+        self.notify(f"Added {name}")
+        await self._render_groups()
+        self._render_threads()
+
+    @work(group="dialog")
+    async def action_rename_contact(self) -> None:
+        key = self._current_contact()
+        if not key:
+            self.notify("Select a contact first", severity="warning")
+            return
+        name = await self.push_screen_wait(InputDialog(
+            "Rename contact", "", "Name", value=self.session.contact_name(key) or ""))
+        if name:
+            self.session.add_contact(key, name)
+            await self._render_groups()
+            self._render_title()
+
+    @work(group="dialog")
+    async def action_remove_contact(self) -> None:
+        key = self._current_contact()
+        if not key:
+            self.notify("Select a contact first", severity="warning")
+            return
+        name = self.session.contact_name(key) or key[:20]
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Remove {name}?", "The contact is forgotten. Messages stay in Private messages.",
+                "Remove")):
+            return
+        self.session.remove_contact(key)
+        self.current_group = self.session.my_inbox
+        await self._render_groups()
+        self.select_group(self.session.my_inbox)
 
     @work(group="dialog")
     async def action_signature(self) -> None:

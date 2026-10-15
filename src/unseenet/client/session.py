@@ -10,7 +10,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..core import crypto
@@ -28,6 +28,7 @@ MAX_CACHED_PER_GROUP = 2000
 SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3): dash dash space
 MAX_SIG_LINES = 4               # the old netiquette limit
 CACHE_SIDECAR = "cache"
+SENT_SIDECAR = "sent"           # copies of private messages you sent (they are sealed to others)
 
 
 class SessionError(RuntimeError):
@@ -78,6 +79,12 @@ class GroupInfo:
         return short_group_id(self.group_id)
 
 
+def art_body_text(body: str) -> str:
+    """A body as it will appear in an article (LF endings, one final newline)."""
+    body = body.replace("\r\n", "\n")
+    return body if body.endswith("\n") else body + "\n"
+
+
 def split_signature(body: str) -> tuple[str, str | None]:
     """Split a body into (text, signature). The signature follows the last '-- ' line."""
     if body.startswith(SIG_SEPARATOR):
@@ -111,6 +118,8 @@ class Session:
         d.setdefault("nodes", [])
         d.setdefault("subscribed", [])
         d.setdefault("read", {})
+        d.setdefault("contacts", {})
+        self.sent: list[dict] = self._load_sent()
 
     # ------------------------------------------------------------------
     # identities & settings
@@ -361,7 +370,18 @@ class Session:
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, pow_bits=DEFAULT_POW))
-        return await self._post_article(art)
+        msgid = await self._post_article(art)
+        # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
+        self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
+                             # where it falls among received messages: dates are rounded to
+                             # 10 minutes for privacy, so they cannot order a conversation
+                             "after": self._high.get(self.my_inbox, 0),
+                             "subject": subject, "body": art_body_text(body),
+                             "references": references or [],
+                             "date": datetime.now(timezone.utc).isoformat()})
+        self.data["read"].setdefault(self.my_inbox, []).append(msgid)
+        self.save()
+        return msgid
 
     def reply_target(self, msg: "Message") -> str | None:
         """Where a reply to a private message goes."""
@@ -370,6 +390,71 @@ class Session:
         if msg.sender_key:
             return personal_inbox_id(crypto.key_from_text(msg.sender_key))
         return None
+
+    # ------------------------------------------------------------------
+    # contacts and conversations (client side only)
+    # ------------------------------------------------------------------
+    def add_contact(self, key_text: str, name: str) -> None:
+        """Give a key a name of your own (a "petname"). Others cannot fake it."""
+        crypto.key_from_text(key_text)
+        if not name.strip():
+            raise SessionError("a contact needs a name")
+        if key_text == self.identity().key_text:
+            raise SessionError("that is your own key")
+        self.data["contacts"][key_text] = {"name": name.strip()}
+        self.save()
+
+    def remove_contact(self, key_text: str) -> None:
+        self.data["contacts"].pop(key_text, None)
+        self.save()
+
+    def contact_name(self, key_text: str | None) -> str | None:
+        entry = self.data["contacts"].get(key_text or "")
+        return entry["name"] if entry else None
+
+    def contacts(self) -> list[tuple[str, str]]:
+        """(key, name) sorted by name."""
+        return sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
+                      key=lambda kv: kv[1].lower())
+
+    def conversation(self, key_text: str) -> list["Message"]:
+        """All private messages between you and a key, both directions, oldest first."""
+        received = [m for m in self.cache.get(self.my_inbox, {}).values()
+                    if m.sender_key == key_text]
+        mine = self.identity().key_text
+        sent = []
+        for i, e in enumerate(self.sent):
+            if e.get("to") != key_text:
+                continue
+            msg = Message(-1 - i, e["msgid"], self.my_inbox, subject=e["subject"],
+                          from_name="You", author_key=mine, body=e["body"],
+                          references=e.get("references", []), encrypted=True, private=True,
+                          sender_key=mine)
+            try:
+                msg.date = datetime.fromisoformat(e["date"])
+            except (KeyError, ValueError):
+                pass
+            sent.append(msg)
+        after = {e["msgid"]: e.get("after", 0) for e in self.sent}
+        order = {m.message_id: (m.number, 0, 0) for m in received}
+        for i, m in enumerate(sent):
+            order[m.message_id] = (after.get(m.message_id, 0), 1, i)
+        return sorted(received + sent, key=lambda m: order[m.message_id])
+
+    def unread_from(self, key_text: str) -> int:
+        return sum(1 for m in self.cache.get(self.my_inbox, {}).values()
+                   if m.sender_key == key_text and not self.is_read(m))
+
+    def _load_sent(self) -> list[dict]:
+        try:
+            payload = self.vault.read_sidecar(SENT_SIDECAR)
+        except Exception:  # noqa: BLE001
+            return []
+        return json.loads(payload).get("sent", []) if payload else []
+
+    def _remember_sent(self, entry: dict) -> None:
+        self.sent.append(entry)
+        self.vault.write_sidecar(SENT_SIDECAR, json.dumps({"v": 1, "sent": self.sent}).encode())
 
     async def node_info(self) -> dict:
         """UN-RFC 0011 node information, or {} if the node does not offer it."""

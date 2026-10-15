@@ -35,6 +35,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   node with `unseenet-node --drop-group` (reversible with `--undrop-group`).
 - TUI: "Unsubscribe from group" and "Remove group from the network" in the
   command palette.
+- Contacts: give a key a name of your own (`a`), shown as "Name ✓"
+  everywhere; a Contacts folder with one conversation per person, both
+  directions, ordered as sent and received. Copies of sent private
+  messages are kept encrypted next to the vault.
 
 ### Fixed
 - TUI: creating a group with an invalid name closed the dialog and lost what

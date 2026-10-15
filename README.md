@@ -130,6 +130,7 @@ the node to connect to (its `.onion` address). Then:
 | `i` | invite someone to a closed group you own |
 | `j` | join a group by ID or `unseenet:join` link |
 | `F5` | refresh (also happens every 30 seconds) |
+| `a` | add the author of a post as a contact; contacts get their own conversation view |
 | `s` | edit your signature |
 | `Ctrl+P` | command palette - every action by name |
 

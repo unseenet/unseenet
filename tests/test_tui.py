@@ -221,3 +221,48 @@ async def test_tui_create_group_rejects_bad_name_and_keeps_dialog(tmp_path, monk
         assert await wait_for(pilot, lambda: any(g.startswith("andlo.test@") for g in app.groups), 300)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_contact_conversation(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    a = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    a.new_identity("andreas", "Andreas"); a.add_node(addr)
+    b = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    b.new_identity("sonia", "Sonia"); b.add_node(addr)
+    await a.ensure_inbox(); await b.ensure_inbox()
+    await b.send_private(a.my_inbox, "Hej far", "Kan du hente mig?\n")
+    a.save(); await a.close(); await b.close()
+
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "a.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        app.query_one("#threads").focus()
+        await pilot.press("a")                      # add the sender as a contact
+        await pilot.pause(0.3)
+        await pilot.click("#ok")                    # key pre-filled
+        await pilot.pause(0.3)
+        name = app.screen.query_one("#value")
+        assert name.value == "Sonia"                # name suggested
+        name.value = "Sonia (datter)"
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: bool(app.session.contacts()), 100)
+        key = b.identity().key_text
+        app.select_group("contact:" + key)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 100)
+        await pilot.press("n")
+        await pilot.pause(0.3)
+        await pilot.press(*"Ja")
+        await pilot.click("#body")
+        await pilot.press(*"Jeg kommer")
+        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
+        rows = [app._who(m) for m in app.messages.values()]
+        assert rows[0].startswith("Sonia (datter) ✓") and rows[1] == "You"
+        await pilot.press("q")
+    server.close()

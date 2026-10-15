@@ -148,3 +148,42 @@ async def test_private_messages_and_operator_contact(tmp_path, monkeypatch):
     for s in (a, b):
         await s.close()
     server.close()
+
+
+async def test_contacts_and_conversation(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=BITS, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def session(name):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        s.new_identity(name, name.title())
+        s.add_node(addr)
+        return s
+
+    a, b = session("andreas"), session("sonia")
+    await a.ensure_inbox(); await b.ensure_inbox()
+    b_key = b.identity().key_text
+    a.add_contact(b_key, "Min datter")
+    with pytest.raises(sess.SessionError):
+        a.add_contact(a.identity().key_text, "mig selv")
+
+    await b.send_private(a.my_inbox, "Hej far", "Første\n")
+    await a.fetch_group(a.my_inbox)
+    assert a.unread_from(b_key) == 1
+    await a.send_private(personal_inbox_id(b.identity().public_key), "Re: Hej far", "Svar\n",
+                         owner_key=b.identity().public_key)
+    conv = a.conversation(b_key)
+    assert [(m.from_name, m.body) for m in conv] == [("Sonia", "Første\n"), ("You", "Svar\n")]
+    assert a.is_read(conv[1])                       # your own message is read
+
+    # sent copies survive a restart, encrypted on disk
+    await a.close()
+    assert b"Svar" not in (tmp_path / "andreas.vault.sent").read_bytes()
+    again = Session(Vault.open(tmp_path / "andreas.vault", "pw", **KDF), status=lambda *_: None)
+    again.load_offline()
+    assert [m.body for m in again.conversation(b_key)] == ["Første\n", "Svar\n"]
+    assert again.contact_name(b_key) == "Min datter"
+    await b.close()
+    server.close()

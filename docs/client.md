@@ -81,6 +81,7 @@ After that the connection is reused.
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
 | ++s++ | Edit your signature |
+| ++a++ | Add the selected post's author as a contact |
 | ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
 
 Groups are shown by **hierarchy**, the part of the name before the first
@@ -138,6 +139,21 @@ list as *✉ Private messages*.
 
 The recipient's inbox has to be on the node you use, or on a node it is
 replicated to.
+
+## Contacts and conversations
+
+Press ++a++ on a post or a private message to add its author as a
+**contact**, under a name you choose. Contacts appear in the group list
+under *Contacts*; selecting one shows your whole conversation with that
+person, both directions, in order. ++n++ or ++r++ there writes to them.
+
+- The name is yours alone and is tied to the person's key. Someone else
+  can call themselves "Sonia", but only the real one shows as
+  **Sonia ✓** in your client - everywhere, also in public groups.
+- Messages you send are sealed to the recipient, so not even you could
+  read them on the node afterwards. The client keeps its own copy, in an
+  encrypted file next to your vault (`unseenet.vault.sent`).
+- Rename or remove contacts from the command palette (++ctrl+p++).
 
 ## Contacting a node's operator
 
