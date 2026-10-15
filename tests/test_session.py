@@ -93,3 +93,21 @@ async def test_offline_cache(tmp_path, monkeypatch):
     other = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
     other.data["nodes"] = ["127.0.0.1:1"]
     assert other.load_offline() == 0
+
+
+def test_signatures(tmp_path):
+    from unseenet.client.session import split_signature
+    assert split_signature("Hej\n-- \nAndreas\n") == ("Hej\n", "Andreas\n")
+    assert split_signature("Hej\n--\nikke en signatur\n") == ("Hej\n--\nikke en signatur\n", None)
+    assert split_signature("a\n-- \nfirst\n-- \nlast\n") == ("a\n-- \nfirst\n", "last\n")
+
+    s = Session(Vault.open(tmp_path / "s.vault", "pw", **KDF), status=lambda *_: None)
+    ident = s.new_identity("a", "Andreas")
+    assert s.signature() == ""
+    s.set_signature("{name} ({fp})\n{key}")
+    assert s.signature() == f"Andreas ({ident.fingerprint[:4]})\n{ident.key_text}"
+    try:
+        s.set_signature("1\n2\n3\n4\n5")
+        raise AssertionError("five lines accepted")
+    except sess.SessionError:
+        pass

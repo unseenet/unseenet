@@ -25,6 +25,8 @@ from ..nntp import Client, NNTPError
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
 MAX_CACHED_PER_GROUP = 2000
+SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3): dash dash space
+MAX_SIG_LINES = 4               # the old netiquette limit
 CACHE_SIDECAR = "cache"
 
 
@@ -74,6 +76,16 @@ class GroupInfo:
     @property
     def short(self) -> str:
         return short_group_id(self.group_id)
+
+
+def split_signature(body: str) -> tuple[str, str | None]:
+    """Split a body into (text, signature). The signature follows the last '-- ' line."""
+    if body.startswith(SIG_SEPARATOR):
+        return "", body[len(SIG_SEPARATOR):]
+    idx = body.rfind("\n" + SIG_SEPARATOR)
+    if idx < 0:
+        return body, None
+    return body[:idx + 1], body[idx + 1 + len(SIG_SEPARATOR):]
 
 
 def strip_reader_headers(raw: bytes) -> bytes:
@@ -126,6 +138,27 @@ class Session:
 
     def display_name(self, name: str | None = None) -> str:
         return self.data["identities"][name or self.default_identity_name()]["display"]
+
+    def signature_template(self, name: str | None = None) -> str:
+        return self.data["identities"][name or self.default_identity_name()].get("signature", "")
+
+    def set_signature(self, template: str, name: str | None = None) -> None:
+        lines = template.strip("\n").split("\n") if template.strip() else []
+        if len(lines) > MAX_SIG_LINES:
+            raise SessionError(f"a signature has at most {MAX_SIG_LINES} lines")
+        self.data["identities"][name or self.default_identity_name()]["signature"] = "\n".join(lines)
+        self.save()
+
+    def signature(self, name: str | None = None) -> str:
+        """The signature with {name}, {key} and {fp} filled in ('' if none)."""
+        template = self.signature_template(name)
+        if not template:
+            return ""
+        ident = self.identity(name)
+        for placeholder, value in (("{name}", self.display_name(name)), ("{key}", ident.key_text),
+                                   ("{fp}", ident.fingerprint[:4])):
+            template = template.replace(placeholder, value)
+        return template
 
     def new_identity(self, name: str, display: str | None = None) -> crypto.Identity:
         ident = crypto.Identity.generate()

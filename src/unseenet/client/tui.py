@@ -27,7 +27,8 @@ from .. import __version__
 from ..core.vault import Vault, VaultError
 from ..core import crypto
 from ..core.groups import personal_inbox_id
-from .session import GroupInfo, Message, Session, SessionError, default_vault_path
+from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
+                      default_vault_path, split_signature)
 
 REFRESH_SECONDS = 30
 
@@ -165,10 +166,10 @@ class ComposeDialog(Dialog):
     BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "send", "Send")]
 
     def __init__(self, group: GroupInfo, subject: str = "", quote: str = "", is_reply: bool = False,
-                 heading: str | None = None):
+                 heading: str | None = None, signature: str = ""):
         super().__init__()
         self.group, self.subject, self.quote, self.is_reply = group, subject, quote, is_reply
-        self.heading = heading
+        self.heading, self.signature = heading, signature
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog compose"):
@@ -177,7 +178,9 @@ class ComposeDialog(Dialog):
             yield Label(self.heading or f"{kind} {self.group.short}{lock}", classes="title",
                         markup=False)
             yield Input(value=self.subject, placeholder="Subject", id="subject")
-            yield TextArea(self.quote, id="body", soft_wrap=True)
+            text = self.quote + (("\n" if self.quote else "\n\n") + SIG_SEPARATOR + self.signature
+                                 if self.signature else "")
+            yield TextArea(text, id="body", soft_wrap=True)
             yield Label("Ctrl+S to send. Sending takes a moment: the post carries a small "
                         "proof-of-work.", classes="hint")
             with Horizontal(classes="buttons"):
@@ -185,9 +188,10 @@ class ComposeDialog(Dialog):
                 yield Button("Send", variant="primary", id="ok")
 
     def on_mount(self) -> None:
+        body = self.query_one("#body", TextArea)
+        # the cursor goes below the quote, above the signature
+        body.move_cursor((self.quote.count("\n"), 0) if self.signature else body.document.end)
         if self.is_reply:
-            body = self.query_one("#body", TextArea)
-            body.move_cursor(body.document.end)    # write below the quote
             body.focus()
         else:
             self.query_one("#subject").focus()
@@ -196,10 +200,42 @@ class ComposeDialog(Dialog):
     def action_send(self) -> None:
         subject = self.query_one("#subject", Input).value.strip()
         body = self.query_one("#body", TextArea).text
-        if not subject or not body.strip():
+        if not subject or not split_signature(body)[0].strip():
             self.app.notify("Subject and text are required", severity="error")
             return
         self.dismiss((subject, body))
+
+
+class SignatureDialog(Dialog):
+    BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "save", "Save")]
+
+    def __init__(self, template: str):
+        super().__init__()
+        self.template = template or "{name}  ·  {key}"
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Your signature", classes="title")
+            yield Label(f"Added below '-- ' at the end of your posts. At most {MAX_SIG_LINES} lines. "
+                        "{name}, {key} and {fp} are filled in. Leave empty for none.",
+                        classes="hint", markup=False)
+            yield TextArea(self.template, id="sig", soft_wrap=True)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", variant="primary", id="ok")
+
+    def on_mount(self) -> None:
+        self.query_one("#sig", TextArea).styles.height = MAX_SIG_LINES + 2
+        self.query_one("#sig").focus()
+
+    @on(Button.Pressed, "#ok")
+    def action_save(self) -> None:
+        text = self.query_one("#sig", TextArea).text
+        if len([ln for ln in text.strip("\n").split("\n") if text.strip()]) > MAX_SIG_LINES:
+            self.app.notify(f"At most {MAX_SIG_LINES} lines, please - that was the rule on Usenet too",
+                            severity="warning")
+            return
+        self.dismiss(text)
 
 
 class CreateGroupDialog(Dialog):
@@ -378,6 +414,7 @@ class UnseenetApp(App):
         Binding("m", "message", "Message"),
         Binding("o", "node_info", "Node"),
         Binding("k", "show_key", "My key"),
+        Binding("s", "signature", "Signature", show=False),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
         Binding("q", "quit", "Quit"),
@@ -643,8 +680,14 @@ class UnseenetApp(App):
                 else "\n◈ end-to-end encrypted" if msg.encrypted else "")
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
         self.query_one("#article-head", Static).update(head)
-        body = msg.body if msg.readable else (msg.error or msg.subject)
-        self.query_one("#article-body", Static).update("\n" + body)
+        if msg.readable:
+            text, sig = split_signature(msg.body)
+            body = Text("\n" + text)
+            if sig is not None:
+                body.append(SIG_SEPARATOR + sig, style="dim")
+        else:
+            body = Text("\n" + (msg.error or msg.subject))
+        self.query_one("#article-body", Static).update(body)
         if not self.session.is_read(msg):
             self.session.mark_read(msg, save=False)
             self._save_soon()
@@ -677,7 +720,8 @@ class UnseenetApp(App):
             self.notify("Select a post to reply to", severity="warning")
             return
         subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
-        quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in m.body.rstrip().split("\n")) + "\n"
+        text = split_signature(m.body)[0]          # never quote the signature
+        quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in text.rstrip().split("\n")) + "\n"
         if m.private:
             target = self.session.reply_target(m)
             if not target:
@@ -695,7 +739,8 @@ class UnseenetApp(App):
                               references: list[str] | None = None) -> None:
         g = GroupInfo(target, type="inbox")
         result = await self.push_screen_wait(ComposeDialog(
-            g, subject, quote, bool(references), heading=heading + "  ✉ only they can read it"))
+            g, subject, quote, bool(references), heading=heading + "  ✉ only they can read it",
+            signature=self.session.signature()))
         if not result:
             return
         subject, body = result
@@ -748,7 +793,8 @@ class UnseenetApp(App):
     @work(group="post")
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
                            references: list[str] | None = None) -> None:
-        result = await self.push_screen_wait(ComposeDialog(g, subject, quote, bool(references)))
+        result = await self.push_screen_wait(ComposeDialog(g, subject, quote, bool(references),
+                                                           signature=self.session.signature()))
         if not result:
             return
         subject, body = result
@@ -853,6 +899,8 @@ class UnseenetApp(App):
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",
              self.action_show_key),
+            ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
+             self.action_signature),
             ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
             ("Private messages", "Open your inbox", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
@@ -860,6 +908,18 @@ class UnseenetApp(App):
         ]
         for title, help_text, callback in commands:
             yield SystemCommand(title, help_text, callback)
+
+    @work(group="dialog")
+    async def action_signature(self) -> None:
+        text = await self.push_screen_wait(SignatureDialog(self.session.signature_template()))
+        if text is None:
+            return
+        try:
+            self.session.set_signature(text)
+        except SessionError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        self.notify("Signature saved" if text.strip() else "Signature removed")
 
     def action_open_inbox(self) -> None:
         gid = self.session.my_inbox

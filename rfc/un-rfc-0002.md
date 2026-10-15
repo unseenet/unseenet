@@ -168,7 +168,19 @@ Proof-Of-Work: sha256; bits=20; nonce=Hk9r2w
 Det virker!
 ```
 
-# 7. Security Considerations
+# 7. Body Conventions (Informative)
+
+These conventions come from Usenet and are not checked by nodes. Clients
+SHOULD follow them so that they work well together.
+
+- **Signature.** A signature is separated from the text by a line
+  containing exactly `-- ` (dash, dash, space), as in RFC 3676 section
+  4.3. It SHOULD be at most four lines. Clients SHOULD NOT quote the
+  signature when replying, and MAY display it dimmed.
+- **Quoting.** Quoted lines start with `> `, preceded by one line naming
+  the author.
+
+# 8. Security Considerations
 
 - `Author-Key` is visible to every node, even in closed groups. It links
   articles by the same author. See UN-RFC 0003 section 2 on per-group

@@ -147,3 +147,44 @@ async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):
         assert b"Tak for noden" not in raw
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_signature_added_and_not_quoted(tmp_path, monkeypatch):
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.add_node(f"127.0.0.1:{port}")
+    s.set_signature("Me ({fp})")
+    gid = await s.create_group("dk.test", "open", min_pow=10)
+    await s.close()
+
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.current_group == gid, 300)
+        await pilot.press("n")
+        await pilot.pause(0.3)
+        await pilot.press(*"Emne")
+        await pilot.click("#body")
+        await pilot.press("ctrl+home")
+        await pilot.press(*"Teksten")
+        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 400)
+        msg = next(iter(app.messages.values()))
+        fp = app.session.identity().fingerprint[:4]
+        assert msg.body.startswith("Teksten") and msg.body.endswith(f"-- \nMe ({fp})\n")
+        app.query_one("#threads").focus()
+        await pilot.press("r")
+        await pilot.pause(0.4)
+        text = app.screen.query_one("#body").text
+        assert "> Teksten" in text and f"> Me ({fp})" not in text   # signature not quoted
+        assert text.endswith(f"-- \nMe ({fp})")                      # own signature added
+        await pilot.press("escape")
+        await pilot.press("q")
+    server.close()

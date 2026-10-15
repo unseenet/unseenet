@@ -129,6 +129,7 @@ the node to connect to (its `.onion` address). Then:
 | `i` | invite someone to a closed group you own |
 | `j` | join a group by ID or `unseenet:join` link |
 | `F5` | refresh (also happens every 30 seconds) |
+| `s` | edit your signature |
 | `Ctrl+P` | command palette - every action by name |
 
 Everything is kept in `unseenet.vault`, encrypted, next to where you run it,

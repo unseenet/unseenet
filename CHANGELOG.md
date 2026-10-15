@@ -25,6 +25,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   the main view and when browsing the node's groups.
 - TUI: every action is in the command palette (Ctrl+P), plus "Private
   messages" and "Mark group as read".
+- Signatures: up to four lines below `-- `, per identity, with `{name}`,
+  `{key}` and `{fp}`; not quoted in replies; shown dimmed (`s` in the TUI).
+- UN-RFC 0002: informative section on signature and quoting conventions.
 
 ## [0.1.0] - 2026-10-15
 

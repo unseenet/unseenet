@@ -80,6 +80,7 @@ After that the connection is reused.
 | ++j++ | Join a group by ID or `unseenet:join` link |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
+| ++s++ | Edit your signature |
 | ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
 
 Groups are shown by **hierarchy**, the part of the name before the first
@@ -90,6 +91,21 @@ large hierarchies start folded.
 
 Unread posts are marked with ●. Posts in closed groups are marked with ◈,
 private messages with ✉.
+
+## Signature
+
+Press ++s++ to set a signature. It is added at the bottom of the compose
+window below a `-- ` line - the old Usenet signature separator - so you
+can see it and change it before sending. Use up to four lines;
+`{name}`, `{key}` and `{fp}` are filled in with your display name, your
+key and its short fingerprint, e.g.:
+
+```text
+{name}  ·  {key}
+```
+
+When you reply, the other person's signature is left out of the quote,
+and signatures are shown dimmed when you read.
 
 ## Private messages
 
