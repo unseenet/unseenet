@@ -1,4 +1,9 @@
-# Unseenet
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="Unseenet" width="440">
+  </picture>
+</p>
 
 **Usenet, unseen.** A decentralized, encrypted discussion network in the
 spirit of old Usenet and BBSes — groups and chats you can reach by
