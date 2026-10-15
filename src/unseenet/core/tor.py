@@ -97,22 +97,30 @@ class TorProcess:
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         port_file = self.data_dir / "control_port"
         port_file.unlink(missing_ok=True)
+        # Our own, empty torrc: never inherit the system's /etc/tor/torrc (e.g. Fedora's
+        # ControlSocket in /run/tor, which a normal user cannot use).
+        torrc = self.data_dir / "torrc"
+        torrc.write_text("# Unseenet runs Tor with command-line options only.\n")
+        self.log_file = self.data_dir / "tor.log"
         self.process = await asyncio.create_subprocess_exec(
             self.binary,
+            "-f", str(torrc),
+            "--defaults-torrc", str(torrc),
             "--DataDirectory", str(self.data_dir),
             "--SocksPort", "auto",
             "--ControlPort", "auto",
             "--ControlPortWriteToFile", str(port_file),
             "--CookieAuthentication", "1",
             "--CookieAuthFile", str(self.data_dir / "control_auth_cookie"),
-            "--Log", "notice stderr",
+            "--Log", f"notice file {self.log_file}",
             "--AvoidDiskWrites", "1",
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            # Never PIPE without reading it: a full pipe would eventually block Tor.
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         while not port_file.exists():
             if self.process.returncode is not None or loop.time() > deadline:
-                raise TorError("tor failed to start")
+                raise TorError("tor failed to start" + self._log_tail())
             await asyncio.sleep(0.2)
         host, port = port_file.read_text().strip().split("=", 1)[1].rsplit(":", 1)
         self.control = await TorControl.connect(host, int(port))
@@ -124,8 +132,15 @@ class TorProcess:
             if "PROGRESS=100" in status:
                 return
             if loop.time() > deadline:
-                raise TorError("tor bootstrap timed out")
+                raise TorError("tor bootstrap timed out" + self._log_tail())
             await asyncio.sleep(1)
+
+    def _log_tail(self, lines: int = 5) -> str:
+        try:
+            tail = self.log_file.read_text(errors="replace").splitlines()[-lines:]
+        except (OSError, AttributeError):
+            return ""
+        return ":\n" + "\n".join(tail) if tail else ""
 
     async def stop(self) -> None:
         if self.control:
