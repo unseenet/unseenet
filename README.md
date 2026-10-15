@@ -143,6 +143,22 @@ the other's `name` and address) and restart with
 For development, a node can run without Tor:
 `unseenet-node --no-tor --data /tmp/node --listen 127.0.0.1:1119`.
 
+## Talk about Unseenet - on Unseenet
+
+Two open groups are carried by the project's test nodes:
+
+| Group | For |
+|-------|-----|
+| `unseenet@ph5fc5hop5232qsz` | The project: protocol, software, ideas, questions |
+| `unseenet.test@ph5fc5hop5232qsz` | Test posts - say hello, try replies |
+
+Both are owned by the project key
+`ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya`.
+Connect to the test node
+`f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion`,
+press `j` in the TUI and paste a group ID (or `g` to browse).
+The test nodes may be reset at any time while Unseenet is pre-alpha.
+
 ## Roadmap
 
 - [x] Protocol drafts UN-RFC 0000–0007
