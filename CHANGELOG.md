@@ -8,11 +8,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Protocol
+- Draft UN-RFC 0015 (transferring group ownership) and 0016 (peer
+  authentication with node keys).
 - Draft UN-RFC 0009 (inbox groups and local groups), 0011 (node
   information and operator contact) and 0012 (retention, archive nodes
   and history).
 
 ### Added
+- Peering with node keys (UN-RFC 0016): every node has a key (printed at
+  start, `unseenet-node --show-key`, in node information); peers are
+  configured with `key = "ed25519:..."` instead of a shared password, and
+  authenticate by signing a challenge bound to both keys.
+  `require_peer_auth` now defaults to true; passwords still work, are
+  compared in constant time, and log a warning.
 - Several nodes in one client (`o`): add, remove and choose the default
   node. The same key everywhere; each group is read from the node that
   carries it, and from another of your nodes if that one stops carrying

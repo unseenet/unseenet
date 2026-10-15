@@ -110,7 +110,7 @@ In addition to UN-RFC 0002 section 5, a node MUST check that:
 2. `v` is 1; `name` matches the Group ID; the owner fingerprint matches.
 3. `owner` equals `Author-Key`.
 4. If a previous manifest is known, `type` is unchanged and `owner` is
-   unchanged. (Ownership transfer is not defined in this version.)
+   unchanged, except by a transfer (UN-RFC 0015).
 
 # 5. Posting Rules
 

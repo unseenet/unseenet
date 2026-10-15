@@ -112,6 +112,7 @@ Peering is configured by node operators, per peer, with:
   default `*`);
 - optionally a shared secret for `AUTHINFO USER`/`AUTHINFO PASS`
   (RFC 4643). Over Tor, sending the password in plain text is acceptable.
+  UN-RFC 0016 replaces the shared secret with node keys.
 
 A node MAY refuse `IHAVE`, `CHECK` and `TAKETHIS` from connections that
 have not authenticated as a configured peer, answering `480`.

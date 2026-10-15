@@ -79,4 +79,6 @@ nav:
       - "0012 Retention and archives": spec/un-rfc-0012.md
       - "0013 Removing groups": spec/un-rfc-0013.md
       - "0014 Group rules": spec/un-rfc-0014.md
+      - "0015 Ownership transfer": spec/un-rfc-0015.md
+      - "0016 Peer keys": spec/un-rfc-0016.md
   - Development: development.md

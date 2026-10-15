@@ -16,26 +16,26 @@ min_pow = 18
 retention_days = 90
 new_groups = "accept"
 trusted_owners = []
-require_peer_auth = false
+require_peer_auth = true
 
 [[peer]]
 name = "friend"
 address = "abcdef...xyz.onion:119"
+key = "ed25519:..."
 groups = "*"
-password = "shared-secret"
 ```
 
 ## `[node]`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `name` | `"unseenet"` (the installer uses the hostname) | How this node introduces itself to peers. Peers use it as the user name when authenticating, so it must match the `name` the other side has for you. |
+| `name` | `"unseenet"` (the installer uses the hostname) | The node's name, shown to clients. With old password peering it is also the user name, so it must match the `name` the other side has for you. |
 | `min_pow` | `18` | Minimum [postage](../concepts.md#postage) in bits for posts this node accepts. Each extra bit doubles the cost. Group owners can require more for their groups. |
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
-| `require_peer_auth` | `false` | If `true`, only configured peers that authenticate can push posts to this node. Clients can always post. |
+| `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
 
 ### `new_groups`: which groups the node carries
 
@@ -73,10 +73,11 @@ One section per peer. See [Peering](peering.md).
 
 | Key | Required | Meaning |
 |-----|----------|---------|
-| `name` | yes | The peer's name. Must equal the `name` in the peer's own `[node]` section if you use a password. |
+| `name` | yes | Your label for the peer, used in the logs. (With a password: must equal the `name` in the peer's own `[node]` section.) |
 | `address` | yes | The peer's onion address with port, `xyz.onion:119`. (`host:port` works for local testing.) |
+| `key` | yes, for new peerings | The peer's node key, `ed25519:...` ([UN-RFC 0016](../spec/un-rfc-0016.md)). Used to accept the peer logging in to you, and to check that you reached the right node. |
 | `groups` | no, `"*"` | Which groups to **send** to this peer, as a wildmat (see below). |
-| `password` | no | Shared secret. Used to log in to the peer, and to accept the peer logging in to you. |
+| `password` | no | Old shared-secret login, ignored when `key` is set. See [Peering](peering.md#passwords-old-way). |
 
 ### Wildmats
 

@@ -23,7 +23,8 @@ node is open to anyone.
 
 ## What you should do
 
-- **Know your peers.** Peer with people you know, and use passwords.
+- **Know your peers.** Peer with people you know, using node keys, and keep
+  `require_peer_auth` on so only they can push posts to you.
 - **Decide on a policy.** For a node among friends, `accept` is fine. For a
   node open to strangers, consider `trusted`, and say publicly which groups
   you carry.

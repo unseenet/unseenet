@@ -53,15 +53,36 @@ def load_node_config(path: Path | None):
     data = tomllib.loads(path.read_text())
     node = data.get("node", {})
     peers = [PeerConfig(**p) for p in data.get("peer", [])]
+    for p in peers:
+        if p.key:
+            try:
+                p.public_key()
+            except crypto.CryptoError as exc:
+                sys.exit(f"{path}: peer {p.name}: bad key {p.key!r} ({exc})")
+        elif p.password:
+            logging.getLogger("unseenet.node").warning(
+                "peer %s uses a shared password; node keys are safer (UN-RFC 0016)", p.name)
     return NodeConfig(name=node.get("name", "unseenet"),
                       max_size=node.get("max_size", 65536),
                       min_pow=node.get("min_pow", 18),
                       retention_days=node.get("retention_days", 90),
                       new_groups=node.get("new_groups", "accept"),
                       trusted_owners=node.get("trusted_owners", []),
-                      require_peer_auth=node.get("require_peer_auth", False),
+                      # only configured peers may push, unless the operator says otherwise
+                      require_peer_auth=node.get("require_peer_auth", True),
                       operator=data.get("operator", {}),
                       peers=peers)
+
+
+def load_node_key(data: Path, passphrase: str) -> crypto.Identity:
+    """The node key (UN-RFC 0016), created on first start, sealed like the onion key."""
+    key_file = data / "node_key.vault"
+    if key_file.exists():
+        return crypto.Identity.from_seed(unseal(key_file.read_bytes(), passphrase))
+    key = crypto.Identity.generate()
+    key_file.write_bytes(seal(key.seed, passphrase, **_kdf()))
+    key_file.chmod(0o600)
+    return key
 
 
 async def run_node(args) -> None:
@@ -71,7 +92,10 @@ async def run_node(args) -> None:
     data = Path(args.data)
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
     config = load_node_config(Path(args.config) if args.config else None)
-    node = Node(Store(data / "articles.sqlite"), config)
+    passphrase = _passphrase("Node passphrase: ", "UNSEENET_NODE_PASSPHRASE")
+    node_key = load_node_key(data, passphrase)
+    print(f"Node key: {node_key.key_text}  (give it to the operators you peer with)")
+    node = Node(Store(data / "articles.sqlite"), config, key=node_key)
     host, port = args.listen.rsplit(":", 1)
     server = await node.serve(host, int(port))
     print(f"ONNTP listening on {args.listen}")
@@ -84,7 +108,6 @@ async def run_node(args) -> None:
         await tor.start()
         socks_port = tor.socks_port
         key_file = data / "onion_key.vault"
-        passphrase = _passphrase("Node passphrase: ", "UNSEENET_NODE_PASSPHRASE")
         key = unseal(key_file.read_bytes(), passphrase).decode() if key_file.exists() else None
         onion, new_key = await tor.control.add_onion(key, 119, f"{host}:{port}")
         if new_key:
@@ -118,9 +141,16 @@ def node_main(argv=None) -> None:
     p.add_argument("--version", action="version", version=f"unseenet-node {__version__}")
     p.add_argument("--drop-group", metavar="GROUP_ID",
                    help="stop carrying a group on this node, delete its posts, and exit")
+    p.add_argument("--show-key", action="store_true",
+                   help="print this node's key (for your peers' node.toml) and exit")
     p.add_argument("--undrop-group", metavar="GROUP_ID",
                    help="allow a group dropped with --drop-group again, and exit")
     args = p.parse_args(argv)
+    if args.show_key:
+        data = Path(args.data)
+        data.mkdir(parents=True, exist_ok=True, mode=0o700)
+        print(load_node_key(data, _passphrase("Node passphrase: ", "UNSEENET_NODE_PASSPHRASE")).key_text)
+        return
     if args.drop_group or args.undrop_group:
         from .node.server import Node
         node = Node(Store(Path(args.data) / "articles.sqlite"))

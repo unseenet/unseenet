@@ -74,9 +74,9 @@ new_groups = "accept"          # accept | trusted | manual
 
 [[peer]]
 name = "friend"
-address = "abcdef...xyz.onion"
+address = "abcdef...xyz.onion:119"
 groups = "dk.*,comp.*"
-password = "shared-secret"     # optional, for AUTHINFO
+key = "ed25519:..."            # the friend's node key (UN-RFC 0016)
 ```
 
 ## Design Decisions (so far)

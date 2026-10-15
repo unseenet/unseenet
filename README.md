@@ -153,10 +153,10 @@ curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-
 It installs Tor and the node as a systemd service and prints the node's
 `.onion` address. The full guide - configuration, peering, backup,
 security and troubleshooting - is in the
-[documentation](https://andlo.github.io/unseenet/node/install/). To peer with a friend's node, add a `[[peer]]` section
-to `/home/unseenet/node.toml` on both nodes (same `password`, each using
-the other's `name` and address) and restart with
-`systemctl restart unseenet-node`.
+[documentation](https://andlo.github.io/unseenet/node/install/). To peer with a friend's node, swap onion addresses and
+node keys (the installer prints both), add a `[[peer]]` section with the
+other's `address` and `key` to `/home/unseenet/node.toml` on both nodes,
+and restart with `systemctl restart unseenet-node`.
 
 For development, a node can run without Tor:
 `unseenet-node --no-tor --data /tmp/node --listen 127.0.0.1:1119`.

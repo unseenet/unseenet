@@ -121,8 +121,16 @@ block Tor; Tor bridges are not supported by Unseenet yet.
 down, or its address may be wrong. Posts stay queued and are delivered
 when it comes back.
 
-**`authentication failed`** - the peer's `name` and `password` do not
-match on both sides. See [Peering](peering.md#peering-two-nodes).
+**`the node answered with key ..., not the configured ...`** - the `key`
+you have for that peer is wrong, or the peer has a new node key. Ask its
+operator for the key ("Node key:" in their journal).
+
+**`the peer did not accept our key`** - the peer does not have your node
+key in its `[[peer]]` section (or has an old one). Send it your key; see
+[Peering](peering.md#node-keys).
+
+**`authentication failed`** (password peering) - the peer's `name` and
+`password` do not match on both sides.
 
 **A post is rejected** - the client shows why: `postage` (too little
 proof-of-work), `permission` (not allowed in that group type), `group`

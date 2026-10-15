@@ -596,6 +596,8 @@ class NodeInfoDialog(Dialog):
                       f"Software:  {i.get('software', '')}"]
             if i.get("description"):
                 lines.append(f"About:     {i['description']}")
+            if i.get("node_key"):
+                lines.append(f"Node key:  {i['node_key']}")
             lines += ["",
                       f"New groups:       {p.get('new_groups', '?')}",
                       f"Kept for:         {p.get('retention_days', '?')} days",

@@ -113,6 +113,8 @@ The protocol is designed to be extended without breaking old software:
 | 0012 | Retention, Archive Nodes and History          | Standards Track |
 | 0013 | Removing Groups                               | Standards Track |
 | 0014 | Group Rules (Charters)                        | Standards Track |
+| 0015 | Transferring Group Ownership                  | Standards Track |
+| 0016 | Peer Authentication with Node Keys            | Standards Track |
 
 Reserved for future work: 0010 (node discovery). The moderation submission queue first reserved
 as 0009 is covered by UN-RFC 0009 section 3.

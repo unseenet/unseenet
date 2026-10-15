@@ -39,10 +39,11 @@ retention_days = 90
 new_groups = "accept"
 
 # Add peers like this, then: systemctl restart unseenet-node
+# Swap onion addresses and node keys ("Node key:" in the journal) with the friend.
 # [[peer]]
 # name = "friend-node"
 # address = "abcdef...xyz.onion:119"
-# password = "shared-secret"
+# key = "ed25519:..."
 TOML
   chown unseenet: /home/unseenet/node.toml
 fi
@@ -64,3 +65,6 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 echo "Node address: ${ADDR:-not ready yet - check: journalctl -u unseenet-node -f}"
+KEY=$(journalctl -u unseenet-node -o cat --no-pager | grep -o 'Node key: ed25519:[a-z2-7]*' | tail -1 | cut -d' ' -f3 || true)
+echo "Node key:     ${KEY:-see: journalctl -u unseenet-node | grep 'Node key'}"
+echo "Give both to the operators you peer with."
