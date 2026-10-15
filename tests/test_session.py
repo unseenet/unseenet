@@ -50,3 +50,46 @@ async def test_closed_group_invite_flow(tmp_path, monkeypatch):
     for s in (a, b, c):
         await s.close()
     server.close()
+
+
+async def test_offline_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    a = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    a.new_identity("a", "A"); a.add_node(addr)
+    b = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    b.new_identity("b", "B"); b.add_node(addr)
+    open_g = await a.create_group("dk.snak", "open", min_pow=10)
+    closed = await a.create_group("familie", "closed", min_pow=10)
+    await a.invite(closed, b.identity().key_text)
+    await a.post(open_g, "Offentligt", "Alle kan læse\n")
+    await a.post(closed, "Hemmeligt", "Kun familien\n")
+    b.subscribe(open_g); b.subscribe(closed)
+    await b.fetch_group(open_g); await b.fetch_group(closed)
+    await b.close(); await a.close()
+    server.close(); await server.wait_closed()
+
+    # the cache file is encrypted
+    blob = (tmp_path / "b.vault.cache").read_bytes()
+    assert b"Kun familien" not in blob and b"Alle kan" not in blob
+    assert oct((tmp_path / "b.vault.cache").stat().st_mode & 0o777) == "0o600"
+
+    # node is gone: everything is still readable from the cache
+    again = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    assert again.load_offline() == 2
+    bodies = {m.subject: m.body for g in again.cache.values() for m in g.values()}
+    assert bodies == {"Offentligt": "Alle kan læse\n", "Hemmeligt": "Kun familien\n"}
+    try:
+        await again.fetch_group(open_g)
+        raise AssertionError("node should be unreachable")
+    except (OSError, ConnectionError):
+        pass
+    assert again.cache[open_g]          # cache untouched by the failed fetch
+
+    # a cache made for another node is ignored (article numbers are per node)
+    other = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    other.data["nodes"] = ["127.0.0.1:1"]
+    assert other.load_offline() == 0

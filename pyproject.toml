@@ -1,13 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "unseenet"
-version = "0.1.0.dev0"
+dynamic = ["version"]
 description = "A Usenet-style, decentralized and encrypted discussion network over Tor onion services"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+keywords = ["usenet", "nntp", "tor", "onion", "decentralized", "encryption", "bbs", "privacy"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Andreas Lorensen" }]
 requires-python = ">=3.11"
 dependencies = [
@@ -16,8 +18,14 @@ dependencies = [
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
-    "License :: OSI Approved :: Apache Software License",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Communications :: Usenet News",
     "Topic :: Security :: Cryptography",
 ]
@@ -33,7 +41,12 @@ unseenet-tui = "unseenet.client.tui:main"
 
 [project.urls]
 Homepage = "https://github.com/andlo/unseenet"
+Documentation = "https://andlo.github.io/unseenet/"
+Changelog = "https://github.com/andlo/unseenet/blob/main/CHANGELOG.md"
 Specification = "https://github.com/andlo/unseenet/tree/main/rfc"
+
+[tool.setuptools.dynamic]
+version = { attr = "unseenet.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

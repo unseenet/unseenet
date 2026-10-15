@@ -17,6 +17,7 @@ import tomllib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from . import __version__
 from .core import crypto
 from .core.article import Article, ArticleError, new_article, validate_structure
 from .core.groups import (decrypt_article, encrypted_article, encryption_epoch, make_key_update,
@@ -113,6 +114,7 @@ def node_main(argv=None) -> None:
     p.add_argument("--tor", help="path to the tor binary")
     p.add_argument("--no-tor", action="store_true", help="local only, for development")
     p.add_argument("-v", "--verbose", action="store_true")
+    p.add_argument("--version", action="version", version=f"unseenet-node {__version__}")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(name)s %(message)s")
@@ -330,6 +332,7 @@ def client_main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="unseenet", description="Unseenet client.")
     p.add_argument("--vault", default="unseenet.vault", help="encrypted vault file")
     p.add_argument("--identity", "-i", help="identity to use (default: first)")
+    p.add_argument("--version", action="version", version=f"unseenet {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("id-new", help="create a new identity")

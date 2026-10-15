@@ -1,0 +1,64 @@
+name: release
+# Push a tag like v0.1.0 to release. The tag must match unseenet.__version__.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check that the tag matches the version
+        run: |
+          VERSION=$(python -c "import sys; sys.path.insert(0, 'src'); import unseenet; print(unseenet.__version__)")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version $VERSION" >&2; exit 1
+          fi
+          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; }
+      - run: pip install -e ".[dev]" build twine
+      - run: pytest -q
+      - run: python -m build && twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/unseenet
+    permissions:
+      id-token: write          # trusted publishing: no API token stored anywhere
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Release notes from CHANGELOG.md
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRE=""; case "$GITHUB_REF_NAME" in v0.*) PRE="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Unseenet $GITHUB_REF_NAME" --notes-file notes.md $PRE

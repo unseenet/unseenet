@@ -23,6 +23,7 @@ from textual.screen import ModalScreen
 from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, ListItem, ListView,
                              Select, Static, TextArea)
 
+from .. import __version__
 from ..core.vault import Vault, VaultError
 from .session import GroupInfo, Message, Session, SessionError, default_vault_path
 
@@ -43,7 +44,8 @@ ModalScreen { align: center middle; }
 .dialog { width: 80; height: auto; max-height: 90%; border: thick $primary; background: $panel; padding: 1 2; }
 .dialog Label.title { text-style: bold; margin-bottom: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
-.dialog #body { height: 14; margin-bottom: 1; }
+.dialog.compose { width: 96%; height: 94%; max-height: 100%; }
+.dialog.compose #body { height: 1fr; margin-bottom: 1; }
 .dialog .buttons { height: auto; align-horizontal: right; }
 .dialog Button { margin-left: 1; }
 .dialog .hint { color: $text-muted; }
@@ -147,12 +149,12 @@ class ComposeDialog(Dialog):
         self.group, self.subject, self.quote, self.is_reply = group, subject, quote, is_reply
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
+        with Vertical(classes="dialog compose"):
             kind = "Reply in" if self.is_reply else "New post in"
             lock = "  ◈ encrypted" if self.group.type == "closed" else ""
             yield Label(f"{kind} {self.group.short}{lock}", classes="title")
             yield Input(value=self.subject, placeholder="Subject", id="subject")
-            yield TextArea(self.quote, id="body")
+            yield TextArea(self.quote, id="body", soft_wrap=True)
             yield Label("Ctrl+S to send. Sending takes a moment: the post carries a small "
                         "proof-of-work.", classes="hint")
             with Horizontal(classes="buttons"):
@@ -160,7 +162,12 @@ class ComposeDialog(Dialog):
                 yield Button("Send", variant="primary", id="ok")
 
     def on_mount(self) -> None:
-        self.query_one("#body" if self.is_reply else "#subject").focus()
+        if self.is_reply:
+            body = self.query_one("#body", TextArea)
+            body.move_cursor(body.document.end)    # write below the quote
+            body.focus()
+        else:
+            self.query_one("#subject").focus()
 
     @on(Button.Pressed, "#ok")
     def action_send(self) -> None:
@@ -362,24 +369,45 @@ class UnseenetApp(App):
                 s.add_node(result["node"])
         ident = s.identity()
         self.sub_title = f"{s.display_name()} ({ident.fingerprint[:4]})  -  {s.node}"
+        await self.show_offline()
         self.refresh_groups()
         self.set_interval(REFRESH_SECONDS, self.action_refresh)
 
     # --- groups ---
+    def _groups_from_vault(self, available: dict[str, GroupInfo] | None = None) -> dict[str, GroupInfo]:
+        groups = {}
+        for gid in self.session.data["subscribed"]:
+            entry = self.session.group_entry(gid)
+            if available is not None and gid in available:
+                g = available[gid]
+            else:
+                g = GroupInfo(gid, entry.get("title", ""))
+                if available is not None:
+                    g.description = "(not on this node)"
+            g.subscribed = True
+            g.type = entry.get("type") or g.type
+            groups[gid] = g
+        return groups
+
+    async def show_offline(self) -> None:
+        """Show what is in the encrypted local cache before any network access."""
+        loaded = self.session.load_offline()
+        self.groups = self._groups_from_vault()
+        await self._render_groups()
+        if self.groups:
+            self.current_group = next(iter(self.groups))
+            self._render_threads()
+        self.set_status(f"{loaded} saved posts available offline - connecting ...")
+
     @work(exclusive=True, group="groups")
     async def refresh_groups(self) -> None:
         s = self.session
         try:
             available = {g.group_id: g for g in await s.list_groups()}
         except (SessionError, OSError, ConnectionError) as exc:
-            self.set_status(f"Cannot reach node: {exc}")
+            self.set_status(f"Offline ({exc}) - showing saved posts")
             return
-        groups = {}
-        for gid in s.data["subscribed"]:
-            g = available.get(gid) or GroupInfo(gid, "(not on this node)")
-            g.subscribed = True
-            g.type = s.group_entry(gid).get("type") or g.type
-            groups[gid] = g
+        groups = self._groups_from_vault(available)
         self.groups = groups
         for gid in groups:
             try:
@@ -390,7 +418,7 @@ class UnseenetApp(App):
         await self._render_groups()
         if self.current_group in groups:
             self._render_threads()
-        elif groups and self.current_group is None:
+        elif groups:
             self.select_group(next(iter(groups)))
         if not groups:
             self.query_one("#threads-title", Static).update(
@@ -423,7 +451,7 @@ class UnseenetApp(App):
         try:
             await self.session.fetch_group(gid)
         except (SessionError, OSError, ConnectionError) as exc:
-            self.notify(str(exc), severity="error")
+            self.set_status(f"Offline ({exc}) - showing saved posts")
         self.groups[gid].type = self.session.group_entry(gid).get("type")
         self._render_threads()
         self.query_one("#threads", DataTable).focus()
@@ -626,6 +654,7 @@ class UnseenetApp(App):
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="unseenet-tui", description="Unseenet terminal client.")
     p.add_argument("--vault", default=str(default_vault_path()), help="encrypted vault file")
+    p.add_argument("--version", action="version", version=f"unseenet-tui {__version__}")
     args = p.parse_args(argv)
     UnseenetApp(Path(args.vault)).run()
 

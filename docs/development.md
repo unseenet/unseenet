@@ -212,6 +212,53 @@ Missing / rough:
 - No packaging for USB yet (plan: PyInstaller or Nuitka per OS with the
   Tor Expert Bundle).
 
+## Versioning
+
+There are three independent version numbers. Keeping them apart means the
+software can evolve quickly while the network stays compatible.
+
+| What | Where | Rules |
+|------|-------|-------|
+| **Software** | `unseenet.__version__`, tags `vX.Y.Z` | Semantic versioning (below) |
+| **Protocol** | `PROTOCOL_VERSION`, the `Unseenet-Version` header | Changes only through a new UN-RFC (UN-RFC 0000) |
+| **File formats** | magic bytes (`UNSVAULT1`, `UNSSIDE1`) and `"v"` fields | A new format gets a new magic or `v`; old files must still open |
+
+### Software versions
+
+[Semantic versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
+
+- **Before 1.0** (now): anything may change. `MINOR` is raised for new
+  features *and* for breaking changes; `PATCH` for fixes only. Every
+  release is marked as a pre-release on GitHub.
+- **From 1.0**: `MAJOR` for breaking changes (command line, `node.toml`,
+  vault format, dropping a protocol version), `MINOR` for new features,
+  `PATCH` for fixes.
+
+What counts as breaking: anything that makes an existing `node.toml`,
+vault or script stop working, or that stops a node from talking to nodes
+running the previous `MINOR` release.
+
+**Compatibility promise:** a release always interoperates with nodes and
+clients from the previous `MINOR` release, so a network can be upgraded
+one node at a time.
+
+### Making a release
+
+1. Move the entries under `## [Unreleased]` in `CHANGELOG.md` to a new
+   `## [X.Y.Z] - YYYY-MM-DD` section, and add the compare link at the bottom.
+2. Set `__version__ = "X.Y.Z"` in `src/unseenet/__init__.py`.
+3. Commit, then tag and push:
+   ```bash
+   git tag -a vX.Y.Z -m "Unseenet X.Y.Z" && git push origin vX.Y.Z
+   ```
+4. `.github/workflows/release.yml` checks that the tag, `__version__` and
+   the changelog agree, runs the tests, builds, publishes to PyPI with
+   trusted publishing (no API tokens stored anywhere) and creates the
+   GitHub release with the changelog section as notes.
+
+Between releases, every change that users or node operators would notice
+gets a line under `## [Unreleased]`.
+
 ## Coding Conventions
 
 - Python 3.11+, type hints, `from __future__ import annotations`.

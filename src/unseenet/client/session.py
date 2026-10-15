@@ -7,6 +7,7 @@ encrypted vault (UN-RFC 0007); articles are cached in memory only.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,6 +23,8 @@ from ..nntp import Client, NNTPError
 
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
+MAX_CACHED_PER_GROUP = 2000
+CACHE_SIDECAR = "cache"
 
 
 class SessionError(RuntimeError):
@@ -84,6 +87,8 @@ class Session:
         self._client: Client | None = None
         self._lock = asyncio.Lock()
         self.cache: dict[str, dict[int, Message]] = {}
+        self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores
+        self._high: dict[str, int] = {}               # highest article number fetched
         d = self.vault.data
         d.setdefault("identities", {})
         d.setdefault("groups", {})
@@ -197,6 +202,8 @@ class Session:
             except ValueError:
                 continue
             entry = self.data["groups"].get(gid, {})
+            if gid in subscribed and desc and entry.get("title") != desc:
+                self.group_entry(gid)["title"] = desc       # remembered for offline use
             out.append(GroupInfo(gid, desc, entry.get("type"), subscribed=gid in subscribed))
         return out
 
@@ -240,6 +247,7 @@ class Session:
     async def fetch_group(self, group_id: str) -> list[Message]:
         """Fetch new articles in a group; returns all cached messages, oldest first."""
         cache = self.cache.setdefault(group_id, {})
+        raws = self._raw.setdefault(group_id, {})
         me = self.identity()
         entry = self.group_entry(group_id)
 
@@ -248,27 +256,75 @@ class Session:
                 _, low, high = await c.group(group_id)
             except NNTPError as exc:
                 raise SessionError("group not carried by this node") from exc
-            start = max([low, *[n + 1 for n in cache]])
+            start = max(low, self._high.get(group_id, 0) + 1)
             fetched = []
             for n in range(start, high + 1):
                 raw = await c.article(str(n))
                 if raw is not None:
                     fetched.append((n, raw))
-            return fetched
+            return fetched, high
 
+        fetched, high = await self._call(run)
         changed = False
-        for n, raw in await self._call(run):
+        for n, raw in fetched:
+            raw = strip_reader_headers(raw)
             msg = self._parse(n, raw, group_id, entry, me)
             if msg is None:
                 changed = True     # control article updated group state
                 continue
             cache[n] = msg
+            raws[n] = raw
+        if high > self._high.get(group_id, 0):
+            self._high[group_id] = high
         if changed:
             self.save()
+        if fetched:
+            self.save_offline()
         return sorted(cache.values(), key=lambda m: m.number)
 
+    # ------------------------------------------------------------------
+    # offline cache (UN-RFC 0007: encrypted with the vault key)
+    # ------------------------------------------------------------------
+    def load_offline(self) -> int:
+        """Load cached articles so groups can be read without a connection.
+
+        Article numbers are local to a node, so the cache is only used for the
+        node it was made with. Returns the number of articles loaded.
+        """
+        try:
+            payload = self.vault.read_sidecar(CACHE_SIDECAR)
+        except Exception:  # noqa: BLE001  damaged cache: start over, the node has it all
+            return 0
+        if not payload:
+            return 0
+        data = json.loads(payload)
+        if data.get("v") != 1 or data.get("node") != self.node:
+            return 0
+        me = self.identity()
+        loaded = 0
+        for gid, g in data.get("groups", {}).items():
+            entry = self.group_entry(gid)
+            self._high[gid] = max(self._high.get(gid, 0), int(g.get("high", 0)))
+            cache = self.cache.setdefault(gid, {})
+            raws = self._raw.setdefault(gid, {})
+            for n_text, b64raw in g.get("articles", {}).items():
+                n, raw = int(n_text), base64.b64decode(b64raw)
+                msg = self._parse(n, raw, gid, entry, me)
+                if msg is not None:
+                    cache[n], raws[n] = msg, raw
+                    loaded += 1
+        return loaded
+
+    def save_offline(self) -> None:
+        groups = {}
+        for gid, raws in self._raw.items():
+            keep = sorted(raws)[-MAX_CACHED_PER_GROUP:]
+            groups[gid] = {"high": self._high.get(gid, 0),
+                           "articles": {str(n): base64.b64encode(raws[n]).decode() for n in keep}}
+        payload = json.dumps({"v": 1, "node": self.node, "groups": groups}).encode()
+        self.vault.write_sidecar(CACHE_SIDECAR, payload)
+
     def _parse(self, n: int, raw: bytes, group_id: str, entry: dict, me) -> Message | None:
-        raw = strip_reader_headers(raw)
         try:
             art = Article.from_bytes(raw)
             validate_structure(art, raw_size=len(raw))

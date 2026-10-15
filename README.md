@@ -106,11 +106,11 @@ Requires Python 3.11+ and the `tor` binary (`dnf install tor` / `apt install tor
 ### The client
 
 ```bash
-git clone https://github.com/andlo/unseenet
-cd unseenet
-pip install -e ".[tui]"
+pipx install "unseenet[tui]"
 unseenet-tui
 ```
+
+(or from a clone: `pip install -e ".[tui]"`)
 
 On first start you choose a passphrase for your vault, a display name, and
 the node to connect to (its `.onion` address). Then:
@@ -125,7 +125,8 @@ the node to connect to (its `.onion` address). Then:
 | `j` | join a group by ID or `unseenet:join` link |
 | `F5` | refresh (also happens every 30 seconds) |
 
-Everything is kept in `unseenet.vault`, encrypted, next to where you run it.
+Everything is kept in `unseenet.vault`, encrypted, next to where you run it,
+and the posts you have fetched stay readable offline.
 There is also a plain command line client, `unseenet --help`.
 
 ### A node
@@ -175,6 +176,7 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 - [x] First real test: two nodes peering over Tor
 - [x] TUI client (first version): groups, threads, posting, closed groups, invites
 - [x] Node install script and systemd service
+- [x] Encrypted offline cache; documentation site; releases on PyPI
 - [ ] Pull catch-up between nodes (NEWNEWS)
 - [ ] Chat view in the TUI
 - [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)

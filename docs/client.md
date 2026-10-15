@@ -26,13 +26,22 @@ You need Python 3.11 or newer, `git` and the `tor` program.
     brew install tor git python
     ```
 
-Then:
+Then install Unseenet from PyPI with [pipx](https://pipx.pypa.io/), which
+keeps it in its own environment:
+
+```bash
+pipx install "unseenet[tui]"
+unseenet-tui
+```
+
+Or, to follow development, from the repository:
 
 ```bash
 git clone https://github.com/andlo/unseenet
 cd unseenet
 python3 -m venv .venv
 .venv/bin/pip install -e ".[tui]"
+.venv/bin/unseenet-tui
 ```
 
 You do **not** need to start or configure the system's Tor service.
@@ -40,10 +49,6 @@ Unseenet runs its own Tor process with its own settings and ignores
 `/etc/tor/torrc`.
 
 ## First start
-
-```bash
-.venv/bin/unseenet-tui
-```
 
 1. **Choose a passphrase.** It encrypts your vault (`unseenet.vault` in the
    current directory). There is no way to recover it if you forget it.
@@ -99,17 +104,23 @@ makes mass spam expensive. The client computes it in the background.
   passphrase (Argon2id + XSalsa20-Poly1305). It is only decrypted in memory.
 - Back it up. If you lose it, you lose your identity and your keys to
   closed groups.
-- The vault is a normal file, so it can live on a USB stick together with
-  the program.
+- The vault and its cache are normal files, so they can live on a USB stick
+  together with the program.
 
-!!! note "Offline reading"
-    Posts are currently fetched from the node each time you start the client.
-    An encrypted local cache for offline reading is on the way.
+## Reading offline
+
+Posts you have fetched are kept in an encrypted cache next to the vault
+(`unseenet.vault.cache`), encrypted with the same key. When you start the
+client it shows them at once, and then fetches what is new. Without a
+connection to the node you can still read everything you fetched before.
+
+The cache belongs to one node: article numbers differ between nodes, so
+if you switch node the cache starts over.
 
 ## The command line client
 
 There is also a plain command line client for scripting and testing:
 
 ```bash
-.venv/bin/unseenet --help
+unseenet --help
 ```

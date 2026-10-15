@@ -14,6 +14,7 @@ import nacl.pwhash
 import nacl.secret
 
 MAGIC = b"UNSVAULT1"
+SIDECAR_MAGIC = b"UNSSIDE1"
 OPSLIMIT = nacl.pwhash.argon2id.OPSLIMIT_MODERATE
 MEMLIMIT = nacl.pwhash.argon2id.MEMLIMIT_MODERATE
 
@@ -83,19 +84,42 @@ class Vault:
     def save(self) -> None:
         with self._lock:
             payload = json.dumps(self.data).encode()
-            blob = _pack(self._key, self._salt, self._ops, self._mem, payload)
-            directory = self.path.resolve().parent
-            fd, tmp = tempfile.mkstemp(prefix=".unseenet-vault-", dir=directory)
+            self._atomic_write(self.path, _pack(self._key, self._salt, self._ops, self._mem, payload))
+
+    # --- sidecar files: other data encrypted with the same key -----------------
+    def sidecar_path(self, name: str) -> Path:
+        return self.path.with_name(f"{self.path.name}.{name}")
+
+    def write_sidecar(self, name: str, payload: bytes) -> None:
+        """Encrypt ``payload`` with the vault key into ``<vault>.<name>``."""
+        box = nacl.secret.SecretBox(self._key).encrypt(payload)
+        with self._lock:
+            self._atomic_write(self.sidecar_path(name), SIDECAR_MAGIC + bytes(box))
+
+    def read_sidecar(self, name: str) -> bytes | None:
+        path = self.sidecar_path(name)
+        try:
+            blob = path.read_bytes()
+        except FileNotFoundError:
+            return None
+        if not blob.startswith(SIDECAR_MAGIC):
+            raise VaultError(f"{path.name} is not an Unseenet sidecar file")
+        return _open_box(self._key, blob[len(SIDECAR_MAGIC):])
+
+    @staticmethod
+    def _atomic_write(path: Path, blob: bytes) -> None:
+        directory = path.resolve().parent
+        fd, tmp = tempfile.mkstemp(prefix=".unseenet-", dir=directory)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(blob)
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, path)
+        except BaseException:
             try:
-                with os.fdopen(fd, "wb") as f:
-                    f.write(blob)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.chmod(tmp, 0o600)
-                os.replace(tmp, self.path)
-            except BaseException:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
