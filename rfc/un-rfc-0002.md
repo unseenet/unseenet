@@ -179,3 +179,8 @@ Det virker!
   is out of scope for this series.
 - The 64 KiB limit is a protection against storage exhaustion and keeps
   the network unsuitable for bulk file distribution.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

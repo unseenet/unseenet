@@ -83,3 +83,8 @@ data (consensus cache) SHOULD live on the stick or in memory.
 - Encryption does not hide that Unseenet is installed. Users for whom
   that is itself a risk should consider the legal situation where they
   live.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

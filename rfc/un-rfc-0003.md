@@ -146,3 +146,8 @@ All keys, secrets and nonces MUST come from the operating system CSPRNG
   is used for signatures and sealed-box decryption under strictly
   separated purposes, but implementations MAY instead publish a separate
   X25519 key in a future revision.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

@@ -165,4 +165,8 @@ RFC-lignende dokumenter, så alle kan lave kompatible noder og klienter.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+- Code: [Apache License 2.0](LICENSE)
+- Protocol specification (`rfc/`) and logo (`assets/`):
+  [CC BY 4.0](rfc/LICENSE.md) — copy, quote and implement freely, with credit
+
+Anyone may implement the protocol; no license is needed for that.

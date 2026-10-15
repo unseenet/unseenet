@@ -155,3 +155,8 @@ See UN-RFC 0003 (cryptography), 0004 (group access), 0006 (spam) and
 0007 (data at rest). Briefly: content confidentiality is only provided
 for closed groups; metadata (group ID, size, approximate time,
 author key) is visible to nodes for all articles.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

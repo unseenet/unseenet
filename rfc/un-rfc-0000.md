@@ -114,3 +114,8 @@ Reserved for future work: 0008 (low-latency chat delivery),
 # 7. Author's Address
 
 Andreas Lorensen, Denmark. <https://github.com/andlo>
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

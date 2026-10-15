@@ -15,4 +15,4 @@ Colors: ink `#10302a`, green `#16a974` (light) / `#34d399` (dark).
 The wordmark is DejaVu Sans Mono Bold (Bitstream Vera license) converted
 to outlines. Regenerate everything with `python tools/make_logo.py`.
 
-The logo is licensed under the same terms as the rest of the repository.
+The logo is licensed under CC BY 4.0, see [LICENSE.md](LICENSE.md).

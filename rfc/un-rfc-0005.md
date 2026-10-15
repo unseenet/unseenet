@@ -174,3 +174,8 @@ uniformly 0 to 60 seconds), independently per peer.
 - Tor onion services can be subject to denial of service; Tor's own
   onion-service proof-of-work defense SHOULD be enabled on nodes where
   available.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

@@ -241,3 +241,8 @@ and checked against the target.
   SHOULD keep an offline backup of the owner key.
 - Nodes enforce posting rules, but a malicious node can still drop
   articles. Clients SHOULD read from more than one node.
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.

@@ -82,3 +82,8 @@ groups under spam pressure may raise `min_pow`.
 - Postage limits volume; it does not judge content. Content filtering
   remains the job of moderators, node operators and readers
   (UN-RFC 0001 section 4).
+
+# Copyright Notice
+
+Copyright (c) 2026 the persons identified as the document authors.
+This document is licensed under CC BY 4.0, see `rfc/LICENSE.md`.
