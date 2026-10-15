@@ -80,6 +80,13 @@ After that the connection is reused.
 | ++j++ | Join a group by ID or `unseenet:join` link |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
+| ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
+
+Groups are shown by **hierarchy**, the part of the name before the first
+dot, as in the old newsreaders: `dk.snak` and `dk.teknik` sit under `dk.*`,
+`comp.lang.python` under `comp.*`. Hierarchies with unread posts are bold.
+The same goes for the list of all groups on the node (++g++), where
+large hierarchies start folded.
 
 Unread posts are marked with ●. Posts in closed groups are marked with ◈,
 private messages with ✉.

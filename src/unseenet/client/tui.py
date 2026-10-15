@@ -14,14 +14,14 @@ import os
 from pathlib import Path
 
 from textual import on, work
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.markup import escape
 from textual.screen import ModalScreen
-from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, ListItem, ListView,
-                             Select, Static, TextArea)
+from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, Select, Static,
+                             TextArea, Tree)
 
 from .. import __version__
 from ..core.vault import Vault, VaultError
@@ -30,6 +30,23 @@ from ..core.groups import personal_inbox_id
 from .session import GroupInfo, Message, Session, SessionError, default_vault_path
 
 REFRESH_SECONDS = 30
+
+
+def by_hierarchy(groups: list[GroupInfo]) -> list[tuple[str, list[GroupInfo]]]:
+    """Group by the first part of the name, as Usenet hierarchies (dk.*, comp.*, ...).
+
+    A hierarchy with a single group is returned as ('', [group]) so it can be shown
+    without a folder of its own.
+    """
+    buckets: dict[str, list[GroupInfo]] = {}
+    for g in groups:
+        name = g.group_id.rpartition("@")[0]
+        buckets.setdefault(name.split(".", 1)[0], []).append(g)
+    out = []
+    for top in sorted(buckets):
+        items = sorted(buckets[top], key=lambda g: (g.group_id.rpartition("@")[0], g.group_id))
+        out.append((top if len(items) > 1 else "", items))
+    return out
 
 CSS = """
 Screen { background: $surface; }
@@ -52,7 +69,8 @@ ModalScreen { align: center middle; }
 .dialog Button { margin-left: 1; }
 .dialog .hint { color: $text-muted; }
 .dialog .error { color: $error; }
-#browse-list { height: 20; }
+#browse-tree { height: 22; }
+#groups { padding: 0 1; }
 """
 
 
@@ -288,7 +306,7 @@ class NodeInfoDialog(Dialog):
 
 
 class BrowseDialog(Dialog):
-    """All groups on the node; Enter toggles subscription."""
+    """All groups on the node, by hierarchy; Enter toggles subscription."""
 
     def __init__(self, groups: list[GroupInfo]):
         super().__init__()
@@ -297,28 +315,43 @@ class BrowseDialog(Dialog):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label("Groups on this node", classes="title")
-            yield Label("Enter: subscribe / unsubscribe.  Esc: close.", classes="hint")
-            items = [ListItem(Label(self._label(g), markup=False), id=f"g{i}")
-                     for i, g in enumerate(self.groups)]
-            if not items:
-                items = [ListItem(Label("No groups yet - press c in the main view to create one."))]
-            yield ListView(*items, id="browse-list")
+            yield Label("Enter: subscribe or unsubscribe a group, open or close a "
+                        "hierarchy.  Esc: close.", classes="hint")
+            tree: Tree = Tree("groups", id="browse-tree")
+            tree.show_root = False
+            expand = len(self.groups) <= 15
+            for top, items in by_hierarchy(self.groups):
+                parent = tree.root
+                if top:
+                    subs = sum(1 for g in items if g.subscribed)
+                    parent = tree.root.add(Text(f"{top}.*   {len(items)} groups"
+                                                + (f", {subs} subscribed" if subs else "")),
+                                           expand=expand or subs > 0)
+                for g in items:
+                    parent.add_leaf(self._label(g), data=g)
+            if not self.groups:
+                tree.root.add_leaf(Text("No groups yet - press c in the main view to create one."))
+            yield tree
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
 
     @staticmethod
-    def _label(g: GroupInfo) -> str:
+    def _label(g: GroupInfo) -> Text:
         mark = "[x]" if g.subscribed else "[ ]"
-        return f"{mark} {g.short:28} {g.description}"
+        kind = {"closed": " ◈", "inbox": " ✉"}.get(g.type or "", "")
+        return Text(f"{mark} {g.short}{kind}   {g.description}")
 
-    @on(ListView.Selected)
-    def _toggle(self, event: ListView.Selected) -> None:
-        if not event.item.id:
+    def on_mount(self) -> None:
+        self.query_one("#browse-tree", Tree).focus()
+
+    @on(Tree.NodeSelected, "#browse-tree")
+    def _toggle(self, event: Tree.NodeSelected) -> None:
+        g = event.node.data
+        if not isinstance(g, GroupInfo):
             return
-        g = self.groups[int(event.item.id[1:])]
         g.subscribed = not g.subscribed
         self.app.session.subscribe(g.group_id, g.subscribed)
-        event.item.query_one(Label).update(self._label(g))
+        event.node.set_label(self._label(g))
 
     def action_cancel(self) -> None:
         self.dismiss(True)
@@ -366,7 +399,7 @@ class UnseenetApp(App):
         with Horizontal():
             with Vertical(id="groups-pane"):
                 yield Static("Groups", id="groups-title")
-                yield ListView(id="groups")
+                yield Tree("groups", id="groups")
             with Vertical():
                 yield Static("Select a group", id="threads-title", markup=False)
                 yield DataTable(id="threads", cursor_type="row", zebra_stripes=True)
@@ -485,16 +518,39 @@ class UnseenetApp(App):
         self.set_status(f"{len(available)} groups on node, {len(groups)} subscribed")
 
     async def _render_groups(self) -> None:
-        lv = self.query_one("#groups", ListView)
-        index = lv.index
-        await lv.clear()
-        for gid, g in self.groups.items():
-            unread = self.session.unread_count(gid)
-            label = Label(self._group_label(g) + (f" ({unread})" if unread else ""),
-                          classes="unread" if unread else "", markup=False)
-            await lv.append(ListItem(label, name=gid))
-        if index is not None and index < len(self.groups):
-            lv.index = index
+        tree = self.query_one("#groups", Tree)
+        tree.show_root = False
+        was_open = {str(n.label).split(".*")[0] for n in tree.root.children
+                    if n.children and n.is_expanded}
+        known = {str(n.label).split(".*")[0] for n in tree.root.children if n.children}
+        tree.clear()
+
+        def label(g: GroupInfo) -> Text:
+            unread = self.session.unread_count(g.group_id)
+            text = Text(self._group_label(g) + (f" ({unread})" if unread else ""))
+            if unread:
+                text.stylize("bold")
+            return text
+
+        select = None
+        groups = list(self.groups.values())
+        mine = [g for g in groups if g.group_id == self.session.my_inbox]
+        for g in mine:                                   # private messages always first
+            node = tree.root.add_leaf(label(g), data=g.group_id)
+            select = node if g.group_id == self.current_group else select
+        for top, items in by_hierarchy([g for g in groups if g not in mine]):
+            parent = tree.root
+            if top:
+                unread = sum(self.session.unread_count(g.group_id) for g in items)
+                folder = Text(f"{top}.*" + (f" ({unread})" if unread else ""))
+                if unread:
+                    folder.stylize("bold")
+                parent = tree.root.add(folder, expand=top in was_open or top not in known)
+            for g in items:
+                node = parent.add_leaf(label(g), data=g.group_id)
+                select = node if g.group_id == self.current_group else select
+        if select is not None:
+            tree.move_cursor(select)
 
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
@@ -502,10 +558,10 @@ class UnseenetApp(App):
         mark = {"closed": "◈ ", "inbox": "✉ "}.get(g.type or "", "  ")
         return f"{mark}{g.short}"
 
-    @on(ListView.Selected, "#groups")
-    def _group_selected(self, event: ListView.Selected) -> None:
-        if event.item.name:
-            self.select_group(event.item.name)
+    @on(Tree.NodeSelected, "#groups")
+    def _group_selected(self, event: Tree.NodeSelected) -> None:
+        if isinstance(event.node.data, str):
+            self.select_group(event.node.data)
 
     @work(exclusive=True, group="fetch")
     async def select_group(self, gid: str) -> None:
@@ -776,6 +832,52 @@ class UnseenetApp(App):
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
                                     self.session.identity().key_text))
+
+    def get_system_commands(self, screen):
+        """Everything the keys do is also in the command palette (Ctrl+P)."""
+        yield from super().get_system_commands(screen)
+        if self.session is None:
+            return
+        commands = [
+            ("New post", "Write a new post in the current group  [n]", self.action_new_post),
+            ("Reply", "Reply to the selected post  [r]", self.action_reply),
+            ("Private message", "Write privately to someone by their key  [m]", self.action_message),
+            ("Browse groups", "See all groups on the node, subscribe or unsubscribe  [g]",
+             self.action_browse),
+            ("Create group", "Create an open, moderated, channel, closed or inbox group  [c]",
+             self.action_create_group),
+            ("Invite to closed group", "Give someone access to a closed group you own  [i]",
+             self.action_invite),
+            ("Join group", "Subscribe by group ID or unseenet:join link  [j]", self.action_join),
+            ("Node information", "Who runs this node, its policy, write to the operator  [o]",
+             self.action_node_info),
+            ("Show my key", "Your key, to share for private messages and invitations  [k]",
+             self.action_show_key),
+            ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
+            ("Private messages", "Open your inbox", self.action_open_inbox),
+            ("Mark group as read", "Mark every post in the current group as read",
+             self.action_mark_all_read),
+        ]
+        for title, help_text, callback in commands:
+            yield SystemCommand(title, help_text, callback)
+
+    def action_open_inbox(self) -> None:
+        gid = self.session.my_inbox
+        if gid in self.groups:
+            self.select_group(gid)
+        else:
+            self.notify("Your inbox is not ready yet - it is created when the node is reachable",
+                        severity="warning")
+
+    def action_mark_all_read(self) -> None:
+        g = self._need_group()
+        if not g:
+            return
+        for m in self.session.cache.get(g.group_id, {}).values():
+            self.session.mark_read(m, save=False)
+        self.session.save()
+        self._render_threads()
+        self._save_soon()
 
     def action_refresh(self) -> None:
         if self.session:

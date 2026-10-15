@@ -21,6 +21,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - TUI: `m` private message, `o` node information and "write to operator",
   private replies, inbox at the top of the group list.
 - CLI: `group-create --type inbox --local`.
+- TUI: groups shown as a tree by hierarchy (`dk.*`, `comp.*`, ...), both in
+  the main view and when browsing the node's groups.
+- TUI: every action is in the command palette (Ctrl+P), plus "Private
+  messages" and "Mark group as read".
 
 ## [0.1.0] - 2026-10-15
 
