@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+# local data - never commit vaults, node data or tor state
+*.vault
+*.tmp
+node-data/
+unseenet-tor/

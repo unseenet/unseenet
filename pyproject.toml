@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unseenet"
+version = "0.1.0.dev0"
+description = "A Usenet-style, decentralized and encrypted discussion network over Tor onion services"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Andreas Lorensen" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pynacl>=1.5",
+    "python-socks[asyncio]>=2.4",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications :: Usenet News",
+    "Topic :: Security :: Cryptography",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+unseenet = "unseenet.cli:client_main"
+unseenet-node = "unseenet.cli:node_main"
+
+[project.urls]
+Homepage = "https://github.com/andlo/unseenet"
+Specification = "https://github.com/andlo/unseenet/tree/main/rfc"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]

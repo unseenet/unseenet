@@ -1,0 +1,211 @@
+# Developer Guide
+
+This document describes the code, the decisions made so far and why, and
+what is left. Protocol rules belong in the UN-RFCs (`rfc/`); this file is
+about the implementation and the reasoning around it.
+
+## Principles
+
+1. **The spec is the product.** If the code and an UN-RFC disagree, the
+   code is wrong, or the UN-RFC must be changed through the process in
+   UN-RFC 0000. Never let behavior drift silently.
+2. **Boring, auditable cryptography.** libsodium primitives through
+   PyNaCl. No home-made ciphers. Every hash and signature has its own
+   domain separator.
+3. **Portable first.** The client must run from a USB stick on a machine
+   we do not control. Few dependencies, nothing written outside the stick.
+4. **Text network.** No binaries, small articles, bounded storage.
+5. **Nobody rules alone.** Group owners, node operators and readers each
+   control their own part (UN-RFC 0001 section 4).
+
+## Repository Layout
+
+```
+rfc/                    The UN-RFC series (normative spec)
+docs/DEVELOPMENT.md     This file
+src/unseenet/
+  core/
+    encoding.py         b32/b64, H(), DS()                  UN-RFC 0003 §1
+    crypto.py           identities, signatures, AEAD, sealed boxes, group keys  0003
+    article.py          parse/serialize, canonical form, Message-ID, validation 0002
+    pow.py              postage                              0006
+    groups.py           group IDs, manifests, rules, closed groups              0004
+    store.py            SQLite: articles, history, groups, epochs, peer queues
+    tor.py              own tor process + control port + SOCKS                  0005 §1, 0007 §3
+    vault.py            encrypted client vault               0007 §2
+  node/
+    server.py           acceptance pipeline + ONNTP server   0002 §5, 0004, 0005
+    peering.py          streaming feeds (MODE STREAM/CHECK/TAKETHIS)  0005 §5.2
+  nntp.py               dot-stuffing, block reading, async client
+  cli.py                `unseenet-node` and `unseenet`
+tests/                  pytest; includes two nodes replicating over ONNTP
+```
+
+## Getting Started
+
+```bash
+python -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+```
+
+For a local network without Tor:
+
+```bash
+unseenet-node --no-tor --data /tmp/a --listen 127.0.0.1:1119
+export UNSEENET_PASSPHRASE=test UNSEENET_INSECURE_FAST_KDF=1   # dev only!
+unseenet --vault /tmp/me.vault id-new me
+unseenet --vault /tmp/me.vault node-add 127.0.0.1:1119
+```
+
+A node config file (TOML):
+
+```toml
+[node]
+name = "mynode"
+min_pow = 18
+retention_days = 90
+new_groups = "accept"          # accept | trusted | manual
+
+[[peer]]
+name = "friend"
+address = "abcdef...xyz.onion"
+groups = "dk.*,comp.*"
+password = "shared-secret"     # optional, for AUTHINFO
+```
+
+## Design Decisions (so far)
+
+Each decision lists where it is specified and the reasoning. Changing one
+means writing a new UN-RFC.
+
+### Python
+
+The maintainer is most productive in Python. The workload is I/O-bound
+(Tor latency dominates), so asyncio is more than fast enough. The only
+CPU-heavy part, postage, is deliberately expensive anyway.
+
+### Tor via the control port, not stem
+
+`stem` no longer builds on current Python versions. We need four control
+commands (AUTHENTICATE, GETINFO, ADD_ONION, and bootstrap status), so
+`core/tor.py` speaks the control protocol directly. Bonus: one fewer
+dependency, and `ADD_ONION` lets us keep the onion key in our own
+encrypted file instead of in Tor's directory (UN-RFC 0007 §3).
+
+Arti (Tor in Rust) could later be embedded for a single-binary build.
+
+### NNTP as the wire protocol (UN-RFC 0005)
+
+Decades of newsreaders, tools and understanding come for free. We use a
+strict profile and add capabilities rather than inventing a protocol.
+Tor replaces TLS.
+
+### Signed articles, content-derived Message-IDs (UN-RFC 0002)
+
+Usenet's worst problems were forgery: forged posts, forged cancels,
+forged newgroups. Signing everything and deriving the Message-ID from the
+signed content removes that whole class of problems, and makes duplicate
+suppression trustworthy.
+
+### No Path header (UN-RFC 0002 §2.4, 0005 §5.4)
+
+Path recorded every server an article passed through, which tells an
+observer where it entered the network. History of Message-IDs is enough
+to prevent loops. Readers get a synthetic `Path: not-for-mail` for
+compatibility.
+
+### Group IDs include the owner fingerprint (UN-RFC 0004 §1)
+
+There is no registry to prevent two `dk.snak` groups. Instead of fighting
+that, the owner's fingerprint is part of the name. The UI shows a short
+form and warns about look-alikes.
+
+### Four group types chosen by the owner (UN-RFC 0004 §2)
+
+"Like old Usenet" (open), moderated groups (as Usenet had), channels
+(announcements), and closed groups. This covers both public discussion
+and private circles on the same network.
+
+### Closed groups: epochs and member keys (UN-RFC 0004 §6)
+
+- Content is encrypted with a key derived from a per-epoch group secret.
+- Nodes must be able to reject posts from non-members **without being
+  able to read anything**. Solution: a *member key* derived from the same
+  secret. Only holders of the secret can produce `Member-Signature`, and
+  nodes can verify it with the public member key.
+- Removing a member starts a new epoch. A removed member keeps what they
+  already received — this is unavoidable and documented.
+- MLS (RFC 9420) would add forward secrecy but is far more complex. It is
+  a candidate for a later revision.
+
+### Postage instead of accounts (UN-RFC 0006)
+
+Anonymous identities are free, so we make posting cost a little CPU.
+SHA-256 is simple and good enough to start; the header names the
+algorithm so a memory-hard one (Argon2id) can be added.
+
+### Data at rest (UN-RFC 0007)
+
+- Client: one vault file, Argon2id + XSalsa20-Poly1305, kept decrypted
+  only in memory, saved atomically.
+- Node: LUKS for the disk; onion key encrypted and handed to Tor over the
+  control port; closed groups only ever stored as ciphertext.
+- Known limit: Python cannot reliably wipe secrets from memory. For strong
+  adversaries, recommend running from Tails.
+
+### Text only, 64 KiB
+
+Keeps storage bounded, nodes cheap, and operators away from the legal
+problems binary groups brought to Usenet.
+
+## Open Questions
+
+These are not decided. Discussion welcome — ideally as Draft UN-RFCs.
+
+1. **Chats.** Closed groups with short retention work today, but polling
+   is slow over Tor. Option: an `XUN-WATCH`-style push command or IDLE
+   (reserved UN-RFC 0008).
+2. **Moderation queue.** How does an unapproved post reach a moderator
+   without leaking it publicly? (reserved UN-RFC 0009)
+3. **Node discovery.** Today peers are configured by hand. A signed list
+   of nodes inside a well-known group? (reserved UN-RFC 0010)
+4. **Ownership transfer and co-owners** for groups.
+5. **Hiding the reading pattern** from the node (cover traffic, reading
+   from several nodes).
+6. **Author-Key visibility** in closed groups. Could be hidden by signing
+   only with the member key, at the cost of in-group accountability.
+7. **Post-quantum** signatures and key exchange.
+8. **Abuse handling for node operators** — a clear, documented way to
+   drop groups and peers, and what to tell operators about their
+   responsibilities.
+
+## Code Status
+
+Working:
+
+- Full article lifecycle: build, sign, postage, Message-ID, validate.
+- Manifests, all four group types, approvals, cancels.
+- Closed groups end to end, including invitations via `key-grant`.
+- Node acceptance pipeline and ONNTP reader/peering commands.
+- Push replication to peers (tested with two nodes over local TCP).
+- Own Tor process, onion service, SOCKS connections (not yet covered by
+  automated tests, as CI has no Tor).
+- Encrypted client vault and a command-line client.
+
+Missing / rough:
+
+- Pull catch-up (NEWNEWS is served, not yet used by peers or the client).
+- Client remembers nothing about what you have read.
+- Feeds are not pipelined; one CHECK at a time.
+- No TUI yet.
+- No packaging for USB yet (plan: PyInstaller or Nuitka per OS with the
+  Tor Expert Bundle).
+
+## Coding Conventions
+
+- Python 3.11+, type hints, `from __future__ import annotations`.
+- Reference the UN-RFC section in docstrings where code implements one.
+- Every protocol rule gets a test. Security-relevant rejections get a
+  negative test (see `tests/test_protocol.py`).
+- Commit messages: imperative mood; mention the UN-RFC if relevant.

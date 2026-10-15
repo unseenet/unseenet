@@ -1,0 +1,14 @@
+# Example Unseenet node configuration (see docs/DEVELOPMENT.md)
+[node]
+name = "mynode"
+min_pow = 18
+retention_days = 90
+new_groups = "accept"          # accept | trusted | manual
+trusted_owners = []            # ed25519:... keys, used with new_groups = "trusted"
+require_peer_auth = false
+
+# [[peer]]
+# name = "friend"
+# address = "abcdef...xyz.onion"
+# groups = "dk.*,comp.*"
+# password = "shared-secret"
