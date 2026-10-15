@@ -1,0 +1,18 @@
+[Unit]
+Description=Unseenet node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=unseenet
+WorkingDirectory=/home/unseenet
+EnvironmentFile=/etc/unseenet-node.env
+ExecStart=/home/unseenet/unseenet/.venv/bin/unseenet-node --data /home/unseenet/node-data --config /home/unseenet/node.toml --listen 127.0.0.1:1119
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

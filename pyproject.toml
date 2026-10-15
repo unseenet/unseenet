@@ -23,11 +23,13 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+tui = ["textual>=0.80"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "textual>=0.80"]
 
 [project.scripts]
 unseenet = "unseenet.cli:client_main"
 unseenet-node = "unseenet.cli:node_main"
+unseenet-tui = "unseenet.client.tui:main"
 
 [project.urls]
 Homepage = "https://github.com/andlo/unseenet"

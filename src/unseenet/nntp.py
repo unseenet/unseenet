@@ -36,6 +36,8 @@ async def read_block(reader: asyncio.StreamReader, limit: int = 70000) -> bytes:
             lines.append(line)
     if size > limit:
         raise ValueError("block too large")
+    if not lines:
+        return b""
     return b"\r\n".join(lines) + b"\r\n"
 
 

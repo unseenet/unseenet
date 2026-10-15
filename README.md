@@ -99,35 +99,49 @@ Want to change the protocol or build something compatible? Read
 
 ## Trying it
 
-Requires Python 3.11+ and, for real use, the `tor` binary.
+Requires Python 3.11+ and the `tor` binary (`dnf install tor` / `apt install tor`).
+
+### The client
 
 ```bash
 git clone https://github.com/andlo/unseenet
 cd unseenet
-pip install -e .
-
-# Run a node (starts its own Tor and prints its .onion address)
-unseenet-node --data node-data
-
-# ... or locally without Tor, for development
-unseenet-node --no-tor --data node-data --listen 127.0.0.1:1119
+pip install -e ".[tui]"
+unseenet-tui
 ```
 
-Using the client (everything is stored in `unseenet.vault`, encrypted
-with your passphrase):
+On first start you choose a passphrase for your vault, a display name, and
+the node to connect to (its `.onion` address). Then:
+
+| Key | |
+|-----|---|
+| `g` | browse the node's groups and subscribe |
+| `n` / `r` | new post / reply (Ctrl+S sends) |
+| `c` | create a group (open, moderated, channel or closed) |
+| `k` | show your key, so a group owner can invite you |
+| `i` | invite someone to a closed group you own |
+| `j` | join a group by ID or `unseenet:join` link |
+| `F5` | refresh (also happens every 30 seconds) |
+
+Everything is kept in `unseenet.vault`, encrypted, next to where you run it.
+There is also a plain command line client, `unseenet --help`.
+
+### A node
+
+On Debian or Ubuntu (a Proxmox LXC or a Raspberry Pi is plenty):
 
 ```bash
-unseenet id-new me --display "Andreas"
-unseenet node-add xyz...abc.onion          # or 127.0.0.1:1119 locally
-unseenet groups
-unseenet group-create dk.snak --title "Dansk snak"
-unseenet post dk.snak@<fingerprint> -s "Hello" --body "First post!"
-unseenet read dk.snak@<fingerprint>
-
-# A closed group, and an invitation
-unseenet group-create family --type closed
-unseenet invite family@<fingerprint> ed25519:<their key>
+curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh | sudo bash
 ```
+
+It installs Tor and the node as a systemd service and prints the node's
+`.onion` address. To peer with a friend's node, add a `[[peer]]` section
+to `/home/unseenet/node.toml` on both nodes (same `password`, each using
+the other's `name` and address) and restart with
+`systemctl restart unseenet-node`.
+
+For development, a node can run without Tor:
+`unseenet-node --no-tor --data /tmp/node --listen 127.0.0.1:1119`.
 
 ## Roadmap
 
@@ -138,8 +152,11 @@ unseenet invite family@<fingerprint> ed25519:<their key>
 - [x] Node: ONNTP server, validation, streaming feeds to peers
 - [x] Tor: own process, onion service via control port, SOCKS
 - [x] Client: encrypted vault, command line
-- [ ] Pull catch-up between nodes (NEWNEWS) and persistent read state
-- [ ] TUI client (Textual) with threads and chats
+- [x] First real test: two nodes peering over Tor
+- [x] TUI client (first version): groups, threads, posting, closed groups, invites
+- [x] Node install script and systemd service
+- [ ] Pull catch-up between nodes (NEWNEWS)
+- [ ] Chat view in the TUI
 - [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)
 - [ ] Low-latency chat delivery (UN-RFC 0008)
 - [ ] Moderation submission queue (UN-RFC 0009)
