@@ -42,6 +42,12 @@ DOCS_URL = "https://andlo.github.io/unseenet/"
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
 
 
+def node_label(address: str) -> str:
+    """A short name for a node address: the start of its onion name."""
+    host = address.split(":")[0]
+    return host[:8] if host.endswith(".onion") else address
+
+
 def sess_default_pow() -> int:
     return _session_module.DEFAULT_POW
 
@@ -388,9 +394,10 @@ class ConfirmDialog(Dialog):
 class GroupInfoDialog(Dialog):
     """Title, type, owner and rules of a group (UN-RFC 0014)."""
 
-    def __init__(self, gid: str, data: dict, owner_label: str, can_edit: bool, first_time: bool):
+    def __init__(self, gid: str, data: dict, owner_label: str, can_edit: bool, first_time: bool,
+                 node: str = ""):
         super().__init__()
-        self.gid, self.data, self.owner_label = gid, data, owner_label
+        self.gid, self.data, self.owner_label, self.node = gid, data, owner_label, node
         self.can_edit, self.first_time = can_edit, first_time
 
     def compose(self) -> ComposeResult:
@@ -407,6 +414,8 @@ class GroupInfoDialog(Dialog):
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
                  + ("     Local to one node" if d.get("local") else ""),
                  f"Version:   {d.get('serial', 1)}"]
+        if self.node:
+            lines.append(f"Read from: {self.node}")
         if d.get("description"):
             lines += ["", d["description"]]
         with Vertical(classes="dialog"):
@@ -513,6 +522,62 @@ class AboutDialog(Dialog):
         self.app.open_url(DOCS_URL)
 
 
+class NodesDialog(Dialog):
+    """Your nodes. Your key is in the vault, so you are the same person on all of them."""
+
+    def __init__(self, nodes: list[str], infos: dict, counts: dict[str, int]):
+        super().__init__()
+        self.nodes, self.infos, self.counts = nodes, infos, counts
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog wide"):
+            yield Label("Your nodes", classes="title")
+            yield Label("You are the same on every node - your key lives in your vault. "
+                        "Each group is read from one node; new groups and your inbox go to "
+                        "the default node (★).", classes="hint")
+            yield DataTable(id="nodes-table", cursor_type="row", zebra_stripes=True)
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button("Add", id="add")
+                yield Button("Remove", id="remove")
+                yield Button("Make default", id="default")
+                yield Button("Details", variant="primary", id="info")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#nodes-table", DataTable)
+        table.add_columns("", "Name", "Address", "Your groups", "")
+        for i, address in enumerate(self.nodes):
+            info = self.infos.get(address)
+            name = (info or {}).get("name", "") if info is not None else ""
+            state = "unreachable" if info is None else ""
+            short = address if len(address) <= 34 else address[:16] + "…" + address[-14:]
+            table.add_row("★" if i == 0 else "", Text(name), Text(short),
+                          str(self.counts.get(address, 0)), state, key=address)
+        table.focus()
+
+    def _selected(self) -> str | None:
+        table = self.query_one("#nodes-table", DataTable)
+        if not table.row_count:
+            return None
+        return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+
+    @on(DataTable.RowSelected, "#nodes-table")
+    def _row(self, event: DataTable.RowSelected) -> None:
+        self.dismiss(("info", event.row_key.value))
+
+    @on(Button.Pressed, "#add")
+    def _add(self) -> None:
+        self.dismiss(("add", None))
+
+    @on(Button.Pressed, "#remove")
+    @on(Button.Pressed, "#default")
+    @on(Button.Pressed, "#info")
+    def _act(self, event: Button.Pressed) -> None:
+        address = self._selected()
+        if address:
+            self.dismiss((event.button.id, address))
+
+
 class NodeInfoDialog(Dialog):
     """UN-RFC 0011 node information; can start a message to the operator."""
 
@@ -561,7 +626,8 @@ class BrowseDialog(Dialog):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
-            yield Label("Groups on this node", classes="title")
+            several = len(self.app.session.nodes) > 1
+            yield Label("Groups on your nodes" if several else "Groups on this node", classes="title")
             yield Label("Enter: subscribe or unsubscribe a group, open or close a "
                         "hierarchy.  Esc: close.", classes="hint")
             tree: Tree = Tree("groups", id="browse-tree")
@@ -582,11 +648,13 @@ class BrowseDialog(Dialog):
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
 
-    @staticmethod
-    def _label(g: GroupInfo) -> Text:
+    def _label(self, g: GroupInfo) -> Text:
         mark = "[x]" if g.subscribed else "[ ]"
         kind = {"closed": " ◈", "inbox": " ✉"}.get(g.type or "", "")
-        return Text(f"{mark} {g.short}{kind}   {g.description}")
+        where = ""
+        if len(self.app.session.nodes) > 1 and g.nodes:
+            where = f"   @ {node_label(g.nodes[0])}" + (f" +{len(g.nodes) - 1}" if len(g.nodes) > 1 else "")
+        return Text(f"{mark} {g.short}{kind}   {g.description}{where}")
 
     def on_mount(self) -> None:
         self.query_one("#browse-tree", Tree).focus()
@@ -597,7 +665,8 @@ class BrowseDialog(Dialog):
         if not isinstance(g, GroupInfo):
             return
         g.subscribed = not g.subscribed
-        self.app.session.subscribe(g.group_id, g.subscribed)
+        self.app.session.subscribe(g.group_id, g.subscribed,
+                                   node=g.nodes[0] if g.subscribed and g.nodes else None)
         event.node.set_label(self._label(g))
 
     def action_cancel(self) -> None:
@@ -623,7 +692,7 @@ class UnseenetApp(App):
         Binding("i", "invite", "Invite"),
         Binding("j", "join", "Join", show=False),
         Binding("m", "message", "Message"),
-        Binding("o", "node_info", "Node"),
+        Binding("o", "node_info", "Nodes"),
         Binding("k", "show_key", "My key"),
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
@@ -644,6 +713,7 @@ class UnseenetApp(App):
         self.messages: dict[str, Message] = {}
         self.current_message: Message | None = None
         self._inbox_ready = False
+        self._watching: set[str] = set()
 
     # --- layout ---
     def compose(self) -> ComposeResult:
@@ -707,11 +777,15 @@ class UnseenetApp(App):
                 s.new_identity(name, result["display"])
             if "node" in result:
                 s.add_node(result["node"])
-        ident = s.identity()
-        self.sub_title = f"{s.display_name()} ({ident.fingerprint[:4]})  -  {s.node}"
+        self._update_subtitle()
         await self.show_offline()
         self.refresh_groups()
         self.set_interval(REFRESH_SECONDS, self.action_refresh)
+
+    def _update_subtitle(self) -> None:
+        s = self.session
+        more = f"  (+{len(s.nodes) - 1} more)" if len(s.nodes) > 1 else ""
+        self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node}{more}")
 
     # --- groups ---
     def _groups_from_vault(self, available: dict[str, GroupInfo] | None = None) -> dict[str, GroupInfo]:
@@ -723,7 +797,7 @@ class UnseenetApp(App):
             else:
                 g = GroupInfo(gid, entry.get("title", ""))
                 if available is not None:
-                    g.description = "(not on this node)"
+                    g.description = "(not on your nodes)"
             g.subscribed = True
             g.type = entry.get("type") or g.type
             groups[gid] = g
@@ -751,7 +825,7 @@ class UnseenetApp(App):
             try:
                 await s.ensure_inbox()
                 self._inbox_ready = True
-                self.watch_loop()
+                self._start_watches()
                 available = {g.group_id: g for g in await s.list_groups()}
             except (SessionError, OSError, ConnectionError) as exc:
                 self.set_status(f"Could not set up your inbox: {exc}")
@@ -771,7 +845,9 @@ class UnseenetApp(App):
         if not groups:
             self.query_one("#threads-title", Static).update(
                 "No groups yet - press g to browse the node's groups, or c to create one")
-        self.set_status(f"{len(available)} groups on node, {len(groups)} subscribed")
+        where = f"{len(s.nodes)} nodes" if len(s.nodes) > 1 else "node"
+        down = f" - not reachable: {', '.join(node_label(n) for n in s.unreachable)}" if s.unreachable else ""
+        self.set_status(f"{len(available)} groups on {where}, {len(groups)} subscribed{down}")
 
     async def _render_groups(self) -> None:
         tree = self.query_one("#groups", Tree)
@@ -1182,13 +1258,61 @@ class UnseenetApp(App):
 
     @work(group="dialog", exit_on_error=False)
     async def action_node_info(self) -> None:
-        try:
-            info = await self.session.node_info()
-        except (SessionError, OSError, ConnectionError) as exc:
-            self.notify(f"Cannot reach node: {exc}", severity="error")
-            return
-        if not await self.push_screen_wait(NodeInfoDialog(info, self.session.node or "")):
-            return
+        """Your nodes: add, remove, choose the default, see who runs them."""
+        s = self.session
+        while True:
+            self.set_status("Asking your nodes ...")
+            infos: dict = {}
+
+            async def ask(address: str) -> None:
+                try:
+                    infos[address] = await asyncio.wait_for(s.node_info(address), 60)
+                except (SessionError, OSError, ConnectionError, NNTPError, ValueError,
+                        asyncio.TimeoutError, asyncio.IncompleteReadError):
+                    infos[address] = None
+            await asyncio.gather(*(ask(n) for n in s.nodes))
+            self.set_status("")
+            counts = {n: sum(1 for g in s.data["subscribed"] if s.node_for(g) == n) for n in s.nodes}
+            result = await self.push_screen_wait(NodesDialog(s.nodes, infos, counts))
+            if not result:
+                return
+            action, address = result
+            if action == "add":
+                value = await self.push_screen_wait(InputDialog(
+                    "Add a node", "Its address, e.g. xxxx.onion (add :port if it is not 119). "
+                    "You keep your key and your groups.", "xxxx.onion"))
+                if value:
+                    s.add_node(value)
+                    self.notify(f"Added {value} - its groups are now in the group list (g)")
+                    self._start_watches()
+                    self._update_subtitle()
+                    self.refresh_groups()
+            elif action == "default":
+                s.add_node(address, default=True)
+                self._update_subtitle()
+                self.notify(f"New groups and your inbox now go to {node_label(address)}")
+            elif action == "remove":
+                if not await self.push_screen_wait(ConfirmDialog(
+                        "Stop using this node?",
+                        f"{address}\n\nGroups you read from it move to your default node "
+                        "(if it carries them). Nothing is deleted on the node itself.",
+                        "Remove", danger=True)):
+                    continue
+                try:
+                    s.remove_node(address)
+                except SessionError as exc:
+                    self.notify(str(exc), severity="error")
+                    continue
+                self._watching.discard(address)
+                self._update_subtitle()
+                self.refresh_groups()
+            elif action == "info":
+                if infos.get(address) is None:
+                    self.notify(f"{node_label(address)} does not answer right now", severity="warning")
+                    continue
+                if await self.push_screen_wait(NodeInfoDialog(infos[address], address)):
+                    break
+        info = infos[address]
         try:
             operator = crypto.key_from_text(info["operator"])
         except (KeyError, crypto.CryptoError):
@@ -1265,7 +1389,7 @@ class UnseenetApp(App):
             self.notify(f"Invite failed: {exc}", severity="error", timeout=8)
             return
         await self.push_screen_wait(InfoDialog(
-            "Invitation sent - share this with them", f"unseenet:join?g={g.group_id}&n={self.session.node}"))
+            "Invitation sent - share this with them", f"unseenet:join?g={g.group_id}&n={self.session.node_for(g.group_id)}"))
 
     @work(group="dialog", exit_on_error=False)
     async def action_join(self) -> None:
@@ -1273,12 +1397,22 @@ class UnseenetApp(App):
             "Join a group", "Paste a group ID or an unseenet:join link.", "dk.snak@... or unseenet:join?g=..."))
         if not value:
             return
-        gid = value
+        gid, node = value, None
         if value.startswith("unseenet:join?"):
             params = dict(p.split("=", 1) for p in value.split("?", 1)[1].split("&") if "=" in p)
-            gid = params.get("g", "")
+            gid, node = params.get("g", ""), params.get("n") or None
+        if node and node not in self.session.nodes:
+            if await self.push_screen_wait(ConfirmDialog(
+                    "The group is on another node",
+                    f"{node}\n\nYou do not use this node yet. Add it? You keep your key; "
+                    "the group is read from there.", "Add node")):
+                self.session.add_node(node)
+                self._start_watches()
+                self._update_subtitle()
+            else:
+                node = None
         try:
-            self.session.subscribe(gid)
+            self.session.subscribe(gid, node=node if node in self.session.nodes else None)
         except ValueError:
             self.notify("That is not a valid group ID", severity="error")
             return
@@ -1307,12 +1441,21 @@ class UnseenetApp(App):
                     severity="error", timeout=10)
 
     # --- push (UN-RFC 0008 section 2) ---
-    @work(group="watch", exclusive=True, exit_on_error=False)
-    async def watch_loop(self) -> None:
-        """Keep a second connection open so new posts show up at once."""
-        while True:
+    def _start_watches(self) -> None:
+        for address in self.session.nodes:
+            if address not in self._watching:
+                self._watching.add(address)
+                self.watch_loop(address)
+
+    @work(group="watch", exit_on_error=False)
+    async def watch_loop(self, node: str) -> None:
+        """Keep a second connection to a node open so new posts show up at once."""
+        async def on_new(gid: str, message_id: str) -> None:
+            if self.session.node_for(gid) == node:     # read from this node
+                await self._on_push(gid, message_id)
+        while node in self.session.nodes and node in self._watching:
             try:
-                if await self.session.watch(self._on_push) is False:
+                if await self.session.watch(on_new, node=node) is False:
                     return                         # the node cannot push; polling only
             except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError):
                 pass
@@ -1355,7 +1498,7 @@ class UnseenetApp(App):
             ("Invite to closed group", "Give someone access to a closed group you own  [i]",
              self.action_invite),
             ("Join group", "Subscribe by group ID or unseenet:join link  [j]", self.action_join),
-            ("Node information", "Who runs this node, its policy, write to the operator  [o]",
+            ("Nodes", "Your nodes: add, remove, default, who runs them, write to an operator  [o]",
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",
              self.action_show_key),
@@ -1402,7 +1545,8 @@ class UnseenetApp(App):
             return
         owner = bool(self.session.group_entry(g.group_id).get("owner"))
         result = await self.push_screen_wait(GroupInfoDialog(
-            g.group_id, data, self._owner_label(data), owner, first_time))
+            g.group_id, data, self._owner_label(data), owner, first_time,
+            node=self.session.node_for(g.group_id) or ""))
         if data.get("rules"):
             self.session.mark_rules_seen(g.group_id)
         if result == "edit":

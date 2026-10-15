@@ -75,6 +75,7 @@ class GroupInfo:
     type: str | None = None
     owner_key: str | None = None
     subscribed: bool = False
+    nodes: list[str] = field(default_factory=list)   # the nodes that carry it, yours first
 
     @property
     def short(self) -> str:
@@ -109,8 +110,9 @@ class Session:
         self.vault = vault
         self.status = status            # callback for progress messages
         self.tor: TorProcess | None = None
-        self._client: Client | None = None
-        self._lock = asyncio.Lock()
+        self._clients: dict[str, Client] = {}          # one connection per node
+        self._locks: dict[str, asyncio.Lock] = {}
+        self.unreachable: list[str] = []               # nodes that did not answer last time
         self.cache: dict[str, dict[int, Message]] = {}
         self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores
         self._high: dict[str, int] = {}               # highest article number fetched
@@ -121,6 +123,9 @@ class Session:
         d.setdefault("subscribed", [])
         d.setdefault("read", {})
         d.setdefault("contacts", {})
+        if d["nodes"]:          # groups from before several nodes: they live on the first
+            for entry in d["groups"].values():
+                entry.setdefault("node", d["nodes"][0])
         self.sent: list[dict] = self._load_sent()
 
     # ------------------------------------------------------------------
@@ -178,20 +183,83 @@ class Session:
         self.save()
         return ident
 
-    def add_node(self, address: str) -> None:
-        if address not in self.data["nodes"]:
-            self.data["nodes"].append(address)
-            self.save()
+    # ------------------------------------------------------------------
+    # nodes: your identity is in the vault, so it is the same on every node.
+    # Each group is read from one node (article numbers are per node); new
+    # groups and your inbox go to the default node, the first in the list.
+    # ------------------------------------------------------------------
+    def add_node(self, address: str, default: bool = False) -> None:
+        address = address.strip()
+        if not address:
+            raise SessionError("no address given")
+        nodes = self.data["nodes"]
+        if address in nodes:
+            if not default:
+                return
+            nodes.remove(address)
+        if default or not nodes:
+            nodes.insert(0, address)
+        else:
+            nodes.append(address)
+        self.save()
+
+    def remove_node(self, address: str) -> list[str]:
+        """Stop using a node. Its groups move to the default node; returns them."""
+        nodes = self.data["nodes"]
+        if address not in nodes:
+            return []
+        if len(nodes) == 1:
+            raise SessionError("you need at least one node")
+        nodes.remove(address)
+        moved = [gid for gid, e in self.data["groups"].items() if e.get("node") == address]
+        for gid in moved:
+            self.data["groups"][gid]["node"] = nodes[0]
+            self._forget_numbers(gid)
+        client = self._clients.pop(address, None)
+        if client is not None:
+            client.writer.close()
+        self.save()
+        self.save_offline()
+        return [g for g in moved if g in self.data["subscribed"]]
+
+    @property
+    def nodes(self) -> list[str]:
+        return list(self.data["nodes"])
 
     @property
     def node(self) -> str | None:
+        """The default node: new groups and your inbox live here."""
         return self.data["nodes"][0] if self.data["nodes"] else None
+
+    def node_for(self, group_id: str | None) -> str | None:
+        """The node a group is read from and posted to."""
+        if group_id:
+            address = self.data["groups"].get(group_id, {}).get("node")
+            if address in self.data["nodes"]:
+                return address
+        return self.node
+
+    def pin_group(self, group_id: str, address: str) -> None:
+        """Read a group from ``address`` from now on."""
+        if address not in self.data["nodes"]:
+            raise SessionError(f"{address} is not one of your nodes")
+        entry = self.group_entry(group_id)
+        if entry.get("node") != address:
+            if entry.get("node") is not None:
+                self._forget_numbers(group_id)
+            entry["node"] = address
+            self.save()
+
+    def _forget_numbers(self, group_id: str) -> None:
+        """Article numbers belong to one node: drop them when a group moves."""
+        for store in (self.cache, self._raw, self._high):
+            store.pop(group_id, None)
 
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)
     # ------------------------------------------------------------------
-    async def _connect(self, quiet: bool = False) -> Client:
-        address = self.node
+    async def _connect(self, address: str | None = None, quiet: bool = False) -> Client:
+        address = address or self.node
         if not address:
             raise SessionError("no node configured")
         status = (lambda *_: None) if quiet else self.status
@@ -210,14 +278,14 @@ class Session:
         status(f"Connected to {address}")
         return client
 
-    async def watch(self, on_new, pattern: str = "*") -> bool:
+    async def watch(self, on_new, pattern: str = "*", node: str | None = None) -> bool:
         """Listen for new articles (UN-RFC 0008) on a second connection.
 
         Calls ``on_new(group_id, message_id)`` for each one. Returns False at once if the
         node cannot push; otherwise runs until the connection fails (raises).
         Watching "*" tells the node nothing about which groups you follow.
         """
-        client = await self._connect(quiet=True)
+        client = await self._connect(node, quiet=True)
         try:
             if client.capability("UNSEENET-WATCH") is None:
                 return False
@@ -232,26 +300,30 @@ class Session:
         finally:
             client.writer.close()
 
-    async def _call(self, fn):
-        """Run ``fn(client)`` with one reconnect attempt on a broken connection."""
-        async with self._lock:
+    async def _call(self, fn, node: str | None = None):
+        """Run ``fn(client)`` on a node (default: the default node), with one
+        reconnect attempt on a broken connection."""
+        address = node or self.node
+        if not address:
+            raise SessionError("no node configured")
+        async with self._locks.setdefault(address, asyncio.Lock()):
             for attempt in (1, 2):
-                if self._client is None:
-                    self._client = await self._connect()
+                if address not in self._clients:
+                    self._clients[address] = await self._connect(address)
                 try:
-                    return await fn(self._client)
+                    return await fn(self._clients[address])
                 except (ConnectionError, OSError, asyncio.IncompleteReadError):
-                    self._client = None
+                    self._clients.pop(address, None)
                     if attempt == 2:
                         raise
 
     async def close(self) -> None:
-        if self._client:
+        for client in list(self._clients.values()):
             try:
-                await self._client.quit()
+                await client.quit()
             except Exception:  # noqa: BLE001
                 pass
-            self._client = None
+        self._clients.clear()
         if self.tor:
             await self.tor.stop()
             self.tor = None
@@ -262,25 +334,53 @@ class Session:
     def group_entry(self, group_id: str) -> dict:
         return self.data["groups"].setdefault(group_id, {"type": None, "owner": False, "keys": {}})
 
-    async def list_groups(self, pattern: str = "*") -> list[GroupInfo]:
-        lines = await self._call(lambda c: c.multiline(f"LIST NEWSGROUPS {pattern}", 215))
-        out = []
+    async def list_groups(self, pattern: str = "*", node: str | None = None) -> list[GroupInfo]:
+        """Groups on one node, or on all your nodes (merged; unreachable ones skipped)."""
+        targets = [node] if node else self.nodes
+        results = await asyncio.gather(
+            *(self._call(lambda c: c.multiline(f"LIST NEWSGROUPS {pattern}", 215), n)
+              for n in targets), return_exceptions=True)
+        failed = [r for r in results if isinstance(r, BaseException)]
+        for r in failed:
+            if not isinstance(r, (OSError, ConnectionError, SessionError, NNTPError,
+                                  asyncio.IncompleteReadError)):
+                raise r
+        if failed and len(failed) == len(results):
+            raise failed[0]
+        self.unreachable = [n for n, r in zip(targets, results) if isinstance(r, BaseException)]
+        out: dict[str, GroupInfo] = {}
         subscribed = set(self.data["subscribed"])
-        for line in lines:
-            gid, _, desc = line.partition("\t")
-            try:
-                split_group_id(gid)
-            except ValueError:
+        for address, lines in zip(targets, results):
+            if isinstance(lines, BaseException):
                 continue
-            entry = self.data["groups"].get(gid, {})
-            if gid in subscribed and desc and entry.get("title") != desc:
-                self.group_entry(gid)["title"] = desc       # remembered for offline use
-            out.append(GroupInfo(gid, desc, entry.get("type"), subscribed=gid in subscribed))
-        return out
+            for line in lines:
+                gid, _, desc = line.partition("\t")
+                try:
+                    split_group_id(gid)
+                except ValueError:
+                    continue
+                if gid in out:
+                    out[gid].nodes.append(address)
+                    continue
+                entry = self.data["groups"].get(gid, {})
+                if gid in subscribed and desc and entry.get("title") != desc:
+                    self.group_entry(gid)["title"] = desc       # remembered for offline use
+                out[gid] = GroupInfo(gid, desc, entry.get("type"), subscribed=gid in subscribed,
+                                     nodes=[address])
+        for g in out.values():           # the node it is read from first
+            home = self.node_for(g.group_id)
+            if home in g.nodes:
+                g.nodes.remove(home)
+                g.nodes.insert(0, home)
+        return list(out.values())
 
-    def subscribe(self, group_id: str, on: bool = True) -> None:
+    def subscribe(self, group_id: str, on: bool = True, node: str | None = None) -> None:
         split_group_id(group_id)
         subs = self.data["subscribed"]
+        if on and node:
+            self.pin_group(group_id, node)
+        elif on and self.node:
+            self.group_entry(group_id).setdefault("node", self.node)
         if on and group_id not in subs:
             subs.append(group_id)
         elif not on and group_id in subs:
@@ -290,21 +390,24 @@ class Session:
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
                            min_pow: int = DEFAULT_POW, local: bool = False,
                            retention_days: int | None = None, rules: str = "",
-                           view: str | None = None, low_latency: bool = False) -> str:
+                           view: str | None = None, low_latency: bool = False,
+                           node: str | None = None) -> str:
         owner = self.identity()
+        node = node or self.node
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
                             rules=rules, view=view, low_latency=low_latency,
-                            pow_bits=await self.required_pow(None))
-        await self._post_article(art)
+                            pow_bits=await self.required_pow(None, node=node))
+        await self._post_article(art, node)
         entry = {"type": gtype, "owner": True, "keys": {}, "manifest": json.loads(art.body),
-                 "owner_key": owner.key_text}
+                 "owner_key": owner.key_text, "node": node}
         if gtype == "closed":
             keys = crypto.GroupKeys.generate()
-            await self._post_article(make_key_update(owner, art.group, 1, keys, [],
-                                                     pow_bits=await self.required_pow(art.group, min_pow)))
+            await self._post_article(make_key_update(
+                owner, art.group, 1, keys, [],
+                pow_bits=await self.required_pow(art.group, min_pow, node=node)), node)
             entry["keys"]["1"] = keys.secret.hex()
         self.data["groups"][art.group] = entry
         self.subscribe(art.group)
@@ -356,21 +459,22 @@ class Session:
         self.data.setdefault("rules_seen", {})[group_id] = int(self.manifest_data(group_id).get("serial", 1))
         self.save()
 
-    async def required_pow(self, group_id: str | None, group_min: int | None = None) -> int:
+    async def required_pow(self, group_id: str | None, group_min: int | None = None,
+                           node: str | None = None) -> int:
         """Postage to attach: max(node minimum, group minimum) - UN-RFC 0008 section 4."""
         async def node_min(c: Client) -> int:
             value = c.capability("UNSEENET-MINPOW")
             return int(value) if value and value.strip().isdigit() else DEFAULT_POW
         try:
-            node = await self._call(node_min)
+            node_pow = await self._call(node_min, node or self.node_for(group_id))
         except (OSError, ConnectionError, SessionError):
-            node = DEFAULT_POW
+            node_pow = DEFAULT_POW
         if group_min is None and group_id:
             manifest = self.manifest_data(group_id)
             # A group joined before manifests were kept has none cached yet; the
             # network default is the safe guess (the node will say if it wants more).
             group_min = int(manifest.get("min_pow", 0)) if manifest else DEFAULT_POW
-        return max(node, group_min or 0)
+        return max(node_pow, group_min or 0)
 
     async def _post_with_postage(self, group_id: str, build) -> Article:
         """Build with ``build(bits)`` and post; if the node asks for more postage
@@ -442,6 +546,7 @@ class Session:
         """Make sure this identity's personal inbox exists on the node and is subscribed."""
         gid = self.my_inbox
         entry = self.group_entry(gid)
+        entry.setdefault("node", self.node)
         if not entry.get("owner"):
             async def exists(c: Client) -> bool:
                 try:
@@ -449,9 +554,9 @@ class Session:
                     return True
                 except NNTPError:
                     return False
-            if not await self._call(exists):
+            if not await self._call(exists, self.node_for(gid)):
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
-                                    min_pow=DEFAULT_POW, pow_bits=await self.required_pow(None))
+                                    min_pow=DEFAULT_POW, pow_bits=await self.required_pow(gid))
                 await self._post_article(art)
             entry.update({"type": "inbox", "owner": True})
         if gid not in self.data["subscribed"]:
@@ -575,14 +680,14 @@ class Session:
         self.sent.append(entry)
         self.vault.write_sidecar(SENT_SIDECAR, json.dumps({"v": 1, "sent": self.sent}).encode())
 
-    async def node_info(self) -> dict:
+    async def node_info(self, node: str | None = None) -> dict:
         """UN-RFC 0011 node information, or {} if the node does not offer it."""
         async def run(c: Client) -> dict:
             if c.capability("UNSEENET-NODEINFO") is None:
                 return {}
             lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
             return json.loads(lines[0]) if lines else {}
-        return await self._call(run)
+        return await self._call(run, node)
 
     def _identity_for_fingerprint(self, fp: str) -> crypto.Identity | None:
         for entry in self.data["identities"].values():
@@ -601,27 +706,46 @@ class Session:
         me = self.identity()
         entry = self.group_entry(group_id)
 
-        async def run(c: Client):
-            try:
-                _, low, high = await c.group(group_id)
-            except NNTPError as exc:
-                if "removed by its owner" in exc.text:
-                    raise SessionError("removed by its owner") from exc
-                raise SessionError("group not carried by this node") from exc
-            start = max(low, self._high.get(group_id, 0) + 1)
-            if not entry.get("manifest") and not entry.get("manifest_rescanned"):
-                # Joined before manifests were kept (or never seen it): read the group
-                # once from the start so title, rules, view and postage are known.
-                start = low
-                entry["manifest_rescanned"] = True
-            fetched = []
-            for n in range(start, high + 1):
-                raw = await c.article(str(n))
-                if raw is not None:
-                    fetched.append((n, raw))
-            return fetched, high
+        def reader(since: int):
+            async def run(c: Client):
+                try:
+                    _, low, high = await c.group(group_id)
+                except NNTPError as exc:
+                    if "removed by its owner" in exc.text:
+                        raise SessionError("removed by its owner") from exc
+                    raise SessionError("group not carried by this node") from exc
+                start = max(low, since + 1)
+                if not entry.get("manifest") and not entry.get("manifest_rescanned"):
+                    # Joined before manifests were kept (or never seen it): read the group
+                    # once from the start so title, rules, view and postage are known.
+                    start = low
+                    entry["manifest_rescanned"] = True
+                fetched = []
+                for n in range(start, high + 1):
+                    raw = await c.article(str(n))
+                    if raw is not None:
+                        fetched.append((n, raw))
+                return fetched, high
+            return run
 
-        fetched, high = await self._call(run)
+        home = self.node_for(group_id)
+        try:
+            fetched, high = await self._call(reader(self._high.get(group_id, 0)), home)
+        except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError) as first:
+            if "removed by its owner" in str(first):
+                raise
+            for other in (n for n in self.nodes if n != home):   # another node may carry it
+                try:
+                    fetched, high = await self._call(reader(0), other)
+                except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                    continue
+                self.status(f"{short_group_id(group_id)} is now read from {other}")
+                self.pin_group(group_id, other)
+                cache = self.cache.setdefault(group_id, {})
+                raws = self._raw.setdefault(group_id, {})
+                break
+            else:
+                raise first
         changed = False
         for n, raw in fetched:
             raw = strip_reader_headers(raw)
@@ -655,11 +779,14 @@ class Session:
         if not payload:
             return 0
         data = json.loads(payload)
-        if data.get("v") != 1 or data.get("node") != self.node:
+        if data.get("v") not in (1, 2):
             return 0
         me = self.identity()
         loaded = 0
         for gid, g in data.get("groups", {}).items():
+            # numbers only mean something on the node they came from
+            if g.get("node", data.get("node")) != self.node_for(gid):
+                continue
             entry = self.group_entry(gid)
             self._high[gid] = max(self._high.get(gid, 0), int(g.get("high", 0)))
             cache = self.cache.setdefault(gid, {})
@@ -676,9 +803,9 @@ class Session:
         groups = {}
         for gid, raws in self._raw.items():
             keep = sorted(raws)[-MAX_CACHED_PER_GROUP:]
-            groups[gid] = {"high": self._high.get(gid, 0),
+            groups[gid] = {"node": self.node_for(gid), "high": self._high.get(gid, 0),
                            "articles": {str(n): base64.b64encode(raws[n]).decode() for n in keep}}
-        payload = json.dumps({"v": 1, "node": self.node, "groups": groups}).encode()
+        payload = json.dumps({"v": 2, "groups": groups}).encode()
         self.vault.write_sidecar(CACHE_SIDECAR, payload)
 
     def _parse(self, n: int, raw: bytes, group_id: str, entry: dict, me) -> Message | None:
@@ -780,9 +907,20 @@ class Session:
     # ------------------------------------------------------------------
     # posting
     # ------------------------------------------------------------------
-    async def _post_article(self, art: Article) -> str:
+    async def _post_article(self, art: Article, node: str | None = None) -> str:
         raw = art.to_bytes()
-        code, text = await self._call(lambda c: c.post(raw))
+        target = node or self.node_for(art.group)
+        code, text = await self._call(lambda c: c.post(raw), target)
+        if code != 240 and node is None and "not carried" in text:
+            for other in (n for n in self.nodes if n != target):   # e.g. someone's inbox elsewhere
+                try:
+                    code, text = await self._call(lambda c: c.post(raw), other)
+                except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
+                    continue
+                if code == 240:
+                    if art.group in self.data["groups"]:
+                        self.pin_group(art.group, other)
+                    break
         if code != 240:
             raise SessionError(f"rejected by node: {text}")
         return art.message_id

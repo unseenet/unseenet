@@ -74,7 +74,7 @@ After that the connection is reused.
 | ++ctrl+s++ | Send (in the compose window) |
 | ++c++ | Create a group |
 | ++m++ | Send a private message (pre-filled with the selected post's author) |
-| ++o++ | About this node - and write to its operator |
+| ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
 | ++i++ | Invite someone to a closed group you own |
 | ++j++ | Join a group by ID or `unseenet:join` link |
@@ -83,7 +83,8 @@ After that the connection is reused.
 | ++s++ | Edit your signature |
 | ++a++ | Add the selected post's author as a contact |
 | ++v++ | Switch between chat and threads for the current group |
-| ++question-mark++ | About this group: its rules, type and owner |
+| ++question-mark++ | About this group: its rules, type, owner and node |
+| ++f1++ | About Unseenet, with links to the source and these pages |
 | ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
 
 Groups are shown by **hierarchy**, the part of the name before the first
@@ -190,9 +191,37 @@ person, both directions, in order. ++n++ or ++r++ there writes to them.
   encrypted file next to your vault (`unseenet.vault.sent`).
 - Rename or remove contacts from the command palette (++ctrl+p++).
 
+## Several nodes
+
+Your key lives in your vault, not on a node, so you are the same person
+on every node you use: the same name, the same ✓ for your contacts, and
+the groups you own are yours everywhere. One node may carry some groups
+and another node others, so the client can use several at once.
+
+Press ++o++ for **Your nodes**:
+
+- **Add** a node by its address (`xxxx.onion`, or `xxxx.onion:port`).
+  Its groups show up when you browse with ++g++, marked with the node they
+  are on.
+- **Make default**: new groups and your personal inbox go to the default
+  node (★). The others are only read from and posted to.
+- **Remove** stops using a node. Groups you read from it move to your
+  default node; nothing is deleted on the node itself.
+- **Details** shows who runs the node and lets you write to the operator.
+
+Each group is read from one node, shown as *Read from* when you press
+++question-mark++. If that node stops carrying a group, or cannot be reached,
+the client reads it from another of your nodes that does. An
+`unseenet:join` link names the group's node; if you do not use it yet,
+the client offers to add it.
+
+Using the same key on several nodes lets those nodes see that it is the
+same person. If you want to keep two parts of your life apart, use two
+identities.
+
 ## Contacting a node's operator
 
-Press ++o++ to see who runs the node and its policy: which groups it
+Press ++o++, choose a node and **Details** to see who runs it and its policy: which groups it
 accepts, how long it keeps posts, the minimum postage and what it logs.
 If the operator has set up a contact inbox, **Write to operator** sends
 them a private message. Use it to report abuse, ask for a group to be

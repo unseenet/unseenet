@@ -13,6 +13,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and history).
 
 ### Added
+- Several nodes in one client (`o`): add, remove and choose the default
+  node. The same key everywhere; each group is read from the node that
+  carries it, and from another of your nodes if that one stops carrying
+  it or is down. Join links can add the group's node.
+- TUI: About screen (F1) with links to the source and the documentation.
 - Inbox groups: private messages sealed to the recipient and signed with a
   one-time key, with a verified sender inside. Every identity gets a
   personal inbox (`inbox@<fingerprint>`).

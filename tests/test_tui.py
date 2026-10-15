@@ -134,8 +134,11 @@ async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):
         # the personal inbox is created and listed
         assert await wait_for(pilot, lambda: app._inbox_ready, 300)
         assert app.session.my_inbox in app.groups
+        from unseenet.client.tui import NodeInfoDialog, NodesDialog
         await pilot.press("o")
-        await pilot.pause(0.5)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
+        await pilot.click("#info")                    # details of the selected node
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodeInfoDialog))
         await pilot.click("#ok")                      # "Write to operator"
         await pilot.pause(0.4)
         await pilot.press(*"Hej")
@@ -419,3 +422,65 @@ async def test_tui_about_screen(tmp_path, monkeypatch):
         await pilot.press("escape")
         assert await wait_for(pilot, lambda: not isinstance(app.screen, AboutDialog))
     server.close()
+
+
+async def test_tui_nodes_add_default_remove(tmp_path, monkeypatch):
+    """Two nodes in the TUI: groups from both, the node manager, one key."""
+    import unseenet.client.session as sess
+    from unseenet.client.tui import BrowseDialog, NodesDialog
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    servers, addrs = [], []
+    for _ in range(2):
+        node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+        srv = await node.serve("127.0.0.1", 0)
+        servers.append(srv)
+        addrs.append(f"127.0.0.1:{srv.sockets[0].getsockname()[1]}")
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addrs[1])
+    gid = await other.create_group("dk.andet", "open")
+    await other.post(gid, "hej", "Fra den anden node\n")
+    await other.close()
+
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me"); s.add_node(addrs[0]); s.save()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        await pilot.press("o")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
+        await pilot.click("#add")
+        await pilot.pause(0.3)
+        await pilot.press(*addrs[1], "enter")
+        assert await wait_for(pilot, lambda: addrs[1] in app.session.nodes)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
+        await pilot.press("escape")
+        # the other node's group can be browsed and subscribed, and is read from there
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 300)
+        tree = app.screen.query_one("#browse-tree")
+        leaf = next(n for n in _all_nodes(tree.root) if getattr(n.data, "group_id", None) == gid)
+        tree.select_node(leaf)
+        await pilot.pause(0.2)
+        assert app.session.node_for(gid) == addrs[1]
+        await pilot.press("escape")
+        assert await wait_for(pilot, lambda: any(
+            m.body == "Fra den anden node\n" for m in app.session.cache.get(gid, {}).values()), 300)
+        # make the second node the default
+        await pilot.press("o")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
+        await pilot.press("down")
+        await pilot.click("#default")
+        assert await wait_for(pilot, lambda: app.session.node == addrs[1])
+        await pilot.press("escape")
+        await pilot.press("q")
+    for srv in servers:
+        srv.close()
+
+
+def _all_nodes(node):
+    for child in node.children:
+        yield child
+        yield from _all_nodes(child)
