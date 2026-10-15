@@ -609,6 +609,11 @@ class Session:
                     raise SessionError("removed by its owner") from exc
                 raise SessionError("group not carried by this node") from exc
             start = max(low, self._high.get(group_id, 0) + 1)
+            if not entry.get("manifest") and not entry.get("manifest_rescanned"):
+                # Joined before manifests were kept (or never seen it): read the group
+                # once from the start so title, rules, view and postage are known.
+                start = low
+                entry["manifest_rescanned"] = True
             fetched = []
             for n in range(start, high + 1):
                 raw = await c.article(str(n))

@@ -184,3 +184,27 @@ async def test_post_without_cached_manifest_meets_group_postage(tmp_path, monkey
     for s in (owner, reader):
         await s.close()
     server.close()
+
+
+async def test_old_vault_learns_manifest_and_rules(tmp_path, monkeypatch):
+    """A vault from before manifests were cached rereads the group once and so
+    learns its rules; the owner can then edit them."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    s = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("owner", "Owner")
+    s.add_node(addr)
+    gid = await s.create_group("rules", "open", min_pow=8)
+    await s.post(gid, "Hej", "Første\n")
+    await s.fetch_group(gid)
+    entry = s.data["groups"][gid]
+    entry.pop("manifest", None)                      # as in an older vault
+    assert not s.manifest_data(gid)
+    await s.fetch_group(gid)
+    assert s.manifest_data(gid).get("serial")
+    await s.update_group(gid, rules="Vær søde ved hinanden")
+    assert s.manifest_data(gid)["rules"] == "Vær søde ved hinanden"
+    await s.close()
+    server.close()
