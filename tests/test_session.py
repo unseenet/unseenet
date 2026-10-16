@@ -473,3 +473,60 @@ def test_manifest_banned_entries_are_checked():
                 [{"key": crypto.Identity.generate().key_text, "reason": "x" * 201}]):
         with pytest.raises(ArticleError):
             Manifest.from_article(manifest_article(owner, gid, dict(base, banned=bad), pow_bits=0))
+
+
+async def test_moderators_posters_and_removing_members(tmp_path, monkeypatch):
+    """#70: the owner chooses moderators and posters, and removes a member of a
+    closed group with a new epoch."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    owner, mod, user = person("owner"), person("mod"), person("user")
+    key = {p: p.identity().key_text for p in (owner, mod, user)}
+
+    # moderated group: a moderator posts directly and may withdraw others' posts
+    gid = await owner.create_group("dk.mod", "moderated", min_pow=8)
+    for p in (mod, user):
+        p.subscribe(gid)
+    with pytest.raises(sess.SessionError):
+        await mod.post(gid, "Før", "x\n")
+    await owner.set_role(gid, "moderators", key[mod])
+    await mod.fetch_group(gid)
+    await mod.post(gid, "Efter", "x\n")
+    assert mod.may_cancel(next(m for m in await mod.fetch_group(gid) if m.subject == "Efter"))
+    with pytest.raises(sess.SessionError):
+        await owner.set_role(gid, "posters", key[user])           # posters are for channels
+    await owner.set_role(gid, "moderators", key[mod], False)
+    assert "moderators" not in owner.manifest_data(gid)
+
+    # channel: a poster may post
+    ch = await owner.create_group("dk.kanal", "channel", min_pow=8)
+    user.subscribe(ch)
+    await owner.set_role(ch, "posters", key[user])
+    await user.fetch_group(ch)
+    await user.post(ch, "Nyt", "x\n")
+
+    # closed group: remove a member with a new epoch
+    cl = await owner.create_group("dk.lukket", "closed", min_pow=8)
+    await owner.invite(cl, key[mod])
+    await owner.invite(cl, key[user])
+    assert owner.members(cl) == [key[mod], key[user]]
+    for p in (mod, user):
+        p.subscribe(cl)
+        await p.fetch_group(cl)
+    assert await owner.remove_member(cl, key[user]) == 2
+    assert owner.members(cl) == [key[mod]]
+    await owner.post(cl, "Hemmeligt", "kun for mod\n")
+    seen = {p: [m for m in await p.fetch_group(cl) if m.readable and m.subject == "Hemmeligt"]
+            for p in (mod, user)}
+    assert len(seen[mod]) == 1 and seen[user] == []
+    for p in (owner, mod, user):
+        await p.close()
+    server.close()

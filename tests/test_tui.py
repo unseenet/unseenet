@@ -988,3 +988,33 @@ async def test_tui_owner_bans_and_lifts(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: not app.session.banned(gid), 300)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_make_and_remove_moderator(tmp_path, monkeypatch):
+    """#70: Make moderator (key filled in from the selected post) and remove again."""
+    from unseenet.client.tui import InputDialog, KeyListDialog
+    from unseenet.core import crypto
+    from unseenet.core.article import new_article
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    other = crypto.Identity.generate()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        await app.session._post_article(new_article(gid, "Hej", "x\n", from_name="M").finalize(other, 10))
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        app.current_message = next(iter(app.messages.values()))
+        app.action_add_role("moderators")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, InputDialog), 200)
+        await pilot.pause(0.2)
+        assert app.screen.query_one("#value").value == other.key_text
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: app.session.manifest_data(gid).get("moderators") == [other.key_text], 300)
+        app.action_roles()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, KeyListDialog), 200)
+        await pilot.pause(0.2)
+        app.screen.query_one("#who").value = other.key_text
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: not app.session.manifest_data(gid).get("moderators"), 300)
+        await pilot.press("q")
+    server.close()

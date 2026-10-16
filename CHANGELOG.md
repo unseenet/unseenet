@@ -8,6 +8,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Owners run their groups from the client: **Make moderator**, **Make
+  poster** (channels), **Moderators and posters** (remove), and **Members
+  of closed group**, which removes a member by giving everyone else a new
+  key (a new epoch, UN-RFC 0004 section 6). *About group* shows moderators
+  and posters. (#70)
 - Ban a key from a group (UN-RFC 0004 section 5.1): the owner lists keys in
   the manifest's new `banned` field, with a public reason. Nodes refuse
   their posts, clients hide the old ones, and *About group* shows the bans.
