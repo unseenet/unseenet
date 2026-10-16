@@ -3,26 +3,27 @@ name: announce
 #   - unseenet.announce: release notes after a successful release
 #   - unseenet.nodes: the known-node list (src/unseenet/nodes.json) when it
 #     changes, and every month so it never expires on the nodes
-#   - unseenet.hierarchies: the root list (src/unseenet/hierarchies.json), the
-#     same way (UN-RFC 0018)
+#   - unseenet.hierarchies: the root list (src/unseenet/hierarchies.json), and
+#     unseenet.checkgroups: the project's groups (src/unseenet/checkgroups.json),
+#     the same way (UN-RFC 0018)
 #   - either, by hand
 # The key is the repository secret UNSEENET_ANNOUNCE_SEED; it is a poster in
-# all three channels, which the project key owns (see tools/announce.py).
+# all these channels, which the project key owns (see tools/announce.py).
 on:
   workflow_run:
     workflows: ["release"]
     types: [completed]
   push:
     branches: [main]
-    paths: ["src/unseenet/nodes.json", "src/unseenet/hierarchies.json"]
+    paths: ["src/unseenet/nodes.json", "src/unseenet/hierarchies.json", "src/unseenet/checkgroups.json"]
   schedule:
     - cron: "23 5 1 * *"
   workflow_dispatch:
     inputs:
       what:
-        description: "nodes, hierarchies, release (give the tag) or message"
+        description: "nodes, hierarchies, checkgroups, release (give the tag) or message"
         type: choice
-        options: [nodes, hierarchies, release, message]
+        options: [nodes, hierarchies, checkgroups, release, message]
         default: nodes
       tag:
         description: "release: the tag, e.g. v0.2.0"
@@ -71,7 +72,8 @@ jobs:
             release) python tools/announce.py release "$TAG" ;;
             message) printf '%s\n' "$BODY" > body.txt
                      python tools/announce.py message --subject "$SUBJECT" --body-file body.txt ;;
-            nodes|hierarchies) python tools/announce.py "$WHAT" ;;
+            nodes|hierarchies|checkgroups) python tools/announce.py "$WHAT" ;;
             *)       python tools/announce.py nodes
-                     python tools/announce.py hierarchies ;;
+                     python tools/announce.py hierarchies
+                     python tools/announce.py checkgroups ;;
           esac

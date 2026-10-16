@@ -1,5 +1,6 @@
 """Headless TUI test against a local node (no Tor)."""
 
+import re
 import os
 
 import pytest
@@ -364,7 +365,7 @@ async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
         await pilot.press(*"Hej med dig", "enter")
         assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
         lines = [str(line.text) for line in app.query_one("#chat-log").lines]
-        assert any("Owner: Hej alle!" in ln for ln in lines)
+        assert any(re.search(r"Owner~[a-z2-7]{4}: Hej alle!", ln) for ln in lines)   # Name~fp (UN-RFC 0019)
         assert any("You: Hej med dig" in ln for ln in lines)
         # v switches to threads and back
         app.query_one("#groups").focus()
@@ -396,7 +397,7 @@ async def test_tui_chat_updates_by_push(tmp_path, monkeypatch):
         await pilot.pause(0.5)
         await friend.post(gid, "hej", "Er du der?\n")          # no refresh: push must bring it
         assert await wait_for(pilot, lambda: any(
-            "Friend: Er du der?" in str(ln.text) for ln in app.query_one("#chat-log").lines), 100)
+            re.search(r"Friend~[a-z2-7]{4}: Er du der\?", str(ln.text)) for ln in app.query_one("#chat-log").lines), 100)
         await pilot.press("q")
     await friend.close()
     server.close()
@@ -829,4 +830,31 @@ async def test_tui_shortcuts_follow_where_you_are(tmp_path, monkeypatch):
         await pilot.press("escape")
         await pilot.pause(0.2)
         await pilot.press("q")
+    server.close()
+
+
+async def test_tui_names_dialog(tmp_path, monkeypatch):
+    """@ opens your names (UN-RFC 0019); a claim with no registrar is an error, not a crash."""
+    from unseenet.client.tui import NamesDialog
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF))
+    s.new_identity("andreas", "Andreas")
+    s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    notes = []
+    real = app.notify
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: (notes.append(msg), real(msg, **kw)))
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None)
+        await pilot.press("@")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog), 300)
+        assert "no names yet" in str(app.screen.query_one("#names-details").render())
+        app.screen.query_one("#value").value = "Lorensen"
+        await pilot.press("enter")
+        assert await wait_for(pilot, lambda: any("registrar is not set up" in n for n in notes), 300)
+        assert not isinstance(app.screen, NamesDialog)
     server.close()

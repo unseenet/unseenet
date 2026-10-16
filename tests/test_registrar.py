@@ -229,3 +229,39 @@ async def test_a_key_not_in_the_manifest_cannot_run(world):
     with pytest.raises(sess.SessionError, match="not a poster"):
         await reg.run_once()
     await rogue.close()
+
+
+async def test_client_claims_a_name_and_others_see_it(world, monkeypatch):
+    """The client side (UN-RFC 0019 sections 5.2, 6.1 and 8): claim from the client,
+    see the name, send it with posts, and show it for others."""
+    from unseenet import known_nodes as kn
+    from unseenet.client import naming
+    monkeypatch.setattr(nm, "NAMES_GROUP", world.group)
+    monkeypatch.setattr(kn, "PROJECT_KEY", world.project.key_text)
+    alice, bob = await world.user("alice"), await world.user("bob")
+    alice_key = alice.identity().key_text
+    assert alice.identity_label(alice_key, "@Andreas").startswith("Andreas~")   # no fake @
+
+    await alice.refresh_naming()
+    await naming.claim(alice, "lorensen")
+    assert [p[0] for p in naming.pending(alice)] == ["lorensen"]
+    await world.process(world.registrar(0), world.registrar(1))
+
+    await alice.refresh_naming()
+    assert [c.name for c in naming.my_names(alice)] == ["lorensen"]
+    assert alice.identity_label(alice_key) == "@lorensen"
+
+    talk = await alice.create_group("dk.snak", "open", min_pow=8)
+    await alice.post(talk, "Hej", "Første\n")
+    await alice.post(talk, "Igen", "Anden\n")             # within a week: no certificate again
+    bob.subscribe(talk)
+    msgs = await bob.fetch_group(talk)
+    assert len(naming._store(bob)["seen"][alice_key]) == 1             # sent once, with the first
+    assert naming.header_for(alice, talk) is None
+    assert bob.identity_label(alice_key, "Andreas").startswith("Andreas~")   # registrar unknown yet
+    await bob.refresh_naming()
+    assert bob.identity_label(msgs[0].author_key, msgs[0].from_name) == "@lorensen"
+    bob.add_contact(alice_key, "Søster")
+    assert bob.identity_label(alice_key) == "Søster √"     # your own name for her comes first
+    for s in (alice, bob):
+        await s.close()

@@ -22,7 +22,7 @@ Your identity is an **Ed25519 key pair**. The public key, written like
 `ed25519:det5dxev...`, *is* your identity. The display name you choose is
 only a label; anyone can choose any name. The client shows the first
 characters of the key's **fingerprint** next to names, e.g.
-`Andreas (2byg)`, so you can tell two people with the same name apart.
+`Andreas~2byg`, so you can tell two people with the same name apart.
 
 You can have as many identities as you like. Using a separate identity
 per closed group means your posts in different groups cannot be linked.
@@ -46,8 +46,7 @@ anybody. Names are optional: an identity without one can do everything
 an identity with one can, and a name links everything its identity
 posts, so do not give one to an identity you keep apart.
 
-The client does not show registered and domain names yet, and still
-writes the short form as `Andreas (2byg)`; the specification comes first.
+You claim a name in the client with `@` (see [Using the client](client.md#names)).
 
 ## Signed posts
 

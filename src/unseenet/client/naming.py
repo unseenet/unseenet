@@ -1,0 +1,327 @@
+"""Names in the client: groups (UN-RFC 0018) and identities (UN-RFC 0019).
+
+The client reads three kinds of data groups in the background, the way it
+reads the node list (UN-RFC 0010): the project's root list of hierarchies,
+the hierarchy lists of the maintainers, and the registrar's group of name
+certificates. What it learns is kept in the vault, so names show offline
+too; until it has read anything, the lists that ship with the client count.
+
+Everything here is a function of a Session, so the TUI and the command line
+use the same rules.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+from .. import hierarchies as hz
+from .. import known_nodes as kn
+from .. import names as nm
+from ..core import crypto
+from ..core.groups import short_group_id, split_group_id
+
+if TYPE_CHECKING:
+    from .session import Message, Session
+
+RESEND = timedelta(days=7)            # UN-RFC 0019 section 5.2: once a week per group
+MAX_SEEN_PER_KEY = 8
+
+
+def _store(s: "Session") -> dict:
+    st = s.data.setdefault("naming", {})
+    for key, empty in (("lists", {}), ("names", {}), ("seen", {}), ("sent", {}), ("pending", [])):
+        st.setdefault(key, empty)
+    return st
+
+
+# --- reading the data groups -----------------------------------------------------------
+
+async def _read(s: "Session", group_id: str, owner: str) -> list[tuple["Message", str]]:
+    """The posts in a data group by its owner or posters, if ``owner`` owns it.
+
+    Reads it without subscribing and without keeping it around; returns
+    (message, author) pairs, or nothing if the owner is not the one expected.
+    """
+    from .session import SessionError
+    subscribed = group_id in s.data["subscribed"]
+    try:
+        messages = await s.fetch_group(group_id)
+    except SessionError:
+        return []                                  # not on the node (yet)
+    finally:
+        if not subscribed:
+            s.cache.pop(group_id, None)
+            s._raw.pop(group_id, None)
+            s._high.pop(group_id, None)
+    manifest = s.manifest_data(group_id)
+    if manifest.get("owner") != owner:
+        return []
+    allowed = {owner, *manifest.get("posters", [])}
+    return [(m, m.author_key) for m in messages if m.readable and m.author_key in allowed]
+
+
+def _newest(posts, parse):
+    best = None
+    for m, _ in posts:
+        try:
+            value = parse(m.body)
+        except (ValueError, KeyError, TypeError):
+            continue
+        if best is None or (m.date and (best[0] is None or m.date > best[0])):
+            best = (m.date, m.body, value)
+    return best
+
+
+async def refresh(s: "Session") -> bool:
+    """Read the root list, the hierarchy lists the client needs, and the names.
+
+    True if anything changed. A list that cannot be read keeps its last value.
+    """
+    st = _store(s)
+    before = repr(st)
+    posts = await _read(s, hz.HIERARCHIES_GROUP, kn.PROJECT_KEY)
+    best = _newest(posts, lambda body: hz.parse_root_list(body))
+    if best:
+        st["root"] = best[1]
+    root = root_list(s)
+    for top in sorted({gid.split(".")[0].split("@")[0] for gid in _known(s)}):
+        h = hz.policy_of(top, root)
+        if h.policy != "governed":
+            continue
+        try:
+            posts = await _read(s, h.list, h.maintainer)
+        except Exception:  # noqa: BLE001  one list that cannot be read does not stop the rest
+            continue
+        best = _newest(posts, lambda body, n=h.name: hz.parse_hierarchy_list(body, n))
+        if best:
+            st["lists"][h.name] = best[1]
+    await _read_names(s, st)
+    changed = repr(st) != before
+    if changed:
+        s.save()
+    return changed
+
+
+async def _read_names(s: "Session", st: dict) -> None:
+    posts = await _read(s, nm.NAMES_GROUP, kn.PROJECT_KEY)
+    manifest = s.manifest_data(nm.NAMES_GROUP)
+    if not manifest:
+        return
+    registrars = sorted({kn.PROJECT_KEY, *manifest.get("posters", [])})
+    certs: dict[str, str] = {}
+    newest: dict[str, tuple] = {}
+    for m, author in posts:
+        if m.subject.startswith("name "):
+            try:
+                cert = nm.parse_certificate(m.body)
+            except nm.NameProblem:
+                continue
+            if cert.registrar in registrars:
+                certs[cert.to_json()] = cert.to_json()
+        elif m.subject == nm.REVOKED_SUBJECT:
+            try:
+                revoked = nm.parse_revocations(m.body)
+            except (nm.NameProblem, ValueError):
+                continue
+            if author not in newest or (m.date and newest[author][0] and m.date > newest[author][0]):
+                newest[author] = (m.date, revoked)
+    revoked = set().union(*(r for _, r in newest.values())) if newest else set()
+    st["names"] = {"registrars": registrars, "claims": manifest.get("claims"),
+                   "certs": sorted(certs), "revoked": sorted([n, v] for n, v in revoked)}
+
+
+def _known(s: "Session") -> set[str]:
+    """Every Group ID this client knows of."""
+    return set(s.data["groups"]) | set(s.data["subscribed"])
+
+
+# --- groups (UN-RFC 0018 section 8.1) ------------------------------------------------------
+
+def root_list(s: "Session") -> dict[str, hz.Hierarchy]:
+    text = _store(s).get("root")
+    if text:
+        try:
+            return hz.parse_root_list(text)[1]
+        except ValueError:
+            pass
+    return hz.builtin_root_list()[1]
+
+
+def hierarchy_lists(s: "Session") -> dict[str, hz.HierarchyList]:
+    lists = {"unseenet": hz.builtin_checkgroups()}
+    for name, text in _store(s)["lists"].items():
+        try:
+            lists[name] = hz.parse_hierarchy_list(text, name)
+        except ValueError:
+            continue
+    return lists
+
+
+def group_status(s: "Session", group_id: str, also_known: set[str] = frozenset()) -> hz.GroupName:
+    return hz.name_status(group_id, root_list(s), hierarchy_lists(s), _known(s) | set(also_known))
+
+
+def group_label(s: "Session", group_id: str, also_known: set[str] = frozenset()) -> str:
+    """``unseenet.announce`` where the name is unambiguous, else ``name@abcd``."""
+    try:
+        status = group_status(s, group_id, also_known)
+    except ValueError:
+        return group_id
+    if status.short:
+        return split_group_id(group_id)[0]
+    return short_group_id(group_id)
+
+
+def group_warning(s: "Session", group_id: str, also_known: set[str] = frozenset()) -> str | None:
+    """What to tell someone about to follow this group, if anything."""
+    try:
+        status = group_status(s, group_id, also_known)
+    except ValueError:
+        return None
+    name = split_group_id(group_id)[0]
+    if status.status == "endorsed":
+        return f"Endorsed by the maintainer of {status.hierarchy}.*."
+    if status.status == "unendorsed":
+        return (f"The maintainer of {status.hierarchy}.* does not vouch for this {name} "
+                "(or their list has not been read yet). It could be anyone's.")
+    if status.status == "reserved":
+        return f"{status.hierarchy}.* is reserved: nobody vouches for groups in it."
+    if status.status == "free" and not status.short:
+        return f"There is more than one group called {name}; check its fingerprint."
+    return None
+
+
+# --- identities (UN-RFC 0019 section 8) ------------------------------------------------------
+
+def _registrars(s: "Session") -> set[str]:
+    return set(_store(s)["names"].get("registrars", []))
+
+
+def _revoked(s: "Session") -> set[tuple[str, int]]:
+    return {(n, v) for n, v in _store(s)["names"].get("revoked", [])}
+
+
+def _all_certs(s: "Session") -> list[nm.Certificate]:
+    st = _store(s)
+    texts = set(st["names"].get("certs", []))
+    for seen in st["seen"].values():
+        texts.update(seen)
+    out = []
+    for text in texts:
+        try:
+            out.append(nm.parse_certificate(text))
+        except nm.NameProblem:
+            continue
+    return out
+
+
+def names_of(s: "Session", key_text: str, now: datetime | None = None) -> list[nm.Certificate]:
+    """The names that belong to a key now: accepted certificates that count (5.3)."""
+    now = now or datetime.now(timezone.utc)
+    registrars, revoked = _registrars(s), _revoked(s)
+    accepted = [c for c in _all_certs(s) if c.registrar in registrars and c.valid_at(now)
+                and (c.name, c.serial) not in revoked]
+    out = []
+    for name in sorted({c.name for c in accepted if c.key == key_text}):
+        cur, disputed = nm.current([c for c in accepted if c.name == name])
+        if cur is not None and not disputed and cur.key == key_text:
+            out.append(cur)
+    return sorted(out, key=lambda c: (c.kind != "domain", c.name))     # domain names first
+
+
+def identity_label(s: "Session", key_text: str, from_name: str = "") -> str:
+    """Petname, else ``@domain``, else ``@name``, else ``Name~abcd`` (section 8.1)."""
+    petname = s.contact_name(key_text)
+    if petname:
+        return f"{petname} √"
+    names = names_of(s, key_text)
+    if names:
+        return "@" + names[0].name
+    try:
+        fp = crypto.fingerprint(crypto.key_from_text(key_text))[:4]
+    except crypto.CryptoError:
+        fp = "????"
+    shown = (from_name or "").lstrip("@").strip() or "?"   # never looks like a certified name
+    return f"{shown}~{fp}"
+
+
+def note_certificate(s: "Session", author_key: str, header_value: str | None) -> None:
+    """Remember a certificate an author sent with an article (section 5.2).
+
+    Whether it counts is decided when it is shown, against the registrar's
+    keys and revocations as they are then.
+    """
+    if not header_value:
+        return
+    try:
+        cert = nm.certificate_from_header(header_value)
+    except nm.NameProblem:
+        return
+    if cert.key != author_key:
+        return
+    seen = _store(s)["seen"].setdefault(author_key, [])
+    text = cert.to_json()
+    if text not in seen:
+        seen.append(text)
+        del seen[:-MAX_SEEN_PER_KEY]
+
+
+# --- your own names ---------------------------------------------------------------------------
+
+PENDING_FOR = timedelta(days=3)
+
+
+def pending(s: "Session") -> list[list[str]]:
+    """Claims sent in the last few days: (name, action, when sent)."""
+    now = datetime.now(timezone.utc)
+    return [p for p in _store(s)["pending"] if now - nm.parse_rfc3339(p[2]) < PENDING_FOR]
+
+
+def my_names(s: "Session") -> list[nm.Certificate]:
+    return names_of(s, s.identity().key_text)
+
+
+def header_for(s: "Session", group_id: str, now: datetime | None = None) -> tuple[str, str] | None:
+    """The Name-Certificate header to send with a post here, or None (section 5.2).
+
+    Only in groups everyone can read (never in closed groups or inboxes, where
+    a name would link you), and once a week per group.
+    """
+    entry = s.data["groups"].get(group_id, {})
+    if entry.get("type") in ("closed", "inbox"):
+        return None
+    names = my_names(s)
+    if not names:
+        return None
+    now = now or datetime.now(timezone.utc)
+    last = _store(s)["sent"].get(group_id)
+    if last and now - nm.parse_rfc3339(last) < RESEND:
+        return None
+    return nm.HEADER, names[0].header_value()
+
+
+def sent_header(s: "Session", group_id: str, now: datetime | None = None) -> None:
+    _store(s)["sent"][group_id] = nm.rfc3339(now or datetime.now(timezone.utc))
+
+
+async def claim(s: "Session", name: str, action: str = "claim", to: str | None = None) -> str:
+    """Send a claim (or renew, transfer, release) to the registrar (section 6.1).
+
+    The answer comes to your inbox; the certificate also appears in the
+    registrar's group, which ``refresh`` reads.
+    """
+    body = nm.make_claim(action, name, to)
+    st = _store(s)
+    if not st["names"].get("claims"):
+        await _read_names(s, st)
+    claims = st["names"].get("claims")
+    if not claims:
+        from .session import SessionError
+        raise SessionError("the registrar is not set up yet: its group names no claim inbox")
+    await s.ensure_inbox()                         # the answer comes there
+    msgid = await s.send_private(claims, f"{action} {name}", body, content_type="application/json")
+    st["pending"] = [p for p in st["pending"] if p[0] != name][-20:] + [
+        [name, action, nm.rfc3339(datetime.now(timezone.utc))]]
+    s.save()
+    return msgid

@@ -8,6 +8,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Names in the client (UN-RFC 0018 section 8, UN-RFC 0019 sections 5.2, 6.1
+  and 8). It reads the root list, the hierarchy lists (including the new
+  `unseenet.checkgroups`) and the registrar's group in the background.
+  Groups are shown without their fingerprint where the name cannot be
+  mistaken, with a warning in the group browser where it can. People are
+  shown as your petname, else `@domain` or `@name`, else `Name~abcd`.
+  `@` claims and renews names and shows the ones you hold; your posts in
+  public groups carry your certificate once a week per group.
+- `src/unseenet/checkgroups.json`: the project's list of `unseenet.*`
+  groups, posted to `unseenet.checkgroups` by `tools/announce.py
+  checkgroups` and the announce workflow.
 - `tools/project/create_groups.py` also brings an existing group's title,
   description, rules and `min_pow` up to date with a new manifest, keeping its
   posters and other fields, so `unseenet`, `unseenet.test` and the other
@@ -23,7 +34,7 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   machines that make the same decisions without talking to each other, so
   names keep working when one machine is gone. `unseenet.names` shares the
   formats with the client. See "Running a registrar replica" in the docs.
-  The client cannot claim or show names yet. (#27, #38)
+  (#27, #38)
 - `tools/project/`: the scripts the maintainer runs with the project key, to
   change its vault's passphrase, create the project's groups and set up the
   registrar. They ask for the passphrase in the terminal only.
