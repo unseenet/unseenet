@@ -212,7 +212,8 @@ def envelope_tag(group_id: str, epoch: int, member_pk: bytes) -> str:
 
 def make_key_update(owner: crypto.Identity, group_id: str, epoch: int,
                     keys: crypto.GroupKeys, members: list[bytes], *,
-                    grant_only: bool = False, pow_bits: int = 18) -> Article:
+                    grant_only: bool = False, closes_previous: bool = False,
+                    pow_bits: int = 18) -> Article:
     """Control: key-update (new epoch) or key-grant (add members)."""
     members = list(dict.fromkeys([owner.public_key, *members]))
     data: dict = {"v": 1, "epoch": epoch,
@@ -221,6 +222,8 @@ def make_key_update(owner: crypto.Identity, group_id: str, epoch: int,
     kind = "key-grant" if grant_only else "key-update"
     if not grant_only:
         data["member_key"] = keys.member.key_text
+        if closes_previous:                       # a member was removed (section 6.2)
+            data["closes_previous"] = True
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", f"{kind} {epoch}"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
@@ -364,7 +367,8 @@ def _banned_key(entry) -> bytes:
     return crypto.key_from_text(entry["key"])
 
 
-def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes]) -> None:
+def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes],
+                    closed_before: int = 0) -> None:
     """Raise ArticleError('permission') unless the article may be posted."""
     pk = art.author_key
     if manifest.type != "inbox" and pk in manifest.banned:
@@ -381,6 +385,8 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         current = max(epoch_keys) if epoch_keys else 0
         if epoch not in epoch_keys or epoch < current - 1:
             raise ArticleError("permission", "unknown or expired epoch")
+        if epoch < closed_before:
+            raise ArticleError("permission", "that epoch was closed when a member was removed")
         if not verify_member_signature(art, epoch_keys[epoch]):
             raise ArticleError("permission", "bad Member-Signature")
         return

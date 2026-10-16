@@ -325,6 +325,7 @@ class Session:
         """Article numbers belong to one node: drop them when a group moves."""
         for store in (self.cache, self._raw, self._high):
             store.pop(group_id, None)
+        self.data["groups"].get(group_id, {}).pop("closed", None)   # numbers of the old node
 
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)
@@ -881,7 +882,7 @@ class Session:
         epoch = max(int(e) for e in entry["keys"]) + 1
         keys = crypto.GroupKeys.generate()
         art = make_key_update(self.identity(), group_id, epoch, keys,
-                              [crypto.key_from_text(k) for k in keep],
+                              [crypto.key_from_text(k) for k in keep], closes_previous=True,
                               pow_bits=await self.required_pow(group_id))
         await self._post_article(art)
         entry["keys"][str(epoch)] = keys.secret.hex()
@@ -1441,6 +1442,12 @@ class Session:
             self._take_manifest(art, group_id, entry)
             return None
         if ctl and ctl[0] in ("key-update", "key-grant"):
+            try:
+                if ctl[0] == "key-update" and json.loads(art.body).get("closes_previous") is True:
+                    closed = entry.setdefault("closed", {})        # epoch -> article number
+                    closed.setdefault(ctl[1], n)
+            except (ValueError, AttributeError):
+                pass
             opened = open_envelope(art, me)
             if opened:
                 epoch, keys = opened
@@ -1464,6 +1471,13 @@ class Session:
             msg.encrypted = msg.private = True
             self._open_private(msg, art, group_id)
         elif "Encrypted" in art:
+            # posted with an old key after a member was removed (UN-RFC 0004, 6.5)
+            try:
+                epoch = encryption_epoch(art)
+            except (ArticleError, ValueError):
+                epoch = 0
+            if any(int(e) > epoch and n > at for e, at in entry.get("closed", {}).items()):
+                return None
             msg.encrypted = True
             msg.raw = raw
             self._decrypt_into(msg, art, entry)

@@ -1063,8 +1063,11 @@ async def test_tui_report_post(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.session is not None, 300)
         app.session.subscribe(gid)
         await app._render_groups()
-        app.select_group(gid)
-        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        for _ in range(5):              # the start-up refresh may pick another group first
+            app.select_group(gid)
+            if await wait_for(pilot, lambda: app.current_group == gid and len(app.messages) == 1, 100):
+                break
+        assert app.current_group == gid and len(app.messages) == 1
         app.current_message = next(iter(app.messages.values()))
         app.action_report()
         assert await wait_for(pilot, lambda: isinstance(app.screen, ReportDialog), 300)
