@@ -109,6 +109,7 @@ The protocol is designed to be extended without breaking old software:
 | 0007 | Protecting Data at Rest                       | Informational   |
 | 0008 | Chat Groups and Low-Latency Delivery          | Standards Track |
 | 0009 | Inbox Groups and Local Groups                 | Standards Track |
+| 0010 | Lists of Known Nodes                          | Standards Track |
 | 0011 | Node Information and Operator Contact         | Standards Track |
 | 0012 | Retention, Archive Nodes and History          | Standards Track |
 | 0013 | Removing Groups                               | Standards Track |
@@ -117,8 +118,8 @@ The protocol is designed to be extended without breaking old software:
 | 0016 | Peer Authentication with Node Keys            | Standards Track |
 | 0017 | Catching Up by Pull, and Group State          | Standards Track |
 
-Reserved for future work: 0010 (node discovery). The moderation submission queue first reserved
-as 0009 is covered by UN-RFC 0009 section 3.
+The moderation submission queue first reserved as 0009 is covered by
+UN-RFC 0009 section 3.
 
 # 7. Author's Address
 

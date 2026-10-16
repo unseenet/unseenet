@@ -49,6 +49,29 @@ restored.)
 
 The command works while the node is running.
 
+## Getting your node listed
+
+Clients offer the nodes in the project's list of known nodes
+([UN-RFC 0010](../spec/un-rfc-0010.md)) to new users. To be listed, open a
+pull request that adds your node to
+[`src/unseenet/nodes.json`](https://github.com/andlo/unseenet/blob/main/src/unseenet/nodes.json):
+
+```json
+{
+  "name": "mynode",
+  "address": "xyz...xyz.onion",
+  "node_key": "ed25519:...",
+  "operator": "ed25519:...",
+  "description": "A few words: where, who, what you carry"
+}
+```
+
+`node_key` is printed when your node starts; `operator` is your own key,
+as in `[operator]`. When the pull request is merged, the list is posted to
+`unseenet.nodes` automatically, and clients pick it up the next time they
+connect. Being listed means more users and more responsibility - read
+[Your responsibility](responsibility.md) first.
+
 ## Backup
 
 To move or restore a node with the **same onion address**, you need:

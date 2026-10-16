@@ -171,14 +171,17 @@ For development, a node can run without Tor:
 
 ## Talk about Unseenet - on Unseenet
 
-Two open groups are carried by the project's test nodes:
+The project's groups are carried by its test nodes:
 
 | Group | For |
 |-------|-----|
 | `unseenet@ph5fc5hop5232qsz` | The project: protocol, software, ideas, questions |
 | `unseenet.test@ph5fc5hop5232qsz` | Test posts - say hello, try replies |
+| `unseenet.announce@ph5fc5hop5232qsz` | Releases and news (a channel: read-only) |
+| `unseenet.nodes@ph5fc5hop5232qsz` | The signed list of known nodes, for clients ([UN-RFC 0010](rfc/un-rfc-0010.md)) |
 
-Both are owned by the project key
+Release notes and the node list are posted there automatically by GitHub
+Actions, over Tor. All are owned by the project key
 `ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya`.
 Connect to the test node
 `f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion`,

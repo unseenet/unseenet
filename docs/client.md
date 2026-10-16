@@ -227,6 +227,20 @@ Using the same key on several nodes lets those nodes see that it is the
 same person. If you want to keep two parts of your life apart, use two
 identities.
 
+## Known nodes and announcements
+
+The client knows a list of nodes to start with, so you can pick one instead
+of typing an address. Once connected, it reads the newest list from the
+project's channel `unseenet.nodes@ph5fc5hop5232qsz`
+([UN-RFC 0010](spec/un-rfc-0010.md)): through the node you already use, over
+Tor, and only if it is signed by the project. Nothing is fetched from a web
+site. **Add** in "Your nodes" (++o++) offers the nodes from that list that
+you do not use yet.
+
+New versions and important news are posted to
+`unseenet.announce@ph5fc5hop5232qsz`. Join it with ++j++ to hear about them.
+It is a channel: only the project can post there.
+
 ## Contacting a node's operator
 
 Press ++o++, choose a node and **Details** to see who runs it and its policy: which groups it

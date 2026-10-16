@@ -76,6 +76,7 @@ nav:
       - "0007 Data at rest": spec/un-rfc-0007.md
       - "0008 Chat and low latency": spec/un-rfc-0008.md
       - "0009 Inbox and local groups": spec/un-rfc-0009.md
+      - "0010 Known nodes": spec/un-rfc-0010.md
       - "0011 Node information": spec/un-rfc-0011.md
       - "0012 Retention and archives": spec/un-rfc-0012.md
       - "0013 Removing groups": spec/un-rfc-0013.md

@@ -8,6 +8,7 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Protocol
+- Draft UN-RFC 0010 (lists of known nodes).
 - Draft UN-RFC 0017 (catching up by pull, and group state).
 - Draft UN-RFC 0015 (transferring group ownership) and 0016 (peer
   authentication with node keys).
@@ -23,6 +24,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- Known nodes (UN-RFC 0010, draft): one list in `src/unseenet/nodes.json`;
+  the client ships with it and reads the newest signed list from the
+  channel `unseenet.nodes` over Tor. "Add a node" offers the known nodes.
+- Project channels `unseenet.announce` (releases, news) and
+  `unseenet.nodes`, posted to by GitHub Actions over Tor
+  (`tools/announce.py`, `announce.yml`) with a poster key the project key
+  can revoke.
 - First start offers the known nodes (the project's test nodes) to choose
   from, and adds the others as backups; "Another node" for any address.
 - Portable builds for Windows, macOS (Apple silicon and Intel) and Linux
