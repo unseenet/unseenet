@@ -39,7 +39,7 @@ async def test_tui_create_group_and_post(tmp_path, monkeypatch):
     app = UnseenetApp(vault_path)
     async with app.run_test(size=(140, 40)) as pilot:
         assert await wait_for(pilot, lambda: app.session is not None)
-        await pilot.press("c")
+        app.action_create_group()          # only in the command palette, no key
         await pilot.pause(0.2)
         await pilot.click("#name")
         await pilot.press(*"dk.test")
@@ -213,7 +213,7 @@ async def test_tui_create_group_rejects_bad_name_and_keeps_dialog(tmp_path, monk
     app = UnseenetApp(vault_path)
     async with app.run_test(size=(140, 40)) as pilot:
         assert await wait_for(pilot, lambda: app._inbox_ready, 300)
-        await pilot.press("c")
+        app.action_create_group()          # only in the command palette, no key
         await pilot.pause(0.3)
         await pilot.press(*"andlo,test")
         await pilot.click("#ok")
