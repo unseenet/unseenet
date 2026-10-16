@@ -8,6 +8,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Replies and mentions: posts answering yours are marked ◄, posts naming
+  one of your certified names ♦, and **For you** at the top of the group
+  list gathers the unread ones from all groups; groups show their count
+  and the client tells you when new ones arrive. Worked out locally;
+  nothing is sent. (#109)
 - **Update** in the menu of Bootable (USB, SSD etc.): fetch the newest release over
   Tor (or a development build, or an update zip on the stick) and replace
   the system files, keeping `data/`. Releases get an

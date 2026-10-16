@@ -1131,3 +1131,32 @@ async def test_tui_give_a_name_and_answer_a_request(tmp_path, monkeypatch):
     assert [c.name for c in naming.my_names(sonia)] == ["sonia@lorensen"]
     await sonia.close()
     server.close()
+
+
+async def test_tui_for_you(tmp_path, monkeypatch):
+    """#109: 'For you' at the top of the groups lists a reply to your post, marked."""
+    from unseenet.client.tui import FOR_YOU, REPLY_MARK
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    gid = await other.create_group("dk.snak", "open", min_pow=10)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        s = app.session
+        s.subscribe(gid)
+        mine = await s.post(gid, "Spørgsmål", "?\n")
+        await other.fetch_group(gid)
+        await other.post(gid, "Re: Spørgsmål", "Svar\n", references=[mine])
+        await s.fetch_group(gid)
+        app.refresh_groups()
+        assert await wait_for(pilot, lambda: gid in app.groups, 300)
+        await pilot.pause(0.3)
+        app.select_group(FOR_YOU)
+        assert await wait_for(pilot, lambda: [m.subject for m in app.messages.values()] == ["Re: Spørgsmål"], 300)
+        table = app.query_one("#threads")
+        assert str(table.get_row_at(0)[1]).startswith(REPLY_MARK)
+        assert "For you" in str(app.query_one("#threads-title").render())
+        await pilot.press("q")
+    await other.close()
+    server.close()

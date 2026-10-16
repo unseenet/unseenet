@@ -1028,6 +1028,64 @@ class Session:
         return sorted(((k, v.get("label", k)) for k, v in self.data["ignored"].items()),
                       key=lambda kv: kv[1].lower())
 
+    # --- replies to you and mentions of your names (#109); computed here, never sent ---
+    def _remember_mine(self, msgid: str) -> None:
+        mine = self.data.setdefault("mine", [])
+        mine.append(msgid)
+        del mine[:-2000]
+
+    def my_message_ids(self) -> set[str]:
+        keys = {self.identity(n).key_text for n in self.data["identities"]}
+        ids = set(self.data.get("mine", []))
+        for msgs in self.cache.values():
+            ids.update(m.message_id for m in msgs.values() if m.author_key in keys)
+        return ids
+
+    def _mention_patterns(self) -> list["re.Pattern"]:
+        """Your certified names, as they would be written in a post (UN-RFC 0019).
+        Display names do not count: anyone can call themselves Andreas."""
+        out = []
+        for c in naming.my_names(self):
+            text = naming.name_text(c.name)
+            out.append(re.compile(r"(?<![a-z0-9@.-])" + re.escape(text) + r"(?![a-z0-9-]|\.[a-z0-9])",
+                                  re.IGNORECASE))
+        return out
+
+    def for_me(self, msg: "Message", mine: set[str] | None = None,
+               patterns: list | None = None) -> str | None:
+        """'reply' if the post answers one of yours, 'mention' if it names you, else None."""
+        if msg.private or not msg.readable:
+            return None
+        keys = {self.identity(n).key_text for n in self.data["identities"]}
+        if msg.author_key in keys:
+            return None
+        mine = self.my_message_ids() if mine is None else mine
+        if any(r in mine for r in msg.references):
+            return "reply"
+        patterns = self._mention_patterns() if patterns is None else patterns
+        text = f"{msg.subject}\n{msg.body}"
+        if any(p.search(text) for p in patterns):
+            return "mention"
+        return None
+
+    def for_you(self, unread_only: bool = True) -> list["Message"]:
+        """Replies to you and mentions of you in the groups you follow, newest first."""
+        mine, patterns = self.my_message_ids(), self._mention_patterns()
+        out = []
+        for gid in self.data["subscribed"]:
+            if gid == self.my_inbox:
+                continue
+            for m in self.visible(list(self.cache.get(gid, {}).values())):
+                if (not unread_only or not self.is_read(m)) and self.for_me(m, mine, patterns):
+                    out.append(m)
+        return sorted(out, key=lambda m: m.date or datetime.min.replace(tzinfo=timezone.utc),
+                      reverse=True)
+
+    def for_you_count(self, group_id: str) -> int:
+        mine, patterns = self.my_message_ids(), self._mention_patterns()
+        return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
+                   if not self.is_read(m) and self.for_me(m, mine, patterns))
+
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown)."""
         groups = {m.group for m in msgs}
@@ -1589,6 +1647,7 @@ class Session:
         if gtype == "moderated" and not self.moderates(group_id):
             return await self._submit(group_id, subject, build)
         msgid = (await self._post_with_postage(group_id, build)).message_id
+        self._remember_mine(msgid)
         if cert:
             naming.sent_header(self, group_id)
         marks = self.data["read"].setdefault(group_id, [])   # your own posts are read
