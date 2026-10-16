@@ -75,6 +75,7 @@ show it to users when they add a node.
 | `max_size`       | integer | Largest accepted article                                   |
 | `logging`        | string  | Free text: what the node logs                              |
 | `archive`        | boolean | Whether the node keeps posts longer (UN-RFC 0012)          |
+| `honours_blocks` | boolean | Whether it refuses posts by identities blocked by hierarchy maintainers (UN-RFC 0018 section 8.2) |
 
 # 5. The Operator's Contact Inbox
 

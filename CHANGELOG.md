@@ -8,6 +8,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Hierarchy blocks (UN-RFC 0018 section 5.4): a hierarchy's maintainer can
+  block an identity across its hierarchy with a public reason, and a
+  maintainer of a delegated part (such as `dk.snak.*`) within that part.
+  Clients hide blocked posts and say so, and readers can show them
+  anyway; nodes with the new `honour_blocks` setting refuse them and say
+  so in their node information (UN-RFC 0011). **Block in hierarchy** for
+  maintainers in the client; the client now also reads the lists of
+  delegated sub-hierarchies. (#75)
 - Moderated groups work for everyone: a non-moderator's post goes, sealed,
   to the owner and every moderator (UN-RFC 0009 section 3, now covering
   several moderators), and **Moderation queue** in the client approves it

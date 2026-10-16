@@ -582,3 +582,71 @@ async def test_moderation_queue(tmp_path, monkeypatch):
     for p in (owner, mod, user):
         await p.close()
     server.close()
+
+
+async def test_hierarchy_blocks(tmp_path, monkeypatch):
+    """UN-RFC 0018 sections 5.4 and 8: a maintainer blocks a key in its hierarchy;
+    readers hide it (unless they choose to see it); a node that honours blocks
+    refuses the key's new posts, one that does not still carries them."""
+    import json
+    import unseenet.hierarchies as hz
+    import unseenet.known_nodes as kn
+    from unseenet.client import naming
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    nodes, addrs, servers = [], [], []
+    for honour in (True, False):
+        n = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0), honour_blocks=honour))
+        srv = await n.serve("127.0.0.1", 0)
+        nodes.append(n); servers.append(srv)
+        addrs.append(f"127.0.0.1:{srv.sockets[0].getsockname()[1]}")
+    honouring, plain = addrs
+
+    def person(name, addr):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    # the root publisher (stands in for the project) gives dk to a maintainer
+    root_pub = person("root", honouring)
+    maint = person("maint", honouring)
+    root_gid = await root_pub.create_group("unseenet.hierarchies", "channel", min_pow=8)
+    list_gid = await maint.create_group("dk.liste", "channel", min_pow=8)
+    root_text = json.dumps({"v": 1, "hierarchies": [{"name": "dk", "policy": "governed",
+                            "maintainer": maint.identity().key_text, "list": list_gid}]})
+    await root_pub.post(root_gid, "Hierarchies", root_text + "\n")
+    monkeypatch.setattr(hz, "HIERARCHIES_GROUP", root_gid)
+    monkeypatch.setattr(kn, "PROJECT_KEY", root_pub.identity().key_text)
+
+    owner = person("owner", honouring)
+    troll = person("troll", honouring)
+    gid = await owner.create_group("dk.snak.biler", "open", min_pow=8)
+    troll.subscribe(gid)
+    await troll.post(gid, "Trussel", "...\n")
+
+    # the maintainer blocks the troll in all of dk.*
+    maint.subscribe(gid)
+    await naming.refresh(maint)
+    assert [h.name for h in naming.governing(maint, gid)] == ["dk"]
+    where = await naming.block(maint, gid, troll.identity().key_text, "trusler i flere grupper")
+    assert where == "dk"
+
+    reader = person("reader", honouring)
+    reader.subscribe(gid)
+    await naming.refresh(reader)
+    msgs = await reader.fetch_group(gid)
+    assert reader.visible(msgs) == []
+    assert reader.hidden_by_blocks(gid) == [("dk", "trusler i flere grupper", 1)]
+    reader.set_show_blocked(True)
+    assert [m.subject for m in reader.visible(msgs)] == ["Trussel"]
+
+    # the honouring node refuses new posts; its node information says so
+    nodes[0]._blocks.clear()
+    with pytest.raises(sess.SessionError) as e:
+        await troll.post(gid, "Igen", "...\n")
+    assert "blocked in dk.*" in str(e.value)
+    assert nodes[0].node_info()["policy"]["honours_blocks"] is True
+    assert nodes[1].node_info()["policy"]["honours_blocks"] is False
+    for p in (root_pub, maint, owner, troll, reader):
+        await p.close()
+    for srv in servers:
+        srv.close()
