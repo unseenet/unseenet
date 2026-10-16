@@ -1,0 +1,73 @@
+name: announce
+# Posts to the project's channels on Unseenet itself, over Tor:
+#   - unseenet.announce: release notes after a successful release
+#   - unseenet.nodes: the known-node list (src/unseenet/nodes.json) when it
+#     changes, and every month so it never expires on the nodes
+#   - either, by hand
+# The key is the repository secret UNSEENET_ANNOUNCE_SEED; it is a poster in
+# both channels, which the project key owns (see tools/announce.py).
+on:
+  workflow_run:
+    workflows: ["release"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ["src/unseenet/nodes.json"]
+  schedule:
+    - cron: "23 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "nodes, release (give the tag) or message"
+        type: choice
+        options: [nodes, release, message]
+        default: nodes
+      tag:
+        description: "release: the tag, e.g. v0.2.0"
+        required: false
+      subject:
+        description: "message: subject"
+        required: false
+      body:
+        description: "message: text"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: announce
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - name: Install Tor
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tor
+          sudo systemctl stop tor || true      # we run our own
+      - name: Post
+        env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          WHAT: ${{ github.event_name == 'workflow_run' && 'release' || (github.event_name == 'workflow_dispatch' && inputs.what || 'nodes') }}
+          TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.tag }}
+          SUBJECT: ${{ inputs.subject }}
+          BODY: ${{ inputs.body }}
+        run: |
+          case "$WHAT" in
+            release) python tools/announce.py release "$TAG" ;;
+            message) printf '%s\n' "$BODY" > body.txt
+                     python tools/announce.py message --subject "$SUBJECT" --body-file body.txt ;;
+            *)       python tools/announce.py nodes ;;
+          esac

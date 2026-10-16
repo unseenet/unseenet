@@ -110,12 +110,20 @@ jobs:
             zips/*-usb.zip
             zips/SHA256SUMS.txt
           compression-level: 0
-      - name: Draft a release (tags only; publish it by hand)
+      - name: Attach to the release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" zips/*.zip zips/SHA256SUMS.txt
-          --draft --title "Unseenet $GITHUB_REF_NAME"
-          --notes "Portable builds with Tor inside. See README.txt in each zip and
-          https://andlo.github.io/unseenet/portable/. Check downloads against SHA256SUMS.txt."
+        run: |
+          # The "release" workflow creates the release (after tests and PyPI);
+          # wait for it and attach the zips. If it never comes, leave a draft.
+          for i in $(seq 1 40); do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" zips/*.zip zips/SHA256SUMS.txt --clobber
+              exit 0
+            fi
+            sleep 30
+          done
+          gh release create "$GITHUB_REF_NAME" zips/*.zip zips/SHA256SUMS.txt --draft \
+            --title "Unseenet $GITHUB_REF_NAME" \
+            --notes "Portable builds with Tor inside. See https://andlo.github.io/unseenet/portable/"

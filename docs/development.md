@@ -262,8 +262,11 @@ one node at a time.
    GitHub release with the changelog section as notes.
 5. `.github/workflows/portable.yml` builds the portable zips on Linux,
    Windows and macOS (Apple silicon and Intel), unpacks and self-tests each
-   one, combines the USB zip, and attaches them with `SHA256SUMS.txt` to a
-   **draft** release. Check the self-test logs, then publish the draft.
+   one, combines the USB zip, and attaches them with `SHA256SUMS.txt` to the
+   release.
+6. `.github/workflows/announce.yml` posts the release notes to
+   `unseenet.announce` on Unseenet itself, over Tor, once the release
+   workflow has succeeded.
 
 The portable builds can also be made without a release: run the
 *portable* workflow by hand (Actions, "Run workflow") and download the zips

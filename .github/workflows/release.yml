@@ -61,4 +61,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PRE=""; case "$GITHUB_REF_NAME" in v0.*) PRE="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Unseenet $GITHUB_REF_NAME" --notes-file notes.md $PRE
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # the portable workflow got there first (as a draft): fill it in and publish
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "Unseenet $GITHUB_REF_NAME" --notes-file notes.md $PRE --draft=false
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "Unseenet $GITHUB_REF_NAME" --notes-file notes.md $PRE
+          fi
