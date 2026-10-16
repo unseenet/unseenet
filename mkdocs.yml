@@ -110,6 +110,7 @@ nav:
       - "0019 Names for identities": spec/un-rfc-0019.md
       - "0020 Lists from inside the network": spec/un-rfc-0020.md
       - "0021 Listed nodes must be connected": spec/un-rfc-0021.md
+      - "0022 Profiles": spec/un-rfc-0022.md
   - The project:
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md
