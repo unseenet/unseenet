@@ -67,6 +67,46 @@ def group_name_problem(name: str) -> str | None:
     return None
 
 
+GROUP_KINDS = {"open": "open - anyone can read and post", "moderated": "moderated",
+               "channel": "channel - only chosen people post",
+               "closed": "closed - members only, encrypted",
+               "inbox": "inbox - anyone writes, only the owner reads"}
+
+
+def known_node_details(n) -> str:
+    """A known node (UN-RFC 0010) as a few lines, to choose the right one."""
+    lines = [n.description or "(no description)"]
+    if n.operator:
+        lines.append(f"Run by:   {n.operator}")
+    lines.append(f"Address:  {n.address}")
+    return "\n".join(lines)
+
+
+def node_details(address: str, info: dict | None, known=None, groups: int = 0,
+                 default: bool = False) -> str:
+    """One of your nodes: what it says about itself (UN-RFC 0011) and the node list."""
+    i = info or {}
+    p = i.get("policy", {})
+    name = i.get("name") or (known.name if known else "") or address
+    lines = [name + ("   ★ default node" if default else "")]
+    about = i.get("description") or (known.description if known else "")
+    if about:
+        lines.append(about)
+    operator = i.get("operator") or (known.operator if known else "")
+    if operator:
+        lines.append(f"Run by:   {operator}")
+    lines.append(f"Address:  {address}")
+    if info is None:
+        lines.append("Not reachable right now.")
+    elif p:
+        lines.append(f"Policy:   new groups {p.get('new_groups', '?')}, kept "
+                     f"{p.get('retention_days', '?')} days, postage {p.get('min_pow', '?')} "
+                     f"bits, logs {p.get('logging', '?')}")
+    lines.append(f"Groups:   {groups} of yours are read from here"
+                 + ("   ·   in the project's node list" if known else ""))
+    return "\n".join(lines)
+
+
 def is_personal_inbox(group_id: str) -> bool:
     return group_id.split("@", 1)[0] == INBOX_NAME
 
@@ -102,16 +142,21 @@ Screen { background: $surface; }
 .unread { text-style: bold; }
 
 ModalScreen { align: center middle; }
-.dialog { width: 80; height: auto; max-height: 90%; border: thick $primary; background: $panel; padding: 1 2; }
+.dialog { width: 80; max-width: 100%; height: auto; max-height: 100%; overflow-y: auto;
+          border: thick $primary; background: $panel; padding: 1 2; }
+.dialog.list { width: 90%; max-width: 130; height: 94%; overflow-y: hidden; padding: 0 1; }
+.dialog Label { width: 100%; }
+.dialog.list Tree, .dialog.list DataTable { height: 1fr; min-height: 3; }
+.dialog .details { height: auto; max-height: 10; margin-top: 1; padding: 0 1;
+                   border-left: thick $primary-darken-2; color: $text; }
 .dialog Label.title { text-style: bold; margin-bottom: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
 .dialog.compose { width: 96%; height: 94%; max-height: 100%; }
 .dialog.compose #body { height: 1fr; margin-bottom: 1; }
-.dialog .buttons { height: auto; align-horizontal: right; }
-.dialog Button { margin-left: 1; }
+.dialog .buttons { height: auto; align-horizontal: right; dock: bottom; }
+.dialog Button { margin-left: 1; min-width: 8; width: auto; }
 .dialog .hint { color: $text-muted; }
 .dialog .error { color: $error; }
-#browse-tree { height: 22; }
 #groups { padding: 0 1; }
 """
 
@@ -193,6 +238,8 @@ class SetupDialog(Dialog):
                 other = Input(placeholder="xyz...abc.onion  (or host:port for testing)", id="node")
                 other.display = False
                 yield other
+                yield Static(known_node_details(self.known[0]) if self.known else "",
+                             id="known-details", classes="details", markup=False)
                 yield Checkbox("Also use the other known nodes as backups", value=True, id="backups")
             with Horizontal(classes="buttons"):
                 yield Button("Quit", id="cancel")
@@ -203,6 +250,11 @@ class SetupDialog(Dialog):
         self.query_one("#node").display = event.value == OTHER_NODE
         if event.value == OTHER_NODE:
             self.query_one("#node").focus()
+        n = next((k for k in self.known if k.address == event.value), None)
+        details = self.query_one("#known-details", Static)
+        details.display = n is not None
+        if n:
+            details.update(known_node_details(n))
 
     @on(Input.Submitted)
     @on(Button.Pressed, "#ok")
@@ -400,7 +452,10 @@ class CreateGroupDialog(Dialog):
         name = self.query_one("#name", Input).value.strip().lower()
         problem = group_name_problem(name) if name else "a name is required"
         if problem:                       # stay open, keep what was typed
-            self.app.notify(f"Group name: {problem}", severity="error")
+            # said under the name field, not in a toast that would cover the buttons
+            help_label = self.query_one("#name-help", Label)
+            help_label.update(f"Not valid yet: {problem}")
+            help_label.set_class(True, "error")
             self.query_one("#name", Input).focus()
             return
         view, fast = DELIVERY[self.query_one("#view", Select).value]
@@ -477,9 +532,7 @@ class GroupInfoDialog(Dialog):
 
     def compose(self) -> ComposeResult:
         d = self.data
-        kinds = {"open": "open - anyone can read and post", "moderated": "moderated",
-                 "channel": "channel - only chosen people post", "closed": "closed - members only, encrypted",
-                 "inbox": "inbox - anyone writes, only the owner reads"}
+        kinds = GROUP_KINDS
         lines = [f"Group:     {self.gid}",
                  f"Type:      {kinds.get(d.get('type', ''), d.get('type', '?'))}",
                  f"Owner:     {self.owner_label}",
@@ -600,19 +653,21 @@ class AboutDialog(Dialog):
 class NodesDialog(Dialog):
     """Your nodes. Your key is in the vault, so you are the same person on all of them."""
 
-    def __init__(self, nodes: list[str], infos: dict, counts: dict[str, int]):
+    def __init__(self, nodes: list[str], infos: dict, counts: dict[str, int], known: list | None = None):
         super().__init__()
         self.nodes, self.infos, self.counts = nodes, infos, counts
+        self.known = {n.address: n for n in (known or [])}
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog wide"):
+        with Vertical(classes="dialog list"):
             yield Label("Your nodes", classes="title")
             yield Label("You are the same on every node - your key lives in your vault. "
                         "Each group is read from one node; new groups and your inbox go to "
                         "the default node (★).", classes="hint")
             yield DataTable(id="nodes-table", cursor_type="row", zebra_stripes=True)
+            yield Static("", id="node-details", classes="details", markup=False)
             with Horizontal(classes="buttons"):
-                yield Button("Close", id="cancel")
+                yield Button("OK", id="cancel")
                 yield Button("Add", id="add")
                 yield Button("Remove", id="remove")
                 yield Button("Make default", id="default")
@@ -623,8 +678,9 @@ class NodesDialog(Dialog):
         table.add_columns("", "Name", "Address", "Your groups", "")
         for i, address in enumerate(self.nodes):
             info = self.infos.get(address)
-            name = (info or {}).get("name", "") if info is not None else ""
-            state = "unreachable" if info is None else ""
+            known = self.known.get(address)
+            name = (info or {}).get("name", "") or (known.name if known else "")
+            state = "unreachable" if info is None else "ok"
             short = address if len(address) <= 34 else address[:16] + "…" + address[-14:]
             table.add_row("★" if i == 0 else "", Text(name), Text(short),
                           str(self.counts.get(address, 0)), state, key=address)
@@ -635,6 +691,13 @@ class NodesDialog(Dialog):
         if not table.row_count:
             return None
         return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+
+    @on(DataTable.RowHighlighted, "#nodes-table")
+    def _highlighted(self, event: DataTable.RowHighlighted) -> None:
+        address = event.row_key.value
+        self.query_one("#node-details", Static).update(node_details(
+            address, self.infos.get(address), self.known.get(address),
+            self.counts.get(address, 0), default=address == self.nodes[0]))
 
     @on(DataTable.RowSelected, "#nodes-table")
     def _row(self, event: DataTable.RowSelected) -> None:
@@ -658,8 +721,8 @@ class AddNodeDialog(Dialog):
 
     def __init__(self, known: list, used: list[str]):
         super().__init__()
-        self.choices = [(f"{n.name} - {n.description}", n.address)
-                        for n in known if n.address not in used]
+        self.known = [n for n in known if n.address not in used]
+        self.choices = [(f"{n.name} - {n.description}", n.address) for n in self.known]
         self.choices.append(("Another node - enter its address", OTHER_NODE))
 
     def compose(self) -> ComposeResult:
@@ -671,6 +734,10 @@ class AddNodeDialog(Dialog):
             other = Input(placeholder="xyz...abc.onion  (add :port if it is not 119)", id="node")
             other.display = len(self.choices) == 1
             yield other
+            details = Static(known_node_details(self.known[0]) if self.known else "",
+                             id="known-details", classes="details", markup=False)
+            details.display = bool(self.known)
+            yield details
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Add", variant="primary", id="ok")
@@ -678,6 +745,11 @@ class AddNodeDialog(Dialog):
     @on(Select.Changed, "#known")
     def _changed(self, event: Select.Changed) -> None:
         self.query_one("#node").display = event.value == OTHER_NODE
+        n = next((k for k in self.known if k.address == event.value), None)
+        details = self.query_one("#known-details", Static)
+        details.display = n is not None
+        if n:
+            details.update(known_node_details(n))
 
     @on(Input.Submitted)
     @on(Button.Pressed, "#ok")
@@ -737,9 +809,11 @@ class BrowseDialog(Dialog):
     def __init__(self, groups: list[GroupInfo]):
         super().__init__()
         self.groups = groups
+        self.current: GroupInfo | None = None
+        self.peeked: dict[str, tuple[dict, int] | str] = {}   # group -> (manifest, posts) or error
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
+        with Vertical(classes="dialog list"):
             several = len(self.app.session.nodes) > 1
             yield Label("Groups on your nodes" if several else "Groups on this node", classes="title")
             yield Label("Enter: subscribe or unsubscribe a group, open or close a "
@@ -759,8 +833,10 @@ class BrowseDialog(Dialog):
             if not self.groups:
                 tree.root.add_leaf(Text("No groups yet - press c in the main view to create one."))
             yield tree
+            yield Static("Move to a group to see what it is.", id="group-details",
+                         classes="details", markup=False)
             with Horizontal(classes="buttons"):
-                yield Button("Close", variant="primary", id="cancel")
+                yield Button("OK", variant="primary", id="cancel")
 
     def _label(self, g: GroupInfo) -> Text:
         mark = "[x]" if g.subscribed else "[ ]"
@@ -772,6 +848,75 @@ class BrowseDialog(Dialog):
 
     def on_mount(self) -> None:
         self.query_one("#browse-tree", Tree).focus()
+
+    @on(Tree.NodeHighlighted, "#browse-tree")
+    def _highlighted(self, event: Tree.NodeHighlighted) -> None:
+        g = event.node.data
+        self.current = g if isinstance(g, GroupInfo) else None
+        if self.current is None:
+            return
+        self._show(g)
+        if g.group_id not in self.peeked:
+            self._peek(g)
+
+    @work(group="peek", exit_on_error=False)
+    async def _peek(self, g: GroupInfo) -> None:
+        # Not exclusive: cancelling a request half-way would break the connection.
+        # Wait a moment instead, so scrolling through the list asks for nothing.
+        await asyncio.sleep(0.5)
+        if self.current is not g or g.group_id in self.peeked:
+            return
+        self.peeked[g.group_id] = "asking the node ..."
+        self._show(g)
+        try:
+            self.peeked[g.group_id] = await asyncio.wait_for(
+                self.app.session.peek_group(g.group_id, g.nodes[0] if g.nodes else None), 60)
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError,
+                asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
+            self.peeked[g.group_id] = f"could not ask the node ({exc})"
+        if self.current is g:
+            self._show(g)
+
+    def _owner(self, g: GroupInfo, data: dict) -> str:
+        from ..known_nodes import NODES_GROUP
+        s = self.app.session
+        fp = g.group_id.rpartition("@")[2]
+        if fp == s.my_inbox.rpartition("@")[2]:
+            return "you"
+        if fp == NODES_GROUP.rpartition("@")[2]:
+            return "the Unseenet project"
+        name = s.contact_name(data["owner"]) if data.get("owner") else None
+        return f"{name} ✓ ({fp})" if name else fp
+
+    def _show(self, g: GroupInfo) -> None:
+        peek = self.peeked.get(g.group_id)
+        data = peek[0] if isinstance(peek, tuple) else self.app.session.manifest_data(g.group_id)
+        lines = [g.group_id]
+        title = data.get("title") or g.description
+        if title:
+            lines.append(title)
+        if data.get("description") and data["description"] != title:
+            lines.append(data["description"])
+        if data:
+            facts = [GROUP_KINDS.get(data.get("type", ""), data.get("type", "?"))]
+            if isinstance(peek, tuple):
+                facts.append(f"{peek[1]} posts")
+            facts.append(f"kept {data.get('retention_days', 90)} days")
+            lines.append("Type:   " + ",  ".join(facts))
+        elif isinstance(peek, str):
+            lines.append(f"({peek})")
+        lines.append(f"Owner:  {self._owner(g, data)}")
+        if len(g.nodes) > 1 or len(self.app.session.nodes) > 1:
+            lines.append("On:     " + ", ".join(node_label(n) for n in g.nodes))
+        if data.get("type") == "closed":
+            lines.append("Members only: you need an invitation from the owner to read it.")
+        if data.get("rules"):
+            first = data["rules"].strip().splitlines()[0]
+            lines.append(f"Rules:  {first[:90]}" + (" ..." if len(data["rules"].strip()) > len(first) else ""))
+        try:
+            self.query_one("#group-details", Static).update("\n".join(lines))
+        except Exception:  # noqa: BLE001  (the dialog was closed meanwhile)
+            pass
 
     @on(Tree.NodeSelected, "#browse-tree")
     def _toggle(self, event: Tree.NodeSelected) -> None:
@@ -1412,7 +1557,8 @@ class UnseenetApp(App):
             await asyncio.gather(*(ask(n) for n in s.nodes))
             self.set_status("")
             counts = {n: sum(1 for g in s.data["subscribed"] if s.node_for(g) == n) for n in s.nodes}
-            result = await self.push_screen_wait(NodesDialog(s.nodes, infos, counts))
+            result = await self.push_screen_wait(NodesDialog(s.nodes, infos, counts,
+                                                             s.known_nodes()))
             if not result:
                 return
             action, address = result

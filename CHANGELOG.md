@@ -33,6 +33,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `unseenet.announce`, `unseenet.test`) once, and a new identity gets a
   default signature with the display name and key.
 - Browsing groups no longer lists other people's inboxes.
+- Browsing groups describes the highlighted group below the list: title,
+  type, number of posts, owner, nodes and the first line of its rules,
+  read from the group's signed manifest without subscribing.
+- Your nodes, adding a node and the first start describe the highlighted
+  node: description, operator, address and policy.
 - Node requests must prove that the requester runs the node: the operator
   signs a challenge with `unseenet-node --sign`. Listed nodes are checked
   daily over Tor; unreachable for 3 days gets a note, 10 days removes them.
@@ -122,6 +127,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - TUI: creating a group with an invalid name closed the dialog and lost what
   was typed. Names are now checked as you type, with the reason shown, and
   the dialog stays open until the name is valid.
+
+### Changed
+- Dialogs with lists fill the window, buttons stay visible at the bottom
+  of every dialog in small terminals, and long hints wrap. The group list
+  closes with OK. An invalid group name is shown under the name field
+  instead of in a message that covered the buttons.
 
 ## [0.1.0] - 2026-10-15
 

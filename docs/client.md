@@ -81,7 +81,7 @@ After that the connection is reused.
 
 | Key | What it does |
 |-----|--------------|
-| ++g++ | Browse the groups on the node; ++enter++ subscribes or unsubscribes |
+| ++g++ | Browse the groups on the node; ++enter++ subscribes or unsubscribes. The group under the cursor is described below the list |
 | ++n++ | New post in the current group |
 | ++r++ | Reply to the selected post |
 | ++ctrl+s++ | Send (in the compose window) |

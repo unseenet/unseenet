@@ -222,6 +222,7 @@ async def test_tui_create_group_rejects_bad_name_and_keeps_dialog(tmp_path, monk
         assert "','" in str(app.screen.query_one("#name-help").render())
         name = app.screen.query_one("#name")
         name.value = "andlo.test"
+        await pilot.pause(0.3)          # the help text changes, and the buttons move
         await pilot.click("#ok")
         assert await wait_for(pilot, lambda: any(g.startswith("andlo.test@") for g in app.groups), 300)
         await pilot.press("q")
@@ -544,3 +545,40 @@ async def test_tui_first_start_offers_known_nodes(tmp_path, monkeypatch):
         await pilot.click("#ok")
         assert await wait_for(pilot, lambda: app.session.nodes == [n.address for n in KNOWN_NODES])
         await pilot.press("q")
+
+
+async def test_tui_browse_and_nodes_fit_small_terminal(tmp_path, monkeypatch):
+    """Lists fill the dialog and the buttons stay visible in a small window;
+    the highlighted group and node are described below the list."""
+    from unseenet.client.tui import BrowseDialog, NodesDialog
+    names = [f"dk.gruppe{i}" for i in range(30)]
+    app, server = await _app_with_groups(tmp_path, monkeypatch, names)
+    async with app.run_test(size=(80, 20)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 31, 300)
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 100)
+        dialog = app.screen
+        await pilot.pause(0.3)
+        ok = dialog.query_one("#cancel")
+        assert str(ok.label) == "OK"
+        assert ok.region.bottom <= 20 and ok.region.height > 0
+        tree = dialog.query_one("#browse-tree")
+        tree.move_cursor(tree.root.children[0].children[3])
+        assert await wait_for(pilot, lambda: isinstance(
+            dialog.peeked.get(tree.cursor_node.data.group_id), tuple), 100)
+        text = str(dialog.query_one("#group-details").render())
+        assert "dk.gruppe" in text and "open" in text and "Owner:  you" in text
+        app.save_screenshot(str(tmp_path / "browse.svg"))
+        await pilot.press("escape")
+        await pilot.pause(0.3)
+        app.action_node_info()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog), 200)
+        await pilot.pause(0.3)
+        ok = app.screen.query_one("#cancel")
+        assert ok.region.bottom <= 20 and ok.region.height > 0
+        assert "Address:" in str(app.screen.query_one("#node-details").render())
+        app.save_screenshot(str(tmp_path / "nodes.svg"))
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        await pilot.press("q")
+    server.close()

@@ -487,6 +487,38 @@ class Session:
             subs.remove(group_id)
         self.save()
 
+    async def peek_group(self, group_id: str, node: str | None = None,
+                         max_heads: int = 300) -> tuple[dict, int]:
+        """(manifest, number of posts) of a group you may not follow, for browsing.
+
+        Reads only headers, and the manifest articles themselves; the manifest must be
+        signed by the owner named in the group ID. Nothing is cached or subscribed.
+        """
+        from ..core.groups import Manifest
+
+        async def run(c: Client) -> tuple[dict, int]:
+            count, low, high = await c.group(group_id)
+            best: dict = {}
+            for n in range(low, min(high, low + max_heads - 1) + 1):
+                try:
+                    head = await c.multiline(f"HEAD {n}", 221)
+                except NNTPError:
+                    continue
+                if not any(h.lower().replace(" ", "") == "control:manifest" for h in head):
+                    continue
+                raw = await c.article(str(n))
+                try:
+                    m = Manifest.from_article(Article.from_bytes(raw))
+                except (ArticleError, ValueError, TypeError):
+                    continue
+                if m.group_id == group_id and m.serial >= int(best.get("serial", 0)):
+                    best = dict(m.raw)
+            return best, count
+
+        cached = self.manifest_data(group_id)
+        data, count = await self._call(run, node or self.node_for(group_id))
+        return (cached if int(cached.get("serial", 0)) > int(data.get("serial", 0)) else data), count
+
     def subscribe_starter_groups(self) -> bool:
         """Subscribe to the project's groups once per vault (a new client has
         something to read). Groups unsubscribed later are not added again."""
