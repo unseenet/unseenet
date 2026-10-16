@@ -176,6 +176,7 @@ ModalScreen { align: center middle; }
 .dialog.list Tree, .dialog.list DataTable { height: 1fr; min-height: 3; }
 .dialog .details { height: auto; max-height: 10; margin-top: 1; padding: 0 1;
                    border-left: thick $primary-darken-2; color: $text; }
+#names-details { margin: 1 0 1 0; }        /* the key line must not touch the field below */
 .dialog Label.title { text-style: bold; margin-bottom: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
 .dialog.compose { width: 96%; height: 94%; max-height: 100%; }
