@@ -21,7 +21,8 @@ from . import __version__
 from .core import crypto
 from .core.article import Article, ArticleError, new_article, validate_structure
 from .core.groups import (decrypt_article, encrypted_article, encryption_epoch, make_key_update,
-                          make_manifest, open_envelope, short_group_id, split_group_id)
+                          make_manifest, open_envelope, personal_inbox_id, short_group_id,
+                          split_group_id)
 from .core.store import Store
 from .core.tor import TorProcess, open_connection  # noqa: F401  (re-exported for scripts)
 from .core.vault import Vault, VaultError, seal, unseal
@@ -308,12 +309,68 @@ async def c_node_add(app: App, args) -> None:
     print("Nodes:", ", ".join(app.data["nodes"]))
 
 
+def _owner_of(app: App, group_id: str) -> tuple[str, crypto.Identity] | None:
+    """The identity in this vault whose key owns the group ID, if any."""
+    try:
+        _, fp = split_group_id(group_id)
+    except ValueError:
+        return None
+    for name, entry in app.data["identities"].items():
+        ident = crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
+        if crypto.fingerprint(ident.public_key) == fp:
+            return name, ident
+    return None
+
+
 async def c_groups(app: App, args) -> None:
     async with app.connect() as c:
         lines = await c.multiline(f"LIST NEWSGROUPS {args.pattern}", 215)
     for line in lines:
         gid, _, desc = line.partition("\t")
+        if args.mine:
+            owner = _owner_of(app, gid)
+            if owner is None:
+                continue
+            desc = f"{desc}   [owned by {owner[0]}]"
         print(f"{short_group_id(gid):32} {desc}   ({gid})")
+
+
+async def c_group_remove(app: App, args) -> None:
+    """UN-RFC 0013: remove groups you own from the whole network. Final."""
+    plan = []
+    for gid in args.group:
+        try:
+            split_group_id(gid)
+        except ValueError:
+            sys.exit(f"{gid}: give the full group ID (name@fingerprint), "
+                     "see 'unseenet groups --mine'")
+        owner = _owner_of(app, gid)
+        if owner is None:
+            sys.exit(f"{gid}: none of the identities in this vault owns it")
+        if gid == personal_inbox_id(owner[1].public_key):
+            sys.exit(f"{gid}: a personal inbox cannot be removed")
+        plan.append((gid, *owner))
+
+    print("Removing a group is final: every node deletes it and its posts, and the")
+    print("group ID can never be used again, not even by you. Saved copies remain.")
+    for gid, name, _ in plan:
+        print(f"  {gid}   (owner: {name})")
+    if not args.yes:
+        if not sys.stdin.isatty():
+            sys.exit("Not removed. Add --yes to confirm when not running interactively.")
+        if input("Type 'remove' to go ahead: ").strip() != "remove":
+            sys.exit("Not removed.")
+
+    reason = (args.reason or "Removed by its owner.").rstrip("\n") + "\n"
+    for gid, _, ident in plan:
+        art = new_article(gid, None, reason, extra=[("Control", "rmgroup")])
+        art.finalize(ident, DEFAULT_POW)
+        await app.post(art)
+        if gid in app.data.get("subscribed", []):
+            app.data["subscribed"].remove(gid)
+        app.data["groups"].pop(gid, None)
+        app.vault.save()
+        print(f"Removed {gid}")
 
 
 async def c_group_create(app: App, args) -> None:
@@ -426,7 +483,8 @@ async def c_bridges(app: App, args) -> None:
 
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
-    "group-create": c_group_create, "invite": c_invite, "post": c_post, "read": c_read,
+    "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
+    "post": c_post, "read": c_read,
     "bridges": c_bridges,
 }
 
@@ -447,6 +505,7 @@ def client_main(argv=None) -> None:
     s.add_argument("address")
     s = sub.add_parser("groups", help="list groups on the node")
     s.add_argument("pattern", nargs="?", default="*")
+    s.add_argument("--mine", action="store_true", help="only groups owned by an identity in this vault")
     s = sub.add_parser("group-create", help="create a group you own")
     s.add_argument("name")
     s.add_argument("--type", choices=["open", "moderated", "channel", "closed", "inbox"], default="open")
@@ -454,6 +513,10 @@ def client_main(argv=None) -> None:
     s.add_argument("--title")
     s.add_argument("--description")
     s.add_argument("--min-pow", type=int, default=20)
+    s = sub.add_parser("group-remove", help="remove groups you own from the whole network (final)")
+    s.add_argument("group", nargs="+", help="full group ID, name@fingerprint")
+    s.add_argument("--reason", help="short reason, shown to nodes and readers")
+    s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("invite", help="give a key access to a closed group you own")
     s.add_argument("group")
     s.add_argument("key", help="the member's ed25519:... key")

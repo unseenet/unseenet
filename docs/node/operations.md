@@ -47,6 +47,10 @@ node's decision only. To allow it again, use `--undrop-group` with the same
 group ID. (A group removed by its **owner** is gone for good and cannot be
 restored.)
 
+If the group is **yours** - created by an identity you have - remove it
+from the whole network instead, with `unseenet group-remove` or in the
+client (see [Leaving and removing groups](../client.md#leaving-and-removing-groups)).
+
 The command works while the node is running.
 
 ## Getting your node listed

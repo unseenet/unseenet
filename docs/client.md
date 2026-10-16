@@ -179,6 +179,25 @@ In the command palette (++ctrl+p++):
 If the owner removes a group you follow, the client tells you, and you
 can unsubscribe.
 
+From the [command line client](#the-command-line-client) you can see which
+groups your identities own, and remove several at once:
+
+```bash
+unseenet groups --mine
+unseenet group-remove dk.test@42e5qnhtj53o27ww --reason "Typo in the name"
+```
+
+A group belongs to the identity whose key created it: the part after `@`
+in the group ID is that key's fingerprint. `group-remove` finds the right
+identity in your vault itself, and refuses groups none of them own and your
+personal inbox. It asks you to type `remove` before anything is sent; in a
+script, add `--yes`. Give the full group ID, not the short form the lists
+show.
+
+If you have lost the identity that owns a group, the group cannot be removed
+from the network. A node operator can still
+[drop it from their own node](node/operations.md#dropping-a-group).
+
 ## Signature
 
 A new identity starts with the signature `{name}  ·  {key}`, so others
@@ -372,3 +391,20 @@ There is also a plain command line client for scripting and testing:
 ```bash
 unseenet --help
 ```
+
+| Command | What it does |
+|---|---|
+| `id-new NAME [--display NAME]` | Create an identity |
+| `whoami` | List your identities and their keys |
+| `node-add ADDRESS` | Add a node (`xyz.onion` or `host:port`) |
+| `groups [PATTERN] [--mine]` | List groups on the node; `--mine` only those your identities own |
+| `group-create NAME [--type ...]` | Create a group you own |
+| `group-remove GROUP_ID ... [--reason TEXT] [--yes]` | Remove groups you own from the whole network ([final](#leaving-and-removing-groups)) |
+| `invite GROUP_ID KEY` | Give a key access to a closed group you own |
+| `post GROUP_ID -s SUBJECT [--body TEXT]` | Post; the body is read from stdin without `--body` |
+| `read GROUP_ID` | Read a group |
+| `bridges [MODE]` | Show or set [Tor bridges](tor.md) |
+
+Global options go before the command: `--vault FILE` picks the vault and
+`--identity NAME` the identity (default: the first). The passphrase is read
+from `UNSEENET_PASSPHRASE` if it is set, otherwise you are asked.

@@ -29,6 +29,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   groups to join; the project's node list, root list, names and checkgroups
   are known as data groups from the start. `tools/project/create_groups.py`
   gives the project's data groups that view.
+- The command-line client can remove groups you own from the network:
+  `unseenet group-remove GROUP_ID ...` (UN-RFC 0013). It finds the owning
+  identity in the vault, refuses groups you do not own and your personal
+  inbox, and asks you to type `remove` unless you add `--yes`.
+  `unseenet groups --mine` lists only the groups your identities own. (#42)
 - `unseenet-registrar`: a registrar for names of identities such as
   `@lorensen` (UN-RFC 0019). It runs as several replicas on separate
   machines that make the same decisions without talking to each other, so
