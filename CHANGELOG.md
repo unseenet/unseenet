@@ -13,6 +13,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   [Development build](https://github.com/unseenet/unseenet/releases/tag/dev),
   with versions like `0.2.1.dev3`. Test releases (`0.2.1a1`) go to PyPI and
   GitHub as pre-releases. (#12)
+- Icons for each group in both group lists: `≡` posts, `»` chat, `√`
+  moderated, `►` channel, `∩` closed, `@` inbox, `⌂` local. They and the
+  client's other symbols are from the basic character set every terminal
+  font has, so they show in the classic Windows console too. (#14)
 
 ### Fixed
 - After picking another group or a refresh while an answer was still

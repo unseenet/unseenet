@@ -267,7 +267,7 @@ async def test_tui_contact_conversation(tmp_path, monkeypatch):
         await pilot.press(*"Jeg kommer", "enter")
         assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
         rows = [app._who(m) for m in app.messages.values()]
-        assert rows[0].startswith("Sonia (datter) ✓") and rows[1] == "You"
+        assert rows[0].startswith("Sonia (datter) √") and rows[1] == "You"
         lines = [str(line.text) for line in app.query_one("#chat-log").lines]
         assert any("Sonia (datter)" in ln and "Kan du hente mig?" in ln for ln in lines)
         assert any("You: Jeg kommer" in ln for ln in lines)
@@ -615,5 +615,34 @@ async def test_tui_browse_does_not_subscribe_to_someone_elses_inbox(tmp_path, mo
         await pilot.click("#cancel")
         await pilot.pause(0.3)
         assert app.is_running and not isinstance(app.screen, BrowseDialog)
+        await pilot.press("q")
+    server.close()
+
+
+def test_group_icons():
+    from unseenet.client.tui import ICON_LEGEND, group_icons
+    assert group_icons("open", {"view": "threads"}) == "  ≡"
+    assert group_icons("open", {"view": "chat"}) == "  »"
+    assert group_icons("closed", {"view": "chat"}) == "∩ »"
+    assert group_icons("channel", {}) == "► ≡"
+    assert group_icons("moderated", {}) == "√ ≡"
+    assert group_icons("open", {"local": True}) == "⌂ ≡"
+    assert group_icons("inbox", {}) == "@  "
+    assert group_icons(None, {}) == "·  "
+    assert group_icons(None, {"type": "closed"}) == "∩ ≡"          # from the manifest
+    # WGL4 only: the classic Windows console shows every one of them
+    for ch in "≡»√►∩@⌂·" + ICON_LEGEND:
+        assert ord(ch) < 0x80 or ch in "≡»√►∩⌂·", ch
+
+
+async def test_tui_group_list_shows_icons(tmp_path, monkeypatch):
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(120, 30)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        await pilot.pause(0.5)
+        labels = [str(n.label) for n in app.query_one("#groups").root.children]
+        assert any(label.startswith("@   Private messages") for label in labels)
+        assert any("  ≡ dk.snak" in label for label in labels)
+        app.save_screenshot(str(tmp_path / "icons.svg"))
         await pilot.press("q")
     server.close()

@@ -106,8 +106,27 @@ dot, as in the old newsreaders: `dk.snak` and `dk.teknik` sit under `dk.*`,
 The same goes for the list of all groups on the node (++g++), where
 large hierarchies start folded.
 
-Unread posts are marked with ●. Posts in closed groups are marked with ◈,
-private messages with ✉.
+Each group has two icons, in your list and in the list of all groups:
+first who may write and read it, then how it is shown.
+
+| Icon | Meaning |
+|------|---------|
+| `≡` | Posts in threads |
+| `»` | Chat |
+| `√` | Moderated: posts need a moderator's approval |
+| `►` | Channel: only chosen people post |
+| `∩` | Closed: members only, end-to-end encrypted |
+| `@` | Inbox: anyone writes, only the owner reads |
+| `⌂` | Local: on one node only |
+| `·` | Not known yet (the group's manifest has not been read) |
+
+Open groups have no first icon, so `≡ dk.snak` is an open group with
+threads and `∩ » familie` a closed chat. The icons are from the basic
+character set every terminal font has, so they show even in the classic
+Windows console.
+
+Unread posts are marked with ●. Posts in closed groups are marked with ∩,
+private messages with @.
 
 ## Chat
 
@@ -118,7 +137,7 @@ the client remembers your choice per group. Conversations with contacts
 open as a chat.
 
 A group's owner can mark it as a chat, so it opens that way for
-everybody, and can choose **fast delivery** (⚡ in the title). Nodes then
+everybody, and can choose **fast delivery** (shown in the title). Nodes then
 pass its messages on immediately instead of waiting a random time. That
 makes the chat quick across nodes, but gives up some of the protection
 of *where* a message was posted from - fine for friends chatting, less
@@ -176,7 +195,7 @@ and signatures are shown dimmed when you read.
 
 Every identity has a personal **inbox**. The client creates it on the
 node the first time you connect, and it is shown at the top of the group
-list as *✉ Private messages*.
+list as *@ Private messages*.
 
 - To write to someone, press ++m++ and paste their key (they find it with
   ++k++). If you have a post by them selected, their key is filled in.
@@ -203,7 +222,7 @@ person, both directions, in order. ++n++ or ++r++ there writes to them.
 
 - The name is yours alone and is tied to the person's key. Someone else
   can call themselves "Sonia", but only the real one shows as
-  **Sonia ✓** in your client - everywhere, also in public groups.
+  **Sonia √** in your client - everywhere, also in public groups.
 - Messages you send are sealed to the recipient, so not even you could
   read them on the node afterwards. The client keeps its own copy, in an
   encrypted file next to your vault (`unseenet.vault.sent`).
@@ -212,7 +231,7 @@ person, both directions, in order. ++n++ or ++r++ there writes to them.
 ## Several nodes
 
 Your key lives in your vault, not on a node, so you are the same person
-on every node you use: the same name, the same ✓ for your contacts, and
+on every node you use: the same name, the same √ for your contacts, and
 the groups you own are yours everywhere. One node may carry some groups
 and another node others, so the client can use several at once.
 
@@ -222,7 +241,7 @@ Press ++o++ for **Your nodes**:
   Its groups show up when you browse with ++g++, marked with the node they
   are on.
 - **Make default**: new groups and your personal inbox go to the default
-  node (★). The others are only read from and posted to.
+  node (♦). The others are only read from and posted to.
 - **Remove** stops using a node. Groups you read from it move to your
   default node; nothing is deleted on the node itself.
 - **Details** shows who runs the node and lets you write to the operator.

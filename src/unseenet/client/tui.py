@@ -88,7 +88,7 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
     i = info or {}
     p = i.get("policy", {})
     name = i.get("name") or (known.name if known else "") or address
-    lines = [name + ("   ★ default node" if default else "")]
+    lines = [name + ("   ♦ default node" if default else "")]
     about = i.get("description") or (known.description if known else "")
     if about:
         lines.append(about)
@@ -105,6 +105,29 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
     lines.append(f"Groups:   {groups} of yours are read from here"
                  + ("   ·   in the project's node list" if known else ""))
     return "\n".join(lines)
+
+
+# Group icons: who may write and read, then how the group is shown. Only
+# characters from WGL4, the set every terminal font has - even the classic
+# Windows console with Consolas - and one cell wide each.
+ICONS = {"threads": "≡", "chat": "»", "moderated": "√", "channel": "►", "closed": "∩",
+         "inbox": "@", "local": "⌂", "unknown": "·"}
+ICON_LEGEND = ("≡ posts  » chat  √ moderated  ► channel  ∩ closed  @ inbox  "
+               "⌂ local (one node)  · not known yet")
+
+
+def group_icons(gtype: str | None, data: dict | None = None) -> str:
+    """Two icons and a space between, e.g. '∩ »' for a closed chat group."""
+    data = data or {}
+    gtype = gtype or data.get("type")
+    if not gtype:
+        return f"{ICONS['unknown']}  "
+    if gtype == "inbox":
+        return f"{ICONS['inbox']}  "
+    access = ICONS.get(gtype) if gtype in ("moderated", "channel", "closed") else \
+        (ICONS["local"] if data.get("local") else " ")
+    view = ICONS["chat"] if data.get("view") == "chat" else ICONS["threads"]
+    return f"{access} {view}"
 
 
 def is_personal_inbox(group_id: str) -> bool:
@@ -297,7 +320,7 @@ class ComposeDialog(Dialog):
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog compose"):
             kind = "Reply in" if self.is_reply else "New post in"
-            lock = "  ◈ encrypted" if self.group.type == "closed" else ""
+            lock = "  ∩ encrypted" if self.group.type == "closed" else ""
             yield Label(self.heading or f"{kind} {self.group.short}{lock}", classes="title",
                         markup=False)
             yield Input(value=self.subject, placeholder="Subject", id="subject")
@@ -545,7 +568,7 @@ class GroupInfoDialog(Dialog):
                  f"Type:      {kinds.get(d.get('type', ''), d.get('type', '?'))}",
                  f"Owner:     {self.owner_label}",
                  f"Shown as:  {d.get('view', 'threads')}"
-                 + ("   ⚡ fast delivery (less anonymity about who posts from where)"
+                 + ("   fast delivery (less anonymity about who posts from where)"
                     if d.get("low_latency") else ""),
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
                  + ("     Local to one node" if d.get("local") else ""),
@@ -671,7 +694,7 @@ class NodesDialog(Dialog):
             yield Label("Your nodes", classes="title")
             yield Label("You are the same on every node - your key lives in your vault. "
                         "Each group is read from one node; new groups and your inbox go to "
-                        "the default node (★).", classes="hint")
+                        "the default node (♦).", classes="hint")
             yield DataTable(id="nodes-table", cursor_type="row", zebra_stripes=True)
             yield Static("", id="node-details", classes="details", markup=False)
             with Horizontal(classes="buttons"):
@@ -690,7 +713,7 @@ class NodesDialog(Dialog):
             name = (info or {}).get("name", "") or (known.name if known else "")
             state = "unreachable" if info is None else "ok"
             short = address if len(address) <= 34 else address[:16] + "…" + address[-14:]
-            table.add_row("★" if i == 0 else "", Text(name), Text(short),
+            table.add_row("♦" if i == 0 else "", Text(name), Text(short),
                           str(self.counts.get(address, 0)), state, key=address)
         table.focus()
 
@@ -827,6 +850,7 @@ class BrowseDialog(Dialog):
             yield Label("Groups on your nodes" if several else "Groups on this node", classes="title")
             yield Label("Enter: subscribe or unsubscribe a group, open or close a "
                         "hierarchy.  Esc: close.", classes="hint")
+            yield Label(ICON_LEGEND, classes="hint", markup=False)
             tree: Tree = Tree("groups", id="browse-tree")
             tree.show_root = False
             expand = len(self.groups) <= 15
@@ -849,11 +873,13 @@ class BrowseDialog(Dialog):
 
     def _label(self, g: GroupInfo) -> Text:
         mark = "[x]" if g.subscribed else "[ ]"
-        kind = {"closed": " ◈", "inbox": " ✉"}.get(g.type or "", "")
+        peek = self.peeked.get(g.group_id)
+        data = peek[0] if isinstance(peek, tuple) else self.app.session.manifest_data(g.group_id)
+        icons = group_icons(g.type, data)
         where = ""
         if len(self.app.session.nodes) > 1 and g.nodes:
             where = f"   @ {node_label(g.nodes[0])}" + (f" +{len(g.nodes) - 1}" if len(g.nodes) > 1 else "")
-        return Text(f"{mark} {g.short}{kind}   {g.description}{where}")
+        return Text(f"{mark} {icons} {g.short}   {g.description}{where}")
 
     def on_mount(self) -> None:
         self.query_one("#browse-tree", Tree).focus()
@@ -885,7 +911,7 @@ class BrowseDialog(Dialog):
             self.peeked[g.group_id] = f"could not ask the node ({exc})"
         peek = self.peeked[g.group_id]
         if isinstance(peek, tuple) and peek[0].get("type"):
-            g.type = peek[0]["type"]          # e.g. mark an inbox with ✉ in the list
+            g.type = peek[0]["type"]          # its icons, now that they are known
             node = self.query_one("#browse-tree", Tree).cursor_node
             if node is not None and node.data is g:
                 node.set_label(self._label(g))
@@ -901,7 +927,7 @@ class BrowseDialog(Dialog):
         if fp == NODES_GROUP.rpartition("@")[2]:
             return "the Unseenet project"
         name = s.contact_name(data["owner"]) if data.get("owner") else None
-        return f"{name} ✓ ({fp})" if name else fp
+        return f"{name} √ ({fp})" if name else fp
 
     def _show(self, g: GroupInfo) -> None:
         peek = self.peeked.get(g.group_id)
@@ -1210,9 +1236,8 @@ class UnseenetApp(App):
 
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
-            return "✉ Private messages"
-        mark = {"closed": "◈ ", "inbox": "✉ "}.get(g.type or "", "  ")
-        return f"{mark}{g.short}"
+            return f"{group_icons('inbox')} Private messages"
+        return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {g.short}"
 
     @on(Tree.NodeSelected, "#groups")
     def _group_selected(self, event: Tree.NodeSelected) -> None:
@@ -1286,9 +1311,9 @@ class UnseenetApp(App):
             flag = "●" if not s.is_read(m) else " "
             subject = ("  " * (depth - 1) + "└ " if depth else "") + (m.subject or "(no subject)")
             if m.private:
-                subject = "✉ " + subject
+                subject = f"{ICONS['inbox']} " + subject
             elif m.encrypted and m.readable:
-                subject = "◈ " + subject
+                subject = f"{ICONS['closed']} " + subject
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
@@ -1334,7 +1359,7 @@ class UnseenetApp(App):
             line = Text(f"{when} ", style="dim")
             line.append(who, style="bold green" if own else "bold")
             if not own and self.session.contact_name(m.author_key):
-                line.append(" ✓", style="green")
+                line.append(" √", style="green")
             line.append(": " + text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
             log.write(line)
             if not self.session.is_read(m):
@@ -1389,7 +1414,7 @@ class UnseenetApp(App):
             return "You"
         petname = self.session.contact_name(m.author_key)
         if petname:
-            return f"{petname} ✓ ({m.author_fp})"         # your own name for a key you know
+            return f"{petname} √ ({m.author_fp})"         # your own name for a key you know
         return f"{m.from_name} ({m.author_fp})"
 
     def _render_title(self) -> None:
@@ -1400,16 +1425,16 @@ class UnseenetApp(App):
             key = gid[len(CONTACT):]
             msgs = self.session.conversation(key)
             self.query_one("#threads-title", Static).update(
-                f"✉ {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
+                f"@ {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
                 f"{self.session.unread_from(key)} unread  ·  only the two of you can read them")
             return
         g = self.groups.get(gid)
         total = len(self.session.cache.get(gid, {}))
         unread = self.session.unread_count(gid)
-        kind = {"closed": "◈ closed, encrypted", "moderated": "moderated", "channel": "channel",
-                "open": "open", "inbox": "✉ inbox - only the owner can read"}.get(g.type if g else None, "")
+        kind = {"closed": "closed, encrypted", "moderated": "moderated", "channel": "channel",
+                "open": "open", "inbox": "inbox - only the owner can read"}.get(g.type if g else None, "")
         name = self._group_label(g).strip() if g else gid
-        fast = "  ·  ⚡ fast delivery" if self.session.manifest_data(gid).get("low_latency") else ""
+        fast = "  ·  fast delivery" if self.session.manifest_data(gid).get("low_latency") else ""
         rules = "  ·  ? rules" if self.session.manifest_data(gid).get("rules") else ""
         self.query_one("#threads-title", Static).update(
             f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}")
@@ -1428,8 +1453,8 @@ class UnseenetApp(App):
             who = (f"{escape(msg.from_name)}  ·  key {escape(msg.author_key[:24])}…  ({msg.author_fp})"
                    + ("  ·  verified" if msg.sender_key else "")
                    + (f"  ·  your contact [b]{escape(petname)}[/b]" if petname else ""))
-        note = ("\n✉ private message - only you can read it" if msg.private
-                else "\n◈ end-to-end encrypted" if msg.encrypted else "")
+        note = ("\n@ private message - only you can read it" if msg.private
+                else "\n∩ end-to-end encrypted" if msg.encrypted else "")
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
         self.query_one("#article-head", Static).update(head)
         if msg.readable:
@@ -1514,7 +1539,7 @@ class UnseenetApp(App):
                               references: list[str] | None = None) -> None:
         g = GroupInfo(target, type="inbox")
         result = await self.push_screen_wait(ComposeDialog(
-            g, subject, quote, bool(references), heading=heading + "  ✉ only they can read it",
+            g, subject, quote, bool(references), heading=heading + "  @ only they can read it",
             signature=self.session.signature()))
         if not result:
             return
@@ -1845,7 +1870,7 @@ class UnseenetApp(App):
         if key == self.session.identity().key_text:
             return "you"
         name = self.session.contact_name(key)
-        return f"{name} ✓  ({key[:28]}…)" if name else f"{key[:36]}…"
+        return f"{name} √  ({key[:28]}…)" if name else f"{key[:36]}…"
 
     @work(group="dialog", exit_on_error=False)
     async def action_group_info(self, first_time: bool = False) -> None:
