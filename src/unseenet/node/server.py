@@ -19,6 +19,7 @@ from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate
 from ..core.groups import Manifest, check_permitted, parse_key_update, split_group_id
 from ..core.store import Store
 from ..nntp import MAX_LINE, dot_stuff, read_block
+from .stats import Stats
 
 log = logging.getLogger("unseenet.node")
 
@@ -72,6 +73,7 @@ class Node:
         self.key = key or crypto.Identity.generate()
         self._listeners: list[asyncio.Event] = []
         self._watchers: list[tuple[str, asyncio.Queue]] = []   # UN-RFC 0008 section 2
+        self.stats = Stats()                  # for the operator's monitor (node/stats.py)
 
     def watch(self, pattern: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -102,12 +104,24 @@ class Node:
     # Acceptance pipeline
     # ------------------------------------------------------------------
     def accept(self, raw: bytes, source: str | None = None,
-               now: datetime | None = None, from_peer: bool = False) -> Article:
+               now: datetime | None = None, from_peer: bool = False,
+               how: str | None = None) -> Article:
         """Validate and store an article. Raises ArticleError with an RFC 0005 reason.
 
         ``from_peer`` is true for articles pushed by another node (IHAVE/TAKETHIS),
         authenticated or not; ``source`` names the peer when it authenticated.
+        ``how`` is only for the counters: "client", "peer" or "pull".
         """
+        try:
+            art = self._accept(raw, source, now, from_peer)
+        except ArticleError as err:
+            self.stats.rejected_one(err.reason)
+            raise
+        self.stats.accepted_one(how or ("peer" if from_peer else "client"))
+        return art
+
+    def _accept(self, raw: bytes, source: str | None, now: datetime | None,
+                from_peer: bool) -> Article:
         art = Article.from_bytes(raw)
         validate_structure(art, raw_size=len(raw), max_size=self.config.max_size, now=now)
         if self.store.seen(art.message_id):
@@ -273,11 +287,13 @@ class Node:
 
     async def _session(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         session = Session(self, reader, writer)
+        self.stats.session_opened()
         try:
             await session.run()
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
         finally:
+            self.stats.session_closed(was_peer=session.peer is not None)
             writer.close()
 
 
@@ -357,6 +373,7 @@ class Session:
                 if (peer.name == self._user and peer.password
                         and hmac.compare_digest(peer.password.encode(), args[1].encode())):
                     self.peer = peer.name
+                    self.node.stats.peer_authenticated()
                     self.send("281 authentication accepted")
                     return
             await self._auth_failed()
@@ -399,6 +416,7 @@ class Session:
         if peer is not None and sig and crypto.verify(claimed, crypto.PURPOSE_PEER_AUTH,
                                                        message, sig):
             self.peer = peer.name
+            self.node.stats.peer_authenticated()
             self.send("281 peer authenticated")
             log.info("peer %s authenticated by key", peer.name)
             return
@@ -535,6 +553,8 @@ class Session:
         self.send(f"{code} {number} {msgid}")
         if payload is not None:
             self.writer.write(dot_stuff(payload))
+        if part in ("article", "body") and not self.peer:
+            self.node.stats.served_one()          # how many, never which (UN-RFC 0011)
 
     async def cmd_article(self, args):
         await self._send_part(args, 220, "article")

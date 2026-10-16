@@ -63,6 +63,7 @@ nav:
       - Configuration: node/configuration.md
       - Peering: node/peering.md
       - Operations: node/operations.md
+      - Monitor: node/monitor.md
       - Your responsibility: node/responsibility.md
   - Specification:
       - The UN-RFC series: spec/index.md

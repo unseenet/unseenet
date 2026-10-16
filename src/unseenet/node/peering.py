@@ -53,7 +53,7 @@ class Feeder:
         self.wakeup = node.subscribe()
 
     async def run_once(self) -> int:
-        """Deliver everything that is due. Returns number of articles handled."""
+        """Deliver everything that is due. Returns the number the peer took."""
         store = self.node.store
         due = store.due(self.peer.name)
         if not due:
@@ -67,6 +67,7 @@ class Feeder:
                 await client.command(f"AUTHINFO USER {self.node_name}", (381,))
                 await client.command(f"AUTHINFO PASS {self.peer.password}", (281,))
             await client.command("MODE STREAM", (203,))
+            taken = 0
             for msgid in due:
                 raw = store.get(msgid)
                 if raw is None:          # expired or cancelled meanwhile
@@ -81,7 +82,8 @@ class Feeder:
                     store.postpone(self.peer.name, msgid, self.retry)
                 else:                    # 438 not wanted, 239 taken, 439 rejected
                     store.dequeue(self.peer.name, msgid)
-            return len(due)
+                    taken += code == 239
+            return taken
         finally:
             await client.quit()
 
@@ -91,14 +93,18 @@ class Feeder:
 
     async def run_forever(self) -> None:
         while True:
+            stats = self.node.stats
             try:
-                await self.run_once()
+                stats.sent_to(self.peer.name, await self.run_once())
             except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
                 log.warning("peer %s unreachable: %s", self.peer.name, exc)
+                stats.peer_error(self.peer.name, f"unreachable: {exc}")
             except (PeerAuthError, NNTPError) as exc:
                 log.warning("peer %s: %s", self.peer.name, exc)
-            except Exception:  # noqa: BLE001
+                stats.peer_error(self.peer.name, str(exc))
+            except Exception as exc:  # noqa: BLE001
                 log.exception("feed to %s failed", self.peer.name)
+                stats.peer_error(self.peer.name, f"failed: {exc}")
             try:
                 await asyncio.wait_for(self.wakeup.wait(), timeout=self.retry)
                 self.wakeup.clear()

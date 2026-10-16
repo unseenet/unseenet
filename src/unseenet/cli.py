@@ -97,9 +97,19 @@ async def run_node(args) -> None:
     node_key = load_node_key(data, passphrase)
     print(f"Node key: {node_key.key_text}  (give it to the operators you peer with)")
     node = Node(Store(data / "articles.sqlite"), config, key=node_key)
+    logging.getLogger("unseenet").addHandler(node.stats.log)   # the monitor's log lines
     host, port = args.listen.rsplit(":", 1)
     server = await node.serve(host, int(port))
     print(f"ONNTP listening on {args.listen}")
+    monitor = None
+    if args.monitor != "off":
+        from .node.stats import serve as serve_stats
+        where = args.monitor or str(data / "monitor.sock")
+        try:
+            monitor = await serve_stats(node.stats, node, where, data)
+            print(f"Stats for unseenet-monitor on {where}")
+        except (OSError, ValueError, NotImplementedError) as exc:
+            print(f"No stats interface ({exc})", file=sys.stderr)
 
     tor = None
     socks_port = None
@@ -107,12 +117,14 @@ async def run_node(args) -> None:
         tor = TorProcess(data / "tor", TorProcess.find_binary(args.tor))
         print("Starting Tor ...")
         await tor.start()
+        node.stats.tor = tor
         socks_port = tor.socks_port
         key_file = data / "onion_key.vault"
         key = unseal(key_file.read_bytes(), passphrase).decode() if key_file.exists() else None
         onion, new_key = await tor.control.add_onion(key, 119, f"{host}:{port}")
         if new_key:
             key_file.write_bytes(seal(new_key.encode(), passphrase, **_kdf()))
+        node.stats.onion = onion
         print(f"Node is reachable at {onion}")
 
     feeders = [asyncio.create_task(Feeder(node, peer, socks_port).run_forever())
@@ -130,6 +142,8 @@ async def run_node(args) -> None:
         async with server:
             await asyncio.gather(server.serve_forever(), expire_loop(), *feeders)
     finally:
+        if monitor is not None:
+            monitor.close()
         if tor:
             await tor.stop()
 
@@ -141,6 +155,10 @@ def node_main(argv=None) -> None:
     p.add_argument("--listen", default="127.0.0.1:1119", help="local ONNTP address")
     p.add_argument("--tor", help="path to the tor binary")
     p.add_argument("--no-tor", action="store_true", help="local only, for development")
+    p.add_argument("--monitor", metavar="SOCKET",
+                   help="where unseenet-monitor reads this node's stats: a Unix socket "
+                        "(default: monitor.sock in --data), 127.0.0.1:PORT, or 'off'. "
+                        "Only ever on this computer, never over Tor")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"unseenet-node {__version__}")
     p.add_argument("--drop-group", metavar="GROUP_ID",

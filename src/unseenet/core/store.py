@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS peer_queue (
 
 class Store:
     def __init__(self, path: str | Path = ":memory:"):
+        self.path = None if str(path) == ":memory:" else Path(path)
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.executescript(SCHEMA)
         self.db.commit()
@@ -283,6 +284,22 @@ class Store:
         row = self.db.execute("SELECT author_key, group_id FROM cancels WHERE target=?",
                               (target,)).fetchone()
         return (row[0], row[1]) if row else None
+
+    # --- numbers for the operator (node/stats.py) ---
+    def group_count(self) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM groups WHERE serial > 0").fetchone()[0]
+
+    def group_sizes(self) -> dict[str, int]:
+        return dict(self.db.execute("SELECT group_id, COUNT(*) FROM articles GROUP BY group_id"))
+
+    def total_bytes(self) -> int:
+        return self.db.execute("SELECT COALESCE(SUM(LENGTH(raw)), 0) FROM articles").fetchone()[0]
+
+    def queue_length(self, peer: str) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM peer_queue WHERE peer=?", (peer,)).fetchone()[0]
+
+    def tombstone_count(self) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM tombstones").fetchone()[0]
 
     # --- peer queues ---
     def enqueue(self, peer: str, message_id: str, not_before: float) -> None:

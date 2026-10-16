@@ -66,7 +66,8 @@ class Puller:
                     continue
                 result["fetched"] += 1
                 try:
-                    self.node.accept(strip_reader_headers(raw), source=peer.name, from_peer=True)
+                    self.node.accept(strip_reader_headers(raw), source=peer.name, from_peer=True,
+                                     how="pull")
                     result["accepted"] += 1
                 except ArticleError as err:
                     result["rejected"][err.reason] += 1
@@ -88,13 +89,19 @@ class Puller:
     async def run_forever(self) -> None:
         await asyncio.sleep(random.uniform(5, 60))     # do not hit every peer at start
         while True:
+            stats, name = self.node.stats, self.peer.name
             try:
-                await self.run_once()
+                r = await self.run_once()
+                stats.pulled_from(name, r["accepted"],
+                                  f"{r['listed']} listed, {r['fetched']} fetched, {r['accepted']} new")
             except (OSError, ConnectionError, asyncio.TimeoutError,
                     asyncio.IncompleteReadError) as exc:
-                log.warning("pull from %s: unreachable: %s", self.peer.name, exc)
+                log.warning("pull from %s: unreachable: %s", name, exc)
+                stats.pulled_from(name, 0, f"unreachable: {exc}")
             except (PeerAuthError, NNTPError, ValueError) as exc:
-                log.warning("pull from %s: %s", self.peer.name, exc)
-            except Exception:  # noqa: BLE001
-                log.exception("pull from %s failed", self.peer.name)
+                log.warning("pull from %s: %s", name, exc)
+                stats.pulled_from(name, 0, str(exc))
+            except Exception as exc:  # noqa: BLE001
+                log.exception("pull from %s failed", name)
+                stats.pulled_from(name, 0, f"failed: {exc}")
             await asyncio.sleep(self.interval * random.uniform(0.8, 1.2))

@@ -27,6 +27,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   in closed groups you own, New post only where you may post, ...). In chat
   view, Esc leaves the input line so the letters are shortcuts again, and
   Enter goes back to writing. (#18)
+- `unseenet-monitor`: a program of its own that shows how a node is doing -
+  traffic in the last hour, peers, storage, Tor, warnings and the last log
+  lines. It reads the node's new local stats interface (`monitor.sock` in
+  the data directory, never over Tor; counters only, nothing about who
+  reads what), which other tools can use too. `install-node.sh` sets it up
+  as `unseenet-monitor`. See docs/node/monitor.md. (#20)
 
 ### Fixed
 - After picking another group or a refresh while an answer was still

@@ -26,7 +26,7 @@ cd ~
 [ -d unseenet ] || git clone -q "$1" unseenet
 cd unseenet && git pull -q
 python3 -m venv .venv
-.venv/bin/pip install -q -e .
+.venv/bin/pip install -q -e ".[monitor]"
 mkdir -p ~/node-data && chmod 700 ~/node-data
 USER
 
@@ -56,6 +56,13 @@ if [ ! -f /etc/unseenet-node.env ]; then
 fi
 
 install -m 644 /home/unseenet/unseenet/deploy/unseenet-node.service /etc/systemd/system/
+# "unseenet-monitor" for the operator: runs the monitor as the node's user
+cat > /usr/local/bin/unseenet-monitor <<'MON'
+#!/bin/sh
+exec sudo -u unseenet /home/unseenet/unseenet/.venv/bin/unseenet-monitor \
+  --node /home/unseenet/node-data/monitor.sock "$@"
+MON
+chmod 755 /usr/local/bin/unseenet-monitor
 systemctl daemon-reload
 systemctl enable --now unseenet-node >/dev/null
 echo "Started. Waiting for the onion address (Tor bootstrap can take a minute) ..."
@@ -68,3 +75,4 @@ echo "Node address: ${ADDR:-not ready yet - check: journalctl -u unseenet-node -
 KEY=$(journalctl -u unseenet-node -o cat --no-pager | grep -o 'Node key: ed25519:[a-z2-7]*' | tail -1 | cut -d' ' -f3 || true)
 echo "Node key:     ${KEY:-see: journalctl -u unseenet-node | grep 'Node key'}"
 echo "Give both to the operators you peer with."
+echo "Watch it with:  unseenet-monitor"
