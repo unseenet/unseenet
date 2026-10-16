@@ -54,6 +54,9 @@ cannot use. Use one of these instead:
   ```
 - **Tor Browser**, while it is running - SOCKS port `127.0.0.1:9150`.
 
+In [Tails](tor.md#tails), Tor is always running on `127.0.0.1:9050`. See
+[Tor and Tails](tor.md) for how Tor and onion services work.
+
 You also need a node's address. The project's nodes are:
 
 ```
