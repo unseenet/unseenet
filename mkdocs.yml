@@ -57,6 +57,7 @@ nav:
   - Getting started:
       - Portable (USB, Windows, macOS): portable.md
       - Using the client: client.md
+      - Other newsreaders: other-clients.md
       - Concepts: concepts.md
   - Running a node:
       - Installation: node/install.md
