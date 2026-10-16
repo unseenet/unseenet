@@ -219,15 +219,74 @@ object, encrypted with `enc_key_1` and associated data
 
 # 7. Cancellation
 
-`Control: cancel <message-id>` withdraws an article. It is valid when
-its author is the author of the target article, or the owner or a
-moderator of the group. A node that accepts a valid cancel SHOULD
-delete the target and MUST NOT forward the target afterwards. The
-cancel itself is forwarded like any article. A node that has not seen
-the target yet SHOULD remember the cancel so it can refuse the target.
+`Control: cancel <message-id>` withdraws an article, the *target*. A
+cancel is an article in the target's group; its body is empty or a
+short reason for the readers.
 
 Old Usenet's forged cancels are impossible because cancels are signed
 and checked against the target.
+
+## 7.1 Validity
+
+A cancel is valid when all of these hold:
+
+1. It is in the same group as the target.
+2. Its author is the target's author, or the owner or a moderator of
+   the group according to the current manifest.
+3. The target is not a control article. Manifests, key updates, key
+   grants, cancels and `rmgroup` articles cannot be cancelled: a
+   manifest is replaced by a newer one (section 3.2), and a group is
+   removed with `rmgroup` (UN-RFC 0013). Cancelling a cancel is
+   therefore not possible; a withdrawn article stays withdrawn.
+
+Whether a cancel is valid can only be decided once its target is known.
+
+## 7.2 Nodes
+
+A node that accepts a valid cancel SHOULD delete the target and MUST
+NOT forward the target afterwards. The cancel itself is stored and
+forwarded like any article. A node MUST reject a cancel whose target it
+holds when the cancel is not valid.
+
+A node that has not seen the target yet SHOULD remember the cancel (a
+*pending* cancel) and refuse the target if it arrives and the cancel is
+valid for it; a pending cancel naming a control article is ignored. A
+node SHOULD keep a pending cancel at least as long as the group keeps
+articles (`retention_days`, section 3.1; UN-RFC 0012), counted from the
+cancel's `Date`, and MAY forget it after that.
+
+## 7.3 Clients
+
+A client MUST check a cancel itself (section 7.1) before acting on it,
+as it does for manifests (section 4). A node is not trusted for this:
+otherwise a misbehaving node could hide other people's posts in its
+readers' caches by serving forged cancels.
+
+A client that receives a valid cancel SHOULD remove the target from
+its local storage and stop showing it. It SHOULD remember a cancel whose
+target it has not seen, for as long as section 7.2 says for nodes, so
+that the target is not shown if it arrives later. A client MUST NOT
+show a cancel as a post.
+
+A client SHOULD let its user withdraw their own posts, and let the owner
+and moderators of a group withdraw any post in it. Before sending, it
+MUST make clear that withdrawing is best effort (section 7.4).
+
+## 7.4 Best Effort
+
+A cancel withdraws an article; it cannot delete it. People who already
+read it, clients and nodes that do not follow this specification, and
+archives (UN-RFC 0012) may keep it. User interfaces SHOULD say
+"withdraw", not "delete".
+
+## 7.5 Closed Groups
+
+In a closed group a cancel is not encrypted: nodes must read its
+`Control` header to act on it. It shows the nodes that the author, the
+owner or a moderator withdrew some article, and which one by
+Message-ID; the author key is visible anyway (section 8). The body of a
+cancel in a closed group SHOULD be empty, since a reason would be
+readable by the nodes.
 
 # 8. Security and Privacy Considerations
 
@@ -241,6 +300,9 @@ and checked against the target.
   SHOULD keep an offline backup of the owner key.
 - Nodes enforce posting rules, but a malicious node can still drop
   articles. Clients SHOULD read from more than one node.
+- **Cancels** are best effort (section 7.4) and cannot be forged, but a
+  node can ignore them, or keep serving a withdrawn article. Clients
+  check cancels themselves (section 7.3).
 
 # Copyright Notice
 

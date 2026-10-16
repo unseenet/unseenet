@@ -65,6 +65,25 @@ def test_cancel_only_by_author_or_owner():
     assert node.store.get(art.message_id) is None
 
 
+def test_control_articles_cannot_be_cancelled():
+    """UN-RFC 0004 section 7.1: not a manifest, and not a cancel."""
+    node = make_node()
+    owner, user = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    node.accept(manifest.to_bytes())
+    art = new_article(manifest.group, "hej", "x", from_name="u").finalize(user, BITS)
+    node.accept(art.to_bytes())
+    cancel = new_article(manifest.group, None, "", extra=[("Control", f"cancel {art.message_id}")])
+    cancel = cancel.finalize(user, BITS)
+    node.accept(cancel.to_bytes())
+    for target in (manifest.message_id, cancel.message_id):
+        again = new_article(manifest.group, None, "", extra=[("Control", f"cancel {target}")])
+        with pytest.raises(ArticleError) as e:
+            node.accept(again.finalize(owner, BITS).to_bytes())
+        assert e.value.reason == "permission"
+    assert node.store.get(manifest.message_id) is not None
+
+
 async def test_two_nodes_replicate_over_onntp():
     b = make_node(name="b")
     server_b = await b.serve("127.0.0.1", 0)

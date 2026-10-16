@@ -233,6 +233,10 @@ class Node:
                     raise ArticleError("permission", "cancel for another group")
                 if not privileged and crypto.key_from_text(target_author) != author:
                     raise ArticleError("permission", "not allowed to cancel")
+                stored = self.store.get(target)
+                if stored is not None and Article.from_bytes(stored).control:
+                    # manifests, key updates, cancels: never cancelled (UN-RFC 0004, 7.1)
+                    raise ArticleError("permission", "control articles cannot be cancelled")
                 self.store.delete(target)
             else:
                 self.store.add_cancel(target, art["Author-Key"], art.group)
