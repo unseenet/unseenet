@@ -259,13 +259,159 @@
   .md-typeset h1.un-subject { margin-top: 1.1rem; }
 }
 
-/* Four ways in: two by two on wide screens, not three and one */
-@media screen and (min-width: 45em) {
-  .md-typeset .grid.cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 /* Version header lines in the hero, filled in at build time (tools/docs_hooks.py) */
 .md-typeset .un-headers dd a { color: var(--un-green); text-decoration: none; }
 .md-typeset .un-headers dd a:hover { color: var(--un-paper); text-decoration: underline; }
 .un-headers .un-dim { color: var(--un-muted); }
 .un-headers .un-dim { white-space: nowrap; }
+
+/* ---- Where to start: four paths, each a list of pages in reading order ---- */
+
+.un-paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 2.2rem;
+}
+.un-path {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 12px;
+  padding: 1.1rem 1.3rem 1rem;
+  transition: border-color 0.15s;
+}
+.un-path:hover { border-color: var(--md-accent-fg-color); }
+.md-typeset h3.un-path__title {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.md-typeset .un-path__lede {
+  margin: 0 0 0.8rem;
+  font-size: 0.74rem;
+  color: var(--md-default-fg-color--light);
+}
+.md-typeset ol.un-path__steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+}
+.md-typeset ol.un-path__steps li {
+  counter-increment: step;
+  position: relative;
+  margin: 0 0 0.45rem;
+  padding-left: 1.9rem;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.md-typeset ol.un-path__steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.05rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--un-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--un-ink);
+  background: var(--un-green);
+}
+.md-typeset ol.un-path__steps li + li { margin-left: 0; }
+.md-typeset .un-path a { font-weight: 600; }
+.md-typeset .un-or { color: var(--md-default-fg-color--light); font-size: 0.7rem; }
+.md-typeset .un-path__more {
+  margin: 0.7rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--md-default-fg-color--lightest);
+  font-size: 0.7rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* ---- Talk about Unseenet: set like the hero, groups like the client's list -- */
+
+.un-talk {
+  background: var(--un-ink);
+  color: var(--un-paper);
+  border-radius: 14px;
+  padding: 1.6rem 2rem 1.4rem;
+  margin: 0 0 1rem;
+}
+.un-talk__key {
+  display: block;
+  font-family: var(--un-mono);
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--un-muted);
+  margin-bottom: 0.3rem;
+}
+.md-typeset h2.un-talk__title {
+  margin: 0 0 0.6rem;
+  font-family: var(--un-mono);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--un-paper);
+}
+.md-typeset .un-talk__lede { margin: 0 0 1rem; font-size: 0.78rem; color: var(--un-paper); }
+.md-typeset .un-talk a { color: var(--un-green); }
+.md-typeset .un-talk kbd {
+  background: var(--un-ink-2);
+  color: var(--un-paper);
+  box-shadow: 0 0 0 1px rgba(232, 243, 239, 0.25);
+}
+.md-typeset ul.un-groups {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 1px solid rgba(232, 243, 239, 0.15);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.md-typeset ul.un-groups li {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem 1.2rem;
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.74rem;
+}
+.md-typeset ul.un-groups li + li { border-top: 1px solid rgba(232, 243, 239, 0.1); }
+.md-typeset ul.un-groups li:hover { background: var(--un-ink-2); }
+.md-typeset .un-talk code {
+  background: none;
+  padding: 0;
+  font-family: var(--un-mono);
+  font-size: 0.74rem;
+  color: var(--un-green);
+  word-break: break-all;
+}
+.un-groups__for { color: var(--un-muted); }
+.md-typeset .un-talk__node { margin: 0; font-size: 0.74rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; }
+.md-typeset .un-talk__node .un-talk__key { display: inline; margin: 0; }
+.md-typeset .un-copy {
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(232, 243, 239, 0.3);
+  background: transparent;
+  color: var(--un-paper);
+  cursor: pointer;
+}
+.md-typeset .un-copy:hover { border-color: var(--un-green); color: var(--un-green); }
+.md-typeset .un-copy:focus-visible { outline: 2px solid var(--un-green); outline-offset: 2px; }
+
+@media screen and (max-width: 44.9375em) {
+  .un-paths { grid-template-columns: minmax(0, 1fr); }
+  .un-talk { padding: 1.3rem 1.2rem 1.1rem; border-radius: 10px; }
+  .md-typeset ul.un-groups li { grid-template-columns: minmax(0, 1fr) auto; }
+  .md-typeset ul.un-groups .un-groups__for { grid-column: 1; grid-row: 2; }
+  .md-typeset ul.un-groups .un-copy { grid-row: 1 / span 2; grid-column: 2; }
+}

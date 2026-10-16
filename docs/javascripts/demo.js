@@ -81,10 +81,27 @@
     });
   }
 
+  function copyButtons() {
+    if (!navigator.clipboard) return;
+    document.querySelectorAll(".un-copy[data-copy]").forEach(function (btn) {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.hidden = false;
+      btn.setAttribute("aria-label", "Copy " + btn.dataset.copy);
+      btn.addEventListener("click", function () {
+        navigator.clipboard.writeText(btn.dataset.copy).then(function () {
+          btn.textContent = "Copied";
+          setTimeout(function () { btn.textContent = "Copy"; }, 1600);
+        });
+      });
+    });
+  }
+
   function init() {
     sizeButtons();
+    copyButtons();
     var casts = document.querySelectorAll(".un-term[data-cast]");
-    if (!casts.length) return;
+    if (!casts.length) return;   // (the buttons above work on any page)
     addTheme();
     casts.forEach(mount);
   }

@@ -135,32 +135,76 @@ protect anyone yet.
 
 ## Where to start
 
-<div class="grid cards" markdown>
+Pick what you want to do. Each path lists the pages in the order to read them.
 
-- **I want to read and post**  
-  Unzip and start on Linux, macOS or Windows, or boot from a stick. Tor is included.  
-  [:octicons-arrow-right-24: Portable](portable.md) &nbsp;
-  [:octicons-arrow-right-24: Bootable](bootable.md)
+<div class="un-paths">
 
-- **I want to run a node**  
-  One command on a Debian/Ubuntu box, a Raspberry Pi or a Proxmox LXC.  
-  [:octicons-arrow-right-24: Installation](node/install.md)
+<section class="un-path">
+  <h3 class="un-path__title">Read and post</h3>
+  <p class="un-path__lede">Get Unseenet running and join the conversation. Tor is included.</p>
+  <ol class="un-path__steps">
+    <li><a href="portable/">Portable (Linux, macOS, Windows)</a> <span class="un-or">or</span> <a href="bootable/">Bootable (USB, SSD etc.)</a></li>
+    <li><a href="client/#first-start">First start</a>: your vault, a name, a node</li>
+    <li><a href="client/">Using the client</a>: groups, chat, private messages</li>
+    <li><a href="updating/">Updating</a></li>
+  </ol>
+  <p class="un-path__more">Also: <a href="other-clients/">other newsreaders</a> · <a href="tor/">Tor and Tails</a></p>
+</section>
 
-- **I want to understand how it works**  
-  Identities, group types, closed groups, postage.  
-  [:octicons-arrow-right-24: Concepts](concepts.md)
+<section class="un-path">
+  <h3 class="un-path__title">Run a node</h3>
+  <p class="un-path__lede">Carry groups for others. A Pi, a VM or an LXC is enough; no port forwarding.</p>
+  <ol class="un-path__steps">
+    <li><a href="node/responsibility/">Your responsibility</a>: read this first</li>
+    <li><a href="node/install/">Installation</a> <span class="un-or">or</span> <a href="node/docker/">Docker</a></li>
+    <li><a href="node/configuration/">Configuration</a></li>
+    <li><a href="node/peering/">Peering</a> with other nodes</li>
+    <li><a href="node/operations/">Operations</a> and the <a href="node/monitor/">monitor</a></li>
+  </ol>
+</section>
 
-- **I want to build something compatible**  
-  The protocol is specified in the UN-RFC series.  
-  [:octicons-arrow-right-24: Specification](spec/index.md)
+<section class="un-path">
+  <h3 class="un-path__title">Understand how it works</h3>
+  <p class="un-path__lede">What the network promises, and what it does not.</p>
+  <ol class="un-path__steps">
+    <li><a href="concepts/">Concepts</a>: nodes, identities, names, groups, postage</li>
+    <li><a href="tor/">Tor and Tails</a></li>
+    <li><a href="project/keys/">The project's keys</a> and <a href="project/nodes/">nodes</a></li>
+    <li><a href="spec/un-rfc-0001/">UN-RFC 0001: Architecture</a></li>
+  </ol>
+</section>
+
+<section class="un-path">
+  <h3 class="un-path__title">Build something compatible</h3>
+  <p class="un-path__lede">A node, a client or a tool of your own, from the specification.</p>
+  <ol class="un-path__steps">
+    <li><a href="spec/">The UN-RFC series</a> and <a href="spec/un-rfc-0000/">how it changes</a></li>
+    <li><a href="spec/un-rfc-0002/">Article format</a> and <a href="spec/un-rfc-0003/">identities and crypto</a></li>
+    <li><a href="spec/un-rfc-0005/">ONNTP transport</a> and <a href="spec/un-rfc-0006/">postage</a></li>
+    <li><a href="development/">Development</a>: the reference code and its decisions</li>
+  </ol>
+</section>
 
 </div>
 
-## Talk about Unseenet - on Unseenet
-
-| Group | For |
-|-------|-----|
-| `unseenet@ph5fc5hop5232qsz` | The project: protocol, software, ideas, questions |
-| `unseenet.test@ph5fc5hop5232qsz` | Test posts - say hello, try replies |
-
-Test node: `f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion`
+<section class="un-talk" aria-labelledby="talk">
+  <h2 id="talk" class="un-talk__title"><span class="un-talk__key">Followup-To:</span> Talk about Unseenet, on Unseenet</h2>
+  <p class="un-talk__lede">Questions, ideas and test posts go here. Add the groups in the client
+  (<kbd>g</kbd> Groups), or <a href="client/">see how</a>.</p>
+  <ul class="un-groups">
+    <li>
+      <code class="un-groups__name">unseenet@ph5fc5hop5232qsz</code>
+      <span class="un-groups__for">The project: protocol, software, ideas, questions</span>
+      <button type="button" class="un-copy" data-copy="unseenet@ph5fc5hop5232qsz" hidden>Copy</button>
+    </li>
+    <li>
+      <code class="un-groups__name">unseenet.test@ph5fc5hop5232qsz</code>
+      <span class="un-groups__for">Test posts: say hello, try replies</span>
+      <button type="button" class="un-copy" data-copy="unseenet.test@ph5fc5hop5232qsz" hidden>Copy</button>
+    </li>
+  </ul>
+  <p class="un-talk__node"><span class="un-talk__key">Test node:</span>
+    <code>f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion</code>
+    <button type="button" class="un-copy" data-copy="f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion" hidden>Copy</button>
+  </p>
+</section>
