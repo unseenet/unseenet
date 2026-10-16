@@ -569,8 +569,9 @@ async def test_tui_browse_and_nodes_fit_small_terminal(tmp_path, monkeypatch):
         text = str(dialog.query_one("#group-details").render())
         assert "dk.gruppe" in text and "open" in text and "Owner:  you" in text
         app.save_screenshot(str(tmp_path / "browse.svg"))
-        await pilot.press("escape")
+        await pilot.click("#cancel")             # OK closed it twice: ScreenStackError
         await pilot.pause(0.3)
+        assert not isinstance(app.screen, BrowseDialog) and app.is_running
         app.action_node_info()
         assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog), 200)
         await pilot.pause(0.3)
@@ -578,7 +579,41 @@ async def test_tui_browse_and_nodes_fit_small_terminal(tmp_path, monkeypatch):
         assert ok.region.bottom <= 20 and ok.region.height > 0
         assert "Address:" in str(app.screen.query_one("#node-details").render())
         app.save_screenshot(str(tmp_path / "nodes.svg"))
-        await pilot.press("escape")
+        await pilot.click("#cancel")
+        await pilot.pause(0.3)
+        assert not isinstance(app.screen, NodesDialog) and app.is_running
         await pilot.pause(0.2)
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_browse_does_not_subscribe_to_someone_elses_inbox(tmp_path, monkeypatch):
+    """A node operator's contact inbox (operator@...) is listed, but only its owner
+    can read it: Enter explains that instead of subscribing."""
+    from unseenet.client.tui import BrowseDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    op = Session(Vault.open(tmp_path / "op.vault", "pw", **KDF), status=lambda *_: None)
+    op.new_identity("op", "Operator"); op.add_node(addr)
+    gid = await op.create_group("operator", "inbox", local=True, min_pow=10)
+    await op.close()
+    async with app.run_test(size=(120, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 100)
+        dialog = app.screen
+        tree = dialog.query_one("#browse-tree")
+        leaf = next(n for n in tree.root.children if n.data is not None
+                    and getattr(n.data, "group_id", "") == gid)
+        tree.move_cursor(leaf)
+        assert await wait_for(pilot, lambda: isinstance(dialog.peeked.get(gid), tuple), 100)
+        assert "only its owner can read it" in str(dialog.query_one("#group-details").render())
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        assert gid not in app.session.data["subscribed"]
+        assert any("is an inbox" in n.message for n in app._notifications)
+        await pilot.click("#cancel")
+        await pilot.pause(0.3)
+        assert app.is_running and not isinstance(app.screen, BrowseDialog)
         await pilot.press("q")
     server.close()

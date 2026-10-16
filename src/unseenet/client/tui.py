@@ -167,13 +167,21 @@ ModalScreen { align: center middle; }
 
 class Dialog(ModalScreen):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
+    CANCEL_RESULT = None          # what closing with Esc or the cancel button returns
+
+    def dismiss(self, result=None):
+        # Only the dialog on top can close, and only once: two handlers for one
+        # button press must not pop the screen below it (ScreenStackError).
+        if self.app.screen is not self:
+            return None
+        return super().dismiss(result)
 
     def action_cancel(self) -> None:
-        self.dismiss(None)
+        self.dismiss(self.CANCEL_RESULT)
 
     @on(Button.Pressed, "#cancel")
     def _cancel(self) -> None:
-        self.dismiss(None)
+        self.dismiss(self.CANCEL_RESULT)
 
 
 class UnlockDialog(Dialog):
@@ -805,6 +813,7 @@ class NodeInfoDialog(Dialog):
 
 class BrowseDialog(Dialog):
     """All groups on the node, by hierarchy; Enter toggles subscription."""
+    CANCEL_RESULT = True
 
     def __init__(self, groups: list[GroupInfo]):
         super().__init__()
@@ -874,6 +883,12 @@ class BrowseDialog(Dialog):
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError,
                 asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
             self.peeked[g.group_id] = f"could not ask the node ({exc})"
+        peek = self.peeked[g.group_id]
+        if isinstance(peek, tuple) and peek[0].get("type"):
+            g.type = peek[0]["type"]          # e.g. mark an inbox with ✉ in the list
+            node = self.query_one("#browse-tree", Tree).cursor_node
+            if node is not None and node.data is g:
+                node.set_label(self._label(g))
         if self.current is g:
             self._show(g)
 
@@ -910,6 +925,8 @@ class BrowseDialog(Dialog):
             lines.append("On:     " + ", ".join(node_label(n) for n in g.nodes))
         if data.get("type") == "closed":
             lines.append("Members only: you need an invitation from the owner to read it.")
+        if self._not_mine_inbox(g):
+            lines.append("An inbox: anyone can write to it, only its owner can read it.")
         if data.get("rules"):
             first = data["rules"].strip().splitlines()[0]
             lines.append(f"Rules:  {first[:90]}" + (" ..." if len(data["rules"].strip()) > len(first) else ""))
@@ -918,22 +935,30 @@ class BrowseDialog(Dialog):
         except Exception:  # noqa: BLE001  (the dialog was closed meanwhile)
             pass
 
+    def _not_mine_inbox(self, g: GroupInfo) -> bool:
+        """An inbox someone else owns (a person's, or a node operator's contact
+        inbox): you can write to it, but only its owner can read it."""
+        peek = self.peeked.get(g.group_id)
+        data = peek[0] if isinstance(peek, tuple) else self.app.session.manifest_data(g.group_id)
+        kind = data.get("type") or g.type
+        return kind == "inbox" and g.group_id.rpartition("@")[2] != \
+            self.app.session.my_inbox.rpartition("@")[2]
+
     @on(Tree.NodeSelected, "#browse-tree")
     def _toggle(self, event: Tree.NodeSelected) -> None:
         g = event.node.data
         if not isinstance(g, GroupInfo):
+            return
+        if not g.subscribed and self._not_mine_inbox(g):
+            self.app.notify(f"{g.short} is an inbox: anyone can write to it, only its owner "
+                            "can read it. To write to a node's operator: Ctrl+P, Your nodes, "
+                            "Details, Write to operator.", severity="warning", timeout=10)
             return
         g.subscribed = not g.subscribed
         self.app.session.subscribe(g.group_id, g.subscribed,
                                    node=g.nodes[0] if g.subscribed and g.nodes else None)
         event.node.set_label(self._label(g))
 
-    def action_cancel(self) -> None:
-        self.dismiss(True)
-
-    @on(Button.Pressed, "#cancel")
-    def _cancel(self) -> None:
-        self.dismiss(True)
 
 
 # ======================================================================

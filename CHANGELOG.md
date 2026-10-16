@@ -12,6 +12,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   arriving over Tor, the connection to the node got out of step, and every
   later command failed ("invalid literal for int()") until a restart. An
   interrupted connection is now closed and a new one opened. (#9)
+- Closing the group list with OK crashed the client ("ScreenStackError"):
+  one press closed the dialog twice. (#10)
+- The group list marks inboxes you do not own, such as a node operator's
+  contact inbox, and Enter explains how to write to them instead of
+  subscribing to messages only their owner can read. (#11)
 
 ## [0.2.0] - 2026-10-16
 
