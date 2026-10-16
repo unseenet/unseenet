@@ -96,6 +96,25 @@ async def refresh(s: "Session") -> bool:
         best = _newest(posts, lambda body, n=h.name: hz.parse_hierarchy_list(body, n))
         if best:
             st["lists"][h.name] = best[1]
+    # delegated sub-hierarchies above the groups we know: their endorsements and
+    # blocks count too (sections 5.3, 5.4); at most the depth section 5.3 allows
+    for _ in range(hz.MAX_DEPTH):
+        lists = hierarchy_lists(s)
+        wanted = {sub.name: sub for gid in _known(s)
+                  for sub in hz.sub_lists_needed(gid.rpartition("@")[0] or gid, root, lists)}
+        wanted = {n: h for n, h in wanted.items() if n not in st.setdefault("tried", [])}
+        if not wanted:
+            break
+        for name, sub in sorted(wanted.items()):
+            st["tried"].append(name)
+            try:
+                posts = await _read(s, sub.list, sub.maintainer)
+            except Exception:  # noqa: BLE001
+                continue
+            best = _newest(posts, lambda body, n=name: hz.parse_hierarchy_list(body, n))
+            if best:
+                st["lists"][name] = best[1]
+    st.pop("tried", None)
     await _read_names(s, st)
     changed = repr(st) != before
     if changed:
@@ -146,6 +165,62 @@ def root_list(s: "Session") -> dict[str, hz.Hierarchy]:
         except ValueError:
             pass
     return hz.builtin_root_list()[1]
+
+
+def governing(s: "Session", group_id: str) -> list[hz.Hierarchy]:
+    """The governed hierarchies from the top down to the one deciding the group."""
+    name = group_id.rpartition("@")[0] or group_id
+    root, lists = root_list(s), hierarchy_lists(s)
+    out = []
+    h = hz.policy_of(name.split(".")[0], root)
+    for _ in range(hz.MAX_DEPTH + 1):
+        if h.policy != "governed":
+            break
+        out.append(h)
+        lst = lists.get(h.name)
+        deeper = [x for x in (lst.sub.values() if lst else []) if hz._within(name, x.name)]
+        if not deeper:
+            break
+        h = max(deeper, key=lambda x: len(x.name))
+    return out
+
+
+async def block(s: "Session", group_id: str, key_text: str, reason: str,
+                hierarchy: str | None = None) -> str:
+    """As a maintainer: add a block to your hierarchy list and post it (section 5.4).
+    Returns the hierarchy blocked in."""
+    import json
+    from datetime import datetime, timezone
+    from .session import SessionError
+    crypto.key_from_text(key_text)
+    if not 1 <= len(reason.strip()) <= hz.MAX_BLOCK_REASON:
+        raise SessionError(f"a block needs a reason of 1 to {hz.MAX_BLOCK_REASON} characters")
+    me = s.identity().key_text
+    mine = [h for h in governing(s, group_id) if h.maintainer == me]
+    if hierarchy:
+        mine = [h for h in mine if h.name == hierarchy]
+    if not mine:
+        raise SessionError("you are not the maintainer of a hierarchy above this group")
+    h = mine[0]                                   # the widest one you maintain
+    text = _store(s)["lists"].get(h.name)
+    data = json.loads(text) if text else {"v": 1, "hierarchy": h.name, "groups": []}
+    data["blocked"] = [b for b in data.get("blocked", []) if b.get("key") != key_text] + [
+        {"key": key_text, "reason": reason.strip(),
+         "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}]
+    data["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    body = json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    hz.parse_hierarchy_list(body, h.name)          # never post a list with mistakes
+    await s.fetch_group(h.list)
+    await s.post(h.list, f"Groups of {h.name}, {data['updated']} (block)", body)
+    _store(s)["lists"][h.name] = body
+    s.save()
+    return h.name
+
+
+def blocks(s: "Session", group_id: str) -> dict[str, tuple[str, str]]:
+    """{key: (hierarchy, reason)} blocked by maintainers for this group (section 5.4)."""
+    name = group_id.rpartition("@")[0] or group_id
+    return hz.blocks_for(name, root_list(s), hierarchy_lists(s))
 
 
 def hierarchy_lists(s: "Session") -> dict[str, hz.HierarchyList]:

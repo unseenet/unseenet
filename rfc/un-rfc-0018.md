@@ -140,6 +140,7 @@ channel group named in its root list entry (`list`), the same way:
 | `updated`   | string  | no   | Free text                                      |
 | `groups`    | array   | yes  | Endorsed groups (may be empty)                 |
 | `sub`       | array   | no   | Sub-hierarchies (section 5.3)                  |
+| `blocked`   | array   | no   | Blocked identities (section 5.4)               |
 
 An entry in `groups`:
 
@@ -182,6 +183,38 @@ policy is one of:
 A sub-hierarchy covers its name and everything under it. A reader
 follows delegations at most 4 levels deep below the root list and treats
 anything deeper as unendorsed.
+
+## 5.4 Blocked Identities
+
+A maintainer can block identities across its hierarchy, for example
+someone who posts threats in group after group. An entry in `blocked`:
+
+| Field    | Type       | Req. | Meaning                                         |
+|----------|------------|------|-------------------------------------------------|
+| `key`    | key string | yes  | The blocked identity key                        |
+| `reason` | string     | yes  | A public reason, 1 to 200 characters            |
+| `since`  | string     | no   | When the block was made (RFC 3339)              |
+| `until`  | string     | no   | When it ends (RFC 3339); without it, it lasts   |
+
+An entry without a valid `key` or without a `reason` is ignored, as is
+one whose `until` has passed. A key MUST NOT be listed twice.
+
+A block applies to every group whose name is the hierarchy or lies under
+it, **including delegated sub-hierarchies**: the maintainer of `dk` blocks
+in all of `dk.*`, and the maintainer of a sub-hierarchy `dk.snak` it
+delegated (section 5.3) blocks in `dk.snak` and `dk.snak.*` only. For a
+group, the blocks that count are those of every maintainer on the way
+from the root list down to the hierarchy that decides its name (section
+8.1); a maintainer further down cannot lift a block made higher up. In a
+`free` sub-hierarchy nobody below blocks, but the blocks of the
+maintainers above still apply.
+
+A block is about an identity, not a group: it does not give the
+maintainer any power over groups (section 3). It cannot remove, change or
+cancel anything; it only tells nodes and readers, in public and with a
+reason, that the maintainer does not want this identity in its part of
+the network. What happens then is each node's and each reader's choice
+(section 8).
 
 # 6. Trust Anchors
 
@@ -284,6 +317,13 @@ that decides `N` (the deepest one known to it) and then:
 UN-RFC 0004 section 1 (warning on two subscribed groups with the same
 name) still applies.
 
+A client SHOULD by default not show articles whose `Author-Key` is
+blocked for the group (section 5.4). It SHOULD say that something is
+hidden, by whom and why (for example "2 posts hidden: blocked in `dk.*`:
+threats against members"), and MUST let the reader choose to see them
+anyway: the reader has the last word. A client reads the hierarchy lists
+of delegated sub-hierarchies too, so that their blocks are known.
+
 A client SHOULD show users the hierarchy's title and description when
 they browse it, and SHOULD warn when a new name differs only slightly
 (e.g. by one character) from an endorsed name the user follows.
@@ -297,6 +337,15 @@ the operator's choice; it is not required.
 
 A node that drops a group because it is no longer endorsed does so as a
 local drop (UN-RFC 0013), not a removal.
+
+A node SHOULD also support the policy **"honour the maintainers'
+blocks"**: it then rejects new ordinary articles whose `Author-Key` is
+blocked for the group (section 5.4), and MAY delete such articles it
+already holds, as a local action that is not passed on to peers. This is
+the operator's choice and is off unless the operator turns it on. A node
+says whether it honours blocks in its node information (UN-RFC 0011),
+field `honours_blocks` in `policy`. Control articles are not affected,
+so a blocked identity can still withdraw its own posts.
 
 Nodes MAY require more postage (UN-RFC 0006) for the first manifest
 (serial 1) of a group in a free or unclaimed hierarchy than for other
@@ -385,6 +434,13 @@ bodies of ordinary signed articles in channel groups.
   like `unseenet-announce` or `unseenett` are possible; section 8.1 asks
   clients to warn about near matches, and unendorsed groups always show
   their fingerprint.
+- **Blocks** (section 5.4) are public and carry reasons, so they can be
+  seen and challenged. Keys are free, so a block stops an identity, not a
+  determined person; postage (UN-RFC 0006) makes coming back with new
+  keys slower. A block is not law enforcement: threats and crimes belong
+  with the police. A stolen maintainer key can block anyone in the
+  hierarchy until it is replaced; since readers can show blocked posts
+  and nodes opt in, the damage is limited and visible.
 - **Privacy.** Lists are read over Tor through the user's node. Reading
   them reveals nothing beyond what reading any group does.
 
@@ -396,6 +452,8 @@ bodies of ordinary signed articles in channel groups.
 - UN-RFC 0004 section 3.3: the node policy in section 8.2 is added.
 - UN-RFC 0010 section 6: the project anchor also publishes the root list
   in `unseenet.hierarchies@ph5fc5hop5232qsz`.
+- UN-RFC 0011 section 4: the `policy` object of node information MAY
+  have `honours_blocks` (boolean), section 8.2.
 
 # Copyright Notice
 

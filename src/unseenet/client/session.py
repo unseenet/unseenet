@@ -1029,12 +1029,40 @@ class Session:
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown)."""
-        banned = {gid: {k for k, _ in self.banned(gid)} for gid in {m.group for m in msgs}}
+        groups = {m.group for m in msgs}
+        banned = {gid: {k for k, _ in self.banned(gid)} for gid in groups}
+        if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
+            for gid in groups:
+                banned[gid] |= set(self.hierarchy_blocks(gid))
         if not self.data["ignored"] and not any(banned.values()):
             return list(msgs)
         return [m for m in msgs if m.to_key is not None
                 or not (self.is_ignored(m.sender_key or m.author_key)
                         or (not m.private and m.author_key in banned.get(m.group, ())))]
+
+    def hierarchy_blocks(self, group_id: str) -> dict[str, tuple[str, str]]:
+        """{key: (hierarchy, reason)} that maintainers block for this group."""
+        if group_id.startswith("inbox@") or group_id not in self.data["groups"]:
+            return {}
+        try:
+            return naming.blocks(self, group_id)
+        except Exception:  # noqa: BLE001  lists that cannot be read block nothing
+            return {}
+
+    def hidden_by_blocks(self, group_id: str) -> list[tuple[str, str, int]]:
+        """(hierarchy, reason, posts) hidden in a group by maintainers' blocks."""
+        if self.data.get("show_blocked"):
+            return []
+        blocked = self.hierarchy_blocks(group_id)
+        count: dict[str, int] = {}
+        for m in self.cache.get(group_id, {}).values():
+            if m.author_key in blocked:
+                count[m.author_key] = count.get(m.author_key, 0) + 1
+        return [(blocked[k][0], blocked[k][1], n) for k, n in count.items()]
+
+    def set_show_blocked(self, on: bool) -> None:
+        self.data["show_blocked"] = bool(on)
+        self.save()
 
     def contacts(self) -> list[tuple[str, str]]:
         """(key, name) sorted by name."""

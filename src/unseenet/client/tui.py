@@ -1736,8 +1736,11 @@ class UnseenetApp(App):
         name = self._group_label(g).strip() if g else gid
         fast = "  ·  fast delivery" if self.session.manifest_data(gid).get("low_latency") else ""
         rules = "  ·  ? rules" if self.session.manifest_data(gid).get("rules") else ""
+        hidden = self.session.hidden_by_blocks(gid)
+        blocked = ("  ·  " + "; ".join(f"{n} hidden: blocked in {h}.*: {r}" for h, r, n in hidden[:2])
+                   if hidden else "")
         self.query_one("#threads-title", Static).update(
-            f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}")
+            f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}{blocked}")
 
     def article(self, msg: Message) -> tuple[str, Text]:
         """The header (markup) and the body of a message, as the reader shows them."""
@@ -2304,6 +2307,12 @@ class UnseenetApp(App):
              self.action_members),
             ("Ban from group", "Owner: the selected post's author may no longer post in this "
              "group", self.action_ban),
+            ("Block in hierarchy", "Maintainer: block the selected post's author in your whole "
+             "hierarchy", self.action_block),
+            ("Show posts blocked by maintainers" if not self.session.data.get("show_blocked")
+             else "Hide posts blocked by maintainers",
+             "Maintainers of hierarchies can block people; you decide whether to see them",
+             self.action_toggle_blocked),
             ("Banned from group", "Owner: see who is banned and why, and lift a ban",
              self.action_banned),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
@@ -2558,6 +2567,47 @@ class UnseenetApp(App):
             return
         self.set_status("")
         self.notify("Removed. The others have the new key.")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_block(self) -> None:
+        """Maintainer: block the selected author across the hierarchy (UN-RFC 0018, 5.4)."""
+        m, s, gid = self.current_message, self.session, self.current_group
+        me = s.identity().key_text
+        mine = [h for h in naming.governing(s, gid or "") if h.maintainer == me] if gid else []
+        if not mine:
+            self.notify("Only the maintainer of a hierarchy above this group can block "
+                        "people in it", severity="warning")
+            return
+        if m is None or m.private or not m.author_key or m.author_key == me:
+            self.notify("Select a post by the person you want to block", severity="warning")
+            return
+        who = s.identity_label(m.author_key, m.from_name)
+        reason = await self.push_screen_wait(InputDialog(
+            f"Block {who} in {mine[0].name}.*?",
+            "Nodes that honour blocks refuse their posts in every group under "
+            f"{mine[0].name}, and readers hide them unless they choose to see them. The "
+            "block and its reason are public. Reason (required):",
+            "e.g. threats against members in several groups"))
+        if not reason:
+            return
+        self.set_status("Posting your hierarchy list ...")
+        try:
+            where = await naming.block(s, gid, m.author_key, reason)
+        except (SessionError, OSError, ConnectionError, ValueError, crypto.CryptoError) as exc:
+            self.set_status("")
+            self.notify(f"Not blocked: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.current_message = None
+        self.notify(f"{who} is blocked in {where}.*")
+        self._render_threads()
+
+    def action_toggle_blocked(self) -> None:
+        on = not self.session.data.get("show_blocked")
+        self.session.set_show_blocked(on)
+        self.notify("Showing posts blocked by maintainers" if on
+                    else "Hiding posts blocked by maintainers")
+        self._render_threads()
 
     @work(group="dialog", exit_on_error=False)
     async def action_banned(self) -> None:

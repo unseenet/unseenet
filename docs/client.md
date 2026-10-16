@@ -231,6 +231,26 @@ and why. It stops an identity, not a person - keys are free, so someone
 determined can come back with a new one. Raise the group's postage to make
 that slower, and withdraw posts you do not want (see below).
 
+## Blocked in a hierarchy
+
+A hierarchy can have a **maintainer** - for example an organisation that
+runs `dk.*` ([concepts](concepts.md#hierarchies)). A maintainer can block
+someone in its whole hierarchy, with a public reason - say a person who
+posts threats in group after group. A maintainer it has given a part of
+the hierarchy to, such as `dk.snak.*`, can block within that part.
+
+Your client hides posts by blocked people and says so in the group's
+title line ("2 hidden: blocked in dk.*: threats against members"). You
+decide: **Show posts blocked by maintainers** in the command palette
+shows them again. Node operators decide for their nodes, too
+([`honour_blocks`](node/configuration.md#honour_blocks-maintainers-blocks)).
+
+If you are a maintainer, select a post and choose **Block in hierarchy**,
+with a reason. Your client adds the block to your hierarchy list and
+posts it ([UN-RFC 0018](spec/un-rfc-0018.md) section 5.4). A block does
+not delete anything and gives you no power over the groups themselves;
+for real crimes, contact the police.
+
 ## Ignoring someone
 
 Select a post by the person and choose **Ignore this person** in the

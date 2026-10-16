@@ -124,11 +124,57 @@ us uy uz va vc ve vg vi vn vu wf ws ye yt za zm zw""".split())
 
 
 @dataclass(frozen=True)
+class Block:
+    key: str
+    reason: str
+    since: str = ""
+    until: str = ""
+
+
+@dataclass(frozen=True)
 class HierarchyList:
     hierarchy: str
     updated: str
     groups: dict[str, str]                     # name -> endorsed Group ID
     sub: dict[str, Hierarchy]                  # full name -> governed or free sub-hierarchy
+    blocked: tuple[Block, ...] = ()            # section 5.4
+
+
+MAX_BLOCK_REASON = 200
+
+
+def _blocks(items) -> tuple[Block, ...]:
+    """Valid entries of ``blocked`` (section 5.4); a key listed twice counts for neither."""
+    found: dict[str, Block] = {}
+    twice: set[str] = set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        key, reason = item.get("key"), item.get("reason")
+        if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= MAX_BLOCK_REASON:
+            continue
+        try:
+            crypto.key_from_text(key)
+        except (crypto.CryptoError, TypeError, ValueError):
+            continue
+        if key in found:
+            twice.add(key)
+        found[key] = Block(key, reason.strip(), str(item.get("since", ""))[:40],
+                           str(item.get("until", ""))[:40])
+    return tuple(b for k, b in found.items() if k not in twice)
+
+
+def _expired(b: Block, now) -> bool:
+    if not b.until:
+        return False
+    from datetime import datetime
+    try:
+        until = datetime.fromisoformat(b.until.replace("Z", "+00:00"))
+    except ValueError:
+        return True                                # unreadable: ignore the entry
+    if until.tzinfo is None:
+        return True
+    return until <= now
 
 
 def _within(name: str, hierarchy: str) -> bool:
@@ -171,7 +217,8 @@ def parse_hierarchy_list(text: str, hierarchy: str) -> HierarchyList:
             twice.add(name)
         seen[name] = item["group"]
     groups = {n: g for n, g in seen.items() if n not in twice}       # endorsed twice: neither counts
-    return HierarchyList(hierarchy, str(data.get("updated", ""))[:32], groups, sub)
+    return HierarchyList(hierarchy, str(data.get("updated", ""))[:32], groups, sub,
+                         _blocks(data.get("blocked")))
 
 
 def builtin_checkgroups() -> HierarchyList:
@@ -206,6 +253,51 @@ def deciding(name: str, root: dict[str, Hierarchy],
             return h, lst
         h = max(deeper, key=lambda s: len(s.name))
     return Hierarchy(h.name, "reserved"), None        # deeper than section 5.3 allows
+
+
+def chain(name: str, root: dict[str, Hierarchy],
+          lists: dict[str, HierarchyList]) -> list[HierarchyList]:
+    """The known lists of every governed hierarchy from the top down to the one
+    that decides ``name`` (section 5.4)."""
+    out: list[HierarchyList] = []
+    h = policy_of(name.split(".")[0], root)
+    for _ in range(MAX_DEPTH + 1):
+        if h.policy != "governed":
+            break
+        lst = lists.get(h.name)
+        if lst is None:
+            break
+        out.append(lst)
+        deeper = [s for s in lst.sub.values() if _within(name, s.name)]
+        if not deeper:
+            break
+        h = max(deeper, key=lambda s: len(s.name))
+    return out
+
+
+def blocks_for(name: str, root: dict[str, Hierarchy], lists: dict[str, HierarchyList],
+               now=None) -> dict[str, tuple[str, str]]:
+    """{key: (hierarchy, reason)} of the identities blocked for a group name: the
+    blocks of every maintainer on the way down; the highest one is reported."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    out: dict[str, tuple[str, str]] = {}
+    for lst in chain(name, root, lists):
+        for b in lst.blocked:
+            if b.key not in out and not _expired(b, now):
+                out[b.key] = (lst.hierarchy, b.reason)
+    return out
+
+
+def sub_lists_needed(name: str, root: dict[str, Hierarchy],
+                     lists: dict[str, HierarchyList]) -> list[Hierarchy]:
+    """Governed sub-hierarchies above ``name`` whose lists are not known yet."""
+    out = []
+    for lst in chain(name, root, lists):
+        for s in lst.sub.values():
+            if s.policy == "governed" and _within(name, s.name) and s.name not in lists:
+                out.append(s)
+    return out
 
 
 @dataclass(frozen=True)

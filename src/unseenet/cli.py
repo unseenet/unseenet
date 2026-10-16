@@ -72,6 +72,7 @@ def load_node_config(path: Path | None):
                       # only configured peers may push, unless the operator says otherwise
                       require_peer_auth=node.get("require_peer_auth", True),
                       pull_interval=float(node.get("pull_interval", 3600)),
+                      honour_blocks=bool(node.get("honour_blocks", False)),
                       operator=data.get("operator", {}),
                       peers=peers)
 

@@ -36,7 +36,23 @@ groups = "*"
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
 | `pull_interval` | `3600` | Seconds between [catch-up pulls](peering.md#catching-up) from each peer. |
+| `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
 | `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
+
+### `honour_blocks`: maintainers' blocks
+
+A hierarchy's maintainer (for example whoever runs `dk.*`) can block an
+identity in its whole hierarchy, with a public reason
+([UN-RFC 0018](../spec/un-rfc-0018.md) section 5.4) - say someone who
+posts threats in group after group. With `honour_blocks = true` your node
+refuses new posts by blocked identities in the groups under that
+hierarchy. Readers' clients hide those posts anyway (they can choose to
+see them); this setting decides whether your node carries them at all.
+
+It is off by default: whose blocks you follow is your decision as an
+operator. The node reads the blocks from the lists it carries (the
+project's root list and the maintainers' lists) and says in its node
+information whether it honours them.
 
 ### `new_groups`: which groups the node carries
 
