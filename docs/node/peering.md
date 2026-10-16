@@ -16,8 +16,8 @@ Node key: ed25519:k7m2...  (give it to the operators you peer with)
 or at any time with
 
 ```bash
-sudo -u unseenet bash -c 'cd ~ && set -a && . /etc/unseenet-node.env && \
-  unseenet/.venv/bin/unseenet-node --data node-data --show-key'
+sudo bash -c 'set -a; . /etc/unseenet-node.env; cd /home/unseenet && \
+  sudo -E -u unseenet unseenet/.venv/bin/unseenet-node --data node-data --show-key'
 ```
 
 Clients also show it under **Details** in "Your nodes" (++o++).

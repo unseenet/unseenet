@@ -70,8 +70,8 @@ Because a node key is public, the check also asks you to **prove that you
 run the node**: it posts a challenge, which you sign on the node:
 
 ```bash
-sudo -u unseenet bash -c 'cd ~ && set -a && . /etc/unseenet-node.env && \
-  unseenet/.venv/bin/unseenet-node --data node-data --sign "unseenet-node-claim ..."'
+sudo bash -c 'set -a; . /etc/unseenet-node.env; cd /home/unseenet && \
+  sudo -E -u unseenet unseenet/.venv/bin/unseenet-node --data node-data --sign "unseenet-node-claim ..."'
 ```
 
 Paste the `ed25519:...` line it prints as a comment on the issue. Only the node's
