@@ -34,6 +34,17 @@ theme:
     - content.code.copy
     - search.highlight
 
+exclude_docs: |
+  assets/asciinema/README.md
+
+extra_css:
+  - assets/asciinema/asciinema-player.css
+  - stylesheets/home.css
+
+extra_javascript:
+  - assets/asciinema/asciinema-player.min.js
+  - javascripts/demo.js
+
 markdown_extensions:
   - admonition
   - attr_list

@@ -102,6 +102,20 @@ groups and posts, drives `unseenet-tui` headless and writes
 `docs/img/client-*.svg`. Run it again when the client's look changes, and
 commit the files.
 
+The recordings on the front page are made the same way, from the same
+made-up content:
+
+- `tools/docs_recording.py` runs the real client in a pseudo-terminal,
+  types into it and saves `docs/img/demo.cast`, which the bundled
+  [asciinema player](https://github.com/asciinema/asciinema-player) plays
+  (`pip install pexpect`; `--gif docs/img/demo.gif` also renders the GIF for
+  the README, with [agg](https://github.com/asciinema/agg)).
+- `tools/image/record.py IMAGE` boots a bootable image in QEMU, goes through
+  the menu and makes a vault, and writes `docs/img/boot.webm` and
+  `boot-poster.png` (needs QEMU and ffmpeg; KVM is faster but not needed).
+
+Make them again when the client or the boot menu changes noticeably.
+
 ## Design Decisions (so far)
 
 Each decision lists where it is specified and the reasoning. Changing one

@@ -15,6 +15,10 @@ nodes over Tor onion services.
 > Status: **pre-alpha.** Nothing is stable yet, and it has not had a
 > security review. Do not rely on it to protect anyone yet.
 
+<p align="center">
+  <img src="docs/img/demo.gif" alt="The Unseenet terminal client: unlocking the vault, reading a thread, replying, chatting and browsing groups" width="820">
+</p>
+
 ## The idea
 
 In the old days, you connected to *your* news server. Your server
