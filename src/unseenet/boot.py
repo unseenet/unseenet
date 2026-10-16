@@ -274,9 +274,15 @@ def self_test() -> int:
         check("client, monitor and cryptography load", False, repr(exc))
     tor = run("tor", "--version").stdout.splitlines()
     check("Tor runs", bool(tor) and tor[0].startswith("Tor version"), tor[0] if tor else "")
-    for service in ("dbus", "iwd"):
-        res = run("rc-service", service, "status")
-        check(f"{service} is running", res.returncode == 0)
+    res = run("rc-service", "dbus", "status")
+    check("dbus is running", res.returncode == 0)
+    wireless = list(Path("/sys/class/net").glob("*/wireless"))
+    res = run("rc-service", "iwd", "status")
+    if wireless:                              # without Wi-Fi hardware (QEMU) iwd may stop
+        check("iwd is running", res.returncode == 0)
+    else:
+        print(f"info iwd: no Wi-Fi hardware ({'running' if res.returncode == 0 else 'stopped'})",
+              flush=True)
     check("keyboard layouts", "dk/dk" in keymaps())
     for _ in range(30):                       # DHCP may take a moment
         net = addresses()
