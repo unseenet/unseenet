@@ -227,6 +227,9 @@ class MonitorApp(App):
         for reason, n in sorted(traffic["rejected"].items(), key=lambda kv: -kv[1]):
             rejected.add_row(reason, str(n))
         log = self.query_one("#log-view", RichLog)
+        if not lines:
+            lines = ["(Nothing logged since the node started. Accepted articles, peers and "
+                     "catching up are logged here as they happen.)"]
         new = lines[len(self._log_seen):] if lines[: len(self._log_seen)] == self._log_seen else lines
         if new is lines:
             log.clear()

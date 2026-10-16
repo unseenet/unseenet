@@ -125,6 +125,10 @@ class Stats:
         self.served += 1
         self.series["served"].add()
 
+    def note(self, text: str) -> None:
+        """A line for the monitor's log only (the node prints it to its own output)."""
+        self.log.lines.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} INFO unseenet.node: {text}")
+
     def peer(self, name: str, address: str = "", authenticated_by: str = "") -> PeerStats:
         if name not in self.peers:
             self.peers[name] = PeerStats(name, address, authenticated_by)

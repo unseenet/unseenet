@@ -108,6 +108,7 @@ async def run_node(args) -> None:
         try:
             monitor = await serve_stats(node.stats, node, where, data)
             print(f"Stats for unseenet-monitor on {where}")
+            node.stats.note(f"unseenet-node {__version__} started; stats on {where}")
         except (OSError, ValueError, NotImplementedError) as exc:
             print(f"No stats interface ({exc})", file=sys.stderr)
 
@@ -126,6 +127,7 @@ async def run_node(args) -> None:
             key_file.write_bytes(seal(new_key.encode(), passphrase, **_kdf()))
         node.stats.onion = onion
         print(f"Node is reachable at {onion}")
+        node.stats.note(f"Tor is running; the node is reachable at {onion}")
 
     feeders = [asyncio.create_task(Feeder(node, peer, socks_port).run_forever())
                for peer in config.peers]
