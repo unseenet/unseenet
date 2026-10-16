@@ -418,3 +418,58 @@ async def test_ignore_a_person(tmp_path, monkeypatch):
     for p in (me, troll, friend):
         await p.close()
     server.close()
+
+
+async def test_ban_from_a_group(tmp_path, monkeypatch):
+    """UN-RFC 0004 section 5.1: the owner bans a key; nodes refuse its posts and
+    readers hide the old ones; lifting the ban lets it post again."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    owner, troll, reader = person("owner"), person("troll"), person("reader")
+    gid = await owner.create_group("dk.snak", "open", min_pow=8)
+    for p in (troll, reader):
+        p.subscribe(gid)
+    await troll.post(gid, "Trussel", "...\n")
+    await owner.fetch_group(gid)
+
+    with pytest.raises(sess.SessionError):
+        await reader.ban(gid, troll.identity().key_text, "nej")        # not the owner
+    await owner.ban(gid, troll.identity().key_text, "trusler mod andre")
+    assert owner.banned(gid) == [(troll.identity().key_text, "trusler mod andre")]
+
+    with pytest.raises(sess.SessionError) as e:
+        await troll.post(gid, "Igen", "...\n")
+    assert "banned" in str(e.value)
+    msgs = await reader.fetch_group(gid)
+    assert [m.subject for m in reader.visible(msgs)] == []          # the old post is hidden
+    assert reader.is_banned(gid, troll.identity().key_text)
+
+    await owner.unban(gid, troll.identity().key_text)
+    await troll.fetch_group(gid)
+    await troll.post(gid, "Undskyld", "...\n")
+    msgs = await reader.fetch_group(gid)
+    assert {m.subject for m in reader.visible(msgs)} == {"Trussel", "Undskyld"}
+    for p in (owner, troll, reader):
+        await p.close()
+    server.close()
+
+
+def test_manifest_banned_entries_are_checked():
+    from unseenet.core import crypto
+    from unseenet.core.article import ArticleError
+    from unseenet.core.groups import Manifest, make_group_id, manifest_article
+    owner = crypto.Identity.generate()
+    gid = make_group_id("dk.snak", owner.public_key)
+    base = {"v": 1, "name": "dk.snak", "type": "open", "owner": owner.key_text, "serial": 1}
+    for bad in ([{"reason": "no key"}], [{"key": "nonsense"}], ["ed25519:abc"],
+                [{"key": crypto.Identity.generate().key_text, "reason": "x" * 201}]):
+        with pytest.raises(ArticleError):
+            Manifest.from_article(manifest_article(owner, gid, dict(base, banned=bad), pow_bits=0))
