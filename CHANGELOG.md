@@ -8,6 +8,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- `tools/project/create_groups.py` also brings an existing group's title,
+  description, rules and `min_pow` up to date with a new manifest, keeping its
+  posters and other fields, so `unseenet`, `unseenet.test` and the other
+  groups made before the script get their rules (UN-RFC 0014). (#46)
 - Data groups (UN-RFC 0008 section 3.1.1): a group whose manifest says
   `"view": "data"` carries lists and certificates for programs, not posts
   for people. The client marks it `¤` and leaves it out when you browse for
