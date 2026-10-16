@@ -8,6 +8,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Per-peer `accept` in `[[peer]]`: which groups the node takes from that
+  peer, pushed or pulled. `groups` only ever limited what is sent, so a
+  peering "for dk.* only" can now be held on both sides. (#86)
 - Report a post: **Report post** in the client sends it, with a note and
   optionally anonymously, to the group's owner, its moderators, the
   hierarchy's maintainer and the node's operator - whoever you tick.

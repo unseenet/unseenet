@@ -24,3 +24,4 @@ require_peer_auth = true       # only configured peers may push posts
 # key = "ed25519:..."
 # groups = "dk.*,comp.*"
 # pull = "dk.*,comp.*"
+# accept = "dk.*,comp.*"                # what we take from it (default "*")

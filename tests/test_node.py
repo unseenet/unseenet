@@ -167,3 +167,26 @@ async def test_over_xover_and_hdr_for_newsreaders():
     assert "Hemmeligt" not in " ".join(subjects) and "(encrypted)" in subjects
     await c.quit()
     server.close()
+
+
+def test_peer_accept_pattern():
+    """#86: a peer's `accept` limits what is taken from it; clients and other peers are not limited."""
+    peer = PeerConfig(name="aarhus", address="x:1", accept="dk.*")
+    node = make_node(peers=[peer, PeerConfig(name="bob", address="y:1")])
+    owner, user = crypto.Identity.generate(), crypto.Identity.generate()
+    dk = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    comp = make_manifest(owner, "comp.misc", "open", pow_bits=BITS)
+
+    node.accept(dk.to_bytes(), source="aarhus", from_peer=True)
+    with pytest.raises(ArticleError) as e:
+        node.accept(comp.to_bytes(), source="aarhus", from_peer=True)
+    assert e.value.reason == "group" and "aarhus" in e.value.detail
+
+    node.accept(comp.to_bytes(), source="bob", from_peer=True)
+    art = new_article(comp.group, "hej", "x", from_name="u").finalize(user, BITS)
+    with pytest.raises(ArticleError):
+        node.accept(art.to_bytes(), source="aarhus", from_peer=True)
+    assert not node.store.seen(art.message_id)
+    node.accept(art.to_bytes())                          # a client may post there
+    ok = new_article(dk.group, "hej", "x", from_name="u").finalize(user, BITS)
+    node.accept(ok.to_bytes(), source="aarhus", from_peer=True)

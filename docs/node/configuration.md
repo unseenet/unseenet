@@ -95,6 +95,7 @@ One section per peer. See [Peering](peering.md).
 | `key` | yes, for new peerings | The peer's node key, `ed25519:...` ([UN-RFC 0016](../spec/un-rfc-0016.md)). Used to accept the peer logging in to you, and to check that you reached the right node. |
 | `groups` | no, `"*"` | Which groups to **send** to this peer, as a wildmat (see below). `""` sends nothing. |
 | `pull` | no, `"*"` | Which groups to [catch up on](peering.md#catching-up) from this peer. `""` pulls nothing. |
+| `accept` | no, `"*"` | Which groups to **take** from this peer, pushed or pulled. Posts in other groups are refused. See [Choosing what to share](peering.md#choosing-what-to-share). |
 | `password` | no | Old shared-secret login, ignored when `key` is set. See [Peering](peering.md#passwords-old-way). |
 
 ### Wildmats
