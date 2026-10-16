@@ -143,6 +143,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   group. (#35)
 
 ### Fixed
+- A member removed from a closed group could go on posting with the
+  previous epoch's key, which nodes accept to tolerate replication delay.
+  A key update made because a member was removed now carries
+  `closes_previous` (UN-RFC 0004 sections 6.2 and 6.5): nodes refuse
+  earlier epochs from then on, and clients hide such posts that a lagging
+  node let through. (#84)
 - In *Your names* (`@`) the claim field no longer sits against the line
   with your key. (#61)
 - The tests pass on macOS and Windows again: the stats test makes its Unix

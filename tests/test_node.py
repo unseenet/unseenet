@@ -167,3 +167,29 @@ async def test_over_xover_and_hdr_for_newsreaders():
     assert "Hemmeligt" not in " ".join(subjects) and "(encrypted)" in subjects
     await c.quit()
     server.close()
+
+
+def test_closing_key_update_ends_the_previous_epoch():
+    """UN-RFC 0004 sections 6.2 and 6.5 (#84): after a key update with
+    closes_previous, the previous epoch's member key no longer posts."""
+    from unseenet.core.groups import encrypted_article, make_key_update
+    node = make_node()
+    owner, removed = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = make_manifest(owner, "dk.lukket", "closed", pow_bits=BITS)
+    gid = manifest.group
+    node.accept(manifest.to_bytes())
+    k1, k2, k3 = (crypto.GroupKeys.generate() for _ in range(3))
+    node.accept(make_key_update(owner, gid, 1, k1, [removed.public_key], pow_bits=BITS).to_bytes())
+
+    def post(keys, epoch, subject):
+        return encrypted_article(gid, epoch, keys, removed, from_name="R", subject=subject,
+                                 body="x\n", pow_bits=BITS).to_bytes()
+
+    node.accept(make_key_update(owner, gid, 2, k2, [], pow_bits=BITS).to_bytes())
+    node.accept(post(k1, 1, "tolerated: replication delay"))        # ordinary rotation
+    node.accept(make_key_update(owner, gid, 3, k3, [], closes_previous=True,
+                                pow_bits=BITS).to_bytes())
+    with pytest.raises(ArticleError) as e:
+        node.accept(post(k2, 2, "after removal"))
+    assert "closed" in str(e.value)
+    assert node.store.closed_before(gid) == 3

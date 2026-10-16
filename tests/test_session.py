@@ -527,6 +527,10 @@ async def test_moderators_posters_and_removing_members(tmp_path, monkeypatch):
     seen = {p: [m for m in await p.fetch_group(cl) if m.readable and m.subject == "Hemmeligt"]
             for p in (mod, user)}
     assert len(seen[mod]) == 1 and seen[user] == []
+    # the removed member still has the previous key, but may not post with it (#84)
+    with pytest.raises(sess.SessionError) as e:
+        await user.post(cl, "Stadig her", "x\n")
+    assert "closed" in str(e.value)
     for p in (owner, mod, user):
         await p.close()
     server.close()
@@ -696,3 +700,27 @@ async def test_report_a_post(tmp_path, monkeypatch):
     for p in (owner, mod, troll, reader, operator):
         await p.close()
     server.close()
+
+
+def test_client_hides_old_epoch_posts_after_a_closing_key_update(tmp_path):
+    """UN-RFC 0004 section 6.5: an article of an earlier epoch that comes after a
+    closing key update (a lagging node accepted it) is not shown."""
+    from unseenet.core import crypto
+    from unseenet.core.groups import encrypted_article, make_key_update, make_manifest
+    s = Session(Vault.open(tmp_path / "m.vault", "pw", **KDF), status=lambda *_: None)
+    me = s.new_identity("me", "Me")
+    owner, removed = crypto.Identity.generate(), crypto.Identity.generate()
+    gid = make_manifest(owner, "dk.lukket", "closed", pow_bits=0).group
+    k1, k2 = crypto.GroupKeys.generate(), crypto.GroupKeys.generate()
+    entry = {"type": "closed", "keys": {}, "manifest": {}}
+    up1 = make_key_update(owner, gid, 1, k1, [me.public_key, removed.public_key], pow_bits=0)
+    up2 = make_key_update(owner, gid, 2, k2, [me.public_key], closes_previous=True, pow_bits=0)
+    before = encrypted_article(gid, 1, k1, removed, from_name="R", subject="Før", body="x\n", pow_bits=0)
+    after = encrypted_article(gid, 1, k1, removed, from_name="R", subject="Efter", body="x\n", pow_bits=0)
+    shown = []
+    for n, art in enumerate([up1, before, up2, after], start=1):
+        msg = s._parse(n, art.to_bytes(), gid, entry, me)
+        if msg is not None:
+            shown.append(msg.subject)
+    assert shown == ["Før"]
+    assert entry["closed"] == {"2": 3}

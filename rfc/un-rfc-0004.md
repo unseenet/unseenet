@@ -206,6 +206,16 @@ link a member across groups.
 The owner MUST include an envelope for themself. A new epoch MUST be
 started whenever a member is removed.
 
+A key update MAY carry `"closes_previous": true`. The owner MUST set it
+when the new epoch starts because a member was removed. It ends the
+earlier epochs at once: from the moment a node has accepted such a key
+update, it MUST reject articles of any earlier epoch in that group
+(section 6.5), even the one just before, so that a removed member, who
+still holds the previous member key, cannot go on posting. Articles
+written just before the rotation that have not reached a node yet are
+lost there; that is the price of removing someone, and clients SHOULD
+send again what was refused.
+
 ## 6.3 Adding Members Without Rotation
 
 To add a member without starting a new epoch, the owner posts
@@ -243,9 +253,14 @@ an empty line, and the inner body.
 
 A node MUST reject the article unless `Member-Signature` verifies with
 the member key of epoch *e*, and *e* is the current epoch or the one
-before it (to tolerate replication delay). Thus only holders of the
-group secret can post, and nodes enforce this without being able to
-read anything.
+before it (to tolerate replication delay), and no key update the node
+has accepted with `closes_previous` (section 6.2) is for an epoch later
+than *e*. Thus only holders of the group secret can post, and nodes
+enforce this without being able to read anything.
+
+A client SHOULD NOT show an article of an earlier epoch that comes after
+a key update with `closes_previous` in the group's order on its node:
+it was accepted by a node that had not yet seen the key update.
 
 ## 6.6 Sealed Manifest Information
 

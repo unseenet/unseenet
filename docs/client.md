@@ -491,8 +491,10 @@ As a group's owner you choose who else has a role, in the command palette
 - **Moderators and posters** lists them and removes one.
 - **Members of closed group** lists the people you invited from this
   client, and **removes** one. The group then gets a new key, sent to
-  everyone else; the removed member cannot read anything new, but keeps
-  what they have already read. Members you invited from another device
+  everyone else; the removed member cannot read or post anything new,
+  but keeps what they have already read. Posts others wrote with the old
+  key in the same moment may be refused; the client says so, and you can
+  send them again. Members you invited from another device
   (or before version 0.3.0) are not on the list and do not get the new
   key either - invite them again.
 
