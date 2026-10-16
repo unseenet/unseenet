@@ -1,4 +1,4 @@
-name: Bug in the bootable stick
+name: Bug in Bootable (USB, SSD etc.)
 description: The bootable image does not start, does not find your hardware, or misbehaves.
 title: "Bootable: "
 labels: ["bug", "area: bootable", "triage"]

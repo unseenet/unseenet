@@ -10,8 +10,8 @@ body:
       options:
         - Client (TUI or command line)
         - Node
-        - Portable builds (USB, Windows, macOS, Linux)
-        - Bootable stick
+        - Portable (Linux, macOS, Windows)
+        - Bootable (USB, SSD etc.)
         - Docker image
         - Documentation or website
         - Not sure / several
