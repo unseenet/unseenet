@@ -123,3 +123,47 @@ async def test_two_nodes_replicate_over_onntp():
     server_a.close()
     server_b.close()
     await asyncio.gather(server_a.wait_closed(), server_b.wait_closed())
+
+
+async def test_over_xover_and_hdr_for_newsreaders():
+    """RFC 3977 sections 8.3-8.5 (#21): standard newsreaders list posts with OVER."""
+    from unseenet.core.groups import encrypted_article, make_key_update
+    node = make_node()
+    server = await node.serve("127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    owner, user = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    node.accept(manifest.to_bytes())
+    post = new_article(manifest.group, "Hej\tmed dig", "linje 1\nlinje 2\n",
+                       from_name="Sonia").finalize(user, BITS)
+    node.accept(post.to_bytes())
+    closed = make_manifest(owner, "dk.lukket", "closed", pow_bits=BITS)
+    node.accept(closed.to_bytes())
+    keys = crypto.GroupKeys.generate()
+    node.accept(make_key_update(owner, closed.group, 1, keys, [], pow_bits=BITS).to_bytes())
+    secret = encrypted_article(closed.group, 1, keys, owner, from_name="Ejer", subject="Hemmeligt",
+                               body="x\n", pow_bits=BITS)
+    node.accept(secret.to_bytes())
+
+    c = await Client.connect(f"127.0.0.1:{port}")
+    caps = await c.fetch_capabilities()
+    assert any(cap.startswith("OVER") for cap in caps)
+    assert "Xref:full" in await c.multiline("LIST OVERVIEW.FMT", 215)
+
+    await c.group(manifest.group)
+    lines = await c.multiline("OVER 1-", 224)
+    rows = [ln.split("\t") for ln in lines]
+    assert [r[1] for r in rows] == ["(group settings)", "Hej med dig"]     # TAB cleaned
+    assert rows[1][2] == "Sonia" and rows[1][4] == post.message_id
+    assert rows[1][7] == "2" and rows[1][8] == f"Xref: unseenet {manifest.group}:2"
+    assert await c.multiline("XOVER 2", 224) == [lines[1]]
+    by_id = await c.multiline(f"OVER {post.message_id}", 224)
+    assert by_id[0].startswith("0\t")
+    assert await c.multiline("XHDR Subject 2", 221) == ["2 Hej med dig"]
+    assert await c.multiline("HDR :lines 2", 225) == ["2 2"]
+
+    await c.group(closed.group)
+    subjects = [ln.split("\t")[1] for ln in await c.multiline("OVER 1-", 224)]
+    assert "Hemmeligt" not in " ".join(subjects) and "(encrypted)" in subjects
+    await c.quit()
+    server.close()

@@ -33,9 +33,10 @@ Some things look a little different from Usenet:
   can tell you which key signed a post.
 - **Headers are UTF-8** without MIME encoding. Tell your reader so, or
   æ, ø and å come out as `Ã¦`, `Ã¸` and `Ã¥` (see the examples below).
-- The node does not yet support `OVER`/`XOVER`, so readers fetch the
-  headers of each article one by one. Large groups load slowly
-  ([issue #21](https://github.com/unseenet/unseenet/issues/21)).
+- The node supports `OVER`/`XOVER` and `HDR`/`XHDR` (RFC 3977), so a
+  reader lists a whole group in one request. Posts a reader cannot show
+  get a fixed subject: `(group settings)` for a group's manifest,
+  `(encrypted)` in closed groups and `(private message)` in inboxes.
 
 ## Connecting through Tor
 
@@ -142,11 +143,11 @@ In the new profile:
 5. **Subscribe.** Right-click the account → *Subscribe...*, tick the
    groups you want, and click *OK*.
 
-!!! warning "Not yet verified"
-    Thunderbird lists a group's posts with `XOVER`, which the node does
-    not support yet. Until it does, Thunderbird may show an empty group
-    or load very slowly. This is tracked in
-    [issue #21](https://github.com/unseenet/unseenet/issues/21).
+!!! note "Tell us how it goes"
+    Thunderbird lists a group's posts with `XOVER`, which nodes support
+    from version 0.3.0. It has been tested against a node's NNTP commands,
+    not yet with Thunderbird itself over Tor; if something does not work,
+    please [open an issue](https://github.com/unseenet/unseenet/issues/new/choose).
 
 ## Other readers
 
