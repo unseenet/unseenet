@@ -59,8 +59,12 @@ install -m 644 /home/unseenet/unseenet/deploy/unseenet-node.service /etc/systemd
 # "unseenet-monitor" for the operator: runs the monitor as the node's user
 cat > /usr/local/bin/unseenet-monitor <<'MON'
 #!/bin/sh
-exec sudo -u unseenet /home/unseenet/unseenet/.venv/bin/unseenet-monitor \
-  --node /home/unseenet/node-data/monitor.sock "$@"
+BIN=/home/unseenet/unseenet/.venv/bin/unseenet-monitor
+SOCK=/home/unseenet/node-data/monitor.sock
+if [ "$(id -un)" = unseenet ]; then
+  exec "$BIN" --node "$SOCK" "$@"
+fi
+exec sudo -u unseenet "$BIN" --node "$SOCK" "$@"
 MON
 chmod 755 /usr/local/bin/unseenet-monitor
 systemctl daemon-reload
