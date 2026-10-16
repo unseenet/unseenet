@@ -51,19 +51,19 @@ jobs:
           docker run --rm -v t:/data unseenet-node:test && exit 1 || test $? -eq 64   # no passphrase
           KEY=$(docker run --rm -v t:/data -e UNSEENET_NODE_PASSPHRASE=ci unseenet-node:test --show-key | tail -1)
           echo "node key: $KEY"; case "$KEY" in ed25519:*) ;; *) exit 1 ;; esac
-          docker run -d --name n -v t:/data -e UNSEENET_NODE_PASSPHRASE=ci -e UNSEENET_NO_TOR=1 \
+          docker run -d --name unseenet-test -v t:/data -e UNSEENET_NODE_PASSPHRASE=ci -e UNSEENET_NO_TOR=1 \
             --read-only --tmpfs /tmp --cap-drop ALL \
             --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add FOWNER --cap-add DAC_OVERRIDE \
             --security-opt no-new-privileges unseenet-node:test
           for i in $(seq 1 30); do
-            docker exec n python3 -c "import asyncio; from unseenet.node.stats import fetch; \
+            docker exec unseenet-test python3 -c "import asyncio; from unseenet.node.stats import fetch; \
               s = asyncio.run(fetch('/data/monitor.sock')); print(s['node']['name'], s['node']['version'])" && break
             sleep 2
           done
-          docker exec n ps -o user,args | grep -q "^unseenet .*unseenet-node"    # not root
-          docker exec n unseenet-monitor --version
-          docker logs n
-          docker rm -f n
+          docker exec unseenet-test ps -o user,args | grep -q "^unseenet .*unseenet-node"    # not root
+          docker exec unseenet-test unseenet-monitor --version
+          docker logs unseenet-test
+          docker rm -f unseenet-test
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
