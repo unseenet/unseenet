@@ -88,6 +88,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - Issue forms for the bootable stick and the Docker image.
 
 ### Fixed
+- The tests pass on macOS and Windows again: the stats test makes its Unix
+  socket under a short path, and the monitor test waits for a refused
+  connection, which is slow on Windows. The node now says clearly when the
+  monitor socket's path is too long for the system (104 bytes on macOS)
+  instead of failing with `AF_UNIX path too long`. (#33)
 - The node's onion key file could be read by other users on the machine
   (it is sealed with the passphrase, but should be the node's alone).
 - After picking another group or a refresh while an answer was still

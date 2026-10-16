@@ -1,7 +1,10 @@
 """The node's local stats interface for unseenet-monitor (node/stats.py)."""
 
 import logging
+import shutil
+import tempfile
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -73,7 +76,9 @@ async def test_interface_over_a_unix_socket(tmp_path, monkeypatch):
     logging.getLogger("unseenet").addHandler(node.stats.log)
     logging.getLogger("unseenet").setLevel(logging.INFO)
     logging.getLogger("unseenet.node").info("hello from the node")
-    path = tmp_path / "monitor.sock"
+    # pytest's tmp_path is too long for a Unix socket on macOS (104 bytes)
+    short = Path(tempfile.mkdtemp(prefix="un-", dir="/tmp"))
+    path = short / "monitor.sock"
     mon = await st.serve(node.stats, node, str(path), tmp_path)
     assert (path.stat().st_mode & 0o777) == 0o660               # owner and group only
     snap = await st.fetch(str(path))
@@ -82,6 +87,7 @@ async def test_interface_over_a_unix_socket(tmp_path, monkeypatch):
     assert any("hello from the node" in ln for ln in lines)
     assert "error" in await st.fetch(str(path), "shutdown")      # read-only: nothing else
     mon.close()
+    shutil.rmtree(short, ignore_errors=True)
     logging.getLogger("unseenet").removeHandler(node.stats.log)
     await s.close()
     server.close()
@@ -109,3 +115,10 @@ def test_warnings():
     assert any("peer p: unreachable" in x for x in w)
     assert any("5000 articles waiting" in x for x in w)
     assert any("MB free" in x for x in w)
+
+
+def test_a_unix_socket_path_that_is_too_long_is_refused():
+    import asyncio
+    long = "/tmp/" + "x" * 200 + "/monitor.sock"
+    with pytest.raises(ValueError, match="too long"):
+        asyncio.run(st.serve(None, None, long))
