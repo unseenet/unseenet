@@ -43,9 +43,16 @@ REPO = "https://github.com/unseenet/unseenet"
 GROUP_MIN_POW = 20
 
 
+def is_test_release(version: str) -> bool:
+    """An alpha, beta or release candidate (PEP 440), e.g. 0.2.1a1."""
+    return re.search(r"\d(a|b|rc)\d+$", version) is not None
+
+
 def changelog_section(version: str) -> str:
     text = (ROOT / "CHANGELOG.md").read_text()
     m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
+    if not m and is_test_release(version):      # its notes are what is not released yet
+        m = re.search(r"^## \[Unreleased\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
     if not m:
         sys.exit(f"CHANGELOG.md has no section for {version}")
     return m.group(1).strip() + "\n"
@@ -53,6 +60,14 @@ def changelog_section(version: str) -> str:
 
 def release_post(tag: str) -> tuple[str, str]:
     version = tag.lstrip("v")
+    if is_test_release(version):
+        body = (f"Unseenet {version} is a test release: please try it and report what\n"
+                f"you find. For everyday use, stay with the newest full release.\n\n"
+                f"{changelog_section(version)}\n"
+                f"Downloads:  {REPO}/releases/tag/{tag}\n"
+                f"Check them against SHA256SUMS.txt from the same page.\n\n"
+                f"With Python:  pipx install --pip-args=--pre \"unseenet[tui]\"\n")
+        return f"Unseenet {version} - test release", body
     body = (f"Unseenet {version} is out.\n\n"
             f"{changelog_section(version)}\n"
             f"Downloads, with Tor inside for Windows, macOS and Linux, and the\n"

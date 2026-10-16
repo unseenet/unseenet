@@ -270,6 +270,29 @@ one node at a time.
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.
 
+### Test releases and development builds
+
+An **alpha** (or beta, or release candidate) is a release for testing,
+with a PEP 440 version: `0.2.1a1`, `0.2.1b1`, `0.2.1rc1`. Make it like a
+release, but leave the changelog entries under `## [Unreleased]` - they
+become its notes:
+
+```bash
+# __version__ = "0.2.1a1" in src/unseenet/__init__.py, commit, then:
+git tag -a v0.2.1a1 -m "Unseenet 0.2.1a1" && git push origin v0.2.1a1
+```
+
+It is published to PyPI and GitHub as a pre-release (pip takes it only
+with `--pre`) and announced as a test release.
+
+**Development builds** need nothing: every push to `main` that changes the
+software runs the *portable* workflow, which builds the zips with a
+version from `tools/dev_version.py` (`0.2.1.dev3`: three commits after
+v0.2.0; written into the build only, never committed) and replaces the
+pre-release [`dev`](https://github.com/unseenet/unseenet/releases/tag/dev)
+with them. Its notes are the Unreleased changelog and the commits since
+the last tag. They are not published to PyPI.
+
 The portable builds can also be made without a release: run the
 *portable* workflow by hand (Actions, "Run workflow") and download the zips
 from the run's artifacts. Before a release, check `tools/tor-version.txt`

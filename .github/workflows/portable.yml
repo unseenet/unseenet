@@ -1,10 +1,17 @@
 name: portable
 # Portable builds with Tor inside, for Linux, Windows and macOS, plus one
-# all-in-one USB zip. Runs on version tags (and then drafts a GitHub release),
-# by hand, and when the build itself changes.
+# all-in-one USB zip. Runs on version tags (attached to the release), on every
+# push to main that changes the software (the "dev" pre-release, replaced each
+# time, versioned like 0.2.1.dev3), by hand, and when the build itself changes.
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tools/**"
+      - "pyproject.toml"
+      - ".github/workflows/portable.yml"
   workflow_dispatch:
   pull_request:
     paths:
@@ -18,6 +25,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:                     # a newer push to main replaces a running dev build
+  group: portable-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
   tor:
@@ -50,9 +61,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                   # tags, for the development version
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Development version (not on release tags)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        shell: bash
+        run: python tools/dev_version.py --write
       - run: pip install ".[tui]" pyinstaller pillow
       - uses: actions/download-artifact@v4
         with:
@@ -93,9 +110,14 @@ jobs:
       contents: write                      # for the draft release on tags
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Development version (not on release tags)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: python tools/dev_version.py --write
       - uses: actions/download-artifact@v4
         with:
           pattern: unseenet-*
@@ -127,3 +149,44 @@ jobs:
           gh release create "$GITHUB_REF_NAME" zips/*.zip zips/SHA256SUMS.txt --draft \
             --title "Unseenet $GITHUB_REF_NAME" \
             --notes "Portable builds with Tor inside. See https://unseenet.org/portable/"
+
+  dev:
+    # The newest build of main as the pre-release "dev": one release, replaced
+    # each time, so others can try a fix before it is released.
+    needs: usb
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unseenet-*
+          path: zips
+          merge-multiple: true
+      - name: Release notes
+        run: |
+          VERSION=$(python3 tools/dev_version.py)
+          TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          {
+            echo "**Development build $VERSION** - the newest code on \`main\`, built and self-tested automatically. Not a release: it may have bugs that a release would not. For everyday use, take the newest [release](https://github.com/unseenet/unseenet/releases)."
+            echo
+            echo "Built from $GITHUB_SHA. Found a bug? [Report it](https://github.com/unseenet/unseenet/issues/new/choose) and give the version $VERSION."
+            echo
+            echo "### Not released yet (from CHANGELOG.md)"
+            awk '/^## \[Unreleased\]/ {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md
+            echo
+            echo "### Commits since $TAG"
+            git log --format='- %s (%h)' "$TAG..HEAD"
+          } > notes.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev --yes --cleanup-tag 2>/dev/null || true
+          git push -q origin ":refs/tags/dev" 2>/dev/null || true
+          gh release create dev zips/*.zip zips/SHA256SUMS.txt --prerelease --latest=false \
+            --target "$GITHUB_SHA" --title "Development build $VERSION" --notes-file notes.md

@@ -1,5 +1,7 @@
 name: release
-# Push a tag like v0.1.0 to release. The tag must match unseenet.__version__.
+# Push a tag like v0.2.1 to release, or v0.2.1a1 for an alpha (a test release:
+# PyPI and GitHub mark it as a pre-release; pip only takes it with --pre).
+# The tag must match unseenet.__version__.
 on:
   push:
     tags: ["v*"]
@@ -18,7 +20,10 @@ jobs:
           if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
             echo "Tag $GITHUB_REF_NAME does not match version $VERSION" >&2; exit 1
           fi
-          grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; }
+          case "$VERSION" in
+            *a*|*b*|*rc*) ;;   # alphas, betas, candidates: the notes are under [Unreleased]
+            *) grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; } ;;
+          esac
       - run: pip install -e ".[dev]" build twine
       - run: pytest -q
       - run: python -m build && twine check dist/*
@@ -57,10 +62,15 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then   # an alpha: what is not released yet
+            { echo "**Test release $VERSION.** Please try it and report what you find; for everyday use, take the newest full release."
+              echo
+              awk '/^## \[Unreleased\]/ {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md; } > notes.md
+          fi
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PRE=""; case "$GITHUB_REF_NAME" in v0.*) PRE="--prerelease";; esac
+          PRE=""; case "$GITHUB_REF_NAME" in v0.*|*a*|*b*|*rc*) PRE="--prerelease";; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             # the portable workflow got there first (as a draft): fill it in and publish
             gh release upload "$GITHUB_REF_NAME" dist/* --clobber

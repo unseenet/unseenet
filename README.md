@@ -113,7 +113,9 @@ Download a zip from the [releases](https://github.com/unseenet/unseenet/releases
 unzip it, and double-click **Start Unseenet** - the client and Tor are
 inside, nothing to install. The `-usb.zip` has all three systems in one
 folder for a stick that works anywhere. See the
-[portable guide](https://unseenet.org/portable/).
+[portable guide](https://unseenet.org/portable/). Want the newest fixes
+before they are released? Take the
+[development build](https://github.com/unseenet/unseenet/releases/tag/dev).
 
 ### The client with Python
 

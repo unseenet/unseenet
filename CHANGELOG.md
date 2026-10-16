@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+- Development builds: every change to the code is built and self-tested,
+  and the zips replace the pre-release
+  [Development build](https://github.com/unseenet/unseenet/releases/tag/dev),
+  with versions like `0.2.1.dev3`. Test releases (`0.2.1a1`) go to PyPI and
+  GitHub as pre-releases. (#12)
+
 ### Fixed
 - After picking another group or a refresh while an answer was still
   arriving over Tor, the connection to the node got out of step, and every

@@ -37,6 +37,22 @@ Check the download against `SHA256SUMS.txt` from the same release:
     sha256sum unseenet-0.2.0-usb.zip
     ```
 
+### Releases, test releases and development builds
+
+| Kind | Version | Where | For |
+|------|---------|-------|-----|
+| **Release** | `0.2.1` | [Releases](https://github.com/unseenet/unseenet/releases) | Everyday use |
+| **Test release** | `0.2.1a1` (alpha), `b1`, `rc1` | Releases, marked *Pre-release* | Trying what comes next, before it is released |
+| **Development build** | `0.2.1.dev3` | [Development build](https://github.com/unseenet/unseenet/releases/tag/dev) | The newest code: built after every change, replaced each time |
+
+A development build is made and self-tested automatically after every change
+to the code, so you can try a fix the same day. `0.2.1.dev3` is the third
+change after 0.2.0. It may have bugs a release would not. If you report one,
+give the version: the About screen (F1) shows it, or `unseenet --version`.
+
+Your `data` folder works with all of them: copy it into the new `Unseenet`
+folder to keep your vault.
+
 ## Put it on a stick
 
 Unzip, and copy the `Unseenet` folder to the stick. Any stick formatted
