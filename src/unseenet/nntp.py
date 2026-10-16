@@ -41,6 +41,13 @@ async def read_block(reader: asyncio.StreamReader, limit: int = 70000) -> bytes:
     return b"\r\n".join(lines) + b"\r\n"
 
 
+def strip_reader_headers(raw: bytes) -> bytes:
+    """Remove Path/Xref that a node adds for newsreaders (UN-RFC 0005, 3)."""
+    head, _, body = raw.partition(b"\r\n\r\n")
+    lines = [ln for ln in head.split(b"\r\n") if not ln.lower().startswith((b"path:", b"xref:"))]
+    return b"\r\n".join(lines) + b"\r\n\r\n" + body
+
+
 class NNTPError(Exception):
     def __init__(self, code: int, text: str):
         super().__init__(f"{code} {text}")

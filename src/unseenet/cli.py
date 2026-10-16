@@ -70,6 +70,7 @@ def load_node_config(path: Path | None):
                       trusted_owners=node.get("trusted_owners", []),
                       # only configured peers may push, unless the operator says otherwise
                       require_peer_auth=node.get("require_peer_auth", True),
+                      pull_interval=float(node.get("pull_interval", 3600)),
                       operator=data.get("operator", {}),
                       peers=peers)
 
@@ -116,6 +117,9 @@ async def run_node(args) -> None:
 
     feeders = [asyncio.create_task(Feeder(node, peer, socks_port).run_forever())
                for peer in config.peers]
+    from .node.pulling import Puller
+    feeders += [asyncio.create_task(Puller(node, peer, socks_port).run_forever())
+                for peer in config.peers if peer.pull]
 
     async def expire_loop():
         while True:

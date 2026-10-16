@@ -29,6 +29,7 @@ class PeerConfig:
     address: str                # "xyz.onion" or "host:port" (testing)
     groups: str = "*"           # RFC 3977 wildmat over Group IDs
     key: str | None = None      # the peer's node key, "ed25519:..." (UN-RFC 0016)
+    pull: str = "*"             # wildmat of groups to catch up on from this peer (UN-RFC 0017)
     password: str | None = None  # legacy shared secret for AUTHINFO
 
     def public_key(self) -> bytes | None:
@@ -46,6 +47,7 @@ class NodeConfig:
     peers: list[PeerConfig] = field(default_factory=list)
     forward_delay: tuple[float, float] = (0.0, 60.0)  # UN-RFC 0005, section 5.5
     require_peer_auth: bool = False
+    pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
 
@@ -206,7 +208,7 @@ class Node:
             epoch, member_key, _ = parse_key_update(art)
             self.store.add(art, raw)
             if member_key is not None:
-                self.store.set_epoch(art.group, epoch, member_key)
+                self.store.set_epoch(art.group, epoch, member_key, art.message_id)
         elif ctl[0] == "cancel" and len(ctl) == 2:
             target = ctl[1]
             meta = self.store.get_meta(target)
@@ -555,9 +557,24 @@ class Session:
         except ValueError:
             self.send("501 bad date")
             return
+        store, pattern, since = self.node.store, args[0], int(stamp.timestamp())
         self.send("230 list of new articles follows")
-        for msgid, gid in self.node.store.received_since(int(stamp.timestamp())):
-            if wildmat(args[0], gid):
+        listed: set[str] = set()
+        # UN-RFC 0017: first the state of every matching group, whatever its age, so
+        # that a node catching up can accept what follows; then what arrived since.
+        for gid, *_ in store.groups():
+            if wildmat(pattern, gid):
+                for msgid in store.state_ids(gid):
+                    if msgid not in listed:
+                        listed.add(msgid)
+                        self.send(msgid)
+            await self.writer.drain()
+        for msgid, gid in store.received_since(since):
+            if msgid not in listed and wildmat(pattern, gid):
+                listed.add(msgid)
+                self.send(msgid)
+        for msgid, gid in store.removals_since(since):
+            if wildmat(pattern, gid):
                 self.send(msgid)
         self.send(".")
 

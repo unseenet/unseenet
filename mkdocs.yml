@@ -81,4 +81,5 @@ nav:
       - "0014 Group rules": spec/un-rfc-0014.md
       - "0015 Ownership transfer": spec/un-rfc-0015.md
       - "0016 Peer keys": spec/un-rfc-0016.md
+      - "0017 Catch-up by pull": spec/un-rfc-0017.md
   - Development: development.md

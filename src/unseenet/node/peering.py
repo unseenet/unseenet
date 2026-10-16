@@ -16,6 +16,9 @@ class PeerAuthError(Exception):
     pass
 
 
+class WrongNodeError(PeerAuthError):
+    """The node we reached does not have the key we configured for that peer."""
+
 async def authenticate_with_key(client: Client, me: crypto.Identity, expected: bytes) -> None:
     """UN-RFC 0016: prove our node key to a peer, and check that it is the node we meant."""
     if client.capability("UNSEENET-PEERKEY") is None:
@@ -30,7 +33,7 @@ async def authenticate_with_key(client: Client, me: crypto.Identity, expected: b
     except Exception as exc:  # noqa: BLE001
         raise PeerAuthError("malformed challenge") from exc
     if theirs != expected:
-        raise PeerAuthError(f"the node answered with key {parts[0]}, not the configured "
+        raise WrongNodeError(f"the node answered with key {parts[0]}, not the configured "
                             f"{crypto.key_to_text(expected)}")
     if len(nonce) != 32:
         raise PeerAuthError("malformed challenge")

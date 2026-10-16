@@ -141,7 +141,7 @@ NEWNEWS <wildmat> <yyyymmdd> <hhmmss> GMT
 
 and fetches unknown Message-IDs with `ARTICLE <id>`. Pull SHOULD be used
 on (re)connection and MAY be the only mechanism for nodes that are
-online only intermittently.
+online only intermittently. UN-RFC 0017 specifies the details.
 
 ## 5.4 Loop Prevention
 

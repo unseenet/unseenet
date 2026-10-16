@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS tombstones (       -- UN-RFC 0013
     raw        BLOB
 );
 
+CREATE TABLE IF NOT EXISTS epoch_articles (   -- key updates that define an epoch (UN-RFC 0017)
+    group_id   TEXT NOT NULL,
+    epoch      INTEGER NOT NULL,
+    message_id TEXT PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pulled from a peer
+    peer       TEXT PRIMARY KEY,
+    since      INTEGER NOT NULL                 -- the peer's clock, unix seconds
+);
+
 CREATE TABLE IF NOT EXISTS peer_queue (
     peer       TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -71,6 +82,26 @@ class Store:
     def __init__(self, path: str | Path = ":memory:"):
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.executescript(SCHEMA)
+        self.db.commit()
+        self._backfill_epoch_articles()
+
+    def _backfill_epoch_articles(self) -> None:
+        """Stores from before UN-RFC 0017 did not record which articles define epochs."""
+        if self.db.execute("SELECT 1 FROM epoch_articles LIMIT 1").fetchone():
+            return
+        if not self.db.execute("SELECT 1 FROM epochs LIMIT 1").fetchone():
+            return
+        from .groups import parse_key_update
+        for msgid, gid, raw in list(self.db.execute(
+                "SELECT message_id, group_id, raw FROM articles WHERE instr(raw, ?) > 0",
+                (b"Control: key-update",))):
+            try:
+                epoch, member_key, _ = parse_key_update(Article.from_bytes(raw))
+            except Exception:  # noqa: BLE001
+                continue
+            if member_key is not None:
+                self.db.execute("INSERT OR IGNORE INTO epoch_articles VALUES (?, ?, ?)",
+                                (gid, epoch, msgid))
         self.db.commit()
 
     # --- history ---
@@ -136,9 +167,13 @@ class Store:
         deleted = 0
         for group_id, manifest in list(self.db.execute("SELECT group_id, manifest FROM groups")):
             days = min(default_days, json.loads(manifest).get("retention_days", default_days))
+            # the group's state - current manifest, live key updates - never expires
             cur = self.db.execute(
                 "DELETE FROM articles WHERE group_id=? AND date < ? AND message_id NOT IN "
-                "(SELECT manifest_id FROM groups)", (group_id, now - days * 86400))
+                "(SELECT manifest_id FROM groups) AND message_id NOT IN "
+                "(SELECT message_id FROM epoch_articles WHERE group_id=? AND epoch >= "
+                " (SELECT MAX(epoch) - 1 FROM epoch_articles WHERE group_id=?))",
+                (group_id, now - days * 86400, group_id, group_id))
             deleted += cur.rowcount
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))
         self.db.commit()
@@ -171,9 +206,42 @@ class Store:
                         data.get("title") or data.get("description", "")))
         return out
 
-    def set_epoch(self, group_id: str, epoch: int, member_key: bytes) -> None:
+    def set_epoch(self, group_id: str, epoch: int, member_key: bytes,
+                  message_id: str | None = None) -> None:
         self.db.execute("INSERT OR REPLACE INTO epochs VALUES (?, ?, ?)",
                         (group_id, epoch, crypto.key_to_text(member_key)))
+        if message_id:
+            self.db.execute("INSERT OR IGNORE INTO epoch_articles VALUES (?, ?, ?)",
+                            (group_id, epoch, message_id))
+        self.db.commit()
+
+    def state_ids(self, group_id: str) -> list[str]:
+        """UN-RFC 0017: the articles a node needs before it can accept posts in a
+        group - its current manifest and the key updates of the live epochs."""
+        out = []
+        row = self.db.execute("SELECT manifest_id FROM groups WHERE group_id=? AND serial > 0",
+                              (group_id,)).fetchone()
+        if row and row[0]:
+            out.append(row[0])
+        out += [r[0] for r in self.db.execute(
+            "SELECT e.message_id FROM epoch_articles e JOIN articles a USING (message_id) "
+            "WHERE e.group_id=? AND e.epoch >= (SELECT MAX(epoch) - 1 FROM epoch_articles "
+            "WHERE group_id=?) ORDER BY e.epoch", (group_id, group_id))]
+        return out
+
+    def removals_since(self, since: int) -> list[tuple[str, str]]:
+        """(rmgroup Message-ID, group) for groups their owner removed since ``since``."""
+        return list(self.db.execute(
+            "SELECT message_id, group_id FROM tombstones WHERE reason='owner' AND at >= ? "
+            "AND message_id IS NOT NULL ORDER BY at", (since,)))
+
+    # --- pull state (UN-RFC 0017) ---
+    def pulled_since(self, peer: str) -> int | None:
+        row = self.db.execute("SELECT since FROM pull_state WHERE peer=?", (peer,)).fetchone()
+        return row[0] if row else None
+
+    def set_pulled(self, peer: str, since: int) -> None:
+        self.db.execute("INSERT OR REPLACE INTO pull_state VALUES (?, ?)", (peer, since))
         self.db.commit()
 
     def epochs(self, group_id: str) -> dict[int, bytes]:
@@ -201,6 +269,7 @@ class Store:
         cur = self.db.execute("DELETE FROM articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM groups WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM epochs WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM epoch_articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM cancels WHERE group_id=?", (group_id,))
         self.db.commit()
         return cur.rowcount

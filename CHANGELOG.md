@@ -8,13 +8,24 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Protocol
+- Draft UN-RFC 0017 (catching up by pull, and group state).
 - Draft UN-RFC 0015 (transferring group ownership) and 0016 (peer
   authentication with node keys).
 - Draft UN-RFC 0009 (inbox groups and local groups), 0011 (node
   information and operator contact) and 0012 (retention, archive nodes
   and history).
 
+### Fixed
+- Key updates of closed groups no longer expire with the group's
+  retention; after they did, a new node rejected every post in the group.
+
 ### Added
+- Catching up by pull (UN-RFC 0017): nodes pull from each peer at start
+  and every hour (`pull`, `pull_interval`), so new nodes get the history
+  and nodes that were down get what they missed. Works from any node, so
+  a personal node can carry groups from public nodes.
+- `NEWNEWS` lists each group's state (manifest, live key updates) first,
+  and owner removals.
 - Peering with node keys (UN-RFC 0016): every node has a key (printed at
   start, `unseenet-node --show-key`, in node information); peers are
   configured with `key = "ed25519:..."` instead of a shared password, and

@@ -142,7 +142,45 @@ A peer that cannot be reached, or whose key does not match, is logged as a
 warning and retried every 30 seconds. Queued posts are kept in the
 database, so nothing is lost if a peer is down for a while.
 
-!!! note "Catching up"
-    Today, nodes only *push* new posts. A node that was offline gets what
-    its peers queued for it, but it does not yet *pull* older posts it
-    never saw. Pull-based catch-up (`NEWNEWS`) is planned.
+## Catching up
+
+Pushing delivers new posts as they arrive. To fill the gaps, a node also
+**pulls** from its peers ([UN-RFC 0017](../spec/un-rfc-0017.md)): when
+it starts, and every hour, it asks each peer which posts it has received
+since last time and fetches the ones it has not seen. The first time, it
+asks for everything within its own retention, so a **new node gets the
+history** of the groups it carries, and a node that was down gets what
+it missed.
+
+Each group's *state* - its manifest, and the keys of closed groups - is
+always sent first and never expires, so a new node can check the posts
+that follow, also in closed groups.
+
+Choose what to pull per peer:
+
+```toml
+[[peer]]
+name = "bob"
+address = "bbbb...bbbb.onion:119"
+key = "ed25519:..."
+pull = "*"            # the default; "" pulls nothing, "dk.*" only dk.*
+```
+
+Pulling only reads, like any client, so it also works from a node that
+does not list you as a peer. A small personal node can carry groups
+from public nodes this way without asking anyone. To get your own
+users' posts out, you still need a peer that lists your node key.
+
+```toml
+[[peer]]                 # read-only: pull from a public node, push nothing
+name = "public"
+address = "cccc...cccc.onion:119"
+key = "ed25519:..."      # optional; checks you reached the right node
+groups = ""
+```
+
+The journal shows each pull that found something:
+
+```text
+unseenet.pulling pulled 42 from bob: 41 accepted, rejected: 1 date
+```
