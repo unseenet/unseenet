@@ -117,14 +117,32 @@ A moderated group's manifest MAY name an inbox in a new field:
 | `submissions` | Group ID | Inbox owned by the group owner or a moderator   |
 
 To submit, a client builds the article for the moderated group exactly
-as it would post it (signed, with postage and Message-ID), and sends it
-as the **body** of an inbox article to `submissions`, with
-`Content-Type: message/unseenet` in the inner headers.
+as it would post it (signed, with the group's postage and a Message-ID),
+and sends it as the **body** of an inbox article with
+`Content-Type: message/unseenet` in the inner headers:
+
+- to `submissions`, if the manifest names one;
+- otherwise to the personal inbox (section 2) of the group's owner **and**
+  of each moderator in the current manifest, so that every moderator
+  sees it without sharing a key. A client MAY skip inboxes it cannot
+  reach, but MUST deliver to at least one.
+
+A moderator's client SHOULD show submissions for the groups its user
+moderates as a queue, and MUST check before offering to approve one
+that the submitted article is valid (UN-RFC 0002), is for a moderated
+group, and that its author is not banned (UN-RFC 0004 section 5.1).
 
 The moderator approves by adding `Approved-By` and `Approval` (UN-RFC
 0004 section 5) and posting the original article to the group. Its
 Message-ID is unchanged, so replies and references made before approval
-remain valid. Rejection needs no message, but a moderator MAY reply.
+remain valid. With several moderators the first approval wins: the
+others' clients see the article in the group (or the node refuses it as
+a duplicate) and treat the submission as handled. Rejection needs no
+message, but a moderator MAY reply to the submitter's `Reply-Inbox`.
+
+A submission is sealed like any private message, so nodes learn only
+that an inbox received something, not what was submitted or by whom
+(section 6).
 
 This replaces the reservation of UN-RFC 0009 for a moderation queue.
 

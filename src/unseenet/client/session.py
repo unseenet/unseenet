@@ -59,6 +59,7 @@ class Message:
     sender_key: str | None = None         # verified sender of a private message
     reply_inbox: str | None = None
     to_key: str | None = None             # a private message you sent: its recipient
+    content_type: str = ""                # private messages: the inner Content-Type
 
     @property
     def author_fp(self) -> str:
@@ -608,6 +609,98 @@ class Session:
             return bool(entry.get("keys"))    # a member: you have the group's key
         return True                          # open, moderated (goes to approval), inbox
 
+    # --- moderation (UN-RFC 0004 section 5, UN-RFC 0009 section 3) ---
+    def moderates(self, group_id: str) -> bool:
+        me = self.identity().key_text
+        data = self.manifest_data(group_id)
+        return bool(self.data["groups"].get(group_id, {}).get("owner")) \
+            or data.get("owner") == me or me in data.get("moderators", [])
+
+    def submission_targets(self, group_id: str) -> list[tuple[str, bytes | None]]:
+        """(inbox, owner key or None) to send a submission to (UN-RFC 0009, 3)."""
+        data = self.manifest_data(group_id)
+        if data.get("submissions"):
+            return [(data["submissions"], None)]
+        keys = [data["owner"]] if data.get("owner") else []
+        keys += [k for k in data.get("moderators", []) if k not in keys]
+        return [(personal_inbox_id(crypto.key_from_text(k)), crypto.key_from_text(k)) for k in keys]
+
+    async def _submit(self, group_id: str, subject: str, build) -> str:
+        bits = await self.required_pow(group_id)
+        loop = asyncio.get_running_loop()
+        art = await loop.run_in_executor(None, lambda: build(bits))
+        raw = art.to_bytes().decode("utf-8")
+        delivered, errors = 0, []
+        for inbox, owner_key in self.submission_targets(group_id):
+            try:
+                await self.send_private(inbox, f"Submission to {short_group_id(group_id)}: {subject}",
+                                        raw, owner_key=owner_key, content_type=SUBMISSION_TYPE,
+                                        remember=False)
+                delivered += 1
+            except (SessionError, OSError, ConnectionError) as exc:
+                errors.append(str(exc))
+        if not delivered:
+            raise SessionError("could not reach the moderators: " + "; ".join(errors or ["no inbox"]))
+        entry = self.group_entry(group_id)
+        entry.setdefault("submitted", []).append(art.message_id)
+        del entry["submitted"][:-200]
+        self.data["read"].setdefault(group_id, []).append(art.message_id)
+        self.save()
+        return art.message_id
+
+    def was_submitted(self, group_id: str, message_id: str) -> bool:
+        return message_id in self.group_entry(group_id).get("submitted", [])
+
+    def submissions(self) -> list[tuple["Message", Article]]:
+        """Submissions waiting in your inbox for groups you moderate, oldest first."""
+        done = set(self.data.get("moderation_done", []))
+        out = []
+        for m in self.private_messages():
+            if not m.content_type.startswith(SUBMISSION_TYPE) or m.message_id in done:
+                continue
+            try:
+                raw = m.body.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+                art = Article.from_bytes(raw)
+                validate_structure(art, raw_size=len(raw))
+            except (ArticleError, ValueError, UnicodeError):
+                continue
+            gid = art.group
+            data = self.manifest_data(gid)
+            if data.get("type") != "moderated" or not self.moderates(gid) \
+                    or self.is_banned(gid, art["Author-Key"]):
+                continue
+            if any(x.message_id == art.message_id for x in self.cache.get(gid, {}).values()):
+                continue                    # another moderator approved it already
+            out.append((m, art))
+        return out
+
+    def _moderation_done(self, msg: "Message") -> None:
+        done = self.data.setdefault("moderation_done", [])
+        done.append(msg.message_id)
+        del done[:-500]
+        self.save()
+
+    async def approve_submission(self, msg: "Message", art: Article) -> None:
+        """Approve and post a submitted article; its Message-ID stays the same."""
+        from ..core.groups import approve
+        if not self.moderates(art.group):
+            raise SessionError("you do not moderate this group")
+        approve(art, self.identity())
+        try:
+            await self._post_article(art)
+        except SessionError as exc:
+            if "duplicate" not in str(exc).lower():
+                raise                       # a duplicate: someone else approved it first
+        self._moderation_done(msg)
+
+    async def reject_submission(self, msg: "Message", reason: str = "") -> None:
+        if reason.strip() and (msg.reply_inbox or msg.sender_key):
+            target = self.reply_target(msg)
+            if target:
+                await self.send_private(target, "Not approved: " + msg.subject.split(": ", 1)[-1],
+                                        reason.strip() + "\n", references=[msg.message_id])
+        self._moderation_done(msg)
+
     def is_data_group(self, group_id: str) -> bool:
         """A group for programs, not people (UN-RFC 0008 section 3.1.1)."""
         from ..known_nodes import DATA_GROUPS
@@ -855,7 +948,8 @@ class Session:
 
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
-                           anonymous: bool = False, content_type: str | None = None) -> str:
+                           anonymous: bool = False, content_type: str | None = None,
+                           remember: bool = True) -> str:
         """Send a message to an inbox. Only its owner can read it."""
         if not self.manifest_data(group_id):
             owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
@@ -868,6 +962,8 @@ class Session:
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, content_type=content_type, pow_bits=bits))
         msgid = art.message_id
+        if not remember:
+            return msgid
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
                              # where it falls among received messages: dates are rounded to
@@ -1292,6 +1388,7 @@ class Session:
             msg.readable, msg.error, msg.subject = False, str(err), "(unreadable private message)"
             return
         msg.subject, msg.body = inner.get("Subject", ""), inner.body
+        msg.content_type = inner.get("Content-Type", "")
         msg.reply_inbox = inner.get("Reply-Inbox")
         if sender is None:
             msg.from_name, msg.author_key = "anonymous", ""
@@ -1378,6 +1475,9 @@ class Session:
                 art = new_article(group_id, subject, body, from_name=self.display_name(),
                                   references=references, extra=[cert] if cert else None)
                 return art.finalize(author, bits)
+        gtype = self.manifest_data(group_id).get("type") or entry.get("type")
+        if gtype == "moderated" and not self.moderates(group_id):
+            return await self._submit(group_id, subject, build)
         msgid = (await self._post_with_postage(group_id, build)).message_id
         if cert:
             naming.sent_header(self, group_id)
@@ -1385,6 +1485,9 @@ class Session:
         marks.append(msgid)
         self.save()
         return msgid
+
+
+SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
 
 
 def default_vault_path() -> Path:

@@ -462,6 +462,18 @@ As a group's owner you choose who else has a role, in the command palette
 
 *About group* (++question-mark++) shows everyone the moderators and posters.
 
+### Moderated groups
+
+In a **moderated** group, a post by someone who is not a moderator is
+not posted straight away. The client sends it, sealed, to the owner and
+every moderator ([UN-RFC 0009](spec/un-rfc-0009.md) section 3), and tells
+you it is waiting for approval.
+
+Moderators open **Moderation queue** in the command palette. *Approve*
+posts it unchanged - the author's signature and Message-ID stay - and
+*Reject* drops it. The first moderator to act decides; the others' queues
+forget it.
+
 ## Sending takes a moment
 
 Every post carries a small proof-of-work, about a second of CPU time. It
