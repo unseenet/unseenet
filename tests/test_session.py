@@ -325,3 +325,58 @@ def test_manifest_from_a_node_must_be_signed_by_the_owner(tmp_path):
     assert entry["manifest"]["serial"] == 3 and entry["title"] == "Nodes"
     feed(manifest_article(owner, gid, dict(entry["manifest"], serial=2, title="Old"), pow_bits=0))
     assert entry["manifest"]["title"] == "Nodes"
+
+
+async def test_withdraw_posts_and_honour_cancels(tmp_path, monkeypatch):
+    """UN-RFC 0004 section 7: authors withdraw their own posts, the owner any
+    post; a reader checks every cancel itself and remembers early ones."""
+    from unseenet.core import crypto
+    from unseenet.core.article import new_article
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    owner, author, reader = person("owner"), person("author"), person("reader")
+    gid = await owner.create_group("dk.snak", "open", min_pow=8)
+    for p in (author, reader):
+        p.subscribe(gid)
+    await author.post(gid, "Ups", "Forkert gruppe\n")
+    await author.post(gid, "Bliver", "Den her bliver\n")
+    await owner.post(gid, "Ejer", "Fra ejeren\n")
+    msgs = {m.subject: m for m in await author.fetch_group(gid)}
+
+    # a stranger's cancel is refused by the node; a node that serves one anyway
+    # (here: written straight into the store) is ignored by the reader
+    mallory = crypto.Identity.generate()
+    forged = new_article(gid, None, "", extra=[("Control", f"cancel {msgs['Bliver'].message_id}")])
+    node.store.add(forged.finalize(mallory, 8), forged.to_bytes())
+    assert not author.may_cancel(msgs["Ejer"])
+    with pytest.raises(sess.SessionError):
+        await author.cancel(msgs["Ejer"])
+
+    await author.cancel(msgs["Ups"])                   # own post
+    assert all(m.subject != "Ups" for m in author.cache[gid].values())
+    owner_msgs = {m.subject: m for m in await owner.fetch_group(gid)}
+    assert owner.may_cancel(owner_msgs["Bliver"]) is True   # the owner may withdraw any post
+
+    subjects = {m.subject for m in await reader.fetch_group(gid)}
+    assert subjects == {"Bliver", "Ejer"}              # Ups withdrawn, forged cancel ignored
+
+    # a cancel seen before its target: the target is not shown when it arrives
+    early = reader.group_entry(gid).setdefault("cancels", {})
+    from datetime import datetime, timezone
+    from email.utils import format_datetime
+    early[msgs["Ejer"].message_id] = {"by": owner.identity().key_text,
+                                      "date": format_datetime(datetime.now(timezone.utc))}
+    reader.cache[gid].clear(); reader._raw[gid].clear(); reader._high[gid] = 0
+    subjects = {m.subject for m in await reader.fetch_group(gid)}
+    assert subjects == {"Bliver"}
+    for p in (owner, author, reader):
+        await p.close()
+    server.close()

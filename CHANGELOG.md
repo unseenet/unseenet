@@ -8,6 +8,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Withdraw a post (UN-RFC 0004 section 7): **Withdraw post** in the
+  command palette or Shift+D in the client, and `unseenet withdraw` on
+  the command line, for your own posts and any post in a group you own or
+  moderate. The client asks first and says that withdrawing is best effort.
+  It also honours cancels from others: it checks each one itself, drops the
+  post from its cache, and remembers cancels for posts it has not seen yet.
+  `unseenet read` shows each post's Message-ID. (#36)
 - Screenshots of the client in docs/client.md, made by
   `tools/docs_screenshots.py` from a local node with made-up content. (#57)
 - Names in the client (UN-RFC 0018 section 8, UN-RFC 0019 sections 5.2, 6.1

@@ -125,3 +125,22 @@ def test_parser_knows_the_new_options(monkeypatch):
 def test_fingerprint_matches_group_suffix():
     ident = crypto.Identity.generate()
     assert personal_inbox_id(ident.public_key).endswith("@" + crypto.fingerprint(ident.public_key))
+
+
+async def test_withdraw_own_post(setup, capsys):
+    """UN-RFC 0004 section 7 from the command line: read shows the Message-ID,
+    withdraw sends the cancel, the node deletes the post."""
+    node, app = setup
+    me = app("me")
+    await cli.c_id_new(me, Namespace(name="andreas", display=None))
+    gid = await create(me, "dk.test")
+    await cli.c_post(me, Namespace(group=gid, subject="Ups", body="Forkert\n", identity=None))
+    capsys.readouterr()
+    await cli.c_read(me, Namespace(group=gid, identity=None))
+    out = capsys.readouterr().out
+    mid = next(line.split("Message-ID: ")[1].strip() for line in out.splitlines()
+               if "Message-ID:" in line)
+    assert node.store.get(mid) is not None
+    await cli.c_withdraw(me, Namespace(group=gid, message_id=mid, yes=True, identity=None))
+    assert node.store.get(mid) is None
+    assert "Withdrawn" in capsys.readouterr().out

@@ -109,6 +109,7 @@ else is in the command palette, ++ctrl+p++:
 | ++q++ | Quit |
 | ++s++ | Edit your signature |
 | ++a++ | Add the selected post's author as a contact |
+| ++shift+d++ | Withdraw the selected post (yours, or in a group you own or moderate) |
 | ++v++ | Switch between chat and threads for the current group |
 | ++question-mark++ | About this group: its rules, type, owner and node |
 | ++f1++ | About Unseenet, with links to the source and these pages |
@@ -215,6 +216,25 @@ show.
 If you have lost the identity that owns a group, the group cannot be removed
 from the network. A node operator can still
 [drop it from their own node](node/operations.md#dropping-a-group).
+
+## Withdrawing a post
+
+Select a post and choose **Withdraw post** in the command palette
+(++ctrl+p++), or press ++shift+d++. You can withdraw your own posts, and
+any post in a group you own or moderate. The client sends a signed
+*cancel* ([UN-RFC 0004](spec/un-rfc-0004.md) section 7): nodes delete the
+post and stop passing it on, and other clients stop showing it.
+
+It is **withdrawn, not deleted**. People who have already read it may
+have kept a copy, and nodes or programs that ignore the protocol can keep
+it too. Think before you post.
+
+Your client checks every cancel it receives itself: only the post's
+author, or the group's owner or a moderator, can withdraw a post, so a
+node cannot hide other people's posts from you. A cancel that arrives
+before the post it withdraws is remembered, so the post is not shown when
+it turns up later. In a closed group a cancel cannot carry a reason, since
+the nodes could read it.
 
 ## Signature
 
@@ -431,7 +451,8 @@ unseenet --help
 | `group-remove GROUP_ID ... [--reason TEXT] [--yes]` | Remove groups you own from the whole network ([final](#leaving-and-removing-groups)) |
 | `invite GROUP_ID KEY` | Give a key access to a closed group you own |
 | `post GROUP_ID -s SUBJECT [--body TEXT]` | Post; the body is read from stdin without `--body` |
-| `read GROUP_ID` | Read a group |
+| `read GROUP_ID` | Read a group, with each post's Message-ID |
+| `withdraw GROUP_ID MESSAGE_ID [--yes]` | [Withdraw a post](#withdrawing-a-post): your own, or any in a group you own or moderate |
 | `bridges [MODE]` | Show or set [Tor bridges](tor.md) |
 
 Global options go before the command: `--vault FILE` picks the vault and

@@ -373,6 +373,23 @@ async def c_group_remove(app: App, args) -> None:
         print(f"Removed {gid}")
 
 
+async def c_withdraw(app: App, args) -> None:
+    """UN-RFC 0004 section 7: withdraw a post (your own, or in a group you own or moderate)."""
+    ident = app.identity(args.identity)
+    mid = args.message_id if args.message_id.startswith("<") else f"<{args.message_id}>"
+    print("Withdrawing is best effort: nodes delete the post and clients stop showing")
+    print("it, but people who read it may have kept a copy.")
+    if not args.yes:
+        if not sys.stdin.isatty():
+            sys.exit("Not withdrawn. Add --yes to confirm when not running interactively.")
+        if input(f"Withdraw {mid} from {args.group}? [y/N] ").strip().lower() not in ("y", "yes"):
+            sys.exit("Not withdrawn.")
+    art = new_article(args.group, None, "", extra=[("Control", f"cancel {mid}")])
+    art.finalize(ident, DEFAULT_POW)
+    await app.post(art)
+    print(f"Withdrawn {mid}")
+
+
 async def c_group_create(app: App, args) -> None:
     owner = app.identity(args.identity)
     art = make_manifest(owner, args.name, args.type, title=args.title or "",
@@ -463,7 +480,8 @@ async def c_read(app: App, args) -> None:
                 frm, subj, body = inner["From"], inner["Subject"], inner.body
             else:
                 frm, subj, body = art["From"], art["Subject"], art.body
-            print(f"\n[{n}] {subj}\n    From: {frm} ({short}) {author[:20]}...\n    Date: {art['Date']}\n")
+            print(f"\n[{n}] {subj}\n    From: {frm} ({short}) {author[:20]}...\n    Date: {art['Date']}"
+                  f"\n    Message-ID: {art.message_id}\n")
             print("    " + body.rstrip("\n").replace("\n", "\n    "))
     app.vault.save()
 
@@ -484,6 +502,7 @@ async def c_bridges(app: App, args) -> None:
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
+    "withdraw": c_withdraw,
     "post": c_post, "read": c_read,
     "bridges": c_bridges,
 }
@@ -516,6 +535,10 @@ def client_main(argv=None) -> None:
     s = sub.add_parser("group-remove", help="remove groups you own from the whole network (final)")
     s.add_argument("group", nargs="+", help="full group ID, name@fingerprint")
     s.add_argument("--reason", help="short reason, shown to nodes and readers")
+    s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    s = sub.add_parser("withdraw", help="withdraw a post: your own, or in a group you own or moderate")
+    s.add_argument("group", help="full group ID, name@fingerprint")
+    s.add_argument("message_id", help="the post's Message-ID")
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("invite", help="give a key access to a closed group you own")
     s.add_argument("group")
