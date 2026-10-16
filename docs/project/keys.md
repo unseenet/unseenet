@@ -12,6 +12,7 @@ project of their own.
 |-----|------|-----|
 | **Project key** `ed25519:det5dxev...` (fingerprint `ph5fc5hop5232qsz`) | Only in the maintainer's encrypted owner vault, offline backups | Change the project's groups: who may post, the registrar's keys, the claim inbox |
 | **GitHub poster** | Repository secret `UNSEENET_ANNOUNCE_SEED`, and the owner vault | Post in `unseenet.announce`, `unseenet.nodes`, `unseenet.hierarchies`, `unseenet.checkgroups` |
+| **Release key** `ed25519:clbv6765...` | Repository secret `UNSEENET_RELEASE_KEY` only | Sign the checksums of development builds, which sticks accept only on the development channel |
 | **Registrar keys**, one per replica | On each replica's machine, in its vault | Sign name certificates in `unseenet.names` |
 | **Registrar inbox key** | The owner vault and every replica's vault | Open claims; nothing else |
 
@@ -44,6 +45,8 @@ the command line.
 |--------|------|
 | `change_passphrase.py` | Encrypts the owner vault again under a new passphrase, checks that it opens, and keeps the old file until you delete it. |
 | `create_groups.py` | Lists every group the project owns, with its type, posters, view and rules. Creates those that do not exist yet, and gives existing ones a new manifest when their view, title, description, rules or `min_pow` differ from the list. |
+| `sign_release.py vX.Y.Z` | Signs a release's `SHA256SUMS.txt` with the project key and uploads `SHA256SUMS.txt.sig`, so [sticks](../bootable.md#updating) will update to it. Run it when the release's workflows are done. |
+| `new_release_key.py` | Makes a new release key for development builds and puts it straight into the repository secret (never in a file); prints the public key to pin in `src/unseenet/update.py`. |
 | `setup_registrar.py` | Creates the registrar's inbox key and claim inbox, and sets which replicas' keys may issue names (`--add`, `--remove`). |
 
 `create_groups.py` and `setup_registrar.py` take `--dry-run`, which signs

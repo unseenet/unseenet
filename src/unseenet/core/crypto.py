@@ -22,6 +22,8 @@ PURPOSE_APPROVAL = "UNSEENET-APPROVAL-1"
 PURPOSE_INBOX_SENDER = "UNSEENET-INBOX-SENDER-1"
 PURPOSE_PEER_AUTH = "UNSEENET-PEER-AUTH-1"       # UN-RFC 0016
 PURPOSE_NODE_CLAIM = "UNSEENET-NODE-CLAIM-1"     # UN-RFC 0010: "I run this node"
+# Not part of the network protocol: a release's SHA256SUMS.txt (unseenet.update)
+PURPOSE_RELEASE = "UNSEENET-RELEASE-1"
 
 
 class CryptoError(ValueError):

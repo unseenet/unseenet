@@ -8,6 +8,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- **Update** in the bootable stick's menu: fetch the newest release over
+  Tor (or a development build, or an update zip on the stick) and replace
+  the system files, keeping `data/`. Releases get an
+  `unseenet-<version>-x86_64-update.zip` and a signed `SHA256SUMS.txt.sig`:
+  releases signed with the project key (`tools/project/sign_release.py`),
+  development builds with a separate release key in CI. Also
+  `python -m unseenet.update`. (#68)
 - Withdraw a post (UN-RFC 0004 section 7): **Withdraw post** in the
   command palette or Shift+D in the client, and `unseenet withdraw` on
   the command line, for your own posts and any post in a group you own or

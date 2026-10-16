@@ -34,7 +34,7 @@ FIRMWARE="linux-firmware-intel linux-firmware-ath9k_htc linux-firmware-ath10k
 
 # What the running system has (installed at boot from the image's own repository).
 PACKAGES="alpine-base busybox-openrc busybox-mdev-openrc openrc kbd-bkeymaps
-  python3 tor iwd dbus dhcpcd util-linux-misc blkid dosfstools ncurses-terminfo-base"
+  python3 ca-certificates-bundle tor iwd dbus dhcpcd util-linux-misc blkid dosfstools ncurses-terminfo-base"
 
 log "tools"
 apk add --no-cache -q --no-scripts abuild apk-tools mkinitfs squashfs-tools syslinux grub-efi grub \
@@ -130,6 +130,9 @@ mkdir -p "$TREE/boot/syslinux" "$TREE/boot/grub" "$TREE/EFI/BOOT"
 for f in ldlinux.c32 libcom32.c32 libutil.c32 menu.c32; do
     cp "/usr/share/syslinux/$f" "$TREE/boot/syslinux/"
 done
+# ldlinux.sys is written to fixed sectors and must match the .c32 files: an
+# update keeps the stick's own .c32 files when this differs (unseenet.update).
+apk list -I syslinux 2>/dev/null | head -1 | cut -d' ' -f1 > "$TREE/boot/syslinux/SYSLINUX-VERSION"
 sed -e "s|@CMDLINE@|$CMDLINE|g" -e "s|@VERSION@|$VERSION|g" \
     "$HERE/syslinux.cfg" > "$TREE/boot/syslinux/syslinux.cfg"
 sed -e "s|@CMDLINE@|$CMDLINE|g" -e "s|@VERSION@|$VERSION|g" \
@@ -152,12 +155,26 @@ else
     log "no portable builds given: boot only"
     touch "$TREE/UNSEENET-PORTABLE"
 fi
-mkdir -p "$TREE/data"
 cp "$HERE/README-boot.txt" "$TREE/BOOT-README.txt"
+echo "$VERSION" > "$TREE/UNSEENET-VERSION"
+# What this version puts on the stick: the next update removes what it no longer has.
+( cd "$TREE" && { find . -type f ! -path './data/*' | sed 's#^\./##'; echo UNSEENET-FILES; } | sort ) > $W/files
+mv $W/files "$TREE/UNSEENET-FILES"
+
+log "update zip (everything on the partition except data/)"
+# A stick updates itself from this (unseenet.update): the system files are
+# replaced and data/ is never touched. Made before data/ exists in the tree.
+UPD="$OUT/unseenet-$VERSION-$ARCH-update.zip"
+rm -f "$UPD"
+( cd "$TREE" && zip -q -r -X "$UPD" . -x 'data/*' 'data' )
+mkdir -p "$TREE/data"
 
 log "FAT32 partition and disk image"
 USED=$(du -sm "$TREE" | cut -f1)
-SIZE=$(( USED + USED / 10 + 192 ))      # MB: what is there, plus room for data/
+# MB: what is there, room for data/, and room for an update to write a new
+# modloop while the old one is still in use (unseenet.update)
+MODLOOP=$(du -sm "$TREE/boot/modloop-lts" | cut -f1)
+SIZE=$(( USED + USED / 10 + MODLOOP + 192 ))
 FAT=$W/fat.img
 truncate -s "${SIZE}M" "$FAT"
 mkfs.vfat -F 32 -n "$LABEL" "$FAT" >/dev/null
