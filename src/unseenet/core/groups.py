@@ -76,6 +76,7 @@ class Manifest:
     rules: str = ""                      # UN-RFC 0014
     view: str = "threads"                # UN-RFC 0008
     low_latency: bool = False            # UN-RFC 0008
+    banned: list[bytes] = field(default_factory=list)   # UN-RFC 0004, 5.1
     message_id: str = ""
     raw: dict = field(default_factory=dict)
 
@@ -99,6 +100,7 @@ class Manifest:
                 local=data.get("local") is True, submissions=data.get("submissions"),
                 rules=str(data.get("rules", "")), view=data.get("view", "threads"),
                 low_latency=data.get("low_latency") is True,
+                banned=[_banned_key(b) for b in data.get("banned", [])],
                 message_id=art.message_id, raw=data,
             )
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
@@ -349,9 +351,24 @@ def open_inbox_article(art: Article, owner: crypto.Identity) -> tuple[Article, b
 
 # --- posting rules for ordinary articles (section 5) -------------------------
 
+MAX_BAN_REASON = 200
+
+
+def _banned_key(entry) -> bytes:
+    """One entry of a manifest's ``banned`` list (UN-RFC 0004, 5.1)."""
+    if not isinstance(entry, dict):
+        raise ValueError("a banned entry must be an object")
+    reason = entry.get("reason", "")
+    if not isinstance(reason, str) or len(reason) > MAX_BAN_REASON:
+        raise ValueError(f"a ban reason is at most {MAX_BAN_REASON} characters")
+    return crypto.key_from_text(entry["key"])
+
+
 def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes]) -> None:
     """Raise ArticleError('permission') unless the article may be posted."""
     pk = art.author_key
+    if manifest.type != "inbox" and pk in manifest.banned:
+        raise ArticleError("permission", "banned from this group")
     if manifest.type == "inbox":
         # Anyone may write; nodes can only check the form (UN-RFC 0009, 2.4).
         if art.get("Encrypted", "").strip() != INBOX_SCHEME:

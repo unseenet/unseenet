@@ -559,23 +559,22 @@ class ConfirmDialog(Dialog):
         self.dismiss(True)
 
 
-class IgnoredDialog(Dialog):
-    """The people you ignore (#72): pick one to see them again."""
+class KeyListDialog(Dialog):
+    """A list of people (key, label); pick one for an action."""
 
-    def __init__(self, people: list[tuple[str, str]]):
+    def __init__(self, title: str, hint: str, people: list[tuple[str, str]], action: str):
         super().__init__()
-        self.people = people
+        self.title_, self.hint, self.people, self.action = title, hint, people, action
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
-            yield Label("People you ignore", classes="title")
-            yield Label("Their posts and messages are hidden from you, everywhere. Nobody "
-                        "else knows: the list stays in your vault.", classes="hint")
+            yield Label(self.title_, classes="title", markup=False)
+            yield Label(self.hint, classes="hint", markup=False)
             yield Select([(f"{label}  ({key[:20]}...)", key) for key, label in self.people],
                          prompt="Choose someone", id="who")
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
-                yield Button("Show again", variant="primary", id="ok")
+                yield Button(self.action, variant="primary", id="ok")
 
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
@@ -647,6 +646,12 @@ class GroupInfoDialog(Dialog):
                  f"Version:   {d.get('serial', 1)}"]
         if self.node:
             lines.append(f"Read from: {self.node}")
+        bans = [b for b in d.get("banned", []) if isinstance(b, dict)]
+        if bans:                                  # public on purpose (UN-RFC 0004, 5.1)
+            lines.append(f"Banned:    {len(bans)} "
+                         + ("person" if len(bans) == 1 else "people") + " - "
+                         + "; ".join(f"{b.get('key', '')[8:16]}...: {b.get('reason') or 'no reason given'}"
+                                     for b in bans[:5]) + (" ..." if len(bans) > 5 else ""))
         if d.get("description"):
             lines += ["", d["description"]]
         with Vertical(classes="dialog"):
@@ -2243,6 +2248,10 @@ class UnseenetApp(App):
              "you know", self.action_ignore),
             ("People you ignore", "See who you ignore, and show someone again",
              self.action_ignored),
+            ("Ban from group", "Owner: the selected post's author may no longer post in this "
+             "group", self.action_ban),
+            ("Banned from group", "Owner: see who is banned and why, and lift a ban",
+             self.action_banned),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
@@ -2333,12 +2342,69 @@ class UnseenetApp(App):
         self._render_threads()
 
     @work(group="dialog", exit_on_error=False)
+    async def action_ban(self) -> None:
+        """Owner: ban the selected post's author from the group (UN-RFC 0004, 5.1)."""
+        m, s, gid = self.current_message, self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only a group's owner can ban people from it. You can ignore them "
+                        "(Ctrl+P: Ignore this person).", severity="warning")
+            return
+        if m is None or m.private or not m.author_key or m.author_key == s.identity().key_text:
+            self.notify("Select a post by the person you want to ban", severity="warning")
+            return
+        who = s.identity_label(m.author_key, m.from_name)
+        reason = await self.push_screen_wait(InputDialog(
+            f"Ban {who} from {s.group_label(gid)}?",
+            "Nodes refuse their new posts here, and clients hide the old ones. The ban and "
+            "its reason are public: anyone can read them in the group's settings. Give a short "
+            "reason:", "e.g. threats against other members"))
+        if not reason:
+            return
+        self.set_status("Banning ...")
+        try:
+            await s.ban(gid, m.author_key, reason)
+        except (SessionError, OSError, ConnectionError, crypto.CryptoError) as exc:
+            self.set_status("")
+            self.notify(f"Not banned: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.current_message = None
+        self.notify(f"{who} is banned from {s.group_label(gid)}")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_banned(self) -> None:
+        s, gid = self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only a group's owner can see and lift its bans here; "
+                        "? shows the group's settings", severity="warning")
+            return
+        people = [(k, (s.identity_label(k) + (f" - {r}" if r else ""))) for k, r in s.banned(gid)]
+        if not people:
+            self.notify("Nobody is banned from this group")
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Banned from {s.group_label(gid)}", "Lifting a ban lets them post here again.",
+            people, "Lift ban"))
+        if not key:
+            return
+        try:
+            await s.unban(gid, key)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not lifted: {exc}", severity="error")
+            return
+        self.notify("Ban lifted")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
     async def action_ignored(self) -> None:
         people = self.session.ignored()
         if not people:
             self.notify("You do not ignore anyone")
             return
-        key = await self.push_screen_wait(IgnoredDialog(people))
+        key = await self.push_screen_wait(KeyListDialog(
+            "People you ignore", "Their posts and messages are hidden from you, everywhere. "
+            "Nobody else knows: the list stays in your vault.", people, "Show again"))
         if not key:
             return
         self.session.unignore(key)

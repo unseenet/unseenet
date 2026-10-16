@@ -629,11 +629,13 @@ class Session:
         data = self.manifest_data(group_id)
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
-        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow", "retention_days"}
+        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
+                   "retention_days", "banned"}
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
-            if value in (None, "", False) and key in ("title", "description", "rules", "low_latency"):
+            if value in (None, "", False, []) and key in ("title", "description", "rules",
+                                                         "low_latency", "banned"):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -647,6 +649,35 @@ class Session:
         entry.update({"manifest": data, "title": data.get("title", "")})
         self.save()
         return data
+
+    # --- bans (UN-RFC 0004, section 5.1) ---
+    def banned(self, group_id: str) -> list[tuple[str, str]]:
+        """(key, reason) of the keys the group's current manifest bans."""
+        return [(b.get("key", ""), b.get("reason", ""))
+                for b in self.manifest_data(group_id).get("banned", []) if isinstance(b, dict)]
+
+    def is_banned(self, group_id: str, key_text: str | None) -> bool:
+        return bool(key_text) and any(k == key_text for k, _ in self.banned(group_id))
+
+    async def ban(self, group_id: str, key_text: str, reason: str = "") -> None:
+        """Owner: ban a key from posting in the group (a new manifest)."""
+        crypto.key_from_text(key_text)
+        if key_text == self.identity().key_text:
+            raise SessionError("you cannot ban yourself")
+        if len(reason) > 200:
+            raise SessionError("a reason is at most 200 characters")
+        current = [b for b in self.manifest_data(group_id).get("banned", [])
+                   if isinstance(b, dict) and b.get("key") != key_text]
+        entry = {"key": key_text,
+                 "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        if reason.strip():
+            entry["reason"] = reason.strip()
+        await self.update_group(group_id, banned=current + [entry])
+
+    async def unban(self, group_id: str, key_text: str) -> None:
+        current = [b for b in self.manifest_data(group_id).get("banned", [])
+                   if isinstance(b, dict) and b.get("key") != key_text]
+        await self.update_group(group_id, banned=current)
 
     def rules_unseen(self, group_id: str) -> bool:
         """True if the group has rules the reader has not seen in this version."""
@@ -860,10 +891,12 @@ class Session:
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown)."""
-        if not self.data["ignored"]:
+        banned = {gid: {k for k, _ in self.banned(gid)} for gid in {m.group for m in msgs}}
+        if not self.data["ignored"] and not any(banned.values()):
             return list(msgs)
-        return [m for m in msgs if not self.is_ignored(m.sender_key or m.author_key)
-                or m.to_key is not None]
+        return [m for m in msgs if m.to_key is not None
+                or not (self.is_ignored(m.sender_key or m.author_key)
+                        or (not m.private and m.author_key in banned.get(m.group, ())))]
 
     def contacts(self) -> list[tuple[str, str]]:
         """(key, name) sorted by name."""

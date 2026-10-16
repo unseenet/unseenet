@@ -217,6 +217,20 @@ If you have lost the identity that owns a group, the group cannot be removed
 from the network. A node operator can still
 [drop it from their own node](node/operations.md#dropping-a-group).
 
+## Banning someone from your group
+
+If you own a group, select a post by the person and choose **Ban from
+group** in the command palette, with a short reason. Nodes then refuse
+their new posts in the group, and clients hide their old ones
+([UN-RFC 0004](spec/un-rfc-0004.md) section 5.1). **Banned from group**
+lists the bans and lifts one.
+
+A ban is part of the group's signed settings, so it is **public**: anyone
+can see in the group's settings (++question-mark++) that someone is banned
+and why. It stops an identity, not a person - keys are free, so someone
+determined can come back with a new one. Raise the group's postage to make
+that slower, and withdraw posts you do not want (see below).
+
 ## Ignoring someone
 
 Select a post by the person and choose **Ignore this person** in the
