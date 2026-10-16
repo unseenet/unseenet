@@ -35,6 +35,8 @@ from ..nntp import NNTPError
 from ..core import crypto
 from ..core.groups import INBOX_NAME, personal_inbox_id
 from . import session as _session_module
+from . import naming
+from .. import names as nm
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
                       default_vault_path, split_signature)
 
@@ -323,7 +325,7 @@ class ComposeDialog(Dialog):
         with Vertical(classes="dialog compose"):
             kind = "Reply in" if self.is_reply else "New post in"
             lock = "  ∩ encrypted" if self.group.type == "closed" else ""
-            yield Label(self.heading or f"{kind} {self.group.short}{lock}", classes="title",
+            yield Label(self.heading or f"{kind} {self.app.session.group_label(self.group.group_id)}{lock}", classes="title",
                         markup=False)
             yield Input(value=self.subject, placeholder="Subject", id="subject")
             text = self.quote + (("\n" if self.quote else "\n\n") + SIG_SEPARATOR + self.signature
@@ -554,6 +556,39 @@ class ConfirmDialog(Dialog):
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
         self.dismiss(True)
+
+
+class NamesDialog(Dialog):
+    """Your names (UN-RFC 0019): those you hold, those you asked for, and a field to claim one."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.text = text
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Your names", classes="title")
+            yield Label("A name lets others see @yourname instead of Name~abcd. A name "
+                        "without a dot (lorensen) is first come, first served; a domain "
+                        "(lorensen.dk) needs a DNS record that shows it is yours.", classes="hint")
+            yield Static(self.text, id="names-details", classes="details", markup=False)
+            yield Input(placeholder="lorensen  or  lorensen.dk", id="value")
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button("Renew", id="renew")
+                yield Button("Claim", variant="primary", id="claim")
+
+    def on_mount(self) -> None:
+        self.query_one("#value", Input).focus()
+
+    @on(Input.Submitted)
+    @on(Button.Pressed, "#claim")
+    @on(Button.Pressed, "#renew")
+    def _act(self, event) -> None:
+        name = self.query_one("#value", Input).value.strip().lower().lstrip("@")
+        action = "renew" if getattr(event, "button", None) is not None and event.button.id == "renew" else "claim"
+        if name:
+            self.dismiss((action, name))
 
 
 class GroupInfoDialog(Dialog):
@@ -945,6 +980,7 @@ class BrowseDialog(Dialog):
     def __init__(self, groups: list[GroupInfo]):
         super().__init__()
         self.groups = groups
+        self.known = {g.group_id for g in groups}
         self.current: GroupInfo | None = None
         self.peeked: dict[str, tuple[dict, int] | str] = {}   # group -> (manifest, posts) or error
 
@@ -983,7 +1019,7 @@ class BrowseDialog(Dialog):
         where = ""
         if len(self.app.session.nodes) > 1 and g.nodes:
             where = f"   @ {node_label(g.nodes[0])}" + (f" +{len(g.nodes) - 1}" if len(g.nodes) > 1 else "")
-        return Text(f"{mark} {icons} {g.short}   {g.description}{where}")
+        return Text(f"{mark} {icons} {self.app.session.group_label(g.group_id, self.known)}   {g.description}{where}")
 
     def on_mount(self) -> None:
         self.query_one("#browse-tree", Tree).focus()
@@ -1051,6 +1087,9 @@ class BrowseDialog(Dialog):
         elif isinstance(peek, str):
             lines.append(f"({peek})")
         lines.append(f"Owner:  {self._owner(g, data)}")
+        warning = naming.group_warning(self.app.session, g.group_id, self.known)
+        if warning:
+            lines.append(("Name:   " if warning.startswith("Endorsed") else "! ") + warning)
         if len(g.nodes) > 1 or len(self.app.session.nodes) > 1:
             lines.append("On:     " + ", ".join(node_label(n) for n in g.nodes))
         if data.get("type") == "closed":
@@ -1089,7 +1128,7 @@ class BrowseDialog(Dialog):
         if not isinstance(g, GroupInfo):
             return
         if not g.subscribed and self._not_mine_inbox(g):
-            self.app.notify(f"{g.short} is an inbox: anyone can write to it, only its owner "
+            self.app.notify(f"{self.app.session.group_label(g.group_id, self.known)} is an inbox: anyone can write to it, only its owner "
                             "can read it. To write to a node's operator: Ctrl+P, Your nodes, "
                             "Details, Write to operator.", severity="warning", timeout=10)
             return
@@ -1121,6 +1160,7 @@ class UnseenetApp(App):
         Binding("m", "message", "Message"),
         Binding("o", "node_info", "Nodes"),
         Binding("k", "show_key", "My key"),
+        Binding("at", "names", "Names"),
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
         Binding("question_mark", "group_info", "About group", show=False),
@@ -1259,6 +1299,13 @@ class UnseenetApp(App):
             await self.session.refresh_known_nodes()
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
             pass
+        try:                                    # names of groups and people (UN-RFC 0018, 0019)
+            if await self.session.refresh_naming():
+                await self._render_groups()
+                if self.current_group:
+                    self._render_threads()
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
+            pass
 
     def _update_subtitle(self) -> None:
         s = self.session
@@ -1393,7 +1440,7 @@ class UnseenetApp(App):
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
             return f"{group_icons('inbox')} Private messages"
-        return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {g.short}"
+        return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {self.session.group_label(g.group_id)}"
 
     @on(Tree.NodeSelected, "#groups")
     def _group_selected(self, event: Tree.NodeSelected) -> None:
@@ -1414,12 +1461,12 @@ class UnseenetApp(App):
             self.query_one("#chat-input" if self.view_of(gid) == "chat" else "#threads").focus()
             return
         g = self.groups.get(gid) or GroupInfo(gid)
-        self.query_one("#threads-title", Static).update(f"{g.short} - loading ...")
+        self.query_one("#threads-title", Static).update(f"{self.session.group_label(g.group_id)} - loading ...")
         try:
             await self.session.fetch_group(gid)
         except SessionError as exc:
             if "removed by its owner" in str(exc):
-                self.notify(f"{g.short} was removed by its owner. "
+                self.notify(f"{self.session.group_label(g.group_id)} was removed by its owner. "
                             "Use 'Unsubscribe from group' (Ctrl+P) to forget it.",
                             severity="warning", timeout=10)
             else:
@@ -1514,7 +1561,8 @@ class UnseenetApp(App):
         changed = False
         for m in msgs:
             own = m.author_key == mine
-            who = "You" if own else (self.session.contact_name(m.author_key) or m.from_name or "anonymous")
+            who = "You" if own else (self.session.identity_label(m.author_key, m.from_name)
+                                     if m.author_key else "anonymous")
             when = m.date.astimezone().strftime("%H:%M") if m.date else "     "
             text = split_signature(m.body)[0].rstrip() if m.readable else f"({m.subject})"
             line = Text(f"{when} ", style="dim")
@@ -1575,19 +1623,20 @@ class UnseenetApp(App):
             return f"You → {self._key_label(m.to_key)}"
         if m.from_name == "You" and m.author_key == self.session.identity().key_text:
             return "You"
-        petname = self.session.contact_name(m.author_key)
-        if petname:
-            return f"{petname} √ ({m.author_fp})"         # your own name for a key you know
-        return f"{m.from_name} ({m.author_fp})"
+        if not m.author_key:
+            return m.from_name or "anonymous"
+        # your petname, else a registered name, else what they call themselves (UN-RFC 0019)
+        return self.session.identity_label(m.author_key, m.from_name)
 
     def _key_label(self, key_text: str) -> str:
         """A contact's name, else the start of the key and its fingerprint."""
-        name = self.session.contact_name(key_text)
+        if self.session.contact_name(key_text) or naming.names_of(self.session, key_text):
+            return self.session.identity_label(key_text)
         try:
             fp = crypto.fingerprint(crypto.key_from_text(key_text))[:4]
         except crypto.CryptoError:
             fp = "????"
-        return f"{name} √ ({fp})" if name else f"{key_text[8:20]}… ({fp})"
+        return f"{key_text[8:20]}… ({fp})"
 
     def _render_title(self) -> None:
         gid = self.current_group
@@ -1620,8 +1669,10 @@ class UnseenetApp(App):
             who = "anonymous (the sender did not identify themselves)"
         else:
             petname = self.session.contact_name(msg.author_key)
+            registered = " ".join("@" + c.name for c in naming.names_of(self.session, msg.author_key))
             who = (f"{escape(msg.from_name)}  ·  key {escape(msg.author_key[:24])}…  ({msg.author_fp})"
                    + ("  ·  verified" if msg.sender_key else "")
+                   + (f"  ·  registered [b]{escape(registered)}[/b]" if registered else "")
                    + (f"  ·  your contact [b]{escape(petname)}[/b]" if petname else ""))
         note = ("\n@ private message you sent - only they can read the copy on the node"
                 if msg.to_key else
@@ -1932,7 +1983,7 @@ class UnseenetApp(App):
             self.notify("You can only invite to closed groups you own", severity="warning")
             return
         key = await self.push_screen_wait(InputDialog(
-            f"Invite to {g.short}", "Paste the new member's key (they find it with k).",
+            f"Invite to {self.session.group_label(g.group_id)}", "Paste the new member's key (they find it with k).",
             "ed25519:..."))
         if not key:
             return
@@ -1971,6 +2022,62 @@ class UnseenetApp(App):
             return
         self.current_group = gid
         self.refresh_groups()
+
+    def _names_text(self) -> str:
+        s = self.session
+        mine = naming.my_names(s)
+        lines = []
+        for c in mine:
+            lines.append(f"@{c.name}  ({c.kind}, until {c.expires.astimezone():%d %B %Y})")
+        held = {c.name for c in mine}
+        for name, action, when in naming.pending(s):
+            if name not in held:
+                lines.append(f"{action} {name}: sent {nm.parse_rfc3339(when).astimezone():%d %B %H:%M}, "
+                             "waiting for the registrar (it decides after about an hour)")
+        if not lines:
+            lines.append("You have no names yet.")
+        lines.append("")
+        lines.append(f"Your key: {s.identity().key_text}")
+        return "\n".join(lines)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_names(self) -> None:
+        """Claim a name for your key, and see the ones you have (UN-RFC 0019)."""
+        s = self.session
+        self.set_status("Reading the registrar ...")
+        try:
+            await asyncio.wait_for(s.refresh_naming(), 120)
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError, asyncio.TimeoutError):
+            pass                                  # show what we have
+        self.set_status("")
+        result = await self.push_screen_wait(NamesDialog(self._names_text()))
+        if not result:
+            return
+        action, name = result
+        try:
+            kind = nm.check_name(name)
+        except nm.NameProblem as exc:
+            self.notify(str(exc), severity="error")
+            return
+        if kind == "domain" and action == "claim":
+            record = f"{nm.dns_record_name(name)}  TXT  \"{nm.dns_record_value(s.identity().key_text)}\""
+            if not await self.push_screen_wait(ConfirmDialog(
+                    f"Claim {name}?",
+                    "The registrar looks for this DNS record. Add it at your DNS provider "
+                    f"first, then claim:\n\n{record}\n\nKeep it there: the name is renewed "
+                    "every month for as long as the record is there.", "Claim")):
+                return
+        self.set_status(f"Sending your {action} for {name} ...")
+        try:
+            await naming.claim(s, name, action)
+        except (SessionError, OSError, ConnectionError, NNTPError, nm.NameProblem) as exc:
+            self.set_status("")
+            self.notify(f"Could not send the claim: {exc}", severity="error")
+            return
+        self.set_status("")
+        self.notify(f"Asked the registrar for @{name}. It decides after about an hour; the answer "
+                    "comes to your private messages, and the name shows under @ when it is yours.",
+                    timeout=12)
 
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
@@ -2057,6 +2164,8 @@ class UnseenetApp(App):
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",
              self.action_show_key),
+            ("Names", "Claim a name such as @lorensen, see the names you hold  [@]",
+             self.action_names),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
              self.action_signature),
             ("About this group", "Its rules, type, owner and settings  [?]", self.action_group_info),
@@ -2204,14 +2313,14 @@ class UnseenetApp(App):
             self.notify("Your private messages cannot be unsubscribed", severity="warning")
             return
         if not await self.push_screen_wait(ConfirmDialog(
-                f"Unsubscribe from {g.short}?",
+                f"Unsubscribe from {self.session.group_label(g.group_id)}?",
                 "You stop following the group, and its saved posts are deleted from this "
                 "computer. The group stays on the network; you can subscribe again with g.",
                 "Unsubscribe")):
             return
         self.session.forget_group(g.group_id)
         self.current_group = None
-        self.notify(f"Unsubscribed from {g.short}")
+        self.notify(f"Unsubscribed from {self.session.group_label(g.group_id)}")
         self.refresh_groups()
 
     @work(group="dialog", exit_on_error=False)
@@ -2224,20 +2333,20 @@ class UnseenetApp(App):
                         severity="warning")
             return
         if not await self.push_screen_wait(ConfirmDialog(
-                f"Remove {g.short} from the network?",
+                f"Remove {self.session.group_label(g.group_id)} from the network?",
                 "Every node deletes the group and all its posts, and the name can never be "
                 "used again - not even by you. This cannot be undone.\n\n"
                 "Copies people have already saved cannot be deleted.",
                 "Remove for good", danger=True)):
             return
-        self.set_status(f"Removing {g.short} ...")
+        self.set_status(f"Removing {self.session.group_label(g.group_id)} ...")
         try:
             await self.session.remove_group(g.group_id)
         except (SessionError, OSError, ConnectionError) as exc:
             self.notify(f"Not removed: {exc}", severity="error", timeout=8)
             return
         self.current_group = None
-        self.notify(f"{g.short} removed")
+        self.notify(f"{self.session.group_label(g.group_id)} removed")
         self.refresh_groups()
 
     def action_open_inbox(self) -> None:

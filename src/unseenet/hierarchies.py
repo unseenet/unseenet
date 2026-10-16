@@ -102,3 +102,130 @@ def builtin_root_list() -> tuple[str, dict[str, Hierarchy]]:
     """The project's root list as shipped with this version."""
     return parse_root_list(resources.files("unseenet").joinpath("hierarchies.json").read_text(),
                            strict=True)
+
+
+# --- hierarchy lists (section 5) ----------------------------------------------------
+
+CHECKGROUPS_GROUP = "unseenet.checkgroups@ph5fc5hop5232qsz"   # the project's list for unseenet.*
+MAX_DEPTH = 4                                                  # section 5.3
+
+# ISO 3166-1 alpha-2 country codes: regional hierarchies (section 4.2). Other
+# two-letter names are reserved.
+COUNTRY_CODES = frozenset("""
+ad ae af ag ai al am ao aq ar as at au aw ax az ba bb bd be bf bg bh bi bj bl bm bn bo
+bq br bs bt bv bw by bz ca cc cd cf cg ch ci ck cl cm cn co cr cu cv cw cx cy cz de dj
+dk dm do dz ec ee eg eh er es et fi fj fk fm fo fr ga gb gd ge gf gg gh gi gl gm gn gp
+gq gr gs gt gu gw gy hk hm hn hr ht hu id ie il im in io iq ir is it je jm jo jp ke kg
+kh ki km kn kp kr kw ky kz la lb lc li lk lr ls lt lu lv ly ma mc md me mf mg mh mk ml
+mm mn mo mp mq mr ms mt mu mv mw mx my mz na nc ne nf ng ni nl no np nr nu nz om pa pe
+pf pg ph pk pl pm pn pr ps pt pw py qa re ro rs ru rw sa sb sc sd se sg sh si sj sk sl
+sm sn so sr ss st sv sx sy sz tc td tf tg th tj tk tl tm tn to tr tt tv tw tz ua ug um
+us uy uz va vc ve vg vi vn vu wf ws ye yt za zm zw""".split())
+
+
+@dataclass(frozen=True)
+class HierarchyList:
+    hierarchy: str
+    updated: str
+    groups: dict[str, str]                     # name -> endorsed Group ID
+    sub: dict[str, Hierarchy]                  # full name -> governed or free sub-hierarchy
+
+
+def _within(name: str, hierarchy: str) -> bool:
+    return name == hierarchy or name.startswith(hierarchy + ".")
+
+
+def parse_hierarchy_list(text: str, hierarchy: str) -> HierarchyList:
+    """A maintainer's list for ``hierarchy`` (section 5.1). ValueError if invalid as a whole."""
+    if len(text.encode()) > MAX_SIZE:
+        raise ValueError(f"a hierarchy list must fit in {MAX_SIZE} octets")
+    data = json.loads(text)
+    if (not isinstance(data, dict) or data.get("v") != 1 or data.get("hierarchy") != hierarchy
+            or not isinstance(data.get("groups"), list)):
+        raise ValueError(f"not a version 1 hierarchy list for {hierarchy}")
+    sub: dict[str, Hierarchy] = {}
+    for item in data.get("sub") or []:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        name = item["name"]
+        if not _within(name, hierarchy) or name == hierarchy or item.get("policy") not in ("governed", "free"):
+            continue
+        try:
+            components = name.split(".")
+            if not all(_COMPONENT.match(c) for c in components):
+                continue
+            h = _entry({**item, "name": components[-1]})         # the same checks as the root list
+        except ValueError:
+            continue
+        sub[name] = Hierarchy(name, h.policy, h.maintainer, h.list, h.title, h.description)
+    seen: dict[str, str] = {}
+    twice: set[str] = set()
+    for item in data["groups"]:
+        try:
+            name, _ = split_group_id(item["group"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not _within(name, hierarchy) or any(_within(name, s) for s in sub):
+            continue
+        if name in seen:
+            twice.add(name)
+        seen[name] = item["group"]
+    groups = {n: g for n, g in seen.items() if n not in twice}       # endorsed twice: neither counts
+    return HierarchyList(hierarchy, str(data.get("updated", ""))[:32], groups, sub)
+
+
+def builtin_checkgroups() -> HierarchyList:
+    """The project's list for unseenet.* as shipped with this version."""
+    return parse_hierarchy_list(resources.files("unseenet").joinpath("checkgroups.json").read_text(),
+                                "unseenet")
+
+
+# --- what a group name means (section 8.1) -------------------------------------------
+
+def policy_of(top: str, root: dict[str, Hierarchy]) -> Hierarchy:
+    """The policy of a top-level hierarchy, listed or not (section 4.2)."""
+    if top in root:
+        return root[top]
+    if len(top) == 2:
+        return Hierarchy(top, "free" if top in COUNTRY_CODES else "reserved")
+    return Hierarchy(top, "free")                     # unclaimed: behaves as free
+
+
+def deciding(name: str, root: dict[str, Hierarchy],
+             lists: dict[str, HierarchyList]) -> tuple[Hierarchy, HierarchyList | None]:
+    """The deepest known hierarchy that decides ``name``, and its list if governed."""
+    h = policy_of(name.split(".")[0], root)
+    for _ in range(MAX_DEPTH + 1):
+        if h.policy != "governed":
+            return h, None
+        lst = lists.get(h.name)
+        if lst is None:
+            return h, None                            # governed, but its list is not known
+        deeper = [s for s in lst.sub.values() if _within(name, s.name)]
+        if not deeper:
+            return h, lst
+        h = max(deeper, key=lambda s: len(s.name))
+    return Hierarchy(h.name, "reserved"), None        # deeper than section 5.3 allows
+
+
+@dataclass(frozen=True)
+class GroupName:
+    status: str            # "endorsed", "unendorsed", "free", "reserved"
+    short: bool            # may be shown without the fingerprint
+    hierarchy: str
+
+
+def name_status(group_id: str, root: dict[str, Hierarchy], lists: dict[str, HierarchyList],
+                known: set[str]) -> GroupName:
+    """How a client may show a group (section 8.1). ``known`` is every Group ID the
+    client knows of, so that it can tell whether a free name is unique."""
+    name, _ = split_group_id(group_id)
+    h, lst = deciding(name, root, lists)
+    if h.policy == "governed":
+        if lst is not None and lst.groups.get(name) == group_id:
+            return GroupName("endorsed", True, h.name)
+        return GroupName("unendorsed", False, h.name)
+    if h.policy == "reserved":
+        return GroupName("reserved", False, h.name)
+    same = {g for g in known | {group_id} if g.rpartition("@")[0] == name}
+    return GroupName("free", len(same) == 1, h.name)

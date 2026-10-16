@@ -90,6 +90,7 @@ After that the connection is reused.
 | ++m++ | Send a private message (pre-filled with the selected post's author) |
 | ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
+| `@` | Your names: claim a name such as `@lorensen`, see the ones you hold |
 | ++i++ | Invite someone to a closed group you own |
 | ++j++ | Join a group by ID or `unseenet:join` link |
 | ++f5++ | Refresh (also happens every 30 seconds) |
@@ -240,6 +241,43 @@ person, both directions, in order. ++n++ or ++r++ there writes to them.
   read them on the node afterwards. The client keeps its own copy, in an
   encrypted file next to your vault (`unseenet.vault.sent`).
 - Rename or remove contacts from the command palette (++ctrl+p++).
+
+## Names
+
+Group names and people's names are shown as short as is safe
+([UN-RFC 0018](spec/un-rfc-0018.md) and [0019](spec/un-rfc-0019.md)).
+The client reads the project's lists for this in the background, like the
+node list, and keeps them in your vault.
+
+- **Groups** are shown without their fingerprint when the name cannot be
+  mistaken: `unseenet.announce` is the one the project vouches for; a
+  group someone else made with the same name shows as
+  `unseenet.announce@k2xq`, and the list of all groups (++g++) warns about
+  it. In hierarchies nobody looks after, like `dk` or `alt`, the short
+  name is shown while you know of only one group by that name.
+- **People** are shown by your own name for them (**Sonia √**), else by
+  a name they hold (`@lorensen.dk`, `@lorensen`), else as the name they
+  chose with the start of their fingerprint: `Andreas~2byg`. Anyone can
+  call themselves "Andreas"; only a name with `@` or `√` is checked.
+
+### Claiming a name
+
+Press `@`, type the name and press ++enter++ (or *Claim*).
+
+- A name **without a dot**, like `lorensen`, is first come, first served.
+  Names that are Internet top-level domains (`dk`, `microsoft`) cannot be
+  had.
+- A **domain**, like `lorensen.dk`, shows that the domain is yours. The
+  client tells you the DNS record to add first, a TXT record with your key.
+  Keep the record: the name is renewed each month while it is there.
+
+The claim is sent sealed to the registrar, which decides after about an
+hour. Its answer comes to your private messages, and the name then shows
+under `@`. Registered names last a year; renew them under `@` with
+*Renew*. Your posts in public groups carry your name about once a week
+per group, so others can check it; posts in closed groups and private
+messages never do. A name links everything its identity posts, so do not
+claim one for an identity you keep apart.
 
 ## Several nodes
 

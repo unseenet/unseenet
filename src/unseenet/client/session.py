@@ -23,6 +23,8 @@ from ..core.groups import (INBOX_SCHEME, MAX_RULES, VIEWS, decrypt_article, encr
 from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
+from .. import names
+from . import naming
 
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
@@ -304,6 +306,18 @@ class Session:
         self.data["known_nodes"] = new
         self.save()
         return True
+
+    async def refresh_naming(self) -> bool:
+        """Read the root list, hierarchy lists and names (UN-RFC 0018, 0019). True if changed."""
+        return await naming.refresh(self)
+
+    def group_label(self, group_id: str, also_known: set[str] = frozenset()) -> str:
+        """The name to show for a group: without the fingerprint where UN-RFC 0018 allows."""
+        return naming.group_label(self, group_id, also_known)
+
+    def identity_label(self, key_text: str, from_name: str = "") -> str:
+        """Petname, else @domain, else @name, else Name~abcd (UN-RFC 0019 section 8)."""
+        return naming.identity_label(self, key_text, from_name)
 
     def _forget_numbers(self, group_id: str) -> None:
         """Article numbers belong to one node: drop them when a group moves."""
@@ -1053,6 +1067,7 @@ class Session:
             self._decrypt_into(msg, art, entry)
         else:
             msg.subject, msg.from_name, msg.body = art["Subject"], art["From"], art.body
+            naming.note_certificate(self, msg.author_key, art.get(names.HEADER))
         return msg
 
     def _open_private(self, msg: Message, art: Article, group_id: str) -> None:
@@ -1074,6 +1089,7 @@ class Session:
             msg.sender_key = crypto.key_to_text(sender)
             msg.author_key = msg.sender_key          # show the real sender, not the one-time key
             msg.from_name = inner.get("From", "")
+            naming.note_certificate(self, msg.sender_key, inner.get(names.HEADER))
 
     def _decrypt_into(self, msg: Message, art: Article, entry: dict) -> None:
         key_hex = entry["keys"].get(str(encryption_epoch(art)))
@@ -1133,6 +1149,7 @@ class Session:
                    references: list[str] | None = None) -> str:
         author = self.identity()
         entry = self.group_entry(group_id)
+        cert = None
         if entry.get("type") == "closed":
             if not entry["keys"]:
                 raise SessionError("you are not a member of this closed group")
@@ -1144,11 +1161,15 @@ class Session:
                     group_id, epoch, keys, author, from_name=self.display_name(),
                     subject=subject, body=body, references=references, pow_bits=bits)
         else:
+            cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
+
             def build(bits):
                 art = new_article(group_id, subject, body, from_name=self.display_name(),
-                                  references=references)
+                                  references=references, extra=[cert] if cert else None)
                 return art.finalize(author, bits)
         msgid = (await self._post_with_postage(group_id, build)).message_id
+        if cert:
+            naming.sent_header(self, group_id)
         marks = self.data["read"].setdefault(group_id, [])   # your own posts are read
         marks.append(msgid)
         self.save()
