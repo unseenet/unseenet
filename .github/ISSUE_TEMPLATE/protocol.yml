@@ -1,0 +1,43 @@
+name: Protocol (UN-RFC)
+description: A mistake, an unclear rule or a gap in a UN-RFC, or an idea for a new one.
+title: "UN-RFC "
+labels: ["area: protocol", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The UN-RFCs in [`rfc/`](https://github.com/unseenet/unseenet/tree/main/rfc)
+        describe the protocol so that anyone can build compatible nodes and
+        clients. Changes go through the process in UN-RFC 0000: an issue here
+        first, then a pull request against the document.
+
+        **Found a weakness that could hurt users?** Do not open an issue - report
+        it privately (see the Security link on the previous page).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is it?
+      options:
+        - An error or contradiction in a UN-RFC
+        - Something unclear or missing in a UN-RFC
+        - A proposal for a change or a new UN-RFC
+        - The reference implementation does not follow a UN-RFC
+    validations:
+      required: true
+  - type: input
+    id: rfc
+    attributes:
+      label: Which UN-RFC and section?
+      placeholder: "UN-RFC 0004, section 3.2"
+  - type: textarea
+    id: what
+    attributes:
+      label: Description
+      description: What does the text say, what is the problem, and what should it say?
+    validations:
+      required: true
+  - type: textarea
+    id: compat
+    attributes:
+      label: Compatibility
+      description: Would existing nodes, clients or stored data be affected? How could the change be rolled out?

@@ -1,0 +1,34 @@
+name: Idea or feature request
+description: Something Unseenet should do, or do better.
+labels: ["enhancement", "triage"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      description: The matching area label is added automatically.
+      options:
+        - Client (TUI or command line)
+        - Node
+        - Portable builds (USB, Windows, macOS, Linux)
+        - Documentation or website
+        - Not sure / several
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the situation and what is missing or hard today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
+      description: Your idea, if you have one. Protocol changes are better as a "Protocol (UN-RFC)" issue.
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and anonymity
+      description: Could this reveal anything about users - who they are, where they are, what they read?

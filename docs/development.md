@@ -279,6 +279,29 @@ workflow opens an issue when Tor has a newer stable release).
 Between releases, every change that users or node operators would notice
 gets a line under `## [Unreleased]`.
 
+## Issues, Labels and the Changelog
+
+Every change that users or node operators would notice has an issue, so
+the release notes can say what changed and link to the discussion:
+
+1. Open an issue (or use the existing one). The forms add a type label
+   (`bug`, `enhancement`, `documentation`), an area label and `triage`.
+2. Remove `triage` once you have looked at it; fix the labels if needed.
+3. Mention the issue in the commit: `Fixes #12` closes it when the commit
+   reaches `main`, `Refs #12` only links it.
+4. End the changelog line with the issue number: `- ... (#12)`. The release
+   notes are made from `CHANGELOG.md`, so the number becomes a link there.
+
+| Label | Meaning |
+|-------|---------|
+| `bug`, `enhancement`, `documentation`, `question` | What kind of issue it is |
+| `area: client`, `area: node`, `area: protocol`, `area: portable`, `area: docs`, `area: infra` | Which part it is about |
+| `security` | Affects the safety, privacy or anonymity of users (report weaknesses privately, see `SECURITY.md`) |
+| `breaking` | Breaks compatibility: protocol, file formats, command line or `node.toml` |
+| `triage` | New, not looked at yet |
+| `good first issue`, `help wanted` | For contributors |
+| `node-request`, `accepted` | Requests to join the known-node list (UN-RFC 0010) |
+
 ## Coding Conventions
 
 - Python 3.11+, type hints, `from __future__ import annotations`.

@@ -1,0 +1,18 @@
+name: Documentation
+description: Something on unseenet.org or in the README is wrong, missing or hard to follow.
+title: "Docs: "
+labels: ["documentation", "area: docs", "triage"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Which page?
+      placeholder: https://unseenet.org/portable/
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true

@@ -1,0 +1,58 @@
+name: Bug in the node
+description: Something is wrong in unseenet-node - serving, peering, storage, Tor or the install script.
+title: "Node: "
+labels: ["bug", "area: node", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. **Never paste the node's passphrase, its key
+        or its seed.** Journal lines are fine, but remove onion addresses of peers
+        that are not public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is the node installed?
+      options:
+        - install-node.sh (systemd service)
+        - pip install
+        - From source (git checkout)
+        - Other (container, ...)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: Debian 12, Tor 0.4.9.x
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`unseenet-node --version`"
+      placeholder: unseenet 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: node.toml
+      description: The relevant parts, without secrets.
+      render: toml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl -u unseenet-node --since -1h`"
+      render: text

@@ -1,0 +1,37 @@
+name: issue-labels
+# Issue forms can only set fixed labels. This adds the area label from the
+# "Which part?" answer of the feature form, and "area: portable" when a client
+# bug is about a portable build.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ github.event.issue.body }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          answer() {   # the line after "### <heading>" in a form's body
+            printf '%s\n' "$BODY" | awk -v h="### $1" '{sub(/\r$/, "")} found && NF {print; exit} $0 == h {found = 1}'
+          }
+          labels=""
+          case "$(answer 'Which part?')" in
+            Client*)        labels="area: client" ;;
+            Node*)          labels="area: node" ;;
+            Portable*)      labels="area: portable" ;;
+            Documentation*) labels="area: docs" ;;
+          esac
+          case "$(answer 'How do you run it?')" in
+            Portable*)      labels="area: portable" ;;
+          esac
+          if [ -n "$labels" ]; then
+            gh issue edit "$NUMBER" -R "$REPO" --add-label "$labels"
+          fi

@@ -1,0 +1,64 @@
+name: Bug in the client
+description: Something is wrong in unseenet-tui, the command line client or a portable build.
+title: "Client: "
+labels: ["bug", "area: client", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. **Never paste your passphrase, your vault or a
+        private key.** Logs are fine: they contain no keys, but check them for
+        anything you do not want to share (group names, for instance).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the client
+        2. Press g
+        3. ...
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run it?
+      options:
+        - Portable build (zip / USB stick)
+        - pip install
+        - From source (git checkout)
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`unseenet.exe --version`, `unseenet-tui --version`, or the About screen (F1)."
+      placeholder: unseenet 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        `data/unseenet-tui-errors.log` and the end of `data/unseenet-tor/tor.log`
+        (next to `unseenet.vault`). For a portable build, `--self-test` output helps too.
+      render: text
