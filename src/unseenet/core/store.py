@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS groups (
     high       INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS closed_epochs (     -- key updates with closes_previous (UN-RFC 0004, 6.2)
+    group_id   TEXT NOT NULL,
+    epoch      INTEGER NOT NULL,
+    PRIMARY KEY (group_id, epoch)
+);
+
 CREATE TABLE IF NOT EXISTS epochs (
     group_id   TEXT NOT NULL,
     epoch      INTEGER NOT NULL,
@@ -245,6 +251,16 @@ class Store:
         self.db.execute("INSERT OR REPLACE INTO pull_state VALUES (?, ?)", (peer, since))
         self.db.commit()
 
+    def close_previous(self, group_id: str, epoch: int) -> None:
+        self.db.execute("INSERT OR IGNORE INTO closed_epochs VALUES (?, ?)", (group_id, epoch))
+        self.db.commit()
+
+    def closed_before(self, group_id: str) -> int:
+        """Articles of epochs below this are refused (0: none closed)."""
+        row = self.db.execute("SELECT MAX(epoch) FROM closed_epochs WHERE group_id=?",
+                              (group_id,)).fetchone()
+        return int(row[0] or 0)
+
     def epochs(self, group_id: str) -> dict[int, bytes]:
         return {e: crypto.key_from_text(k) for e, k in self.db.execute(
             "SELECT epoch, member_key FROM epochs WHERE group_id=?", (group_id,))}
@@ -260,6 +276,12 @@ class Store:
                         (group_id, int(time.time()), reason, message_id, raw))
         self.db.commit()
 
+    def dropped_groups(self) -> list[str]:
+        """Groups the operator has dropped (UN-RFC 0013 section 3), sorted."""
+        rows = self.db.execute("SELECT group_id FROM tombstones WHERE reason='operator' "
+                               "ORDER BY group_id").fetchall()
+        return [r[0] for r in rows]
+
     def lift_tombstone(self, group_id: str) -> bool:
         cur = self.db.execute("DELETE FROM tombstones WHERE group_id=? AND reason='operator'", (group_id,))
         self.db.commit()
@@ -270,6 +292,7 @@ class Store:
         cur = self.db.execute("DELETE FROM articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM groups WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM epochs WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM closed_epochs WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM epoch_articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM cancels WHERE group_id=?", (group_id,))
         self.db.commit()

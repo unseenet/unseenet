@@ -22,7 +22,8 @@ never needs the project key itself:
 
 - github_poster: the GitHub Actions key (repository secret
   UNSEENET_ANNOUNCE_SEED), which posts releases, the node list, the root list
-  and the project's hierarchy list (tools/announce.py);
+  and the project's hierarchy list (tools/announce.py), and the daily canaries
+  (tools/node_health.py);
 - registrar keys: see setup_registrar.py.
 """
 
@@ -71,6 +72,10 @@ section 7), and complaints about names used to impersonate someone (UN-RFC
 0019 section 6.7). Decisions are made in public, here or on GitHub. General
 talk about Unseenet belongs in unseenet@""" + FP + "."
 
+CANARY = """Connection checks for the known nodes (UN-RFC 0021). Every day the project's
+checker posts one small canary to each listed node and looks the next day
+where it arrived. Only the checker posts here; there is nothing to read."""
+
 TEST = "Use this group to test posting, replies and your setup. Anything goes."
 
 # name, type, view, title, description, rules, poster (a key in the vault), min_pow.
@@ -95,6 +100,9 @@ GROUPS = (
     ("unseenet.names", "channel", "data", "Names: the project's registrar",
      "Name certificates and revocations for identities (UN-RFC 0019).", NAMES,
      "registrar_poster", 20),
+    ("unseenet.canary", "channel", "data", "Connection checks for known nodes",
+     "Daily canary posts that show listed nodes are connected (UN-RFC 0021).", CANARY,
+     "github_poster", 20),
     ("unseenet.admin", "open", "threads", "Hierarchy requests and name disputes",
      "Requests for hierarchies, decisions, and complaints about names.", ADMIN, None, 22),
 )

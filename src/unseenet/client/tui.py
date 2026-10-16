@@ -13,7 +13,7 @@ import asyncio
 import os
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from textual import on, work
@@ -107,6 +107,8 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
         lines.append(f"Policy:   new groups {p.get('new_groups', '?')}, kept "
                      f"{p.get('retention_days', '?')} days, postage {p.get('min_pow', '?')} "
                      f"bits, logs {p.get('logging', '?')}")
+        if p.get("excludes"):
+            lines.append(f"Leaves out: {p['excludes']}")
     lines.append(f"Groups:   {groups} of yours are read from here"
                  + ("   ·   in the project's node list" if known else ""))
     return "\n".join(lines)
@@ -560,6 +562,99 @@ class ConfirmDialog(Dialog):
         self.dismiss(True)
 
 
+class KeyListDialog(Dialog):
+    """A list of people (key, label); pick one for an action."""
+
+    def __init__(self, title: str, hint: str, people: list[tuple[str, str]], action: str):
+        super().__init__()
+        self.title_, self.hint, self.people, self.action = title, hint, people, action
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label(self.title_, classes="title", markup=False)
+            yield Label(self.hint, classes="hint", markup=False)
+            yield Select([(f"{label}  ({key[:20]}...)" if key.startswith("ed25519:") else label, key)
+                          for key, label in self.people], prompt="Choose", id="who")
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button(self.action, variant="primary", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        who = self.query_one("#who", Select).value
+        if isinstance(who, str):
+            self.dismiss(who)
+
+
+class ReportDialog(Dialog):
+    """Report a post to the people who can act on it (#74)."""
+
+    def __init__(self, subject: str, targets: list[tuple[str, str, str]]):
+        super().__init__()
+        self.subject, self.targets = subject, targets
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label(f"Report \"{self.subject}\"", classes="title", markup=False)
+            yield Label("For posts that break the group's rules or the law. The people you "
+                        "choose get the post and your note as a private message. In an "
+                        "emergency, contact the police: nobody on Unseenet can see who anyone is.",
+                        classes="hint")
+            for i, (who, _, _) in enumerate(self.targets):
+                yield Checkbox(who, value=True, id=f"t{i}")
+            yield Input(placeholder="What is wrong with it? (optional)", id="note")
+            yield Checkbox("Anonymous - they cannot see who reported it or answer you",
+                           value=False, id="anon")
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Report", variant="error", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        chosen = [t for i, t in enumerate(self.targets) if self.query_one(f"#t{i}", Checkbox).value]
+        if not chosen:
+            self.app.notify("Choose at least one", severity="warning")
+            return
+        self.dismiss((chosen, self.query_one("#note", Input).value,
+                      self.query_one("#anon", Checkbox).value))
+
+
+class ModerationDialog(Dialog):
+    """Submissions to groups you moderate (UN-RFC 0009 section 3)."""
+
+    def __init__(self, items: list[tuple[str, str, str]], title: str = "Moderation queue",
+                 hint: str = "Posts waiting for a moderator. Approving posts them unchanged; "
+                              "the first moderator to act decides.",
+                 prompt: str = "Choose a post", reject: str = "Reject", approve: str = "Approve"):
+        super().__init__()
+        self.items = items                  # (id, label, preview)
+        self.texts = (title, hint, prompt, reject, approve)
+
+    def compose(self) -> ComposeResult:
+        title, hint, prompt, reject, approve = self.texts
+        with Vertical(classes="dialog list"):
+            yield Label(title, classes="title", markup=False)
+            yield Label(hint, classes="hint", markup=False)
+            yield Select([(label, i) for i, label, _ in self.items], prompt=prompt, id="which")
+            yield Static("", id="preview", classes="details", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button(reject, variant="error", id="reject")
+                yield Button(approve, variant="primary", id="approve")
+
+    @on(Select.Changed, "#which")
+    def _show(self, event: Select.Changed) -> None:
+        text = next((p for i, _, p in self.items if i == event.value), "")
+        self.query_one("#preview", Static).update(text)
+
+    @on(Button.Pressed, "#approve")
+    @on(Button.Pressed, "#reject")
+    def _act(self, event: Button.Pressed) -> None:
+        which = self.query_one("#which", Select).value
+        if isinstance(which, str):
+            self.dismiss((event.button.id, which))
+
+
 class NamesDialog(Dialog):
     """Your names (UN-RFC 0019): those you hold, those you asked for, and a field to claim one."""
 
@@ -623,6 +718,17 @@ class GroupInfoDialog(Dialog):
                  f"Version:   {d.get('serial', 1)}"]
         if self.node:
             lines.append(f"Read from: {self.node}")
+        label = getattr(self.app.session, "identity_label", None)
+        for role, title in (("moderators", "Moderators:"), ("posters", "Posters:  ")):
+            if d.get(role):
+                names = [label(k) if label else k[:20] for k in d[role][:6]]
+                lines.append(f"{title} " + ", ".join(names) + (" ..." if len(d[role]) > 6 else ""))
+        bans = [b for b in d.get("banned", []) if isinstance(b, dict)]
+        if bans:                                  # public on purpose (UN-RFC 0004, 5.1)
+            lines.append(f"Banned:    {len(bans)} "
+                         + ("person" if len(bans) == 1 else "people") + " - "
+                         + "; ".join(f"{b.get('key', '')[8:16]}...: {b.get('reason') or 'no reason given'}"
+                                     for b in bans[:5]) + (" ..." if len(bans) > 5 else ""))
         if d.get("description"):
             lines += ["", d["description"]]
         with Vertical(classes="dialog"):
@@ -932,6 +1038,7 @@ class NodeInfoDialog(Dialog):
                       f"Kept for:         {p.get('retention_days', '?')} days",
                       f"Minimum postage:  {p.get('min_pow', '?')} bits",
                       f"Logs:             {p.get('logging', '?')}",
+                      f"Leaves out:       {p.get('excludes') or 'nothing'}",
                       "",
                       ("Operator:  " + i["operator"]) if i.get("operator") else "No operator contact given."]
         with Vertical(classes="dialog"):
@@ -1516,10 +1623,10 @@ class UnseenetApp(App):
         if gid and gid.startswith(CONTACT):
             rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
         elif gid == s.my_inbox:
-            rows = self._threaded(s.private_messages())        # what you sent, too
+            rows = self._threaded(s.visible(s.private_messages()))   # what you sent, too
         else:
             msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
-            rows = self._threaded(msgs)
+            rows = self._threaded(s.visible(msgs))      # replies to ignored people stay
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
@@ -1618,7 +1725,9 @@ class UnseenetApp(App):
                 owner = crypto.key_from_text(key)
                 await self.session.send_private(personal_inbox_id(owner), subject, text, owner_key=owner)
             else:
-                await self.session.post(gid, subject, text)
+                msgid = await self.session.post(gid, subject, text)
+                if self.session.was_submitted(gid, msgid):
+                    self.notify("Sent to the moderators for approval", timeout=8)
                 await self.session.fetch_group(gid)
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
@@ -1667,8 +1776,11 @@ class UnseenetApp(App):
         name = self._group_label(g).strip() if g else gid
         fast = "  ·  fast delivery" if self.session.manifest_data(gid).get("low_latency") else ""
         rules = "  ·  ? rules" if self.session.manifest_data(gid).get("rules") else ""
+        hidden = self.session.hidden_by_blocks(gid)
+        blocked = ("  ·  " + "; ".join(f"{n} hidden: blocked in {h}.*: {r}" for h, r, n in hidden[:2])
+                   if hidden else "")
         self.query_one("#threads-title", Static).update(
-            f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}")
+            f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}{blocked}")
 
     def article(self, msg: Message) -> tuple[str, Text]:
         """The header (markup) and the body of a message, as the reader shows them."""
@@ -1956,11 +2068,15 @@ class UnseenetApp(App):
         subject, body = result
         self.set_status("Sending (computing postage) ...")
         try:
-            await self.session.post(g.group_id, subject, body, references)
+            msgid = await self.session.post(g.group_id, subject, body, references)
         except (SessionError, OSError, ConnectionError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             return
-        self.notify("Sent")
+        if self.session.was_submitted(g.group_id, msgid):
+            self.notify("Sent to the moderators. It appears in the group when one of them "
+                        "approves it.", timeout=10)
+        else:
+            self.notify("Sent")
         self.select_group(g.group_id)
 
     @work(group="dialog", exit_on_error=False)
@@ -2054,13 +2170,19 @@ class UnseenetApp(App):
         s = self.session
         mine = naming.my_names(s)
         lines = []
+        primary = naming.preferred(s, s.identity().key_text, mine).name if mine else None
+        kinds = {"registered": "registered", "domain": "domain", "sub": "given by its holder"}
         for c in mine:
-            lines.append(f"@{c.name}  ({c.kind}, until {c.expires.astimezone():%d %B %Y})")
+            lines.append(f"{naming.name_text(c.name)}  ({kinds.get(c.kind, c.kind)}, until "
+                         f"{c.expires.astimezone():%d %B %Y})"
+                         + ("  - your posts show this one" if c.name == primary and len(mine) > 1 else ""))
         held = {c.name for c in mine}
         for name, action, when in naming.pending(s):
             if name not in held:
+                who = ("its holder" if action == "ask"
+                       else "the registrar (it decides after about an hour)")
                 lines.append(f"{action} {name}: sent {nm.parse_rfc3339(when).astimezone():%d %B %H:%M}, "
-                             "waiting for the registrar (it decides after about an hour)")
+                             f"waiting for {who}")
         if not lines:
             lines.append("You have no names yet.")
         lines.append("")
@@ -2235,6 +2357,42 @@ class UnseenetApp(App):
              self.action_edit_group),
             ("Add contact", "Give the selected author, or any key, a name of your own  [a]",
              self.action_add_contact),
+            ("Ignore this person", "Hide everything the selected post's author writes - only "
+             "you know", self.action_ignore),
+            ("People you ignore", "See who you ignore, and show someone again",
+             self.action_ignored),
+            ("Ask for a name under someone's name", "e.g. sonia@lorensen: the holder of "
+             "@lorensen decides", self.action_ask_subname),
+            ("Give a name under yours", "Holders of a name: give someone name@yourname",
+             self.action_give_subname),
+            ("Name requests", "People asking for a name under yours", self.action_name_requests),
+            ("Names you gave", "See them, and take one back", self.action_names_given),
+            ("Name your posts show", "If you have several names, choose one",
+             self.action_primary_name),
+            ("Report post", "Tell the group's owner, moderators, maintainer or node operator "
+             "about a post that breaks the rules or the law", self.action_report),
+            ("Open reported post", "From a report you received: go to the post it is about",
+             self.action_open_reported),
+            ("Moderation queue", "Moderators: posts waiting for approval in groups you "
+             "moderate", self.action_moderation),
+            ("Make moderator", "Owner: let someone approve and withdraw posts in this group",
+             lambda: self.action_add_role("moderators")),
+            ("Make poster", "Owner of a channel: let someone post in it",
+             lambda: self.action_add_role("posters")),
+            ("Moderators and posters", "Owner: see them, and remove one",
+             self.action_roles),
+            ("Members of closed group", "Owner: see whom you invited, and remove a member",
+             self.action_members),
+            ("Ban from group", "Owner: the selected post's author may no longer post in this "
+             "group", self.action_ban),
+            ("Block in hierarchy", "Maintainer: block the selected post's author in your whole "
+             "hierarchy", self.action_block),
+            ("Show posts blocked by maintainers" if not self.session.data.get("show_blocked")
+             else "Hide posts blocked by maintainers",
+             "Maintainers of hierarchies can block people; you decide whether to see them",
+             self.action_toggle_blocked),
+            ("Banned from group", "Owner: see who is banned and why, and lift a ban",
+             self.action_banned),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
@@ -2297,6 +2455,448 @@ class UnseenetApp(App):
             return
         self.session.mark_rules_seen(g.group_id)
         self.notify("Group updated")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ignore(self) -> None:
+        """Ignore the selected post's author (#72)."""
+        m, s = self.current_message, self.session
+        key = (m.sender_key or m.author_key) if m else ""
+        if not key or key == s.identity().key_text:
+            self.notify("Select a post by the person you want to ignore", severity="warning")
+            return
+        who = s.identity_label(key, m.from_name)
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Ignore {who}?",
+                f"{key}\n\nTheir posts and private messages are hidden from you in every "
+                "group. Others still see them, and they are not told. You can show them "
+                "again under 'People you ignore' (Ctrl+P).", "Ignore")):
+            return
+        try:
+            s.ignore(key, who)
+        except (SessionError, crypto.CryptoError) as exc:
+            self.notify(f"Not ignored: {exc}", severity="error")
+            return
+        self.current_message = None
+        self.notify(f"Ignoring {who}")
+        await self._render_groups()
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ban(self) -> None:
+        """Owner: ban the selected post's author from the group (UN-RFC 0004, 5.1)."""
+        m, s, gid = self.current_message, self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only a group's owner can ban people from it. You can ignore them "
+                        "(Ctrl+P: Ignore this person).", severity="warning")
+            return
+        if m is None or m.private or not m.author_key or m.author_key == s.identity().key_text:
+            self.notify("Select a post by the person you want to ban", severity="warning")
+            return
+        who = s.identity_label(m.author_key, m.from_name)
+        reason = await self.push_screen_wait(InputDialog(
+            f"Ban {who} from {s.group_label(gid)}?",
+            "Nodes refuse their new posts here, and clients hide the old ones. The ban and "
+            "its reason are public: anyone can read them in the group's settings. Give a short "
+            "reason:", "e.g. threats against other members"))
+        if not reason:
+            return
+        self.set_status("Banning ...")
+        try:
+            await s.ban(gid, m.author_key, reason)
+        except (SessionError, OSError, ConnectionError, crypto.CryptoError) as exc:
+            self.set_status("")
+            self.notify(f"Not banned: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.current_message = None
+        self.notify(f"{who} is banned from {s.group_label(gid)}")
+        self._render_threads()
+
+    # --- names under a name (UN-RFC 0019 section 5.4) ---
+    @work(group="dialog", exit_on_error=False)
+    async def action_ask_subname(self) -> None:
+        s = self.session
+        name = await self.push_screen_wait(InputDialog(
+            "Ask for a name under someone's name",
+            "Type the name you would like, e.g. sonia@lorensen. Its holder decides; the name "
+            "then shows on your posts. Every name on one identity links it to the others - "
+            "use another identity for a part of your life you keep apart.",
+            "sonia@lorensen"))
+        if not name:
+            return
+        try:
+            await naming.request_subname(s, name.strip().lower())
+        except (SessionError, OSError, ConnectionError, nm.NameProblem) as exc:
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"Asked for {name}. The answer comes to your private messages.", timeout=8)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_give_subname(self) -> None:
+        s = self.session
+        parents = naming.parents_i_hold(s)
+        if not parents:
+            self.notify("You need a name of your own first, e.g. @lorensen (press @)",
+                        severity="warning", timeout=8)
+            return
+        m = self.current_message
+        key = m.author_key if m and not m.private and m.author_key else s.identity().key_text
+        name = await self.push_screen_wait(InputDialog(
+            "Give a name under yours", f"Under {', '.join('@' + p for p in parents)}. You can "
+            "give yourself one too, e.g. andreas@" + parents[0] + ".", f"sonia@{parents[0]}",
+            value=f"@{parents[0]}"))
+        if not name:
+            return
+        key = await self.push_screen_wait(InputDialog(
+            f"Whose is {name}?", "Their key - filled in from the selected post, or yours.",
+            "ed25519:...", value=key))
+        if not key:
+            return
+        years = await self.push_screen_wait(InputDialog(
+            "For how many years?", "1 to 5. Your client renews it when it is about to run out; "
+            "you can take it back at any time.", "1", value="1"))
+        if not years:
+            return
+        try:
+            n = max(1, min(5, int(years)))
+            await naming.give_subname(s, name.strip().lower(), key.strip(), timedelta(days=365 * n))
+        except (SessionError, OSError, ConnectionError, nm.NameProblem, ValueError,
+                crypto.CryptoError) as exc:
+            self.notify(f"Not given: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{name} given to {s.identity_label(key.strip())}")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_name_requests(self) -> None:
+        s = self.session
+        try:
+            await s.fetch_group(s.my_inbox)
+        except (SessionError, OSError, ConnectionError):
+            pass
+        reqs = naming.name_requests(s)
+        if not reqs:
+            self.notify("Nobody is asking for a name under yours")
+            return
+        items = [(m.message_id, f"{d['name']} - {s.identity_label(d['key'], m.from_name)}",
+                  f"{d['name']}\nfor {s.identity_label(d['key'], m.from_name)}\n{d['key']}")
+                 for m, d in reqs]
+        result = await self.push_screen_wait(ModerationDialog(
+            items, "Name requests", "People asking for a name under yours. Giving one makes it "
+            "show on their posts for a year; you can take it back.", "Choose a request",
+            "Refuse", "Give"))
+        if not result:
+            return
+        action, which = result
+        msg, data = next((m, d) for m, d in reqs if m.message_id == which)
+        try:
+            await naming.answer_request(s, msg, data, approve=action == "approve")
+        except (SessionError, OSError, ConnectionError, nm.NameProblem) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{data['name']} given" if action == "approve" else "Refused")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_names_given(self) -> None:
+        s = self.session
+        given = naming.names_given(s)
+        if not given:
+            self.notify("You have not given any names")
+            return
+        people = [(c.name, f"{c.name} - {s.identity_label(c.key)}, until "
+                   f"{c.expires.astimezone():%d %B %Y}") for c in given]
+        name = await self.push_screen_wait(KeyListDialog(
+            "Names you gave", "Taking a name back is public: it goes in your list of revoked "
+            "names, and clients stop showing it.", people, "Take back"))
+        if not name:
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Take back {name}?", "It stops showing on their posts.", "Take back",
+                danger=True)):
+            return
+        try:
+            await naming.revoke_subname(s, name)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{name} taken back")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_primary_name(self) -> None:
+        s = self.session
+        mine = naming.my_names(s)
+        if len(mine) < 2:
+            self.notify("You have " + ("one name" if mine else "no names") + "; nothing to choose")
+            return
+        name = await self.push_screen_wait(KeyListDialog(
+            "Name your posts show", "Readers see this one on your posts.",
+            [(c.name, naming.name_text(c.name)) for c in mine], "Use"))
+        if name:
+            naming.set_primary(s, name)
+            self.notify(f"Your posts show {naming.name_text(name)}")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_report(self) -> None:
+        m, s = self.current_message, self.session
+        if m is None or m.private or not m.readable:
+            self.notify("Select the post you want to report", severity="warning")
+            return
+        self.set_status("Finding who can act on it ...")
+        targets = await s.report_targets(m)
+        self.set_status("")
+        if not targets:
+            self.notify("Nobody to report this to: the group has no owner, moderator, "
+                        "maintainer or node operator you can reach", severity="warning", timeout=8)
+            return
+        result = await self.push_screen_wait(ReportDialog(m.subject or "(no subject)", targets))
+        if not result:
+            return
+        chosen, note, anonymous = result
+        self.set_status("Sending the report ...")
+        try:
+            n = await s.report(m, chosen, note, anonymous)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify(f"Reported to {n} " + ("person" if n == 1 else "people"))
+
+    async def action_open_reported(self) -> None:
+        m, s = self.current_message, self.session
+        found = s.reported_post(m) if m else None
+        if not found:
+            self.notify("Select a report in your private messages first", severity="warning")
+            return
+        gid, msgid = found
+        if gid not in self.groups:
+            self.notify(f"You do not follow {s.group_label(gid)}; subscribe to it with g, "
+                        f"then look for {msgid}", severity="warning", timeout=10)
+            return
+        self.select_group(gid)
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if msgid in self.messages:
+                break
+        if msgid in self.messages:
+            self.current_message = self.messages[msgid]
+            self.notify("This is the reported post: withdraw it, ban or block its author "
+                        "from the command palette", timeout=10)
+        else:
+            self.notify("The post is not there any more - perhaps it was withdrawn", timeout=8)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_moderation(self) -> None:
+        """Approve or reject submissions (UN-RFC 0009 section 3)."""
+        s = self.session
+        try:
+            await s.fetch_group(s.my_inbox)
+        except (SessionError, OSError, ConnectionError):
+            pass                                  # show what we have
+        queue = s.submissions()
+        if not queue:
+            self.notify("Nothing waiting for approval")
+            return
+        items = []
+        for m, art in queue:
+            who = s.identity_label(art["Author-Key"], art.get("From", ""))
+            items.append((m.message_id, f"{s.group_label(art.group)}: {art.get('Subject', '')} - {who}",
+                          f"From: {who}\nGroup: {s.group_label(art.group)}\n"
+                          f"Subject: {art.get('Subject', '')}\n\n{art.body}"))
+        result = await self.push_screen_wait(ModerationDialog(items))
+        if not result:
+            return
+        action, which = result
+        msg, art = next((m, a) for m, a in queue if m.message_id == which)
+        try:
+            if action == "approve":
+                await s.approve_submission(msg, art)
+                self.notify("Approved and posted")
+            else:
+                if not await self.push_screen_wait(ConfirmDialog(
+                        "Reject this post?", "It is not posted, and the queue forgets it. "
+                        "The author is not told unless you write to them.", "Reject")):
+                    return
+                await s.reject_submission(msg)
+                self.notify("Rejected")
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        if self.current_group == art.group:
+            self.select_group(art.group)
+
+    def _owned_group(self, kind: str | None = None) -> str | None:
+        s, gid = self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only the group's owner can do this", severity="warning")
+            return None
+        if kind and s.group_entry(gid).get("type") != kind:
+            self.notify(f"This is only for {kind} groups", severity="warning")
+            return None
+        return gid
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_add_role(self, role: str) -> None:
+        """Owner: add a moderator or (in a channel) a poster (UN-RFC 0004)."""
+        gid = self._owned_group("channel" if role == "posters" else None)
+        if not gid:
+            return
+        s, m = self.session, self.current_message
+        mine = s.identity().key_text
+        key = m.author_key if m and not m.private and m.author_key and m.author_key != mine else ""
+        what = "moderator" if role == "moderators" else "poster"
+        key = await self.push_screen_wait(InputDialog(
+            f"Make a {what} of {s.group_label(gid)}",
+            ("Moderators can post directly, approve others' posts and withdraw any post. "
+             if role == "moderators" else "Posters can post in this channel. ")
+            + "Their key - filled in from the selected post:", "ed25519:...", value=key))
+        if not key:
+            return
+        try:
+            await s.set_role(gid, role, key.strip(), True)
+        except (SessionError, OSError, ConnectionError, crypto.CryptoError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{s.identity_label(key.strip())} is now a {what}")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_roles(self) -> None:
+        gid = self._owned_group()
+        if not gid:
+            return
+        s = self.session
+        data = s.manifest_data(gid)
+        people = [(k, f"{s.identity_label(k)} (moderator)") for k in data.get("moderators", [])]
+        people += [(k, f"{s.identity_label(k)} (poster)") for k in data.get("posters", [])]
+        if not people:
+            self.notify("This group has no moderators or posters. Ctrl+P: Make moderator.")
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Moderators and posters of {s.group_label(gid)}",
+            "Removing someone takes their role away from now on.", people, "Remove"))
+        if not key:
+            return
+        role = "moderators" if key in data.get("moderators", []) else "posters"
+        try:
+            await s.set_role(gid, role, key, False)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify("Removed")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_members(self) -> None:
+        gid = self._owned_group("closed")
+        if not gid:
+            return
+        s = self.session
+        people = [(k, s.identity_label(k)) for k in s.members(gid)]
+        if not people:
+            self.notify("No members recorded here. Members you invited from another device, "
+                        "or before version 0.3.0, are not listed.", timeout=10)
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Members of {s.group_label(gid)}",
+            "The people you invited from this client. Removing one gives everyone else a new "
+            "key; members you invited elsewhere are not listed and lose access too, so invite "
+            "them again.", people, "Remove member"))
+        if not key:
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Remove {s.identity_label(key)}?",
+                "The group gets a new key that the others receive. They cannot read anything "
+                "new - but they keep everything they have already read.", "Remove",
+                danger=True)):
+            return
+        self.set_status("Making a new key for the group ...")
+        try:
+            await s.remove_member(gid, key)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not removed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify("Removed. The others have the new key.")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_block(self) -> None:
+        """Maintainer: block the selected author across the hierarchy (UN-RFC 0018, 5.4)."""
+        m, s, gid = self.current_message, self.session, self.current_group
+        me = s.identity().key_text
+        mine = [h for h in naming.governing(s, gid or "") if h.maintainer == me] if gid else []
+        if not mine:
+            self.notify("Only the maintainer of a hierarchy above this group can block "
+                        "people in it", severity="warning")
+            return
+        if m is None or m.private or not m.author_key or m.author_key == me:
+            self.notify("Select a post by the person you want to block", severity="warning")
+            return
+        who = s.identity_label(m.author_key, m.from_name)
+        reason = await self.push_screen_wait(InputDialog(
+            f"Block {who} in {mine[0].name}.*?",
+            "Nodes that honour blocks refuse their posts in every group under "
+            f"{mine[0].name}, and readers hide them unless they choose to see them. The "
+            "block and its reason are public. Reason (required):",
+            "e.g. threats against members in several groups"))
+        if not reason:
+            return
+        self.set_status("Posting your hierarchy list ...")
+        try:
+            where = await naming.block(s, gid, m.author_key, reason)
+        except (SessionError, OSError, ConnectionError, ValueError, crypto.CryptoError) as exc:
+            self.set_status("")
+            self.notify(f"Not blocked: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.current_message = None
+        self.notify(f"{who} is blocked in {where}.*")
+        self._render_threads()
+
+    def action_toggle_blocked(self) -> None:
+        on = not self.session.data.get("show_blocked")
+        self.session.set_show_blocked(on)
+        self.notify("Showing posts blocked by maintainers" if on
+                    else "Hiding posts blocked by maintainers")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_banned(self) -> None:
+        s, gid = self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only a group's owner can see and lift its bans here; "
+                        "? shows the group's settings", severity="warning")
+            return
+        people = [(k, (s.identity_label(k) + (f" - {r}" if r else ""))) for k, r in s.banned(gid)]
+        if not people:
+            self.notify("Nobody is banned from this group")
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Banned from {s.group_label(gid)}", "Lifting a ban lets them post here again.",
+            people, "Lift ban"))
+        if not key:
+            return
+        try:
+            await s.unban(gid, key)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not lifted: {exc}", severity="error")
+            return
+        self.notify("Ban lifted")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ignored(self) -> None:
+        people = self.session.ignored()
+        if not people:
+            self.notify("You do not ignore anyone")
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            "People you ignore", "Their posts and messages are hidden from you, everywhere. "
+            "Nobody else knows: the list stays in your vault.", people, "Show again"))
+        if not key:
+            return
+        self.session.unignore(key)
+        self.notify("Shown again")
+        await self._render_groups()
         self._render_threads()
 
     @work(group="dialog", exit_on_error=False)

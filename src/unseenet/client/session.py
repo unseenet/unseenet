@@ -59,6 +59,7 @@ class Message:
     sender_key: str | None = None         # verified sender of a private message
     reply_inbox: str | None = None
     to_key: str | None = None             # a private message you sent: its recipient
+    content_type: str = ""                # private messages: the inner Content-Type
 
     @property
     def author_fp(self) -> str:
@@ -128,6 +129,7 @@ class Session:
         d.setdefault("subscribed", [])
         d.setdefault("read", {})
         d.setdefault("contacts", {})
+        d.setdefault("ignored", {})                    # keys you do not want to see (#72)
         if d["nodes"]:          # groups from before several nodes: they live on the first
             for entry in d["groups"].values():
                 entry.setdefault("node", d["nodes"][0])
@@ -323,6 +325,7 @@ class Session:
         """Article numbers belong to one node: drop them when a group moves."""
         for store in (self.cache, self._raw, self._high):
             store.pop(group_id, None)
+        self.data["groups"].get(group_id, {}).pop("closed", None)   # numbers of the old node
 
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)
@@ -607,6 +610,98 @@ class Session:
             return bool(entry.get("keys"))    # a member: you have the group's key
         return True                          # open, moderated (goes to approval), inbox
 
+    # --- moderation (UN-RFC 0004 section 5, UN-RFC 0009 section 3) ---
+    def moderates(self, group_id: str) -> bool:
+        me = self.identity().key_text
+        data = self.manifest_data(group_id)
+        return bool(self.data["groups"].get(group_id, {}).get("owner")) \
+            or data.get("owner") == me or me in data.get("moderators", [])
+
+    def submission_targets(self, group_id: str) -> list[tuple[str, bytes | None]]:
+        """(inbox, owner key or None) to send a submission to (UN-RFC 0009, 3)."""
+        data = self.manifest_data(group_id)
+        if data.get("submissions"):
+            return [(data["submissions"], None)]
+        keys = [data["owner"]] if data.get("owner") else []
+        keys += [k for k in data.get("moderators", []) if k not in keys]
+        return [(personal_inbox_id(crypto.key_from_text(k)), crypto.key_from_text(k)) for k in keys]
+
+    async def _submit(self, group_id: str, subject: str, build) -> str:
+        bits = await self.required_pow(group_id)
+        loop = asyncio.get_running_loop()
+        art = await loop.run_in_executor(None, lambda: build(bits))
+        raw = art.to_bytes().decode("utf-8")
+        delivered, errors = 0, []
+        for inbox, owner_key in self.submission_targets(group_id):
+            try:
+                await self.send_private(inbox, f"Submission to {short_group_id(group_id)}: {subject}",
+                                        raw, owner_key=owner_key, content_type=SUBMISSION_TYPE,
+                                        remember=False)
+                delivered += 1
+            except (SessionError, OSError, ConnectionError) as exc:
+                errors.append(str(exc))
+        if not delivered:
+            raise SessionError("could not reach the moderators: " + "; ".join(errors or ["no inbox"]))
+        entry = self.group_entry(group_id)
+        entry.setdefault("submitted", []).append(art.message_id)
+        del entry["submitted"][:-200]
+        self.data["read"].setdefault(group_id, []).append(art.message_id)
+        self.save()
+        return art.message_id
+
+    def was_submitted(self, group_id: str, message_id: str) -> bool:
+        return message_id in self.group_entry(group_id).get("submitted", [])
+
+    def submissions(self) -> list[tuple["Message", Article]]:
+        """Submissions waiting in your inbox for groups you moderate, oldest first."""
+        done = set(self.data.get("moderation_done", []))
+        out = []
+        for m in self.private_messages():
+            if not m.content_type.startswith(SUBMISSION_TYPE) or m.message_id in done:
+                continue
+            try:
+                raw = m.body.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+                art = Article.from_bytes(raw)
+                validate_structure(art, raw_size=len(raw))
+            except (ArticleError, ValueError, UnicodeError):
+                continue
+            gid = art.group
+            data = self.manifest_data(gid)
+            if data.get("type") != "moderated" or not self.moderates(gid) \
+                    or self.is_banned(gid, art["Author-Key"]):
+                continue
+            if any(x.message_id == art.message_id for x in self.cache.get(gid, {}).values()):
+                continue                    # another moderator approved it already
+            out.append((m, art))
+        return out
+
+    def _moderation_done(self, msg: "Message") -> None:
+        done = self.data.setdefault("moderation_done", [])
+        done.append(msg.message_id)
+        del done[:-500]
+        self.save()
+
+    async def approve_submission(self, msg: "Message", art: Article) -> None:
+        """Approve and post a submitted article; its Message-ID stays the same."""
+        from ..core.groups import approve
+        if not self.moderates(art.group):
+            raise SessionError("you do not moderate this group")
+        approve(art, self.identity())
+        try:
+            await self._post_article(art)
+        except SessionError as exc:
+            if "duplicate" not in str(exc).lower():
+                raise                       # a duplicate: someone else approved it first
+        self._moderation_done(msg)
+
+    async def reject_submission(self, msg: "Message", reason: str = "") -> None:
+        if reason.strip() and (msg.reply_inbox or msg.sender_key):
+            target = self.reply_target(msg)
+            if target:
+                await self.send_private(target, "Not approved: " + msg.subject.split(": ", 1)[-1],
+                                        reason.strip() + "\n", references=[msg.message_id])
+        self._moderation_done(msg)
+
     def is_data_group(self, group_id: str) -> bool:
         """A group for programs, not people (UN-RFC 0008 section 3.1.1)."""
         from ..known_nodes import DATA_GROUPS
@@ -628,11 +723,14 @@ class Session:
         data = self.manifest_data(group_id)
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
-        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow", "retention_days"}
+        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
+                   "retention_days", "banned", "moderators", "posters"}
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
-            if value in (None, "", False) and key in ("title", "description", "rules", "low_latency"):
+            if value in (None, "", False, []) and key in ("title", "description", "rules",
+                                                         "low_latency", "banned", "moderators",
+                                                         "posters"):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -646,6 +744,35 @@ class Session:
         entry.update({"manifest": data, "title": data.get("title", "")})
         self.save()
         return data
+
+    # --- bans (UN-RFC 0004, section 5.1) ---
+    def banned(self, group_id: str) -> list[tuple[str, str]]:
+        """(key, reason) of the keys the group's current manifest bans."""
+        return [(b.get("key", ""), b.get("reason", ""))
+                for b in self.manifest_data(group_id).get("banned", []) if isinstance(b, dict)]
+
+    def is_banned(self, group_id: str, key_text: str | None) -> bool:
+        return bool(key_text) and any(k == key_text for k, _ in self.banned(group_id))
+
+    async def ban(self, group_id: str, key_text: str, reason: str = "") -> None:
+        """Owner: ban a key from posting in the group (a new manifest)."""
+        crypto.key_from_text(key_text)
+        if key_text == self.identity().key_text:
+            raise SessionError("you cannot ban yourself")
+        if len(reason) > 200:
+            raise SessionError("a reason is at most 200 characters")
+        current = [b for b in self.manifest_data(group_id).get("banned", [])
+                   if isinstance(b, dict) and b.get("key") != key_text]
+        entry = {"key": key_text,
+                 "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        if reason.strip():
+            entry["reason"] = reason.strip()
+        await self.update_group(group_id, banned=current + [entry])
+
+    async def unban(self, group_id: str, key_text: str) -> None:
+        current = [b for b in self.manifest_data(group_id).get("banned", [])
+                   if isinstance(b, dict) and b.get("key") != key_text]
+        await self.update_group(group_id, banned=current)
 
     def rules_unseen(self, group_id: str) -> bool:
         """True if the group has rules the reader has not seen in this version."""
@@ -733,6 +860,47 @@ class Session:
                               [crypto.key_from_text(member_key)], grant_only=True,
                               pow_bits=await self.required_pow(group_id))
         await self._post_article(art)
+        members = entry.setdefault("members", [])
+        if member_key not in members:
+            members.append(member_key)
+        self.save()
+
+    def members(self, group_id: str) -> list[str]:
+        """Owner: the keys you invited to a closed group (envelopes do not say whom
+        they are for, so this record is the list). Members invited from another
+        device, or before this was recorded, are missing."""
+        return list(self.data["groups"].get(group_id, {}).get("members", []))
+
+    async def remove_member(self, group_id: str, member_key: str) -> int:
+        """Owner: start a new epoch without the member (UN-RFC 0004, 6.1-6.2).
+        The others get the new key; the removed member keeps what they read.
+        Returns the new epoch."""
+        entry = self.data["groups"].get(group_id)
+        if not entry or not entry.get("owner") or entry.get("type") != "closed":
+            raise SessionError("you can only remove members from closed groups you own")
+        keep = [k for k in entry.get("members", []) if k != member_key]
+        epoch = max(int(e) for e in entry["keys"]) + 1
+        keys = crypto.GroupKeys.generate()
+        art = make_key_update(self.identity(), group_id, epoch, keys,
+                              [crypto.key_from_text(k) for k in keep], closes_previous=True,
+                              pow_bits=await self.required_pow(group_id))
+        await self._post_article(art)
+        entry["keys"][str(epoch)] = keys.secret.hex()
+        entry["members"] = keep
+        self.save()
+        return epoch
+
+    async def set_role(self, group_id: str, role: str, key_text: str, on: bool = True) -> None:
+        """Owner: add or remove a moderator or a poster (UN-RFC 0004, 3.1 and 5)."""
+        if role not in ("moderators", "posters"):
+            raise SessionError(f"unknown role {role}")
+        crypto.key_from_text(key_text)
+        if role == "posters" and self.group_entry(group_id).get("type") != "channel":
+            raise SessionError("posters are for channels; other groups have moderators")
+        current = [k for k in self.manifest_data(group_id).get(role, []) if k != key_text]
+        if on:
+            current.append(key_text)
+        await self.update_group(group_id, **{role: current})
 
     # ------------------------------------------------------------------
     # inboxes and private messages (UN-RFC 0009)
@@ -781,7 +949,8 @@ class Session:
 
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
-                           anonymous: bool = False, content_type: str | None = None) -> str:
+                           anonymous: bool = False, content_type: str | None = None,
+                           remember: bool = True) -> str:
         """Send a message to an inbox. Only its owner can read it."""
         if not self.manifest_data(group_id):
             owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
@@ -794,6 +963,8 @@ class Session:
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, content_type=content_type, pow_bits=bits))
         msgid = art.message_id
+        if not remember:
+            return msgid
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
                              # where it falls among received messages: dates are rounded to
@@ -834,6 +1005,65 @@ class Session:
     def contact_name(self, key_text: str | None) -> str | None:
         entry = self.data["contacts"].get(key_text or "")
         return entry["name"] if entry else None
+
+    # --- ignoring people: the reader's own killfile, never sent anywhere (#72) ---
+    def ignore(self, key_text: str, label: str = "") -> None:
+        crypto.key_from_text(key_text)
+        if key_text == self.identity().key_text:
+            raise SessionError("that is your own key")
+        self.data["ignored"][key_text] = {
+            "label": label.strip() or self.identity_label(key_text),
+            "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        self.save()
+
+    def unignore(self, key_text: str) -> None:
+        self.data["ignored"].pop(key_text, None)
+        self.save()
+
+    def is_ignored(self, key_text: str | None) -> bool:
+        return bool(key_text) and key_text in self.data["ignored"]
+
+    def ignored(self) -> list[tuple[str, str]]:
+        """(key, label) of the people you ignore, sorted by label."""
+        return sorted(((k, v.get("label", k)) for k, v in self.data["ignored"].items()),
+                      key=lambda kv: kv[1].lower())
+
+    def visible(self, msgs: list["Message"]) -> list["Message"]:
+        """Leave out messages from people you ignore (your own are always shown)."""
+        groups = {m.group for m in msgs}
+        banned = {gid: {k for k, _ in self.banned(gid)} for gid in groups}
+        if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
+            for gid in groups:
+                banned[gid] |= set(self.hierarchy_blocks(gid))
+        if not self.data["ignored"] and not any(banned.values()):
+            return list(msgs)
+        return [m for m in msgs if m.to_key is not None
+                or not (self.is_ignored(m.sender_key or m.author_key)
+                        or (not m.private and m.author_key in banned.get(m.group, ())))]
+
+    def hierarchy_blocks(self, group_id: str) -> dict[str, tuple[str, str]]:
+        """{key: (hierarchy, reason)} that maintainers block for this group."""
+        if group_id.startswith("inbox@") or group_id not in self.data["groups"]:
+            return {}
+        try:
+            return naming.blocks(self, group_id)
+        except Exception:  # noqa: BLE001  lists that cannot be read block nothing
+            return {}
+
+    def hidden_by_blocks(self, group_id: str) -> list[tuple[str, str, int]]:
+        """(hierarchy, reason, posts) hidden in a group by maintainers' blocks."""
+        if self.data.get("show_blocked"):
+            return []
+        blocked = self.hierarchy_blocks(group_id)
+        count: dict[str, int] = {}
+        for m in self.cache.get(group_id, {}).values():
+            if m.author_key in blocked:
+                count[m.author_key] = count.get(m.author_key, 0) + 1
+        return [(blocked[k][0], blocked[k][1], n) for k, n in count.items()]
+
+    def set_show_blocked(self, on: bool) -> None:
+        self.data["show_blocked"] = bool(on)
+        self.save()
 
     def contacts(self) -> list[tuple[str, str]]:
         """(key, name) sorted by name."""
@@ -897,6 +1127,74 @@ class Session:
     def _remember_sent(self, entry: dict) -> None:
         self.sent.append(entry)
         self.vault.write_sidecar(SENT_SIDECAR, json.dumps({"v": 1, "sent": self.sent}).encode())
+
+    # --- reporting a post (#74): private messages to those who can act on it ---
+    async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:
+        """(who, inbox, key) of the people who can act on a post: the group's owner,
+        its moderators, the maintainers of its hierarchy and the operator of the
+        node it was read from."""
+        out: list[tuple[str, str, str]] = []
+        data = self.manifest_data(msg.group)
+        me = self.identity().key_text
+
+        def add(who: str, key: str | None, inbox: str | None = None) -> None:
+            if not key or key == me or any(k == key for _, _, k in out):
+                return
+            try:
+                inbox = inbox or personal_inbox_id(crypto.key_from_text(key))
+            except crypto.CryptoError:
+                return
+            out.append((who, inbox, key))
+
+        if data.get("owner"):
+            add(f"The group's owner ({self.identity_label(data['owner'])})", data["owner"])
+        for k in data.get("moderators", []):
+            add(f"Moderator {self.identity_label(k)}", k)
+        for h in naming.governing(self, msg.group):
+            add(f"Maintainer of {h.name}.* ({self.identity_label(h.maintainer)})", h.maintainer)
+        try:
+            info = await self.node_info(self.node_for(msg.group))
+        except (SessionError, OSError, ConnectionError, ValueError):
+            info = {}
+        if info.get("operator") and info.get("contact"):
+            add(f"The operator of {info.get('name', 'the node')}", info["operator"], info["contact"])
+        return out
+
+    async def report(self, msg: "Message", targets: list[tuple[str, str, str]], note: str = "",
+                     anonymous: bool = False) -> int:
+        """Send a report of a post to the chosen people. Returns how many got it."""
+        if not targets:
+            raise SessionError("choose at least one person to report to")
+        quote = "\n".join("> " + line for line in (msg.body or "").rstrip("\n").splitlines()[:40])
+        body = (f"Report of a post\n\nGroup: {msg.group}\nMessage-ID: {msg.message_id}\n"
+                f"Author key: {msg.author_key}\n"
+                + (f"\nNote from the reporter:\n{note.strip()}\n" if note.strip() else "")
+                + f"\nThe post, as the reporter saw it:\nFrom: {msg.from_name}\n"
+                f"Subject: {msg.subject}\n\n{quote}\n")
+        sent, errors = 0, []
+        for _, inbox, key in targets:
+            try:
+                await self.send_private(inbox, f"Report: {msg.subject or '(no subject)'}", body,
+                                        owner_key=crypto.key_from_text(key),
+                                        content_type=REPORT_TYPE + "; charset=utf-8",
+                                        anonymous=anonymous,
+                                        remember=False)
+                sent += 1
+            except (SessionError, OSError, ConnectionError) as exc:
+                errors.append(str(exc))
+        if not sent:
+            raise SessionError("the report could not be sent: " + "; ".join(errors))
+        return sent
+
+    @staticmethod
+    def reported_post(msg: "Message") -> tuple[str, str] | None:
+        """(group, Message-ID) named in a report you received."""
+        if not msg.content_type.startswith(REPORT_TYPE):
+            return None
+        found = dict(re.findall(r"^(Group|Message-ID): (\S+)$", msg.body or "", re.M))
+        if "Group" in found and "Message-ID" in found:
+            return found["Group"], found["Message-ID"]
+        return None
 
     async def node_info(self, node: str | None = None) -> dict:
         """UN-RFC 0011 node information, or {} if the node does not offer it."""
@@ -1144,6 +1442,12 @@ class Session:
             self._take_manifest(art, group_id, entry)
             return None
         if ctl and ctl[0] in ("key-update", "key-grant"):
+            try:
+                if ctl[0] == "key-update" and json.loads(art.body).get("closes_previous") is True:
+                    closed = entry.setdefault("closed", {})        # epoch -> article number
+                    closed.setdefault(ctl[1], n)
+            except (ValueError, AttributeError):
+                pass
             opened = open_envelope(art, me)
             if opened:
                 epoch, keys = opened
@@ -1167,6 +1471,13 @@ class Session:
             msg.encrypted = msg.private = True
             self._open_private(msg, art, group_id)
         elif "Encrypted" in art:
+            # posted with an old key after a member was removed (UN-RFC 0004, 6.5)
+            try:
+                epoch = encryption_epoch(art)
+            except (ArticleError, ValueError):
+                epoch = 0
+            if any(int(e) > epoch and n > at for e, at in entry.get("closed", {}).items()):
+                return None
             msg.encrypted = True
             msg.raw = raw
             self._decrypt_into(msg, art, entry)
@@ -1187,6 +1498,7 @@ class Session:
             msg.readable, msg.error, msg.subject = False, str(err), "(unreadable private message)"
             return
         msg.subject, msg.body = inner.get("Subject", ""), inner.body
+        msg.content_type = inner.get("Content-Type", "")
         msg.reply_inbox = inner.get("Reply-Inbox")
         if sender is None:
             msg.from_name, msg.author_key = "anonymous", ""
@@ -1227,7 +1539,8 @@ class Session:
                 self.save()
 
     def unread_count(self, group_id: str) -> int:
-        return sum(1 for m in self.cache.get(group_id, {}).values() if not self.is_read(m))
+        return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
+                   if not self.is_read(m))
 
     # ------------------------------------------------------------------
     # posting
@@ -1272,6 +1585,9 @@ class Session:
                 art = new_article(group_id, subject, body, from_name=self.display_name(),
                                   references=references, extra=[cert] if cert else None)
                 return art.finalize(author, bits)
+        gtype = self.manifest_data(group_id).get("type") or entry.get("type")
+        if gtype == "moderated" and not self.moderates(group_id):
+            return await self._submit(group_id, subject, build)
         msgid = (await self._post_with_postage(group_id, build)).message_id
         if cert:
             naming.sent_header(self, group_id)
@@ -1279,6 +1595,10 @@ class Session:
         marks.append(msgid)
         self.save()
         return msgid
+
+
+SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
+REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74)
 
 
 def default_vault_path() -> Path:

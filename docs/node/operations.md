@@ -83,11 +83,33 @@ passphrase can make that signature. When a maintainer accepts the request,
 your node is added to `src/unseenet/nodes.json`, the new list is posted to
 `unseenet.nodes`, and clients pick it up the next time they connect.
 
-Listed nodes are reached over Tor **every day**. If yours does not answer
-for 3 days, you get a note on your request; after 10 days it is taken off
-the list. Ask again when it is back.
+Being listed does not peer your node with anyone: to share groups with
+other nodes, [peer](peering.md) with them yourself. A listed node that
+peered with nobody would show its users only its own posts, so the
+project requires that a listed node is **connected**
+([UN-RFC 0021](../spec/un-rfc-0021.md)):
 
-(A pull request that edits `src/unseenet/nodes.json` works too.)
+- **Posts get out and in.** [Peer](peering.md) with at least one listed
+  node, and make sure it lists your node key too. The project's own
+  nodes peer with anyone who asks to be listed - say so in the request.
+- **It carries the groups.** Your node must carry every group that most
+  listed nodes carry, except groups you leave out openly with
+  [`excludes`](configuration.md#excludes-groups-you-leave-out). The
+  project's groups (`unseenet*`) cannot be left out.
+
+When the other checks pass, the request check posts a small **canary**
+post to your node and one to a listed node, and waits up to an hour for
+each to show up on the other side.
+
+Listed nodes are checked **every day**: reached over Tor, and checked with
+a new canary for each node, read on all the others the next day. A canary
+counts as having got out when more than half of the listed nodes have it.
+If your node is not reachable, not connected or misses groups for 3 days,
+you get a note on your request saying what is wrong; after 10 days it is
+taken off the list. Ask again when it is fixed.
+
+(A pull request that edits `src/unseenet/nodes.json` works too; the daily
+check applies all the same.)
 
 Being listed means more users and more responsibility - read
 [Your responsibility](responsibility.md) first.

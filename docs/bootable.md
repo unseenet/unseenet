@@ -99,7 +99,7 @@ end-to-end encrypted, so the node cannot read them either.
 !!! note "Coming"
     An encrypted partition on the same stick for everything, created on the
     first boot, and a guest mode that keeps nothing; and an image for the
-    Raspberry Pi (#19).
+    Raspberry Pi (#97).
 
 ## What is on it
 

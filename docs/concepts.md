@@ -37,6 +37,7 @@ that applies:
 |----------|------------|
 | your own name for them | A **petname** you gave the key yourself. It never leaves your computer, and it always wins. |
 | `@lorensen.dk` | A **domain name**, proven by a DNS record on the domain. Only the domain's owner can get it. |
+| `sonia@lorensen`, `andlo@lorensen.dk` | A **name under a name**: given by whoever holds `@lorensen`, or by the domain `lorensen.dk` in DNS - like an e-mail address. |
 | `@lorensen` | A **registered name**, given out first come, first served by a registrar. Names that are Internet top-level domains, like `microsoft` or `dk`, cannot be registered. |
 | `Andreas~2byg` | Everyone else: the display name they chose, and the first characters of the fingerprint. |
 

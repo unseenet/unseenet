@@ -8,7 +8,7 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
-- **Update** in the bootable stick's menu: fetch the newest release over
+- **Update** in the menu of Bootable (USB, SSD etc.): fetch the newest release over
   Tor (or a development build, or an update zip on the stick) and replace
   the system files, keeping `data/`. Releases get an
   `unseenet-<version>-x86_64-update.zip` and a signed `SHA256SUMS.txt.sig`:
@@ -16,9 +16,60 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   development builds with a separate release key in CI. Also
   `python -m unseenet.update`. (#68)
 - **Update Unseenet** in the client's command palette and `unseenet update`
-  for portable folders and USB sticks on Windows, macOS and Linux: the USB
+  for Portable (Linux, macOS, Windows), also on a USB stick: the USB
   zip or the platform's zip, checked the same way, `data/` kept. Running
   programs on Windows are moved aside and removed at the next start. (#68)
+- Listed nodes must be connected (UN-RFC 0021): the daily health check
+  posts a small canary to each listed node in `unseenet.canary` and reads
+  the next day where they arrived. A node whose canary does not reach more
+  than half of the others, that misses theirs, or that does not carry what
+  most of them carry, gets a note after 3 days and is taken off the list
+  after 10. The "Add my node" check sends a canary each way first. (#87)
+- `excludes` in `[node]`: groups the node does not carry by choice. They
+  are refused, and published in the node information with every dropped
+  group; clients show them under **About this node**. (#87)
+- Per-peer `accept` in `[[peer]]`: which groups the node takes from that
+  peer, pushed or pulled. `groups` only ever limited what is sent, so a
+  peering "for dk.* only" can now be held on both sides. (#86)
+- Names under a name (UN-RFC 0019 sections 4.4, 5.4, 6.4, 6.6): the holder
+  of `@lorensen` gives `andreas@lorensen` and `sonia@lorensen` with
+  certificates signed by its own key, for 1 to 5 years, renewed
+  automatically and revocable in a public list; they count only while the
+  parent is held. Domains can name people in DNS (`andlo@lorensen.dk`
+  through `andlo._unseenet.lorensen.dk`), checked by the registrar. An
+  identity with several names chooses which one its posts show. In the
+  client: *Give a name under yours*, *Ask for a name under someone's
+  name*, *Name requests*, *Names you gave*, *Name your posts show*. (#92)
+- Report a post: **Report post** in the client sends it, with a note and
+  optionally anonymously, to the group's owner, its moderators, the
+  hierarchy's maintainer and the node's operator - whoever you tick.
+  **Open reported post** takes a recipient to it. (#74)
+- Hierarchy blocks (UN-RFC 0018 section 5.4): a hierarchy's maintainer can
+  block an identity across its hierarchy with a public reason, and a
+  maintainer of a delegated part (such as `dk.snak.*`) within that part.
+  Clients hide blocked posts and say so, and readers can show them
+  anyway; nodes with the new `honour_blocks` setting refuse them and say
+  so in their node information (UN-RFC 0011). **Block in hierarchy** for
+  maintainers in the client; the client now also reads the lists of
+  delegated sub-hierarchies. (#75)
+- Moderated groups work for everyone: a non-moderator's post goes, sealed,
+  to the owner and every moderator (UN-RFC 0009 section 3, now covering
+  several moderators), and **Moderation queue** in the client approves it
+  unchanged or rejects it. The first moderator to act decides. (#71)
+- Owners run their groups from the client: **Make moderator**, **Make
+  poster** (channels), **Moderators and posters** (remove), and **Members
+  of closed group**, which removes a member by giving everyone else a new
+  key (a new epoch, UN-RFC 0004 section 6). *About group* shows moderators
+  and posters. (#70)
+- Ban a key from a group (UN-RFC 0004 section 5.1): the owner lists keys in
+  the manifest's new `banned` field, with a public reason. Nodes refuse
+  their posts, clients hide the old ones, and *About group* shows the bans.
+  **Ban from group** and **Banned from group** in the client's command
+  palette. (#73)
+- Ignore a person: **Ignore this person** in the client's command palette
+  hides everything they write, in every group and in private messages.
+  The list stays in your vault and is never sent; **People you ignore**
+  shows someone again. (#72)
 - Withdraw a post (UN-RFC 0004 section 7): **Withdraw post** in the
   command palette or Shift+D in the client, and `unseenet withdraw` on
   the command line, for your own posts and any post in a group you own or
@@ -124,6 +175,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   group. (#35)
 
 ### Fixed
+- A member removed from a closed group could go on posting with the
+  previous epoch's key, which nodes accept to tolerate replication delay.
+  A key update made because a member was removed now carries
+  `closes_previous` (UN-RFC 0004 sections 6.2 and 6.5): nodes refuse
+  earlier epochs from then on, and clients hide such posts that a lagging
+  node let through. (#84)
 - In *Your names* (`@`) the claim field no longer sits against the line
   with your key. (#61)
 - The tests pass on macOS and Windows again: the stats test makes its Unix

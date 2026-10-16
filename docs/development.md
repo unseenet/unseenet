@@ -343,6 +343,21 @@ the release notes can say what changed and link to the discussion:
 | `node-request`, `accepted` | Requests to join the known-node list (UN-RFC 0010) |
 | `hierarchy-request` | Requests for a hierarchy in the project's root list (UN-RFC 0018) |
 
+### Milestones
+
+What is planned for which release is kept as
+[milestones](https://github.com/unseenet/unseenet/milestones) on GitHub,
+so anyone can see what comes next and how far it is:
+
+- one milestone per release (`0.3.0`, `0.4.0`, ...), with a line saying
+  what the release is about, and every issue and the release pull request
+  in it;
+- **Later** for what is wanted but not planned for a release yet - a good
+  place to look for something to work on.
+
+Give an issue a milestone when it is planned; a milestone is closed when
+its release is out. Issues without one are not planned yet.
+
 ## Coding Conventions
 
 - Python 3.11+, type hints, `from __future__ import annotations`.
