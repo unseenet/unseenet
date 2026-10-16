@@ -882,3 +882,39 @@ async def test_tui_withdraw_own_post(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: not app.session.cache.get(gid), 300)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_names_transfer_and_release(tmp_path, monkeypatch):
+    """Under @ you can also transfer a name to another key, or release it (UN-RFC 0019, 6.5)."""
+    from unseenet.client import naming
+    from unseenet.client.tui import ConfirmDialog, InputDialog, NamesDialog
+    from unseenet.core import crypto
+    sent = []
+
+    async def fake_claim(s, name, action="claim", to=None):
+        sent.append((action, name, to))
+        return "<x@y>"
+
+    monkeypatch.setattr(naming, "claim", fake_claim)
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    new_key = crypto.Identity.generate().key_text
+    async with app.run_test(size=(120, 34)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        for action in ("transfer", "release"):
+            app.action_names()
+            assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog), 300)
+            app.screen.query_one("#value").value = "lorensen"
+            await pilot.pause(0.3)
+            app.screen.query_one(f"#{action}").press()
+            if action == "transfer":
+                assert await wait_for(pilot, lambda: isinstance(app.screen, InputDialog), 300)
+                await pilot.pause(0.2)
+                app.screen.query_one("#value").value = new_key
+                app.screen.query_one("#ok").press()
+            assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 300)
+            await pilot.pause(0.2)
+            app.screen.query_one("#ok").press()
+            assert await wait_for(pilot, lambda: len(sent) == (1 if action == "transfer" else 2), 300)
+        assert sent == [("transfer", "lorensen", new_key), ("release", "lorensen", None)]
+        await pilot.press("q")
+    server.close()

@@ -576,6 +576,8 @@ class NamesDialog(Dialog):
             yield Input(placeholder="lorensen  or  lorensen.dk", id="value")
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
+                yield Button("Release", id="release")
+                yield Button("Transfer", id="transfer")
                 yield Button("Renew", id="renew")
                 yield Button("Claim", variant="primary", id="claim")
 
@@ -585,11 +587,16 @@ class NamesDialog(Dialog):
     @on(Input.Submitted)
     @on(Button.Pressed, "#claim")
     @on(Button.Pressed, "#renew")
+    @on(Button.Pressed, "#transfer")
+    @on(Button.Pressed, "#release")
     def _act(self, event) -> None:
         name = self.query_one("#value", Input).value.strip().lower().lstrip("@")
-        action = "renew" if getattr(event, "button", None) is not None and event.button.id == "renew" else "claim"
+        button = getattr(event, "button", None)
+        action = button.id if button is not None else "claim"
         if name:
             self.dismiss((action, name))
+        else:
+            self.notify("Type the name first", severity="warning")
 
 
 class GroupInfoDialog(Dialog):
@@ -2061,6 +2068,33 @@ class UnseenetApp(App):
         except nm.NameProblem as exc:
             self.notify(str(exc), severity="error")
             return
+        to = None
+        if action == "release":
+            if not await self.push_screen_wait(ConfirmDialog(
+                    f"Release @{name}?",
+                    "You give the name up at once. Others can then claim it, and your "
+                    "posts no longer show it.", "Release", danger=True)):
+                return
+        elif action == "transfer":
+            to = await self.push_screen_wait(InputDialog(
+                f"Transfer @{name} to another key",
+                "Paste the key that should hold the name from now on - your new "
+                "identity's, or someone else's. Your own key loses it.",
+                "ed25519:..."))
+            if not to:
+                return
+            try:
+                crypto.key_from_text(to)
+            except crypto.CryptoError:
+                self.notify("That is not a key (ed25519:...)", severity="error")
+                return
+            if to == s.identity().key_text:
+                self.notify("That is your own key", severity="warning")
+                return
+            if not await self.push_screen_wait(ConfirmDialog(
+                    f"Transfer @{name}?", f"From now on the name belongs to\n\n{to}\n\n"
+                    "Only that key can give it back.", "Transfer", danger=True)):
+                return
         if kind == "domain" and action == "claim":
             record = f"{nm.dns_record_name(name)}  TXT  \"{nm.dns_record_value(s.identity().key_text)}\""
             if not await self.push_screen_wait(ConfirmDialog(
@@ -2071,15 +2105,18 @@ class UnseenetApp(App):
                 return
         self.set_status(f"Sending your {action} for {name} ...")
         try:
-            await naming.claim(s, name, action)
+            await naming.claim(s, name, action, to)
         except (SessionError, OSError, ConnectionError, NNTPError, nm.NameProblem) as exc:
             self.set_status("")
             self.notify(f"Could not send the claim: {exc}", severity="error")
             return
         self.set_status("")
-        self.notify(f"Asked the registrar for @{name}. It decides after about an hour; the answer "
-                    "comes to your private messages, and the name shows under @ when it is yours.",
-                    timeout=12)
+        done = {"claim": "the name shows under @ when it is yours",
+                "renew": "the new expiry shows under @",
+                "transfer": "the name then belongs to the other key",
+                "release": "the name is then free"}[action]
+        self.notify(f"Sent your {action} of @{name} to the registrar. It decides after about an "
+                    f"hour; the answer comes to your private messages, and {done}.", timeout=12)
 
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
