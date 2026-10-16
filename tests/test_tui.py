@@ -485,3 +485,31 @@ def _all_nodes(node):
     for child in node.children:
         yield child
         yield from _all_nodes(child)
+
+
+async def test_tui_bridges_dialog(tmp_path, monkeypatch):
+    from textual.widgets import Select, TextArea
+    from unseenet.client.tui import BridgesDialog
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    vault_path = tmp_path / "me.vault"
+    s = Session(Vault.open(vault_path, "pw", **KDF))
+    s.new_identity("me", "Me")
+    s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(vault_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        app.action_bridges()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BridgesDialog))
+        assert not app.screen.query_one("#lines").display          # only for own bridges
+        app.screen.query_one("#mode", Select).value = "custom"
+        await pilot.pause(0.2)
+        assert app.screen.query_one("#lines").display
+        app.screen.query_one("#lines", TextArea).text = "obfs4 192.0.2.1:443 ABCD cert=x iat-mode=0\n"
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: app.session.bridge_setting()["mode"] == "custom")
+        assert app.session.bridge_setting()["custom"] == ["obfs4 192.0.2.1:443 ABCD cert=x iat-mode=0"]
+        await pilot.press("q")
+    server.close()

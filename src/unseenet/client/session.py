@@ -20,7 +20,7 @@ from ..core.groups import (INBOX_SCHEME, MAX_RULES, VIEWS, decrypt_article, encr
                            encryption_epoch, inbox_article, make_key_update, make_manifest,
                            manifest_article, open_envelope, open_inbox_article, personal_inbox_id,
                            short_group_id, split_group_id)
-from ..core.tor import TorProcess
+from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
 
@@ -267,9 +267,23 @@ class Session:
         if address.split(":")[0].endswith(".onion"):
             if self.tor is None:
                 tor_dir = self.vault.path.resolve().parent / "unseenet-tor"
-                tor = TorProcess(tor_dir, TorProcess.find_binary())
-                status("Starting Tor ...")
-                await tor.start()
+                try:
+                    binary = TorProcess.find_binary()
+                except TorError as exc:
+                    raise SessionError(str(exc)) from exc
+                try:
+                    bridges = bridges_for(self.data.get("tor"), binary)
+                except TorError as exc:
+                    raise SessionError(f"Tor bridges: {exc}") from exc
+                tor = TorProcess(tor_dir, binary, bridges=bridges)
+                status("Starting Tor" + (" with bridges" if bridges else "") + " ...")
+                try:
+                    await tor.start()
+                except TorError as exc:
+                    await tor.stop()
+                    hint = ("" if bridges else
+                            " If this network blocks Tor, try bridges (Ctrl+P: Tor bridges).")
+                    raise SessionError(f"{exc}.{hint}") from exc
                 self.tor = tor
             socks = self.tor.socks_port
         status(f"Connecting to {address} ...")
@@ -316,6 +330,23 @@ class Session:
                     self._clients.pop(address, None)
                     if attempt == 2:
                         raise
+
+    # ------------------------------------------------------------------
+    # Tor bridges, for networks that block Tor
+    # ------------------------------------------------------------------
+    def bridge_setting(self) -> dict:
+        return dict(self.data.get("tor") or {"mode": "off"})
+
+    async def set_bridges(self, mode: str, custom: list[str] | None = None) -> None:
+        """Change how Tor connects; Tor is restarted at the next connection."""
+        if mode not in BRIDGE_MODES:
+            raise SessionError(f"unknown bridge mode {mode!r}")
+        lines = [ln.strip() for ln in (custom or []) if ln.strip()]
+        if mode == "custom" and not lines:
+            raise SessionError("paste at least one bridge line")
+        self.data["tor"] = {"mode": mode, "custom": lines}
+        self.save()
+        await self.close()
 
     async def close(self) -> None:
         for client in list(self._clients.values()):

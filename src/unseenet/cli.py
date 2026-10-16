@@ -208,9 +208,15 @@ class App:
         socks = None
         if address.split(":")[0].endswith(".onion"):
             if self.tor is None:
+                from .core.tor import TorError, bridges_for
                 tor_dir = self.vault.path.parent / "unseenet-tor"
-                self.tor = TorProcess(tor_dir, TorProcess.find_binary())
-                print("Starting Tor ...", file=sys.stderr)
+                binary = TorProcess.find_binary()
+                try:
+                    bridges = bridges_for(self.data.get("tor"), binary)
+                except TorError as exc:
+                    sys.exit(f"Tor bridges: {exc}")
+                self.tor = TorProcess(tor_dir, binary, bridges=bridges)
+                print("Starting Tor" + (" with bridges" if bridges else "") + " ...", file=sys.stderr)
                 await self.tor.start()
             socks = self.tor.socks_port
         client = await Client.connect(address, socks)
@@ -374,9 +380,23 @@ async def c_read(app: App, args) -> None:
     app.vault.save()
 
 
+async def c_bridges(app: App, args) -> None:
+    if args.mode:
+        lines = [ln for ln in args.line or []]
+        if args.mode == "custom" and not lines:
+            sys.exit("custom bridges need at least one --line \"obfs4 1.2.3.4:443 ...\"")
+        app.data["tor"] = {"mode": args.mode, "custom": lines}
+        app.vault.save()
+    setting = app.data.get("tor") or {"mode": "off"}
+    print(f"Bridges: {setting['mode']}")
+    for line in setting.get("custom", []) if setting["mode"] == "custom" else []:
+        print(f"  {line}")
+
+
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "invite": c_invite, "post": c_post, "read": c_read,
+    "bridges": c_bridges,
 }
 
 
@@ -412,6 +432,9 @@ def client_main(argv=None) -> None:
     s.add_argument("--body")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
+    s = sub.add_parser("bridges", help="show or set Tor bridges, for networks that block Tor")
+    s.add_argument("mode", nargs="?", choices=["off", "obfs4", "snowflake", "custom"])
+    s.add_argument("--line", action="append", help="a bridge line (custom; repeat for more)")
 
     args = p.parse_args(argv)
     asyncio.run(client_command(args))

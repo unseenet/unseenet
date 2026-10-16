@@ -8,8 +8,12 @@ GETINFO) are a few lines of text. See the Tor control-spec for details.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import platform
 import shutil
+import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +23,81 @@ from python_socks.async_.asyncio import Proxy
 
 class TorError(RuntimeError):
     pass
+
+
+LINUX_LOADERS = {"x86_64": "/lib64/ld-linux-x86-64.so.2", "aarch64": "/lib/ld-linux-aarch64.so.1"}
+
+
+def launch_command(binary: str) -> tuple[list[str], dict[str, str]]:
+    """How to run a program that may come from a portable build.
+
+    - The Tor Expert Bundle ships its own libevent/OpenSSL next to ``tor``; they
+      must be found before the system's (Linux, macOS).
+    - A frozen (PyInstaller) client sets LD_LIBRARY_PATH to its own libraries;
+      a child program must get the original back, not our OpenSSL.
+    - On Linux, FAT-formatted USB sticks are often mounted without execute bits;
+      the dynamic loader can still start the program.
+    """
+    env = dict(os.environ)
+    folder = Path(binary).resolve().parent
+    var = {"darwin": "DYLD_LIBRARY_PATH"}.get(sys.platform, "LD_LIBRARY_PATH")
+    if getattr(sys, "frozen", False):
+        original = env.pop(f"{var}_ORIG", None)
+        if original is None:
+            env.pop(var, None)
+        else:
+            env[var] = original
+    if sys.platform != "win32" and any(folder.glob("libevent*")):
+        env[var] = os.pathsep.join([str(folder)] + ([env[var]] if env.get(var) else []))
+    argv = [str(binary)]
+    if sys.platform.startswith("linux") and not os.access(binary, os.X_OK):
+        loader = LINUX_LOADERS.get(platform.machine())
+        if loader and os.path.exists(loader):
+            argv = [loader, str(binary)]
+    return argv, env
+
+
+def builtin_bridges(binary: str, transport: str) -> list[str]:
+    """The bridges that come with the Tor Expert Bundle (``pt_config.json``)."""
+    config = Path(binary).resolve().parent / "pluggable_transports" / "pt_config.json"
+    try:
+        return list(json.loads(config.read_text())["bridges"][transport])
+    except (OSError, ValueError, KeyError):
+        return []
+
+
+BRIDGE_MODES = ("off", "obfs4", "snowflake", "custom")
+
+
+def bridges_for(setting: dict | None, binary: str) -> list[str] | None:
+    """Bridge lines for a client's setting ``{"mode": ..., "custom": [...]}``, or None.
+
+    ``obfs4`` and ``snowflake`` use the bridges that come with the portable
+    builds; ``custom`` uses lines the user got from bridges.torproject.org.
+    """
+    mode = (setting or {}).get("mode", "off")
+    if mode == "off":
+        return None
+    if mode == "custom":
+        lines = [ln.strip() for ln in (setting or {}).get("custom", []) if ln.strip()]
+        if not lines:
+            raise TorError("no bridge lines given")
+        return lines
+    lines = builtin_bridges(binary, mode)
+    if not lines:
+        raise TorError(f"built-in {mode} bridges come with the portable builds; "
+                       "use custom bridges with this Tor")
+    return lines
+
+
+def bridge_transports(lines: list[str]) -> set[str]:
+    """The pluggable transports a list of bridge lines needs (empty for plain bridges)."""
+    out = set()
+    for line in lines:
+        first = line.split()[0] if line.split() else ""
+        if first and not first[0].isdigit() and not first.startswith("["):
+            out.add(first)
+    return out
 
 
 class TorControl:
@@ -81,6 +160,7 @@ class TorProcess:
 
     data_dir: Path
     binary: str = "tor"
+    bridges: list[str] | None = None     # bridge lines; none: connect to Tor directly
     process: asyncio.subprocess.Process | None = None
     socks_port: int = 0
     control: TorControl | None = None
@@ -95,6 +175,39 @@ class TorProcess:
                 return str(c)
         raise TorError("tor binary not found; install tor or set UNSEENET_TOR")
 
+    @staticmethod
+    def binary_version(binary: str) -> str | None:
+        """``Tor version ...`` if the binary runs here, else None."""
+        argv, env = launch_command(binary)
+        try:
+            out = subprocess.run(argv + ["--version"], env=env, capture_output=True, text=True,
+                                 timeout=30, cwd=Path(binary).resolve().parent)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        first = (out.stdout or "").strip().splitlines()
+        return first[0] if out.returncode == 0 and first else None
+
+    def _torrc(self) -> str:
+        lines = ["# Written by Unseenet for this run; Tor gets the rest as options."]
+        if self.bridges:
+            folder = Path(self.binary).resolve().parent
+            pt_dir = folder / "pluggable_transports"
+            lyrebird = pt_dir / ("lyrebird.exe" if sys.platform == "win32" else "lyrebird")
+            needed = bridge_transports(self.bridges)
+            if needed and not lyrebird.exists():
+                raise TorError("these bridges need pluggable transports (lyrebird), which come "
+                               "with the portable builds; install obfs4proxy/lyrebird otherwise")
+            if needed:
+                # relative to Tor's working directory: paths on USB sticks often have spaces
+                rel = os.path.relpath(lyrebird, folder)
+                argv, _ = launch_command(str(lyrebird))
+                exec_ = (f"{argv[0]} {rel}" if len(argv) > 1 else rel)
+                lines.append("ClientTransportPlugin meek_lite,obfs2,obfs3,obfs4,scramblesuit,"
+                             f"webtunnel,snowflake exec {exec_}")
+            lines.append("UseBridges 1")
+            lines += [f"Bridge {b.strip()}" for b in self.bridges if b.strip()]
+        return "\n".join(lines) + "\n"
+
     async def start(self, timeout: float = 120) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         port_file = self.data_dir / "control_port"
@@ -102,10 +215,14 @@ class TorProcess:
         # Our own, empty torrc: never inherit the system's /etc/tor/torrc (e.g. Fedora's
         # ControlSocket in /run/tor, which a normal user cannot use).
         torrc = self.data_dir / "torrc"
-        torrc.write_text("# Unseenet runs Tor with command-line options only.\n")
+        torrc.write_text(self._torrc())
         self.log_file = self.data_dir / "tor.log"
+        argv, env = launch_command(self.binary)
+        folder = Path(self.binary).resolve().parent
+        geoip = [opt for name, flag in (("geoip", "--GeoIPFile"), ("geoip6", "--GeoIPv6File"))
+                 if (folder / name).is_file() for opt in (flag, str(folder / name))]
         self.process = await asyncio.create_subprocess_exec(
-            self.binary,
+            *argv,
             "-f", str(torrc),
             "--defaults-torrc", str(torrc),
             "--DataDirectory", str(self.data_dir),
@@ -116,6 +233,8 @@ class TorProcess:
             "--CookieAuthFile", str(self.data_dir / "control_auth_cookie"),
             "--Log", f"notice file {self.log_file}",
             "--AvoidDiskWrites", "1",
+            *geoip,
+            env=env, cwd=str(folder),
             # Never PIPE without reading it: a full pipe would eventually block Tor.
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         loop = asyncio.get_running_loop()

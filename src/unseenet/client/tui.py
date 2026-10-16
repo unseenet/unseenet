@@ -276,6 +276,53 @@ class SignatureDialog(Dialog):
         self.dismiss(text)
 
 
+class BridgesDialog(Dialog):
+    """How Tor connects: directly, or through bridges where Tor is blocked."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "save", "Save")]
+    CHOICES = [("Off - connect to Tor directly (best when Tor is not blocked)", "off"),
+               ("Built-in obfs4 bridges - Tor traffic disguised as random data", "obfs4"),
+               ("Built-in Snowflake - through volunteers' browsers, hard to block", "snowflake"),
+               ("My own bridges - lines from bridges.torproject.org", "custom")]
+
+    def __init__(self, setting: dict):
+        super().__init__()
+        self.setting = setting
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Tor bridges", classes="title")
+            yield Label("If Tor cannot connect - at work, at school, or in a country that blocks "
+                        "Tor - bridges are hidden entrances to the Tor network. The built-in ones "
+                        "come with the portable builds. For your own, ask bridges.torproject.org "
+                        "or email bridges@torproject.org, and paste the lines below.",
+                        classes="hint", markup=False)
+            yield Select(self.CHOICES, value=self.setting.get("mode", "off"), allow_blank=False,
+                         id="mode")
+            yield TextArea("\n".join(self.setting.get("custom", [])), id="lines", soft_wrap=True)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", variant="primary", id="ok")
+
+    def on_mount(self) -> None:
+        self.query_one("#lines", TextArea).styles.height = 6
+        self._show_lines()
+
+    @on(Select.Changed, "#mode")
+    def _show_lines(self, event=None) -> None:
+        self.query_one("#lines").display = self.query_one("#mode", Select).value == "custom"
+
+    @on(Button.Pressed, "#ok")
+    def action_save(self) -> None:
+        mode = self.query_one("#mode", Select).value
+        lines = [ln.strip() for ln in self.query_one("#lines", TextArea).text.splitlines()
+                 if ln.strip()]
+        if mode == "custom" and not lines:
+            self.app.notify("Paste at least one bridge line", severity="warning")
+            return
+        self.dismiss({"mode": mode, "custom": lines})
+
+
 DELIVERY_CHOICES = [("Discussion - shown as threads", "threads"),
                     ("Chat - shown as a conversation", "chat"),
                     ("Chat, fast delivery - gives up some anonymity", "fastchat")]
@@ -1255,6 +1302,18 @@ class UnseenetApp(App):
         self.compose_private(personal_inbox_id(owner), f"Private message to {key[:20]}…",
                              owner_key=owner)
 
+    @work(group="dialog", exit_on_error=False)
+    async def action_bridges(self) -> None:
+        result = await self.push_screen_wait(BridgesDialog(self.session.bridge_setting()))
+        if not result:
+            return
+        await self.session.set_bridges(result["mode"], result["custom"])
+        self.notify("Saved - Tor reconnects " +
+                    ("directly" if result["mode"] == "off" else f"with {result['mode']} bridges"))
+        self._watching.clear()
+        self.refresh_groups()
+        self._start_watches()
+
     def action_about(self) -> None:
         self.push_screen(AboutDialog())
 
@@ -1487,6 +1546,8 @@ class UnseenetApp(App):
         yield from super().get_system_commands(screen)
         yield SystemCommand("About Unseenet", "The client, the project, source and documentation  [F1]",
                             self.action_about)
+        yield SystemCommand("Tor bridges", "Connect through bridges where Tor is blocked",
+                            self.action_bridges)
         if self.session is None:
             return
         commands = [
