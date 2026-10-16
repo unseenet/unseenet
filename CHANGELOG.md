@@ -15,6 +15,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   It also honours cancels from others: it checks each one itself, drops the
   post from its cache, and remembers cancels for posts it has not seen yet.
   `unseenet read` shows each post's Message-ID. (#36)
+- The node supports `OVER`/`XOVER`, `HDR`/`XHDR`, `LIST OVERVIEW.FMT` and
+  `LIST HEADERS` (RFC 3977 sections 8.3-8.5), so newsreaders such as tin,
+  slrn and Thunderbird list a group in one request instead of fetching
+  every article's headers over Tor. Group settings, encrypted posts and
+  private messages get a fixed subject in the overview. (#21)
 - Screenshots of the client in docs/client.md, made by
   `tools/docs_screenshots.py` from a local node with made-up content. (#57)
 - Names in the client (UN-RFC 0018 section 8, UN-RFC 0019 sections 5.2, 6.1

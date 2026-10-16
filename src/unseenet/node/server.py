@@ -16,7 +16,8 @@ from .. import __version__
 from ..core.groups import canonical_json
 from ..core import crypto
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
-from ..core.groups import Manifest, check_permitted, parse_key_update, split_group_id
+from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, parse_key_update,
+                           split_group_id)
 from ..core.store import Store
 from ..nntp import MAX_LINE, dot_stuff, read_block
 from .stats import Stats
@@ -352,7 +353,8 @@ class Session:
         cfg = self.node.config
         self.send("101 capability list follows")
         for cap in ("VERSION 2", "READER", "POST", "IHAVE", "STREAMING", "AUTHINFO USER",
-                    "LIST ACTIVE NEWSGROUPS", "NEWNEWS", "UNSEENET 1",
+                    "LIST ACTIVE NEWSGROUPS OVERVIEW.FMT HEADERS", "NEWNEWS", "OVER MSGID", "HDR",
+                    "UNSEENET 1",
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY"):
             self.send(cap)
@@ -571,6 +573,132 @@ class Session:
 
     async def cmd_stat(self, args):
         await self._send_part(args, 223, "stat")
+
+    # --- overview (RFC 3977 sections 8.3-8.5; UN-RFC 0005 section 2.4) ---
+    OVERVIEW_FMT = ("Subject:", "From:", "Date:", "Message-ID:", "References:",
+                    ":bytes", ":lines", "Xref:full")
+
+    def _range(self, args) -> list[tuple[int, str, bytes]] | None:
+        """Articles named by a message-id, a number, n-, n-m or (none) the current one."""
+        store = self.node.store
+        if args and args[0].startswith("<"):
+            raw = store.get(args[0])
+            if raw is None:
+                self.send("430 no such article")
+                return None
+            return [(0, args[0], raw)]
+        if not self.group:
+            self.send("412 no group selected")
+            return None
+        nums = store.numbers(self.group)
+        if not args:
+            if self.current is None:
+                self.send("420 no current article")
+                return None
+            lo = hi = self.current
+        else:
+            first, dash, last = args[0].partition("-")
+            try:
+                lo = int(first)
+                hi = (int(last) if last else (nums[-1] if nums else lo)) if dash else lo
+            except ValueError:
+                self.send("501 syntax: range n, n- or n-m")
+                return None
+        out = []
+        for n in nums:
+            if lo <= n <= hi:
+                found = store.by_number(self.group, n)
+                if found:
+                    out.append((n, found[0], found[1]))
+        if not out:
+            self.send("423 no articles in that range")
+            return None
+        return out
+
+    @staticmethod
+    def _clean(value: str) -> str:
+        return value.replace("\t", " ").replace("\r", " ").replace("\n", " ")
+
+    def _overview_fields(self, number: int, raw: bytes) -> dict[str, str]:
+        """The overview of one article. Articles a newsreader cannot show get a
+        fixed subject, so readers do not show empty lines (#21)."""
+        try:
+            art = Article.from_bytes(raw)
+        except ArticleError:
+            return {"Subject:": "(invalid article)"}
+        ctl = art.control
+        encrypted = art.get("Encrypted", "")
+        if ctl and ctl[0] == "manifest":
+            subject = "(group settings)"
+        elif ctl:
+            subject = f"(control: {ctl[0]})"
+        elif encrypted.strip() == INBOX_SCHEME or art.group.startswith("inbox@"):
+            subject = "(private message)"
+        elif encrypted:
+            subject = "(encrypted)"
+        else:
+            subject = art.get("Subject") or "(no subject)"
+        head, _, body = raw.partition(b"\r\n\r\n")
+        group = self.group or art.group
+        return {
+            "Subject:": subject, "From:": art.get("From") or "(unknown)",
+            "Date:": art.get("Date", ""), "Message-ID:": art.message_id,
+            "References:": art.get("References", ""), ":bytes": str(len(raw)),
+            ":lines": str(body.count(b"\n") + (1 if body and not body.endswith(b"\n") else 0)),
+            "Xref:full": f"Xref: unseenet {group}:{number}" if number else "",
+        }
+
+    async def cmd_over(self, args):
+        found = self._range(args)
+        if found is None:
+            return
+        self.send("224 overview information follows")
+        for number, _, raw in found:
+            f = self._overview_fields(number, raw)
+            self.send("\t".join([str(number)] + [self._clean(f.get(k, "")) for k in self.OVERVIEW_FMT]))
+        self.send(".")
+
+    cmd_xover = cmd_over
+
+    async def cmd_list_overview_fmt(self, args):
+        self.send("215 order of fields in overview database")
+        for field_ in self.OVERVIEW_FMT:
+            self.send(field_)
+        self.send(".")
+
+    async def cmd_hdr(self, args, code: int = 225):
+        if not args:
+            self.send("501 syntax: HDR field [range|message-id]")
+            return
+        name = args[0]
+        found = self._range(args[1:])
+        if found is None:
+            return
+        key = name if name.startswith(":") else name.rstrip(":").lower()
+        self.send(f"{code} headers follow")
+        for number, _, raw in found:
+            f = self._overview_fields(number, raw)
+            if key.startswith(":"):
+                value = f.get(key, "")
+            else:
+                over = {k.rstrip(":").lower(): v for k, v in f.items() if not k.startswith(":")}
+                if key in over and key != "xref:full":
+                    value = over[key]
+                else:
+                    try:
+                        value = Article.from_bytes(raw).get(name.rstrip(":"), "") or ""
+                    except ArticleError:
+                        value = ""
+            self.send(f"{number} {self._clean(value)}")
+        self.send(".")
+
+    async def cmd_xhdr(self, args):
+        await self.cmd_hdr(args, code=221)
+
+    async def cmd_list_headers(self, args):
+        self.send("215 headers and metadata items supported")
+        self.send(":")
+        self.send(".")
 
     async def cmd_newnews(self, args):
         if len(args) < 3:
