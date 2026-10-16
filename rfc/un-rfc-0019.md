@@ -249,9 +249,16 @@ channel group, exactly like a node list publisher (UN-RFC 0010 section
 4): the Group ID pins the owner, and the **registrar keys** are the
 owner and the `posters` of its current manifest. A certificate is
 trusted when its `registrar` is one of these keys. The same group holds
-the revocation list and, as ordinary articles, the certificates the
-registrar has issued, so that a client can look up who holds a name
-(section 8.3).
+the revocation list and the certificates the registrar has issued, so
+that a client can look up who holds a name (section 8.3):
+
+- a certificate is posted as an ordinary article with
+  `Content-Type: application/json`, `Subject: name <name>` and the
+  certificate's canonical JSON as its body;
+- the revocation list is posted the same way with `Subject: revoked`.
+
+A client looking up a name reads the subjects and takes the accepted
+certificate with the highest `serial` (section 5.3).
 
 If two trusted registrars issue the same name to different keys, the
 client shows both in short form.
@@ -308,10 +315,12 @@ user sees.
 # 9. Reserved Names
 
 Besides the top-level domains (section 4.1), the project's registrar
-does not issue these registered names: `admin`, `abuse`, `help`, `info`,
-`node`, `nodes`, `operator`, `postmaster`, `registrar`, `root`,
+does not issue these registered names to anybody but the owner of its own
+group (section 7), that is, the project: `admin`, `abuse`, `help`,
+`info`, `node`, `nodes`, `operator`, `postmaster`, `registrar`, `root`,
 `security`, `support`, `system`, `unseenet`, `usenet`, and the names
-reserved in UN-RFC 0018 section 9.
+reserved in UN-RFC 0018 section 9. The project uses them for itself (for
+example `@unseenet`), so that nobody else can pose as it.
 
 # 10. Signature Purposes
 
