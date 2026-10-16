@@ -935,7 +935,15 @@ async def test_tui_ignore_and_show_again(tmp_path, monkeypatch):
         await app.session.post(gid, "Mit", "y\n")
         app.select_group(gid)
         assert await wait_for(pilot, lambda: len(app.messages) == 2, 300)
-        app.current_message = next(m for m in app.messages.values() if m.subject == "Spam")
+        await pilot.pause(0.5)                   # let the list settle: a re-render moves the cursor
+        table = app.query_one("#threads")
+        table.focus()
+        for row in range(table.row_count):
+            table.move_cursor(row=row)
+            await pilot.pause(0.1)
+            if app.current_message and app.current_message.subject == "Spam":
+                break
+        assert app.current_message.subject == "Spam"
         app.action_ignore()
         assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 200)
         await pilot.pause(0.2)
