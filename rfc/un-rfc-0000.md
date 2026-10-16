@@ -117,6 +117,7 @@ The protocol is designed to be extended without breaking old software:
 | 0015 | Transferring Group Ownership                  | Standards Track |
 | 0016 | Peer Authentication with Node Keys            | Standards Track |
 | 0017 | Catching Up by Pull, and Group State          | Standards Track |
+| 0018 | Hierarchies and Authority over Group Names    | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

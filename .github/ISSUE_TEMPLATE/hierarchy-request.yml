@@ -1,0 +1,72 @@
+name: Request a hierarchy
+description: Ask for a top-level hierarchy, or delegation of a country hierarchy, in the project's root list (UN-RFC 0018).
+title: "Hierarchy: "
+labels: ["hierarchy-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A maintainer of a hierarchy says which group each name in it means
+        (UN-RFC 0018). It does not own the groups: it cannot post, moderate or
+        remove them. Read UN-RFC 0018 section 7 before you ask.
+
+        You can also ask without a GitHub account: send the same information to
+        the project's inbox, `inbox@ph5fc5hop5232qsz`, on Unseenet.
+
+        After you open this issue, a maintainer of the project posts a short
+        challenge. Sign it with the maintainer key (purpose
+        `UNSEENET-HIERARCHY-CLAIM-1`) and paste the signature back as a comment.
+  - type: input
+    id: name
+    attributes:
+      label: Hierarchy name
+      description: One name component, at least three characters (a-z, 0-9, + _ -). For a country hierarchy, its two-letter ISO 3166-1 code.
+      placeholder: games
+    validations:
+      required: true
+  - type: input
+    id: maintainer
+    attributes:
+      label: Maintainer key
+      description: The identity that will publish the hierarchy list.
+      placeholder: "ed25519:..."
+    validations:
+      required: true
+  - type: input
+    id: list
+    attributes:
+      label: Hierarchy list group
+      description: The Group ID of a channel group owned by the maintainer key, where the list will be posted.
+      placeholder: "games.list@abcd..."
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: At most 64 characters.
+    validations:
+      required: true
+  - type: textarea
+    id: charter
+    attributes:
+      label: Charter
+      description: What the hierarchy is for, and how you will decide which groups to endorse. The first 200 characters become its description.
+    validations:
+      required: true
+  - type: textarea
+    id: existing
+    attributes:
+      label: Existing groups
+      description: If groups already use this name, how will you handle them? The maintainer is expected to endorse groups already in use unless they are abandoned or abusive.
+    validations:
+      required: false
+  - type: checkboxes
+    id: promises
+    attributes:
+      label: As the maintainer
+      options:
+        - label: I hold the maintainer key and will publish the hierarchy list at least every 180 days.
+          required: true
+        - label: I understand that the hierarchy can be returned to reserved or free if the list is not kept up.
+          required: true
