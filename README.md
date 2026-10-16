@@ -117,6 +117,16 @@ folder for a stick that works anywhere. See the
 before they are released? Take the
 [development build](https://github.com/unseenet/unseenet/releases/tag/dev).
 
+### Docker
+
+```bash
+docker run -d --name unseenet-node -v unseenet:/data \
+  -e UNSEENET_NODE_PASSPHRASE='a long passphrase' ghcr.io/unseenet/node:latest
+docker exec -it unseenet-node unseenet-monitor
+```
+
+A node in a container, for amd64 and arm64 - see [Docker](https://unseenet.org/node/docker/).
+
 ### Bootable stick
 
 `unseenet-<version>-x86_64.img.xz` makes a stick you can boot from - Unseenet

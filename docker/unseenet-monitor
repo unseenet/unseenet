@@ -1,0 +1,3 @@
+#!/bin/sh
+# docker exec -it unseenet-node unseenet-monitor
+exec /opt/unseenet/bin/unseenet-monitor --node "${UNSEENET_MONITOR:-/data/monitor.sock}" "$@"

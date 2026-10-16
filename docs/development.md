@@ -318,7 +318,7 @@ the release notes can say what changed and link to the discussion:
 | Label | Meaning |
 |-------|---------|
 | `bug`, `enhancement`, `documentation`, `question` | What kind of issue it is |
-| `area: client`, `area: node`, `area: protocol`, `area: portable`, `area: docs`, `area: infra` | Which part it is about |
+| `area: client`, `area: node`, `area: protocol`, `area: portable`, `area: bootable`, `area: docker`, `area: docs`, `area: infra` | Which part it is about |
 | `security` | Affects the safety, privacy or anonymity of users (report weaknesses privately, see `SECURITY.md`) |
 | `breaking` | Breaks compatibility: protocol, file formats, command line or `node.toml` |
 | `triage` | New, not looked at yet |

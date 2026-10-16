@@ -1,0 +1,44 @@
+name: Bug in the Docker image
+description: The node container (ghcr.io/unseenet/node) does not start or misbehaves.
+title: "Docker: "
+labels: ["bug", "area: docker", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. **Never paste the passphrase, or files from
+        /data** (the node key and the onion key). Logs are fine.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Image and tag
+      description: "`docker inspect --format '{{index .RepoDigests 0}}' ghcr.io/unseenet/node:latest` is best."
+      placeholder: ghcr.io/unseenet/node:0.3.0
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Docker or Podman version, the operating system and the CPU.
+      placeholder: Docker 28 on Debian 13, amd64 / Synology DSM / Raspberry Pi OS arm64
+    validations:
+      required: true
+  - type: textarea
+    id: run
+    attributes:
+      label: How do you start it?
+      description: The `docker run` command or your compose file, without secrets.
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`docker logs unseenet-node`, and `docker inspect --format '{{json .State.Health}}' unseenet-node` if it is unhealthy."
+      render: text

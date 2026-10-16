@@ -125,6 +125,7 @@ async def run_node(args) -> None:
         onion, new_key = await tor.control.add_onion(key, 119, f"{host}:{port}")
         if new_key:
             key_file.write_bytes(seal(new_key.encode(), passphrase, **_kdf()))
+            key_file.chmod(0o600)
         node.stats.onion = onion
         print(f"Node is reachable at {onion}")
         node.stats.note(f"Tor is running; the node is reachable at {onion}")

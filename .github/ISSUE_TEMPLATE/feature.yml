@@ -11,6 +11,8 @@ body:
         - Client (TUI or command line)
         - Node
         - Portable builds (USB, Windows, macOS, Linux)
+        - Bootable stick
+        - Docker image
         - Documentation or website
         - Not sure / several
     validations:

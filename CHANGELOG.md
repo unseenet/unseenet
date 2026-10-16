@@ -40,8 +40,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   self-test must pass with Tor connecting. See docs/bootable.md. (#19)
 - On the Linux console the client, the monitor and the boot menu draw
   borders the console's font has.
+- A Docker image for the node, `ghcr.io/unseenet/node` (amd64, arm64): the
+  node, the monitor and Tor; runs as a normal user, works with a read-only
+  root file system; the passphrase as a Docker secret; `node.toml` written
+  from the environment on the first start. `:dev` follows main, releases
+  get `:<version>` and `:latest`; signed with cosign. See
+  docs/node/docker.md and deploy/docker-compose.yml. (#22)
+- Issue forms for the bootable stick and the Docker image.
 
 ### Fixed
+- The node's onion key file could be read by other users on the machine
+  (it is sealed with the passphrase, but should be the node's alone).
 - After picking another group or a refresh while an answer was still
   arriving over Tor, the connection to the node got out of step, and every
   later command failed ("invalid literal for int()") until a restart. An

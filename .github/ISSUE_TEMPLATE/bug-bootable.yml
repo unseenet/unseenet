@@ -1,0 +1,69 @@
+name: Bug in the bootable stick
+description: The bootable image does not start, does not find your hardware, or misbehaves.
+title: "Bootable: "
+labels: ["bug", "area: bootable", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying it. Hardware matters here, so please say what the
+        computer is. **Never paste your passphrase or anything from `data/`.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Where did it stop - the boot loader, a black screen, the menu, Wi-Fi, the client, the node ...?
+    validations:
+      required: true
+  - type: input
+    id: computer
+    attributes:
+      label: Computer
+      description: Make and model, and if you know them the Wi-Fi and graphics chips.
+      placeholder: Lenovo ThinkPad T480, Intel Wireless 8265
+    validations:
+      required: true
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: How does it start?
+      options:
+        - UEFI (newer computers)
+        - BIOS / legacy (older computers)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: secureboot
+    attributes:
+      label: Secure Boot
+      options:
+        - Turned off
+        - Turned on
+        - Not sure
+  - type: dropdown
+    id: medium
+    attributes:
+      label: Written to
+      options:
+        - USB stick
+        - SD card
+        - Internal disk
+        - Other
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image's file name, or the version in the boot menu.
+      placeholder: unseenet-0.2.1.dev11-x86_64.img.xz
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Messages
+      description: |
+        If you got as far as the menu: choose **Shell** and paste the output of
+        `dmesg | tail -50` (hardware) or `tail -50 /var/log/messages` (services).
+        **Alt+F3** shows the start-up messages. A photo of the screen is fine too.
+      render: text

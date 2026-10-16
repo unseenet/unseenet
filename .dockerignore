@@ -1,0 +1,10 @@
+# Only what the image needs: never a vault, Tor state or build output.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!NOTICE
+!src/
+!docker/
+!tools/dev_version.py
+src/**/__pycache__

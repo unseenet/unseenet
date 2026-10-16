@@ -27,6 +27,8 @@ jobs:
             Client*)        labels="area: client" ;;
             Node*)          labels="area: node" ;;
             Portable*)      labels="area: portable" ;;
+            Bootable*)      labels="area: bootable" ;;
+            Docker*)        labels="area: docker" ;;
             Documentation*) labels="area: docs" ;;
           esac
           case "$(answer 'How do you run it?')" in
