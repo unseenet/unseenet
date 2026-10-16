@@ -154,7 +154,8 @@ sh start-linux.sh --self-test           # Linux
 
 prints which program, vault and Tor it uses, checks that every part loads,
 starts Tor and connects to the Tor network. Add `--offline` to skip the
-network.
+network, or `--node xyz.onion` to also talk to a node over Tor - the whole
+path a post takes.
 
 ## Other modes
 
