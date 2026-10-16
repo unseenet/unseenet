@@ -952,4 +952,6 @@ class Session:
 
 
 def default_vault_path() -> Path:
-    return Path("unseenet.vault")
+    """``unseenet.vault`` in the current directory, or in ``data/`` of a portable build."""
+    from ..portable import default_vault_path as portable_default
+    return portable_default()

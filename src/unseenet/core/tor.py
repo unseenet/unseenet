@@ -87,10 +87,12 @@ class TorProcess:
 
     @staticmethod
     def find_binary(explicit: str | None = None) -> str:
-        candidates = [explicit, os.environ.get("UNSEENET_TOR"), shutil.which("tor")]
+        from ..portable import bundled_tor
+        # a portable build uses the Tor it came with, so the version is the one we tested
+        candidates = [explicit, os.environ.get("UNSEENET_TOR"), bundled_tor(), shutil.which("tor")]
         for c in candidates:
             if c and Path(c).exists():
-                return c
+                return str(c)
         raise TorError("tor binary not found; install tor or set UNSEENET_TOR")
 
     async def start(self, timeout: float = 120) -> None:

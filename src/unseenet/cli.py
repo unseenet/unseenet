@@ -382,7 +382,8 @@ COMMANDS = {
 
 def client_main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="unseenet", description="Unseenet client.")
-    p.add_argument("--vault", default="unseenet.vault", help="encrypted vault file")
+    from .portable import default_vault_path
+    p.add_argument("--vault", default=str(default_vault_path()), help="encrypted vault file")
     p.add_argument("--identity", "-i", help="identity to use (default: first)")
     p.add_argument("--version", action="version", version=f"unseenet {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)

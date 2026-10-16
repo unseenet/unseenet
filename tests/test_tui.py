@@ -100,7 +100,8 @@ def test_vault_saves_are_private_and_fast(tmp_path):
     v = Vault.open(tmp_path / "v.vault", "pw", **KDF)
     v.data["x"] = 1
     v.save()
-    assert oct(os.stat(tmp_path / "v.vault").st_mode & 0o777) == "0o600"
+    if os.name != "nt":                    # Windows has no Unix file modes
+        assert oct(os.stat(tmp_path / "v.vault").st_mode & 0o777) == "0o600"
     t = time.time()
     for _ in range(20):
         v.save()

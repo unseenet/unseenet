@@ -1,5 +1,6 @@
 """Client session against a local node: open and closed groups, invites, read marks."""
 
+import os
 import pytest
 
 import unseenet.client.session as sess
@@ -77,7 +78,8 @@ async def test_offline_cache(tmp_path, monkeypatch):
     # the cache file is encrypted
     blob = (tmp_path / "b.vault.cache").read_bytes()
     assert b"Kun familien" not in blob and b"Alle kan" not in blob
-    assert oct((tmp_path / "b.vault.cache").stat().st_mode & 0o777) == "0o600"
+    if os.name != "nt":                    # Windows has no Unix file modes
+        assert oct((tmp_path / "b.vault.cache").stat().st_mode & 0o777) == "0o600"
 
     # node is gone: everything is still readable from the cache
     again = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
