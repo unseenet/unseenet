@@ -559,6 +559,31 @@ class ConfirmDialog(Dialog):
         self.dismiss(True)
 
 
+class IgnoredDialog(Dialog):
+    """The people you ignore (#72): pick one to see them again."""
+
+    def __init__(self, people: list[tuple[str, str]]):
+        super().__init__()
+        self.people = people
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("People you ignore", classes="title")
+            yield Label("Their posts and messages are hidden from you, everywhere. Nobody "
+                        "else knows: the list stays in your vault.", classes="hint")
+            yield Select([(f"{label}  ({key[:20]}...)", key) for key, label in self.people],
+                         prompt="Choose someone", id="who")
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button("Show again", variant="primary", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        who = self.query_one("#who", Select).value
+        if isinstance(who, str):
+            self.dismiss(who)
+
+
 class NamesDialog(Dialog):
     """Your names (UN-RFC 0019): those you hold, those you asked for, and a field to claim one."""
 
@@ -1515,10 +1540,10 @@ class UnseenetApp(App):
         if gid and gid.startswith(CONTACT):
             rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
         elif gid == s.my_inbox:
-            rows = self._threaded(s.private_messages())        # what you sent, too
+            rows = self._threaded(s.visible(s.private_messages()))   # what you sent, too
         else:
             msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
-            rows = self._threaded(msgs)
+            rows = self._threaded(s.visible(msgs))      # replies to ignored people stay
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
@@ -2214,6 +2239,10 @@ class UnseenetApp(App):
              self.action_edit_group),
             ("Add contact", "Give the selected author, or any key, a name of your own  [a]",
              self.action_add_contact),
+            ("Ignore this person", "Hide everything the selected post's author writes - only "
+             "you know", self.action_ignore),
+            ("People you ignore", "See who you ignore, and show someone again",
+             self.action_ignored),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
@@ -2276,6 +2305,45 @@ class UnseenetApp(App):
             return
         self.session.mark_rules_seen(g.group_id)
         self.notify("Group updated")
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ignore(self) -> None:
+        """Ignore the selected post's author (#72)."""
+        m, s = self.current_message, self.session
+        key = (m.sender_key or m.author_key) if m else ""
+        if not key or key == s.identity().key_text:
+            self.notify("Select a post by the person you want to ignore", severity="warning")
+            return
+        who = s.identity_label(key, m.from_name)
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Ignore {who}?",
+                f"{key}\n\nTheir posts and private messages are hidden from you in every "
+                "group. Others still see them, and they are not told. You can show them "
+                "again under 'People you ignore' (Ctrl+P).", "Ignore")):
+            return
+        try:
+            s.ignore(key, who)
+        except (SessionError, crypto.CryptoError) as exc:
+            self.notify(f"Not ignored: {exc}", severity="error")
+            return
+        self.current_message = None
+        self.notify(f"Ignoring {who}")
+        await self._render_groups()
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ignored(self) -> None:
+        people = self.session.ignored()
+        if not people:
+            self.notify("You do not ignore anyone")
+            return
+        key = await self.push_screen_wait(IgnoredDialog(people))
+        if not key:
+            return
+        self.session.unignore(key)
+        self.notify("Shown again")
+        await self._render_groups()
         self._render_threads()
 
     @work(group="dialog", exit_on_error=False)

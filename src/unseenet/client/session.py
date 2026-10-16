@@ -128,6 +128,7 @@ class Session:
         d.setdefault("subscribed", [])
         d.setdefault("read", {})
         d.setdefault("contacts", {})
+        d.setdefault("ignored", {})                    # keys you do not want to see (#72)
         if d["nodes"]:          # groups from before several nodes: they live on the first
             for entry in d["groups"].values():
                 entry.setdefault("node", d["nodes"][0])
@@ -835,6 +836,35 @@ class Session:
         entry = self.data["contacts"].get(key_text or "")
         return entry["name"] if entry else None
 
+    # --- ignoring people: the reader's own killfile, never sent anywhere (#72) ---
+    def ignore(self, key_text: str, label: str = "") -> None:
+        crypto.key_from_text(key_text)
+        if key_text == self.identity().key_text:
+            raise SessionError("that is your own key")
+        self.data["ignored"][key_text] = {
+            "label": label.strip() or self.identity_label(key_text),
+            "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        self.save()
+
+    def unignore(self, key_text: str) -> None:
+        self.data["ignored"].pop(key_text, None)
+        self.save()
+
+    def is_ignored(self, key_text: str | None) -> bool:
+        return bool(key_text) and key_text in self.data["ignored"]
+
+    def ignored(self) -> list[tuple[str, str]]:
+        """(key, label) of the people you ignore, sorted by label."""
+        return sorted(((k, v.get("label", k)) for k, v in self.data["ignored"].items()),
+                      key=lambda kv: kv[1].lower())
+
+    def visible(self, msgs: list["Message"]) -> list["Message"]:
+        """Leave out messages from people you ignore (your own are always shown)."""
+        if not self.data["ignored"]:
+            return list(msgs)
+        return [m for m in msgs if not self.is_ignored(m.sender_key or m.author_key)
+                or m.to_key is not None]
+
     def contacts(self) -> list[tuple[str, str]]:
         """(key, name) sorted by name."""
         return sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
@@ -1227,7 +1257,8 @@ class Session:
                 self.save()
 
     def unread_count(self, group_id: str) -> int:
-        return sum(1 for m in self.cache.get(group_id, {}).values() if not self.is_read(m))
+        return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
+                   if not self.is_read(m))
 
     # ------------------------------------------------------------------
     # posting
