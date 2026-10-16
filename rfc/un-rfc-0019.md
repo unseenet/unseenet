@@ -108,6 +108,8 @@ section 3):
 | `expires`   | date       | yes  | RFC 3339 UTC                                       |
 | `serial`    | integer    | yes  | Increases each time the registrar issues this name  |
 | `registrar` | key string | yes  | The issuing key                                    |
+| `claim`     | string     | no   | Message-ID of the claim it was issued for (6.8)    |
+| `claimed`   | date       | no   | The `Date` of that claim, RFC 3339 UTC (6.8)       |
 | `sig`       | signature  | yes  | By `registrar`, purpose `UNSEENET-NAME-CERT-1`, over the canonical JSON without `sig` |
 
 Lifetimes:
@@ -145,11 +147,20 @@ A client accepts a certificate for the author of an article if
 5. it is not revoked (section 6.6);
 6. its `name` satisfies section 4 for its `kind`.
 
+Certificates for the same name, key and serial from different registrar
+keys of one group are the same decision (section 6.8), not a conflict.
+
 If a client knows two accepted certificates for the same name with
 different keys, it uses the one with the higher `serial`. If the serials
-are equal, the registrar has made a mistake or its key was stolen: the
-client MUST show both identities in short form and SHOULD mark the name
-as **disputed**.
+are equal, it uses the one with the earlier `claimed`, and then the one
+with the lexicographically lower `claim`. Only if that does not decide
+(both are equal, or a certificate has no `claim`) has the registrar made
+a mistake or had a key stolen: the client MUST then show both identities
+in short form and SHOULD mark the name as **disputed**.
+
+A client MAY require a decision to be signed by at least two registrar
+keys of the group before it shows a name, so that one stolen key alone
+cannot give a name away.
 
 # 6. Registration
 
@@ -159,10 +170,11 @@ project's registrar; other registrars MAY choose their own.
 
 ## 6.1 Claims
 
-A claim is sent to the registrar's inbox (UN-RFC 0009) as an inbox
-article whose inner article has `Content-Type: application/json`, a
-`Sender-Key` and `Sender-Signature` by the claiming identity, a
-`Reply-Inbox`, and a canonical JSON body:
+A claim is sent to the registrar's **claim inbox** (UN-RFC 0009), which
+the registrar group's manifest names in the field `claims` (a Group ID),
+as an inbox article whose inner article has
+`Content-Type: application/json`, a `Sender-Key` and `Sender-Signature`
+by the claiming identity, a `Reply-Inbox`, and a canonical JSON body:
 
 | Field    | Type   | Req. | Meaning                                 |
 |----------|--------|------|-----------------------------------------|
@@ -173,16 +185,19 @@ article whose inner article has `Content-Type: application/json`, a
 
 The claiming identity is the verified sender key. The registrar answers
 through `Reply-Inbox` with the certificate, or with a reason for
-refusing.
+refusing. With several replicas (6.8) every replica answers, with its own
+certificate; a client keeps them all, since a name stays valid as long as
+any of their keys is trusted.
 
 ## 6.2 Registered Names
 
 The registrar issues a certificate for a free name to the first valid
-claim it handles. To make squatting expensive, the project's registrar
-(section 7.2):
+claim in the order of section 6.8. To make squatting expensive, the
+project's registrar (section 7.2):
 
 - requires the claim article to carry at least 24 bits of postage
-  (UN-RFC 0006);
+  (UN-RFC 0006), by giving the claim inbox a `min_pow` of 24, so that
+  the nodes enforce it;
 - issues at most 3 registered names per key;
 - issues certificates for 1 year.
 
@@ -229,6 +244,10 @@ certificates that are no longer valid before their expiry: after a
 transfer, a release, or a dispute (6.7). Entries can be dropped once the
 certificate they name has expired, so the list stays short.
 
+Each registrar key of a group publishes its own list. A client takes the
+newest list by each trusted key, and an entry in any of them revokes
+every certificate for that name and serial, whichever key signed it.
+
 ## 6.7 Disputes
 
 The project's registrar takes a name away only for **impersonation or
@@ -239,6 +258,49 @@ dispute. Complaints are made as for hierarchies (UN-RFC 0018 section
 
 Organisations that want a name nobody can dispute should use a domain
 name.
+
+## 6.8 Several Registrar Keys
+
+A registrar group MAY list several registrar keys, each held by a
+**replica** of the registrar running on its own machine. Every replica
+issues its own certificate, signed with its own key, for every decision.
+So the registrar keeps working while any one replica runs, and a name
+stays valid while any key that signed it is still trusted. The group's
+owner adds and removes replicas by changing the manifest's `posters`.
+
+All replicas read the same claims. The claim inbox is an inbox group
+whose owner is an **inbox key** that every replica holds; it is used only
+to open claims and to sign the inbox's manifest, never to sign
+certificates, and it is not a registrar key. Like any group, the inbox is
+carried by every node. For the replicas to reach the same decisions,
+every replica follows these rules:
+
+1. **Order.** Claims are handled in the order of their `Date`, then of
+   their Message-ID. At time *t*, a replica handles every claim whose
+   `Date` is at least one hour before *t* and that it has not yet
+   handled, in that order. The hour gives the claim time to reach every
+   node.
+2. **Late claims.** A claim that reaches a replica only when its `Date`
+   is already more than an hour old is late. The replica refuses it
+   ("arrived late, send it again") and takes no other action.
+3. **Same inputs, same output.** A decision depends only on the claim,
+   the earlier decisions in this order, and the DNS record and list of
+   top-level domains as the replica finds them when it handles the claim.
+   A certificate issued for a claim has `claim` set to the claim's
+   Message-ID, `claimed` and `issued` set to the claim's `Date`,
+   `expires` set to `issued` plus the lifetime, and `serial` one more
+   than the highest serial issued for the name for any earlier claim. A
+   monthly renewal of a domain name without a claim is issued at 00:00
+   UTC on the first day of the month, without `claim` and `claimed`.
+4. **Converging.** If a replica finds that another replica's certificate
+   wins over its own by section 5.3, because it did not see a claim in
+   time or found a DNS record differently, it revokes its own
+   certificate and issues the winning decision with its own key.
+
+Claims, certificates and revocations all travel through the network,
+so replicas need no connection to each other and no other place to keep
+state: a replica that starts on a new machine rebuilds what it knows
+from its group and its inbox.
 
 # 7. Trusted Registrars
 
@@ -269,10 +331,12 @@ The reference client pins the project's registrar:
 
 - channel group `unseenet.names@ph5fc5hop5232qsz`, owned by the project
   key of UN-RFC 0010 section 6;
-- inbox for claims: the inbox of the automated registrar key listed as a
-  poster in that group's manifest.
+- claim inbox: the Group ID in the `claims` field of that group's
+  manifest.
 
-The registrar runs automatically. It is a convenience of the reference
+The registrar runs automatically, as at least two replicas (section 6.8)
+on machines that are not the project's nodes, so that it depends on no
+single machine or node. It is a convenience of the reference
 client, not part of the protocol.
 
 # 8. Display
@@ -368,6 +432,15 @@ UN-RFC 0003 section 3 is extended with:
   stop trusting its certificates at once, because trust follows the
   current manifest. Certificates the thief issued with an existing
   name's serial show up as disputed (5.3). Petnames are not affected.
+- **Stolen replica key.** One stolen key among several can still issue
+  certificates the others did not; a client that requires two keys (5.3)
+  is not fooled by it. Removing the key from the manifest makes only that
+  key's certificates untrusted: the others' certificates for the same
+  decisions stay valid.
+- **Stolen inbox key.** It lets the thief read claims, which say little
+  that the certificates do not, but not issue anything. The group's owner
+  makes a new inbox key and claim inbox and changes `claims` in the
+  manifest.
 - **Stolen identity key.** The thief holds the name too, until the
   registrar acts on a complaint or the certificate expires.
 - **Lookalikes.** Names are ASCII only, so Unicode lookalikes are
@@ -377,6 +450,8 @@ UN-RFC 0003 section 3 is extended with:
 
 - UN-RFC 0002 section 2.3: the optional header `Name-Certificate` is
   added.
+- UN-RFC 0004 section 3.1: a registrar group's manifest has the field
+  `claims` (section 6.1).
 - UN-RFC 0003 section 2: "Clients SHOULD display at least the first 4
   characters next to display names" is replaced by section 8 of this
   document; the purpose in section 10 is added.
