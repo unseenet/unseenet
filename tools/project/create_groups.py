@@ -33,7 +33,7 @@ import json
 import sys
 
 import _owner
-from _owner import FP, open_owner_session, post_everywhere
+from _owner import FP, fetch_manifests, open_owner_session, post_everywhere
 
 from unseenet.core.groups import make_manifest, manifest_article
 
@@ -129,17 +129,25 @@ async def main() -> None:
     s = open_owner_session()
     owner = s.identity()
     todo = []                                   # (article, type, new group?)
+    owned = [f"{g[0]}@{owner.fingerprint}" for g in GROUPS
+             if s.data["groups"].get(f"{g[0]}@{owner.fingerprint}", {}).get("owner")]
+    network = await fetch_manifests(owned) if owned else {}
     for name, gtype, view, title, desc, rules, poster, min_pow in GROUPS:
         gid = f"{name}@{owner.fingerprint}"
         entry = s.data["groups"].get(gid, {})
         if entry.get("owner"):
-            if not entry.get("manifest"):
-                sys.exit(f"{gid}: the vault has no manifest for it; open the group in the TUI once")
+            # the newest of what the nodes have and what the vault remembers
+            known = [m for m in (network.get(gid), entry.get("manifest")) if m]
+            if not known:
+                sys.exit(f"{gid}: no node has its manifest and the vault has none; "
+                         "is a node reachable?")
+            current = max(known, key=lambda m: int(m.get("serial", 0)))
             wanted = {"view": view, "title": title, "description": desc, "rules": rules,
                       "min_pow": min_pow}
-            data, notes = updated_manifest(entry["manifest"], gtype, wanted)
+            data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
-                print(f"{gid}: up to date")
+                print(f"{gid}: up to date (serial {current['serial']})")
+                entry["manifest"] = current
                 continue
             todo.append((manifest_article(owner, gid, data, pow_bits=_owner.POW_BITS), gtype, False))
             print(f"{gid}: will update to serial {data['serial']}")
@@ -153,6 +161,8 @@ async def main() -> None:
                             view=None if view == "threads" else view, pow_bits=_owner.POW_BITS)
         todo.append((art, gtype, True))
         print(f"{gid}: will create ({gtype}, view {view}, posters {posters or 'none'})")
+    if not dry:
+        s.save()                                # remembers the manifests read from the nodes
     if not todo or dry:
         print("Nothing to do." if not todo else "--dry-run: nothing posted or stored.")
         return
