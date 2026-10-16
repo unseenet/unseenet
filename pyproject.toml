@@ -54,7 +54,7 @@ version = { attr = "unseenet.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-unseenet = ["nodes.json"]
+unseenet = ["nodes.json", "hierarchies.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

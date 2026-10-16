@@ -8,6 +8,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- The project's root list of hierarchies (UN-RFC 0018) is kept in
+  `src/unseenet/hierarchies.json`, checked by the tests, and posted to
+  `unseenet.hierarchies` when it changes and every month, together with
+  the node list. The client does not use it yet. (#25)
 - Development builds: every change to the code is built and self-tested,
   and the zips replace the pre-release
   [Development build](https://github.com/unseenet/unseenet/releases/tag/dev),

@@ -40,6 +40,10 @@ src/unseenet/
   client/
     session.py          vault, persistent node connection, reading/posting, read marks
     tui.py              `unseenet-tui` (Textual)
+  known_nodes.py        the shipped node list and its parser      0010
+  nodes.json            the project's node list (posted to unseenet.nodes)
+  hierarchies.py        root list of hierarchies: parse and check  0018 §4
+  hierarchies.json      the project's root list (posted to unseenet.hierarchies)
   nntp.py               dot-stuffing, block reading, async client
   cli.py                `unseenet-node` and `unseenet`
   launcher.py           the one program of the portable builds; --self-test
