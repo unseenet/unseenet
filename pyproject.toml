@@ -40,10 +40,10 @@ unseenet-node = "unseenet.cli:node_main"
 unseenet-tui = "unseenet.client.tui:main"
 
 [project.urls]
-Homepage = "https://github.com/andlo/unseenet"
-Documentation = "https://andlo.github.io/unseenet/"
-Changelog = "https://github.com/andlo/unseenet/blob/main/CHANGELOG.md"
-Specification = "https://github.com/andlo/unseenet/tree/main/rfc"
+Homepage = "https://github.com/unseenet/unseenet"
+Documentation = "https://unseenet.org/"
+Changelog = "https://github.com/unseenet/unseenet/blob/main/CHANGELOG.md"
+Specification = "https://github.com/unseenet/unseenet/tree/main/rfc"
 
 [tool.setuptools.dynamic]
 version = { attr = "unseenet.__version__" }

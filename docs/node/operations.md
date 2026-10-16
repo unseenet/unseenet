@@ -54,7 +54,7 @@ The command works while the node is running.
 Clients offer the nodes in the project's list of known nodes
 ([UN-RFC 0010](../spec/un-rfc-0010.md)) to new users. To be listed, fill in
 the form
-**[Add my node](https://github.com/andlo/unseenet/issues/new?template=add-node.yml)**
+**[Add my node](https://github.com/unseenet/unseenet/issues/new?template=add-node.yml)**
 on GitHub. You need:
 
 - the node's **onion address** and **node key** - both are printed when

@@ -42,7 +42,7 @@ unseenet-tui
 Or, to follow development, from the repository:
 
 ```bash
-git clone https://github.com/andlo/unseenet
+git clone https://github.com/unseenet/unseenet
 cd unseenet
 python3 -m venv .venv
 .venv/bin/pip install -e ".[tui]"

@@ -18,7 +18,7 @@ body:
         Listed nodes are checked every day: one that cannot be reached for 10 days
         is taken off the list (with a note after 3 days).
 
-        Before you ask, read [Your responsibility](https://andlo.github.io/unseenet/node/responsibility/).
+        Before you ask, read [Your responsibility](https://unseenet.org/node/responsibility/).
   - type: input
     id: name
     attributes:

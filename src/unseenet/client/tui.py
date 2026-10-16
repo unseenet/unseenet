@@ -37,8 +37,8 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
                       default_vault_path, split_signature)
 
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
-REPO_URL = "https://github.com/andlo/unseenet"
-DOCS_URL = "https://andlo.github.io/unseenet/"
+REPO_URL = "https://github.com/unseenet/unseenet"
+DOCS_URL = "https://unseenet.org/"
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
 
 

@@ -5,8 +5,8 @@ Discussion groups the old Usenet way, over Tor. This folder holds everything:
 the client, Tor, and - once you start it - your encrypted vault in data/.
 Put the whole folder on a USB stick, or anywhere you like.
 
-  Documentation:  https://andlo.github.io/unseenet/
-  Source:         https://github.com/andlo/unseenet
+  Documentation:  https://unseenet.org/
+  Source:         https://github.com/unseenet/unseenet
 
 
 STARTING

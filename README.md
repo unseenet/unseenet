@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-**📖 Documentation: [andlo.github.io/unseenet](https://andlo.github.io/unseenet/)**
+**📖 Documentation: [unseenet.org](https://unseenet.org/)**
 
 **Usenet, unseen.** A decentralized, encrypted discussion network in the
 spirit of old Usenet and BBSes — groups and chats you can reach by
@@ -109,11 +109,11 @@ Want to change the protocol or build something compatible? Read
 
 ### Portable: Windows, macOS, Linux, USB stick
 
-Download a zip from the [releases](https://github.com/andlo/unseenet/releases),
+Download a zip from the [releases](https://github.com/unseenet/unseenet/releases),
 unzip it, and double-click **Start Unseenet** - the client and Tor are
 inside, nothing to install. The `-usb.zip` has all three systems in one
 folder for a stick that works anywhere. See the
-[portable guide](https://andlo.github.io/unseenet/portable/).
+[portable guide](https://unseenet.org/portable/).
 
 ### The client with Python
 
@@ -155,13 +155,13 @@ There is also a plain command line client, `unseenet --help`.
 On Debian or Ubuntu (a Proxmox LXC or a Raspberry Pi is plenty):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh | sudo bash
 ```
 
 It installs Tor and the node as a systemd service and prints the node's
 `.onion` address. The full guide - configuration, peering, backup,
 security and troubleshooting - is in the
-[documentation](https://andlo.github.io/unseenet/node/install/). To peer with a friend's node, swap onion addresses and
+[documentation](https://unseenet.org/node/install/). To peer with a friend's node, swap onion addresses and
 node keys (the installer prints both), add a `[[peer]]` section with the
 other's `address` and `key` to `/home/unseenet/node.toml` on both nodes,
 and restart with `systemctl restart unseenet-node`.

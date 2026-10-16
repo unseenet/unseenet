@@ -61,18 +61,18 @@ def test_ownership_challenge(tmp_path, monkeypatch, capsys):
     node_main(["--data", str(tmp_path), "--show-key"])
     node_key = capsys.readouterr().out.strip()
 
-    challenge = nr.new_challenge("andlo/unseenet", 7)
+    challenge = nr.new_challenge("unseenet/unseenet", 7)
     bot = {"user": {"login": nr.BOT}, "body": "Check ...\n" + nr.how_to_prove(challenge)}
-    assert nr.find_challenge([bot], "andlo/unseenet", 7) == challenge
-    assert nr.find_challenge([bot], "andlo/unseenet", 8) is None             # another issue
-    fake = {"user": {"login": "someone"}, "body": "unseenet-node-claim andlo/unseenet#7 " + "0" * 32}
-    assert nr.find_challenge([fake], "andlo/unseenet", 7) is None             # only the bot's counts
+    assert nr.find_challenge([bot], "unseenet/unseenet", 7) == challenge
+    assert nr.find_challenge([bot], "unseenet/unseenet", 8) is None             # another issue
+    fake = {"user": {"login": "someone"}, "body": "unseenet-node-claim unseenet/unseenet#7 " + "0" * 32}
+    assert nr.find_challenge([fake], "unseenet/unseenet", 7) is None             # only the bot's counts
 
     node_main(["--data", str(tmp_path), "--sign", challenge])
     sig = capsys.readouterr().out.strip()
     reply = {"user": {"login": "operator"}, "body": f"Here you go:\n\n{sig}\n"}
     assert nr.proven([bot, reply], challenge, node_key)
-    assert not nr.proven([bot, reply], nr.new_challenge("andlo/unseenet", 7), node_key)   # other challenge
+    assert not nr.proven([bot, reply], nr.new_challenge("unseenet/unseenet", 7), node_key)   # other challenge
     other = crypto.Identity.generate().key_text
     assert not nr.proven([bot, reply], challenge, other)                  # someone else's node
 

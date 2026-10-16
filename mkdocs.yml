@@ -1,8 +1,8 @@
 site_name: Unseenet
 site_description: Usenet, unseen - a decentralized, encrypted discussion network over Tor onion services
-site_url: https://andlo.github.io/unseenet/
-repo_url: https://github.com/andlo/unseenet
-repo_name: andlo/unseenet
+site_url: https://unseenet.org/
+repo_url: https://github.com/unseenet/unseenet
+repo_name: unseenet/unseenet
 edit_uri: edit/main/docs/
 copyright: Code Apache-2.0 · Specification and logo CC BY 4.0
 

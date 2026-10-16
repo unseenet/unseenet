@@ -126,4 +126,4 @@ jobs:
           done
           gh release create "$GITHUB_REF_NAME" zips/*.zip zips/SHA256SUMS.txt --draft \
             --title "Unseenet $GITHUB_REF_NAME" \
-            --notes "Portable builds with Tor inside. See https://andlo.github.io/unseenet/portable/"
+            --notes "Portable builds with Tor inside. See https://unseenet.org/portable/"

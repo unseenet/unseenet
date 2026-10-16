@@ -7,7 +7,7 @@ groups and contacts are in the encrypted vault inside it.
 
 ## Download
 
-Get the zips from the [releases page](https://github.com/andlo/unseenet/releases):
+Get the zips from the [releases page](https://github.com/unseenet/unseenet/releases):
 
 | File | For |
 |------|-----|
@@ -171,8 +171,8 @@ unseenet --version
 ## How the builds are made
 
 Every release is built by GitHub Actions from the tagged source, in the
-open: [`.github/workflows/portable.yml`](https://github.com/andlo/unseenet/blob/main/.github/workflows/portable.yml)
-and [`tools/build_portable.py`](https://github.com/andlo/unseenet/blob/main/tools/build_portable.py).
+open: [`.github/workflows/portable.yml`](https://github.com/unseenet/unseenet/blob/main/.github/workflows/portable.yml)
+and [`tools/build_portable.py`](https://github.com/unseenet/unseenet/blob/main/tools/build_portable.py).
 
 - **Tor** is the Tor Project's
   [Expert Bundle](https://www.torproject.org/download/tor/) - Tor, its

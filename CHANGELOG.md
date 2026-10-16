@@ -159,5 +159,5 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/andlo/unseenet/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/andlo/unseenet/releases/tag/v0.1.0
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/unseenet/unseenet/releases/tag/v0.1.0

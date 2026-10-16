@@ -10,13 +10,13 @@ it is reached as a Tor onion service.
 As root on the machine that will be the node:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh | sudo bash
 ```
 
 !!! info "Read before you pipe"
     Piping a script into `bash` runs it as root. If you prefer, download it
     first and read it:
-    `curl -fsSLO https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh`
+    `curl -fsSLO https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh`
 
 The script:
 
@@ -49,7 +49,7 @@ pct create 160 local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst \
   --rootfs local-lvm:4 --net0 name=eth0,bridge=vmbr0,ip=dhcp \
   --unprivileged 1 --features nesting=1 --start 1
 pct exec 160 -- bash -c "apt-get update && apt-get install -y curl && \
-  curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh | bash"
+  curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh | bash"
 ```
 
 ## What is where
@@ -86,7 +86,7 @@ groups yet: create one, or [peer](peering.md) with a node that has some.
 On other systems, install Python 3.11+ and Tor, then:
 
 ```bash
-git clone https://github.com/andlo/unseenet && cd unseenet
+git clone https://github.com/unseenet/unseenet && cd unseenet
 python3 -m venv .venv && .venv/bin/pip install -e .
 UNSEENET_NODE_PASSPHRASE=choose-something .venv/bin/unseenet-node \
   --data ~/node-data --config ~/node.toml

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Install an Unseenet node on Debian/Ubuntu (e.g. a Proxmox LXC or a Raspberry Pi).
 #
-#   curl -fsSL https://raw.githubusercontent.com/andlo/unseenet/main/deploy/install-node.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh | sudo bash
 #
 # Creates the user "unseenet", installs Tor and the node, and starts a systemd
 # service. The node prints its .onion address in the journal:
 #   journalctl -u unseenet-node | grep onion
 set -euo pipefail
 
-REPO="${UNSEENET_REPO:-https://github.com/andlo/unseenet}"
+REPO="${UNSEENET_REPO:-https://github.com/unseenet/unseenet}"
 NODE_NAME="${UNSEENET_NODE_NAME:-$(hostname)}"
 
 if [ "$(id -u)" -ne 0 ]; then echo "Run as root (sudo)." >&2; exit 1; fi

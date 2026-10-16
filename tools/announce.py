@@ -39,7 +39,7 @@ from unseenet.known_nodes import ANNOUNCE_GROUP, NODES_GROUP, parse_node_list  #
 from unseenet.nntp import Client  # noqa: E402
 
 FROM = "Unseenet project"
-REPO = "https://github.com/andlo/unseenet"
+REPO = "https://github.com/unseenet/unseenet"
 GROUP_MIN_POW = 20
 
 
