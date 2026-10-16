@@ -1,4 +1,4 @@
-# Bootable stick
+# Bootable (USB, SSD etc.)
 
 One stick (or SD card, or disk) that you can **boot from** - Unseenet in a
 text console, running from memory, touching nothing on the computer - and
@@ -78,41 +78,9 @@ On a computer that is already running, open the stick and start
 
 ## Updating
 
-Choose **Update** in the menu. The stick fetches the newest release over Tor,
-checks it, and replaces its system files with the new ones; **`data/` is
-kept** - your vault, the node's data and your settings. The computer restarts
-afterwards. **Newest development build** gets the newest code on `main`
-instead, and a file `unseenet-*-update.zip` that you put in the stick's
-root, together with `SHA256SUMS.txt` and `SHA256SUMS.txt.sig` from the same
-release, is offered for updating without a network.
-
-On a running Linux computer the same is
-`python -m unseenet.update --media /run/media/you/UNSEENET` (`--check` only
-says whether there is something newer).
-
-How it can be trusted: every release has a `SHA256SUMS.txt`, signed in
-`SHA256SUMS.txt.sig`. The stick only updates when the signature is from a key
-built into Unseenet and the downloaded zip matches its checksum:
-
-- **releases** are signed by the maintainer with the project key, which
-  never leaves the maintainer's computer;
-- **development builds** are signed in GitHub Actions with a separate
-  release key, which the stick only accepts when you ask for a development
-  build.
-
-See [the project's keys](project/keys.md).
-
-Files are replaced one by one, each written next to the old one and renamed
-over it. Do not pull out the stick or turn off the computer while it works;
-if that happens anyway, `data/` is not touched, and choosing **Update**
-again finishes the job (or, if the stick no longer starts, use it on a
-running computer to copy `data/` off, and write a new image). The boot
-loader (`ldlinux.sys`) is never rewritten.
-
-!!! note "Coming"
-    Going back to the previous version, and growing the partition to the
-    whole stick so there is room for it; updating from the portable client
-    on Windows and macOS (#68).
+Choose **Update** in the menu: the stick fetches the newest release over
+Tor, checks its signature, replaces the system files and restarts. **`data/`
+is kept.** All about it, also without a network: [Updating](updating.md).
 
 ## Your data
 

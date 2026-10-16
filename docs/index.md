@@ -125,8 +125,9 @@ protect anyone yet.
 <div class="grid cards" markdown>
 
 - **I want to read and post**  
-  Install the client, connect to a node and join a group.  
-  [:octicons-arrow-right-24: Using the client](client.md)
+  Unzip and start on Linux, macOS or Windows, or boot from a stick. Tor is included.  
+  [:octicons-arrow-right-24: Portable](portable.md) &nbsp;
+  [:octicons-arrow-right-24: Bootable](bootable.md)
 
 - **I want to run a node**  
   One command on a Debian/Ubuntu box, a Raspberry Pi or a Proxmox LXC.  

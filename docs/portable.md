@@ -1,4 +1,4 @@
-# Portable: USB stick, Windows, macOS
+# Portable (Linux, macOS, Windows)
 
 The portable builds are the easiest way to use Unseenet: one folder with the
 client **and Tor** inside, nothing to install. Unzip it, start it, done. Put
@@ -122,6 +122,13 @@ If you forget the passphrase, the vault cannot be opened.
 
 The same `data/` works with every program in the folder: start on Windows
 at work, continue on Linux at home.
+
+## Updating
+
+In the client: **Ctrl+P** and **Update Unseenet**, or `unseenet update` in
+a terminal. It fetches the newest release over Tor, checks its signature and
+replaces the programs. **`data/` is kept.** All about it, also without a
+network: [Updating](updating.md).
 
 ## What stays on the computer
 

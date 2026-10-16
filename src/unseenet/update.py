@@ -52,7 +52,12 @@ TRUSTED = {"stable": (PROJECT_KEY,), "dev": (PROJECT_KEY, DEV_RELEASE_KEY)}
 REPO = "https://github.com/unseenet/unseenet"
 SUMS = "SHA256SUMS.txt"
 SIG = SUMS + ".sig"
-UPDATE_ZIP = re.compile(r"^unseenet-(?P<version>[0-9][0-9A-Za-z.+-]*)-(?P<arch>x86_64)-update\.zip$")
+# What a release offers: one zip per kind of installation (see stick_kind)
+ASSET = re.compile(r"^unseenet-(?P<version>[0-9][0-9A-Za-z.+]*?)-(?P<what>x86_64-update|usb|"
+                   r"linux-x86_64|windows-x86_64|macos-aarch64|macos-x86_64)\.zip$")
+PLATFORMS = ("linux-x86_64", "windows-x86_64", "macos-aarch64", "macos-x86_64")
+TOP = "Unseenet"                     # the portable zips' top folder
+OLD_SUFFIX = ".unseenet-old"         # Windows: a program in use, moved aside
 VERSION_FILE = "UNSEENET-VERSION"
 FILES_LIST = "UNSEENET-FILES"        # what this version put on the stick (removed by the next)
 MARKER = "UPDATING"                  # on the stick while files are being replaced
@@ -122,13 +127,28 @@ def parse_sums(sums: bytes) -> dict[str, str]:
     return out
 
 
-def update_zip_in(sums: dict[str, str], arch: str = "x86_64") -> tuple[str, str]:
-    """(file name, version) of the update zip a release's checksums list."""
+def asset_in(sums: dict[str, str], what: str) -> tuple[str, str]:
+    """(file name, version) of the zip for ``what`` that a release's checksums list."""
     for name in sums:
-        m = UPDATE_ZIP.match(name)
-        if m and m.group("arch") == arch:
+        m = ASSET.match(name)
+        if m and m.group("what") == what:
             return name, m.group("version")
-    raise UpdateError("this release has no update zip (it is older than updating)")
+    raise UpdateError(f"this release has no {what} zip (it is older than updating)")
+
+
+def update_zip_in(sums: dict[str, str]) -> tuple[str, str]:
+    """The bootable image's update zip (every release that can be updated to has one)."""
+    return asset_in(sums, "x86_64-update")
+
+
+def stick_kind(root: Path) -> str:
+    """Which of a release's zips updates ``root``: a bootable stick takes the update
+    zip (it has the portable builds too), a USB folder with every platform the usb
+    zip, and a folder with one platform that platform's zip."""
+    if (root / "unseenet.apkovl.tar.gz").exists():
+        return "x86_64-update"
+    present = [p for p in PLATFORMS if (root / p).is_dir()]
+    return present[0] if len(present) == 1 else "usb"
 
 
 def sha256_file(path: Path) -> str:
@@ -142,9 +162,22 @@ def sha256_file(path: Path) -> str:
 # ----------------------------------------------------------------------
 # Downloading (over Tor when a SOCKS port is given)
 # ----------------------------------------------------------------------
+def _tls() -> ssl.SSLContext:
+    """The system's certificates, or certifi's where it has none (a frozen build of
+    Python often looks in the build machine's folders)."""
+    ctx = ssl.create_default_context()
+    if ctx.cert_store_stats().get("x509_ca", 0) == 0:
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            pass
+    return ctx
+
+
 class _Conn(http.client.HTTPSConnection):
     def __init__(self, host: str, socks_port: int | None):
-        super().__init__(host, timeout=90, context=ssl.create_default_context())
+        super().__init__(host, timeout=90, context=_tls())
         self.socks_port = socks_port
 
     def connect(self) -> None:
@@ -207,7 +240,7 @@ def fetch(url: str, socks_port: int | None, dest: Path | None = None,
 def _member(name: str) -> str:
     """A zip member as a safe relative path; UpdateError for anything else."""
     p = PurePosixPath(name)
-    if p.is_absolute() or ".." in p.parts or "\\" in name or not p.parts:
+    if p.is_absolute() or ".." in p.parts or "\\" in name or not p.parts or ":" in p.parts[0]:
         raise UpdateError(f"unsafe file name in the update zip: {name!r}")
     if p.parts[0].lower() in NEVER or p.name.lower() in NEVER:
         raise UpdateError(f"the update zip may not contain {name!r}")
@@ -221,27 +254,37 @@ def _read(path: Path) -> str:
         return ""
 
 
+def _is_link(info: zipfile.ZipInfo) -> bool:
+    return info.create_system == 3 and (info.external_attr >> 16) & 0o170000 == 0o120000
+
+
 @dataclass
 class Plan:
     version: str
-    replace: list[str]          # zip members, in the order they are written (kernel last)
+    replace: list[str]          # paths on the stick, in the order they are written (kernel last)
     remove: list[str]           # what the old version put there and the new one does not
     keep_syslinux: bool         # the stick's .c32 files stay (they match its ldlinux.sys)
     room: int                   # free bytes needed on the stick
+    prefix: str = ""            # the zip's top folder ("Unseenet/" in the portable zips)
 
 
 def make_plan(media: Path, zf: zipfile.ZipFile) -> Plan:
-    names = [_member(n) for n in zf.namelist() if not n.endswith("/")]
+    raw = [n for n in zf.namelist() if not n.endswith("/")]
+    prefix = TOP + "/" if raw and all(n.startswith(TOP + "/") for n in raw) else ""
+    names = [_member(n[len(prefix):]) for n in raw]
     if VERSION_FILE not in names:
         raise UpdateError(f"not an Unseenet update zip: it has no {VERSION_FILE}")
-    version = zf.read(VERSION_FILE).decode("utf-8", "replace").strip()
-    new_sl = zf.read(SYSLINUX_VERSION).decode().strip() if SYSLINUX_VERSION in names else ""
+    version = zf.read(prefix + VERSION_FILE).decode("utf-8", "replace").strip()
+    new_sl = zf.read(prefix + SYSLINUX_VERSION).decode().strip() \
+        if SYSLINUX_VERSION in names else ""
     old_sl = _read(media / SYSLINUX_VERSION)
     keep = not (old_sl and new_sl and old_sl == new_sl)
     if keep:     # unknown or different: the .c32 files must stay those ldlinux.sys knows
         names = [n for n in names if not (n.startswith(SYSLINUX + "/")
                                           and (n.endswith(".c32") or n == SYSLINUX_VERSION))]
-    names.sort(key=lambda n: (n in KERNEL, KERNEL.index(n) if n in KERNEL else 0, n))
+    # the version file last but the kernel: a stick that says "new" has all of it
+    order = (VERSION_FILE, FILES_LIST, *KERNEL)
+    names.sort(key=lambda n: (order.index(n) + 1 if n in order else 0, n))
     lower = {n.lower() for n in names}
     remove = []
     for line in _read(media / FILES_LIST).splitlines():
@@ -253,10 +296,10 @@ def make_plan(media: Path, zf: zipfile.ZipFile) -> Plan:
                 and not (keep and old.startswith(SYSLINUX + "/")):
             remove.append(old)
     # One file at a time: each old file is freed when the new one replaces it,
-    # except the modloop, which stays mounted until the reboot - but it is
-    # written last, so the most that is ever needed is the largest file.
-    largest = max((zf.getinfo(n).file_size for n in names), default=0)
-    return Plan(version, names, remove, keep, largest + (32 << 20))
+    # except the modloop (mounted until the reboot) and, on Windows, programs
+    # that are running - but those are few, so the largest file plus some room.
+    largest = max((zf.getinfo(prefix + n).file_size for n in names), default=0)
+    return Plan(version, names, remove, keep, largest + (64 << 20), prefix)
 
 
 def _sync() -> None:
@@ -264,30 +307,114 @@ def _sync() -> None:
         os.sync()
 
 
+def _replace(tmp: Path, dest: Path) -> None:
+    """Rename ``tmp`` over ``dest``; on Windows a running program is moved aside first."""
+    try:
+        os.replace(tmp, dest)
+    except PermissionError:
+        aside = dest.with_name(dest.name + OLD_SUFFIX)
+        n = 0
+        while aside.exists():
+            try:
+                aside.unlink()
+            except OSError:
+                n += 1
+                aside = dest.with_name(f"{dest.name}.{n}{OLD_SUFFIX}")
+        os.replace(dest, aside)          # Windows lets a file in use be renamed
+        os.replace(tmp, dest)
+
+
+def clean_old(root: Path) -> None:
+    """Delete files an earlier update moved aside because they were in use."""
+    for top in root.iterdir() if root.is_dir() else ():
+        if top.name.lower() == "data":
+            continue
+        for p in ([top] if top.is_file() else top.rglob("*" + OLD_SUFFIX)):
+            if p.name.endswith(OLD_SUFFIX):
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+
+def _write_file(zf: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path) -> None:
+    """Write one file next to ``dest`` and rename it over it."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".new")
+    with zf.open(info) as src, open(tmp, "wb") as out:
+        shutil.copyfileobj(src, out, 1 << 20)
+        out.flush()
+        os.fsync(out.fileno())
+    mode = (info.external_attr >> 16) & 0o777
+    if mode and os.name != "nt":
+        try:
+            os.chmod(tmp, mode)
+        except OSError:                  # FAT: no modes to keep
+            pass
+    _replace(tmp, dest)
+
+
+def _resolve(member: str, target: str) -> str:
+    parts: list[str] = []
+    for part in (PurePosixPath(member).parent / target).as_posix().split("/"):
+        if part == "..":
+            parts = parts[:-1]
+        elif part not in ("", "."):
+            parts.append(part)
+    return "/".join(parts)
+
+
+def _write_link(zf: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path) -> None:
+    """A symbolic link (the macOS builds have some): made as a link where the file
+    system has them, else (FAT) a copy of what it points to, as the image does."""
+    target = zf.read(info).decode()
+    # Windows: links need privileges and a POSIX-style relative target makes a link
+    # Windows cannot open, so there the copy is used, as on FAT
+    if os.name != "nt" and not (dest.is_dir() and not dest.is_symlink()):
+        tmp = dest.with_name(dest.name + ".new")
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if tmp.is_symlink() or tmp.exists():
+                tmp.unlink()
+            os.symlink(target, tmp)
+            _replace(tmp, dest)
+            return
+        except (OSError, NotImplementedError):
+            pass
+    resolved = _resolve(info.filename, target)
+    members = {i.filename: i for i in zf.infolist() if not i.filename.endswith("/")}
+    if resolved in members:
+        src = members[resolved]
+        (_write_link if _is_link(src) else _write_file)(zf, src, dest)
+        return
+    for name, sub in members.items():    # a link to a folder: copy the folder
+        if name.startswith(resolved + "/"):
+            out = dest / name[len(resolved) + 1:]
+            (_write_link if _is_link(sub) else _write_file)(zf, sub, out)
+
+
 def apply(media: Path, zip_path: Path, say: Callable[[str], None] = print) -> Plan:
     """Replace the stick's system files with those in ``zip_path``. data/ is not touched."""
+    clean_old(media)
     with zipfile.ZipFile(zip_path) as zf:
         plan = make_plan(media, zf)
         free = shutil.disk_usage(media).free
         if free < plan.room:
             raise UpdateError(f"the stick needs {plan.room >> 20} MB free for the update and "
-                              f"has {free >> 20} MB; delete something outside data/ or "
-                              "write a new image (keep a copy of data/ first)")
+                              f"has {free >> 20} MB; delete something outside data/, or "
+                              "start again with a fresh copy (keep a copy of data/ first)")
         (media / MARKER).write_text(plan.version + "\n")
         _sync()
         for i, name in enumerate(plan.replace, 1):
-            dest = media / name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            tmp = dest.with_name(dest.name + ".new")
-            with zf.open(name) as src, open(tmp, "wb") as out:
-                shutil.copyfileobj(src, out, 1 << 20)
-                out.flush()
-                os.fsync(out.fileno())
-            os.replace(tmp, dest)
-            if i % 50 == 0 or name in KERNEL:
+            info = zf.getinfo(plan.prefix + name)
+            (_write_link if _is_link(info) else _write_file)(zf, info, media / name)
+            if i % 100 == 0 or name in KERNEL:
                 say(f"  {i}/{len(plan.replace)} files")
         for name in plan.remove:
-            (media / name).unlink(missing_ok=True)
+            try:
+                (media / name).unlink(missing_ok=True)
+            except OSError:              # in use (Windows): gone at the next update
+                pass
     _sync()
     (media / MARKER).unlink(missing_ok=True)
     _sync()
@@ -311,11 +438,11 @@ class Release:
     signed_by: str
 
 
-def check_release(sums: bytes, sig: str, channel: str) -> Release:
+def check_release(sums: bytes, sig: str, channel: str, what: str = "x86_64-update") -> Release:
     """What a release's signed checksums offer; UpdateError unless the signature is good."""
     signer = check_signature(sums, sig, channel)
     table = parse_sums(sums)
-    name, version = update_zip_in(table)
+    name, version = asset_in(table, what)
     return Release(channel, version, name, table[name], signer)
 
 
@@ -354,31 +481,36 @@ def _ask(question: str, yes: bool) -> bool:
 def run(args: argparse.Namespace, socks_port: int | None) -> int:
     media: Path = args.media
     current = stick_version(media)
+    what = stick_kind(media)
     print(f"This stick: Unseenet {current}  ({media})")
     if (left := unfinished(media)):
         print(f"An update to {left} did not finish; it is done again now.")
     if args.zip:                       # offline: the zip, with the release's sums and signature
+        m = ASSET.match(args.zip.name)
+        if not m or m.group("what") != what:
+            raise UpdateError(f"{args.zip.name} is not the zip for this stick: it needs "
+                              f"unseenet-<version>-{what}.zip")
         folder = args.zip.parent
         try:
             sums, sig = (folder / SUMS).read_bytes(), (folder / SIG).read_text()
         except OSError:
             raise UpdateError(f"put {SUMS} and {SIG} from the same release next to the zip")
         try:
-            rel = check_release(sums, sig, "stable")
+            rel = check_release(sums, sig, "stable", what)
         except UpdateError:              # a file you chose: a development build will do too
-            rel = check_release(sums, sig, "dev")
+            rel = check_release(sums, sig, "dev", what)
         if rel.zip_name != args.zip.name:
             raise UpdateError(f"{SUMS} is for {rel.zip_name}, not {args.zip.name}")
     else:
         print(f"Looking for the newest {args.channel} release ...")
         sums = fetch(release_url(args.channel, SUMS), socks_port)
         sig = fetch(release_url(args.channel, SIG), socks_port).decode("utf-8", "replace")
-        rel = check_release(sums, sig, args.channel)
+        rel = check_release(sums, sig, args.channel, what)
     who = "the project key" if rel.signed_by == PROJECT_KEY else "the release key (development)"
     print(f"Newest: Unseenet {rel.version}, signed by {who}")
     if version_key(rel.version) <= version_key(current) and not args.force and not left:
-        print("The stick is up to date.")
-        return 0
+        print("It is up to date.")
+        return 3
     if args.check:
         print("An update is available.")
         return 0
@@ -434,9 +566,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-tor", action="store_true", help="download directly, not over Tor")
     args = p.parse_args(argv)
     args.media = args.media or find_stick()
-    if args.media is None or not (args.media / VERSION_FILE).exists() and \
-            not (args.media / "unseenet.apkovl.tar.gz").exists():
-        sys.exit("No Unseenet stick found; give it with --media.")
+    if args.media is None or not any((args.media / f).exists() for f in (
+            VERSION_FILE, "unseenet.apkovl.tar.gz", "UNSEENET-PORTABLE")):
+        sys.exit("No Unseenet stick or portable folder found; give it with --media.")
     try:
         code = run(args, None) if (args.zip or args.no_tor) else asyncio.run(_over_tor(args))
     except UpdateError as exc:

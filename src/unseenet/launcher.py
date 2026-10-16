@@ -81,11 +81,26 @@ def self_test(network: bool = True, node: str | None = None) -> int:
     return asyncio.run(run())
 
 
+def _clean_after_update() -> None:
+    """Windows: delete the programs an update had to move aside while they ran."""
+    if sys.platform != "win32":
+        return
+    from .portable import portable_root
+    root = portable_root()
+    if root is not None:
+        from .update import clean_old
+        clean_old(root)
+
+
 def main(argv: list[str] | None = None) -> None:
     args = list(sys.argv[1:] if argv is None else argv)
+    _clean_after_update()
     if args[:1] == ["cli"]:
         from .cli import client_main
         client_main(args[1:])
+    elif args[:1] == ["update"]:
+        from .update import main as update_main
+        update_main(args[1:])
     elif args[:1] == ["node"]:
         from .cli import node_main
         node_main(args[1:])

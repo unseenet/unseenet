@@ -15,6 +15,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   releases signed with the project key (`tools/project/sign_release.py`),
   development builds with a separate release key in CI. Also
   `python -m unseenet.update`. (#68)
+- **Update Unseenet** in the client's command palette and `unseenet update`
+  for Portable (Linux, macOS, Windows), also on a USB stick: the USB
+  zip or the platform's zip, checked the same way, `data/` kept. Running
+  programs on Windows are moved aside and removed at the next start. (#68)
 - Listed nodes must be connected (UN-RFC 0021): the daily health check
   posts a small canary to each listed node in `unseenet.canary` and reads
   the next day where they arrived. A node whose canary does not reach more
