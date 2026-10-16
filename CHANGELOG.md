@@ -11,6 +11,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - Per-peer `accept` in `[[peer]]`: which groups the node takes from that
   peer, pushed or pulled. `groups` only ever limited what is sent, so a
   peering "for dk.* only" can now be held on both sides. (#86)
+- Names under a name (UN-RFC 0019 sections 4.4, 5.4, 6.4, 6.6): the holder
+  of `@lorensen` gives `andreas@lorensen` and `sonia@lorensen` with
+  certificates signed by its own key, for 1 to 5 years, renewed
+  automatically and revocable in a public list; they count only while the
+  parent is held. Domains can name people in DNS (`andlo@lorensen.dk`
+  through `andlo._unseenet.lorensen.dk`), checked by the registrar. An
+  identity with several names chooses which one its posts show. In the
+  client: *Give a name under yours*, *Ask for a name under someone's
+  name*, *Name requests*, *Names you gave*, *Name your posts show*. (#92)
 - Report a post: **Report post** in the client sends it, with a note and
   optionally anonymously, to the group's owner, its moderators, the
   hierarchy's maintainer and the node's operator - whoever you tick.
