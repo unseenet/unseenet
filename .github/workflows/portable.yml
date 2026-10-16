@@ -185,7 +185,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: unseenet-image
-          path: dist/image/unseenet-*.img.xz
+          path: |
+            dist/image/unseenet-*.img.xz
+            dist/image/unseenet-*-update.zip
           compression-level: 0
       - name: Attach to the release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -193,14 +195,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           IMG=dist/image/unseenet-$VERSION-x86_64.img.xz
+          UPD=dist/image/unseenet-$VERSION-x86_64-update.zip
           for i in $(seq 1 40); do
             if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then break; fi
             sleep 30
           done
           mkdir -p sums
           gh release download "$GITHUB_REF_NAME" -p SHA256SUMS.txt -D sums 2>/dev/null || true
-          ( cd dist/image && sha256sum "$(basename "$IMG")" ) >> sums/SHA256SUMS.txt
-          gh release upload "$GITHUB_REF_NAME" "$IMG" sums/SHA256SUMS.txt --clobber
+          ( cd dist/image && sha256sum "$(basename "$IMG")" "$(basename "$UPD")" ) >> sums/SHA256SUMS.txt
+          # stable releases are signed by the maintainer: tools/project/sign_release.py
+          gh release upload "$GITHUB_REF_NAME" "$IMG" "$UPD" sums/SHA256SUMS.txt --clobber
 
   dev:
     # The newest build of main as the pre-release "dev": one release, replaced
@@ -235,11 +239,21 @@ jobs:
             echo "### Commits since $TAG"
             git log --format='- %s (%h)' "$TAG..HEAD"
           } > notes.md
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -q .
+      - name: Sign the checksums with the release key (sticks on the dev channel check it)
+        env:
+          UNSEENET_RELEASE_KEY: ${{ secrets.UNSEENET_RELEASE_KEY }}
+        run: |
+          ( cd zips && sha256sum ./*.img.xz ./*-update.zip | sed 's# ./# #' >> SHA256SUMS.txt )
+          python tools/sign_sums.py zips/SHA256SUMS.txt
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           git push -q origin ":refs/tags/dev" 2>/dev/null || true
-          ( cd zips && sha256sum ./*.img.xz | sed 's# ./# #' >> SHA256SUMS.txt )
-          gh release create dev zips/*.zip zips/*.img.xz zips/SHA256SUMS.txt --prerelease --latest=false \
+          gh release create dev zips/*.zip zips/*.img.xz zips/SHA256SUMS.txt zips/SHA256SUMS.txt.sig \
+            --prerelease --latest=false \
             --target "$GITHUB_SHA" --title "Development build $VERSION" --notes-file notes.md

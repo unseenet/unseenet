@@ -8,6 +8,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- **Update** in the menu of Bootable (USB, SSD etc.): fetch the newest release over
+  Tor (or a development build, or an update zip on the stick) and replace
+  the system files, keeping `data/`. Releases get an
+  `unseenet-<version>-x86_64-update.zip` and a signed `SHA256SUMS.txt.sig`:
+  releases signed with the project key (`tools/project/sign_release.py`),
+  development builds with a separate release key in CI. Also
+  `python -m unseenet.update`. (#68)
 - Listed nodes must be connected (UN-RFC 0021): the daily health check
   posts a small canary to each listed node in `unseenet.canary` and reads
   the next day where they arrived. A node whose canary does not reach more

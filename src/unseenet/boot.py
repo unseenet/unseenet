@@ -259,6 +259,12 @@ def self_test() -> int:
     if media is not None:
         check("data/ can be written", writable(media), str(media / "data"))
         check("portable builds on the medium", (media / "UNSEENET-PORTABLE").exists())
+        check("the version is on the medium (for updates)",
+              (media / "UNSEENET-VERSION").read_text().strip() == __version__
+              if (media / "UNSEENET-VERSION").exists() else False)
+    import ssl
+    check("certificates for HTTPS (updates)",
+          ssl.create_default_context().cert_store_stats()["x509_ca"] > 0)
     try:
         from .client import tui  # noqa: F401
         from . import monitor  # noqa: F401
@@ -380,6 +386,7 @@ ITEMS = [
     ("wifi", "Wi-Fi         connect to a wireless network"),
     ("keyboard", "Keyboard      choose the keyboard layout"),
     ("clock", "Clock         Tor needs the right time"),
+    ("update", "Update        a newer Unseenet onto this stick, keeping data/"),
     ("shell", "Shell         a command line (type 'exit' to come back)"),
     ("reboot", "Restart"),
     ("poweroff", "Shut down"),
@@ -564,6 +571,31 @@ class BootMenu(App):
             self.notify("Clock set" if res.returncode == 0 else f"Not set: {res.stderr.strip()}",
                         severity="information" if res.returncode == 0 else "error")
         self.refresh_status()
+
+    @work(exclusive=True, group="dialog")
+    async def do_update(self) -> None:
+        if self.media is None or not writable(self.media):
+            self.notify("The stick cannot be written, so it cannot be updated", severity="error")
+            return
+        offline = sorted(self.media.glob("unseenet-*-update.zip"))
+        options = [("stable", "Newest release (recommended)"),
+                   ("dev", "Newest development build - may have bugs a release would not")]
+        options += [(f"zip:{z.name}", f"From {z.name} on the stick") for z in offline]
+        choice = await self.push_screen_wait(Pick(
+            "Update", "Get a newer Unseenet onto this stick, over Tor. Your data/ (vault, "
+            "node, settings) is kept. The computer restarts afterwards.", options))
+        if not choice:
+            return
+        cmd = [sys.executable, "-m", "unseenet.update", "--media", str(self.media), "--reboot"]
+        if choice.startswith("zip:"):
+            cmd += ["--zip", str(self.media / choice[4:])]
+        else:
+            if not addresses():
+                self.notify("Not connected: plug in a cable or choose Wi-Fi first",
+                            severity="warning")
+                return
+            cmd += ["--channel", choice]
+        self._run(*cmd, "--pause")
 
     def do_shell(self) -> None:
         self._run("/bin/sh", "-l")
