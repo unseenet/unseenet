@@ -33,6 +33,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   the data directory, never over Tor; counters only, nothing about who
   reads what), which other tools can use too. `install-node.sh` sets it up
   as `unseenet-monitor`. See docs/node/monitor.md. (#20)
+- A bootable image, `unseenet-<version>-x86_64.img.xz`: Alpine Linux from
+  memory with a boot menu (client, node, monitor, Wi-Fi, keyboard, clock),
+  for BIOS and UEFI; the same FAT partition is a portable stick on a running
+  computer, sharing `data/`. Built and booted in QEMU by CI, where its
+  self-test must pass with Tor connecting. See docs/bootable.md. (#19)
+- On the Linux console the client, the monitor and the boot menu draw
+  borders the console's font has.
 
 ### Fixed
 - After picking another group or a refresh while an answer was still

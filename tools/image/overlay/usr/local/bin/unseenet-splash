@@ -1,0 +1,18 @@
+#!/bin/sh
+# The first thing on the screen while the system starts.
+# Only characters the Linux console's built-in font has (CP437).
+exec > /dev/tty1 2>&1
+printf '\033[2J\033[H\033[?25l\n\n'
+printf '\033[32m'
+cat <<'LOGO'
+                 .  -  -  -  -  -  -  -  .
+             '                             '
+        ═════════════════════════════════════════
+          \          \         |         /          /
+           o──────────o────────O────────o──────────o
+
+        █ █ █▄ █ ▄▀▀ █▀▀ █▀▀ █▄ █ █▀▀ ▀█▀
+        █ █ █ ▀█  ▀▄ █▀  █▀  █ ▀█ █▀   █
+        ▀▀▀ ▀  ▀ ▀▀  ▀▀▀ ▀▀▀ ▀  ▀ ▀▀▀  ▀
+LOGO
+printf '\033[0m\n        Starting ...  (Alt+F3 shows the details)\n'

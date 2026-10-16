@@ -29,6 +29,7 @@ from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input,
                              Select, Static, TextArea, Tree)
 
 from .. import __version__
+from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
@@ -1099,7 +1100,7 @@ class BrowseDialog(Dialog):
 
 class UnseenetApp(App):
     TITLE = "unseenet"
-    CSS = CSS
+    CSS = CSS + console_css()
     BINDINGS = [
         # chat: the input line takes the letters; Esc leaves it, Enter goes back
         # (first, so the footer always has room for them)

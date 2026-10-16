@@ -150,10 +150,62 @@ jobs:
             --title "Unseenet $GITHUB_REF_NAME" \
             --notes "Portable builds with Tor inside. See https://unseenet.org/portable/"
 
+  image:
+    # The bootable image (tools/image): Alpine from RAM, the boot menu, and the
+    # portable builds on the same FAT partition. Booted in QEMU, BIOS and UEFI,
+    # and its self-test must pass, Tor connecting included.
+    needs: usb
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                      # attach to the release on tags
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: unseenet-usb-and-checksums
+          path: usb
+      - name: Build
+        run: |
+          VERSION=$(python3 tools/dev_version.py)
+          case "$GITHUB_REF" in refs/tags/v*) VERSION="${GITHUB_REF_NAME#v}";; esac
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          VERSION=$VERSION sh tools/image/build.sh usb/*-usb.zip
+      - name: Boot it in QEMU (BIOS and UEFI) and run its self-test
+        run: |
+          SU=sudo
+          $SU apt-get update -qq
+          $SU apt-get install -y -qq qemu-system-x86 ovmf mtools socat >/dev/null
+          $SU chmod a+rw /dev/kvm 2>/dev/null || true
+          $SU chown -R "$(id -u)" dist
+          IMG=dist/image/unseenet-$VERSION-x86_64.img
+          TIMEOUT=900 sh tools/image/boot-test.sh "$IMG" bios
+          TIMEOUT=900 sh tools/image/boot-test.sh "$IMG" uefi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unseenet-image
+          path: dist/image/unseenet-*.img.xz
+          compression-level: 0
+      - name: Attach to the release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IMG=dist/image/unseenet-$VERSION-x86_64.img.xz
+          for i in $(seq 1 40); do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then break; fi
+            sleep 30
+          done
+          mkdir -p sums
+          gh release download "$GITHUB_REF_NAME" -p SHA256SUMS.txt -D sums 2>/dev/null || true
+          ( cd dist/image && sha256sum "$(basename "$IMG")" ) >> sums/SHA256SUMS.txt
+          gh release upload "$GITHUB_REF_NAME" "$IMG" sums/SHA256SUMS.txt --clobber
+
   dev:
     # The newest build of main as the pre-release "dev": one release, replaced
     # each time, so others can try a fix before it is released.
-    needs: usb
+    needs: [usb, image]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -188,5 +240,6 @@ jobs:
         run: |
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           git push -q origin ":refs/tags/dev" 2>/dev/null || true
-          gh release create dev zips/*.zip zips/SHA256SUMS.txt --prerelease --latest=false \
+          ( cd zips && sha256sum ./*.img.xz | sed 's# ./# #' >> SHA256SUMS.txt )
+          gh release create dev zips/*.zip zips/*.img.xz zips/SHA256SUMS.txt --prerelease --latest=false \
             --target "$GITHUB_SHA" --title "Development build $VERSION" --notes-file notes.md

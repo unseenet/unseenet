@@ -1,0 +1,15 @@
+#!/bin/sh
+# The boot menu on tty1. If it cannot start, say so and give a shell.
+export TERM=linux
+export PATH=/opt/unseenet/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export HOME=/root
+cd /root
+if grep -qw unseenet.selftest /proc/cmdline; then
+    echo "Self-test running - see the serial console."
+    exec sleep 3600
+fi
+/opt/unseenet/bin/python -m unseenet.boot && exit 0
+echo
+echo "The Unseenet menu stopped with an error (see above)."
+echo "You get a shell; type 'exit' to try the menu again."
+exec /bin/sh -l

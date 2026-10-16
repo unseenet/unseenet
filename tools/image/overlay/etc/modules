@@ -1,0 +1,15 @@
+# Loaded at boot by the "modules" service.
+af_packet
+ipv6
+# iwd does its cryptography in the kernel (AF_ALG)
+af_alg
+algif_hash
+algif_skcipher
+algif_aead
+cmac
+hmac
+md4
+ecb
+cbc
+des3_ede
+pkcs8_key_parser

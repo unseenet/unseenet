@@ -27,6 +27,7 @@ from textual.widgets import (DataTable, Footer, Header, Label, RichLog, Sparklin
                              TabbedContent, TabPane)
 
 from . import __version__
+from .console import console_css
 from .node.stats import fetch
 
 REFRESH = 2.0
@@ -36,8 +37,8 @@ PLACES = ["node-data/monitor.sock", "~/node-data/monitor.sock",
 CSS = """
 Screen { background: $surface; }
 #top { height: auto; }
-#node { width: 1fr; height: auto; padding: 0 1; border: round $primary-darken-2; }
-#traffic { width: 1fr; height: auto; padding: 0 1; border: round $primary-darken-2; }
+#node { width: 1fr; height: auto; padding: 0 1; border: solid $primary-darken-2; }
+#traffic { width: 1fr; height: auto; padding: 0 1; border: solid $primary-darken-2; }
 .spark-row { height: 1; }
 .spark-label { width: 9; }
 .spark-count { width: 12; text-align: right; }
@@ -95,7 +96,7 @@ def find_nodes() -> list[str]:
 
 class MonitorApp(App):
     TITLE = "unseenet-monitor"
-    CSS = CSS
+    CSS = CSS + console_css()
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),

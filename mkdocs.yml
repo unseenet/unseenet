@@ -56,6 +56,7 @@ nav:
   - Home: index.md
   - Getting started:
       - Portable (USB, Windows, macOS): portable.md
+      - Bootable stick: bootable.md
       - Using the client: client.md
       - Other newsreaders: other-clients.md
       - Concepts: concepts.md

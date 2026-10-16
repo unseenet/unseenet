@@ -117,6 +117,13 @@ folder for a stick that works anywhere. See the
 before they are released? Take the
 [development build](https://github.com/unseenet/unseenet/releases/tag/dev).
 
+### Bootable stick
+
+`unseenet-<version>-x86_64.img.xz` makes a stick you can boot from - Unseenet
+in a text console, from memory, nothing on the computer touched - and that
+works as a portable stick on a running computer too, with the same data. See
+the [bootable stick](https://unseenet.org/bootable/).
+
 ### The client with Python
 
 Requires Python 3.11+ and the `tor` binary (`dnf install tor` / `apt install tor`).

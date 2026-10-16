@@ -1,0 +1,11 @@
+#!/bin/sh
+# Booted with "unseenet.selftest" (the self-test entry of the boot menu, and CI):
+# check the system on the serial console, then shut down.
+grep -qw unseenet.selftest /proc/cmdline || exit 0
+{
+    echo "UNSEENET-SELFTEST-BEGIN"
+    /opt/unseenet/bin/python -m unseenet.boot --self-test
+    echo "UNSEENET-SELFTEST-RESULT $?"
+} > /dev/ttyS0 2>&1
+sync
+poweroff
