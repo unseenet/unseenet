@@ -13,7 +13,7 @@ import asyncio
 import os
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from textual import on, work
@@ -570,8 +570,8 @@ class KeyListDialog(Dialog):
         with Vertical(classes="dialog"):
             yield Label(self.title_, classes="title", markup=False)
             yield Label(self.hint, classes="hint", markup=False)
-            yield Select([(f"{label}  ({key[:20]}...)", key) for key, label in self.people],
-                         prompt="Choose someone", id="who")
+            yield Select([(f"{label}  ({key[:20]}...)" if key.startswith("ed25519:") else label, key)
+                          for key, label in self.people], prompt="Choose", id="who")
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
                 yield Button(self.action, variant="primary", id="ok")
@@ -619,22 +619,25 @@ class ReportDialog(Dialog):
 class ModerationDialog(Dialog):
     """Submissions to groups you moderate (UN-RFC 0009 section 3)."""
 
-    def __init__(self, items: list[tuple[str, str, str]]):
+    def __init__(self, items: list[tuple[str, str, str]], title: str = "Moderation queue",
+                 hint: str = "Posts waiting for a moderator. Approving posts them unchanged; "
+                              "the first moderator to act decides.",
+                 prompt: str = "Choose a post", reject: str = "Reject", approve: str = "Approve"):
         super().__init__()
         self.items = items                  # (id, label, preview)
+        self.texts = (title, hint, prompt, reject, approve)
 
     def compose(self) -> ComposeResult:
+        title, hint, prompt, reject, approve = self.texts
         with Vertical(classes="dialog list"):
-            yield Label("Moderation queue", classes="title")
-            yield Label("Posts waiting for a moderator. Approving posts them unchanged; the "
-                        "first moderator to act decides.", classes="hint")
-            yield Select([(label, i) for i, label, _ in self.items], prompt="Choose a post",
-                         id="which")
+            yield Label(title, classes="title", markup=False)
+            yield Label(hint, classes="hint", markup=False)
+            yield Select([(label, i) for i, label, _ in self.items], prompt=prompt, id="which")
             yield Static("", id="preview", classes="details", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
-                yield Button("Reject", variant="error", id="reject")
-                yield Button("Approve", variant="primary", id="approve")
+                yield Button(reject, variant="error", id="reject")
+                yield Button(approve, variant="primary", id="approve")
 
     @on(Select.Changed, "#which")
     def _show(self, event: Select.Changed) -> None:
@@ -2146,13 +2149,19 @@ class UnseenetApp(App):
         s = self.session
         mine = naming.my_names(s)
         lines = []
+        primary = naming.preferred(s, s.identity().key_text, mine).name if mine else None
+        kinds = {"registered": "registered", "domain": "domain", "sub": "given by its holder"}
         for c in mine:
-            lines.append(f"@{c.name}  ({c.kind}, until {c.expires.astimezone():%d %B %Y})")
+            lines.append(f"{naming.name_text(c.name)}  ({kinds.get(c.kind, c.kind)}, until "
+                         f"{c.expires.astimezone():%d %B %Y})"
+                         + ("  - your posts show this one" if c.name == primary and len(mine) > 1 else ""))
         held = {c.name for c in mine}
         for name, action, when in naming.pending(s):
             if name not in held:
+                who = ("its holder" if action == "ask"
+                       else "the registrar (it decides after about an hour)")
                 lines.append(f"{action} {name}: sent {nm.parse_rfc3339(when).astimezone():%d %B %H:%M}, "
-                             "waiting for the registrar (it decides after about an hour)")
+                             f"waiting for {who}")
         if not lines:
             lines.append("You have no names yet.")
         lines.append("")
@@ -2328,6 +2337,14 @@ class UnseenetApp(App):
              "you know", self.action_ignore),
             ("People you ignore", "See who you ignore, and show someone again",
              self.action_ignored),
+            ("Ask for a name under someone's name", "e.g. sonia@lorensen: the holder of "
+             "@lorensen decides", self.action_ask_subname),
+            ("Give a name under yours", "Holders of a name: give someone name@yourname",
+             self.action_give_subname),
+            ("Name requests", "People asking for a name under yours", self.action_name_requests),
+            ("Names you gave", "See them, and take one back", self.action_names_given),
+            ("Name your posts show", "If you have several names, choose one",
+             self.action_primary_name),
             ("Report post", "Tell the group's owner, moderators, maintainer or node operator "
              "about a post that breaks the rules or the law", self.action_report),
             ("Open reported post", "From a report you received: go to the post it is about",
@@ -2471,6 +2488,128 @@ class UnseenetApp(App):
         self.current_message = None
         self.notify(f"{who} is banned from {s.group_label(gid)}")
         self._render_threads()
+
+    # --- names under a name (UN-RFC 0019 section 5.4) ---
+    @work(group="dialog", exit_on_error=False)
+    async def action_ask_subname(self) -> None:
+        s = self.session
+        name = await self.push_screen_wait(InputDialog(
+            "Ask for a name under someone's name",
+            "Type the name you would like, e.g. sonia@lorensen. Its holder decides; the name "
+            "then shows on your posts. Every name on one identity links it to the others - "
+            "use another identity for a part of your life you keep apart.",
+            "sonia@lorensen"))
+        if not name:
+            return
+        try:
+            await naming.request_subname(s, name.strip().lower())
+        except (SessionError, OSError, ConnectionError, nm.NameProblem) as exc:
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"Asked for {name}. The answer comes to your private messages.", timeout=8)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_give_subname(self) -> None:
+        s = self.session
+        parents = naming.parents_i_hold(s)
+        if not parents:
+            self.notify("You need a name of your own first, e.g. @lorensen (press @)",
+                        severity="warning", timeout=8)
+            return
+        m = self.current_message
+        key = m.author_key if m and not m.private and m.author_key else s.identity().key_text
+        name = await self.push_screen_wait(InputDialog(
+            "Give a name under yours", f"Under {', '.join('@' + p for p in parents)}. You can "
+            "give yourself one too, e.g. andreas@" + parents[0] + ".", f"sonia@{parents[0]}",
+            value=f"@{parents[0]}"))
+        if not name:
+            return
+        key = await self.push_screen_wait(InputDialog(
+            f"Whose is {name}?", "Their key - filled in from the selected post, or yours.",
+            "ed25519:...", value=key))
+        if not key:
+            return
+        years = await self.push_screen_wait(InputDialog(
+            "For how many years?", "1 to 5. Your client renews it when it is about to run out; "
+            "you can take it back at any time.", "1", value="1"))
+        if not years:
+            return
+        try:
+            n = max(1, min(5, int(years)))
+            await naming.give_subname(s, name.strip().lower(), key.strip(), timedelta(days=365 * n))
+        except (SessionError, OSError, ConnectionError, nm.NameProblem, ValueError,
+                crypto.CryptoError) as exc:
+            self.notify(f"Not given: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{name} given to {s.identity_label(key.strip())}")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_name_requests(self) -> None:
+        s = self.session
+        try:
+            await s.fetch_group(s.my_inbox)
+        except (SessionError, OSError, ConnectionError):
+            pass
+        reqs = naming.name_requests(s)
+        if not reqs:
+            self.notify("Nobody is asking for a name under yours")
+            return
+        items = [(m.message_id, f"{d['name']} - {s.identity_label(d['key'], m.from_name)}",
+                  f"{d['name']}\nfor {s.identity_label(d['key'], m.from_name)}\n{d['key']}")
+                 for m, d in reqs]
+        result = await self.push_screen_wait(ModerationDialog(
+            items, "Name requests", "People asking for a name under yours. Giving one makes it "
+            "show on their posts for a year; you can take it back.", "Choose a request",
+            "Refuse", "Give"))
+        if not result:
+            return
+        action, which = result
+        msg, data = next((m, d) for m, d in reqs if m.message_id == which)
+        try:
+            await naming.answer_request(s, msg, data, approve=action == "approve")
+        except (SessionError, OSError, ConnectionError, nm.NameProblem) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{data['name']} given" if action == "approve" else "Refused")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_names_given(self) -> None:
+        s = self.session
+        given = naming.names_given(s)
+        if not given:
+            self.notify("You have not given any names")
+            return
+        people = [(c.name, f"{c.name} - {s.identity_label(c.key)}, until "
+                   f"{c.expires.astimezone():%d %B %Y}") for c in given]
+        name = await self.push_screen_wait(KeyListDialog(
+            "Names you gave", "Taking a name back is public: it goes in your list of revoked "
+            "names, and clients stop showing it.", people, "Take back"))
+        if not name:
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Take back {name}?", "It stops showing on their posts.", "Take back",
+                danger=True)):
+            return
+        try:
+            await naming.revoke_subname(s, name)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{name} taken back")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_primary_name(self) -> None:
+        s = self.session
+        mine = naming.my_names(s)
+        if len(mine) < 2:
+            self.notify("You have " + ("one name" if mine else "no names") + "; nothing to choose")
+            return
+        name = await self.push_screen_wait(KeyListDialog(
+            "Name your posts show", "Readers see this one on your posts.",
+            [(c.name, naming.name_text(c.name)) for c in mine], "Use"))
+        if name:
+            naming.set_primary(s, name)
+            self.notify(f"Your posts show {naming.name_text(name)}")
 
     @work(group="dialog", exit_on_error=False)
     async def action_report(self) -> None:
