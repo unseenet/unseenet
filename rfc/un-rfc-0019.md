@@ -294,8 +294,11 @@ every replica follows these rules:
    UTC on the first day of the month, without `claim` and `claimed`.
 4. **Converging.** If a replica finds that another replica's certificate
    wins over its own by section 5.3, because it did not see a claim in
-   time or found a DNS record differently, it revokes its own
-   certificate and issues the winning decision with its own key.
+   time or found a DNS record differently, it issues the winning
+   decision with its own key as well. It does not revoke its own
+   certificate: section 5.3 already makes the winner count on every
+   client, and a revocation names a serial, so it would revoke the
+   winner's certificate too.
 
 Claims, certificates and revocations all travel through the network,
 so replicas need no connection to each other and no other place to keep

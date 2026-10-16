@@ -8,6 +8,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- `unseenet-registrar`: a registrar for names of identities such as
+  `@lorensen` (UN-RFC 0019). It runs as several replicas on separate
+  machines that make the same decisions without talking to each other, so
+  names keep working when one machine is gone. `unseenet.names` shares the
+  formats with the client. See "Running a registrar replica" in the docs.
+  The client cannot claim or show names yet. (#27, #38)
+- `tools/project/`: the scripts the maintainer runs with the project key, to
+  change its vault's passphrase, create the project's groups and set up the
+  registrar. They ask for the passphrase in the terminal only.
 - The project's root list of hierarchies (UN-RFC 0018) is kept in
   `src/unseenet/hierarchies.json`, checked by the tests, and posted to
   `unseenet.hierarchies` when it changes and every month, together with

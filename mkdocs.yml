@@ -91,4 +91,7 @@ nav:
       - "0017 Catch-up by pull": spec/un-rfc-0017.md
       - "0018 Hierarchies": spec/un-rfc-0018.md
       - "0019 Names for identities": spec/un-rfc-0019.md
+  - The project:
+      - The project's keys: project/keys.md
+      - Running a registrar replica: project/registrar.md
   - Development: development.md
