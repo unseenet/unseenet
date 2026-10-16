@@ -106,6 +106,8 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
         lines.append(f"Policy:   new groups {p.get('new_groups', '?')}, kept "
                      f"{p.get('retention_days', '?')} days, postage {p.get('min_pow', '?')} "
                      f"bits, logs {p.get('logging', '?')}")
+        if p.get("excludes"):
+            lines.append(f"Leaves out: {p['excludes']}")
     lines.append(f"Groups:   {groups} of yours are read from here"
                  + ("   ·   in the project's node list" if known else ""))
     return "\n".join(lines)
@@ -1035,6 +1037,7 @@ class NodeInfoDialog(Dialog):
                       f"Kept for:         {p.get('retention_days', '?')} days",
                       f"Minimum postage:  {p.get('min_pow', '?')} bits",
                       f"Logs:             {p.get('logging', '?')}",
+                      f"Leaves out:       {p.get('excludes') or 'nothing'}",
                       "",
                       ("Operator:  " + i["operator"]) if i.get("operator") else "No operator contact given."]
         with Vertical(classes="dialog"):

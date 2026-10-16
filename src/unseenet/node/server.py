@@ -50,6 +50,7 @@ class NodeConfig:
     peers: list[PeerConfig] = field(default_factory=list)
     forward_delay: tuple[float, float] = (0.0, 60.0)  # UN-RFC 0005, section 5.5
     require_peer_auth: bool = False
+    excludes: str = ""                   # wildmat of groups not carried by choice (UN-RFC 0021)
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
     # UN-RFC 0011: who runs this node and how to reach them
@@ -143,6 +144,8 @@ class Node:
         now = now or datetime.now(timezone.utc)
         ctl = art.control
         is_manifest = ctl == ["manifest"]
+        if self.config.excludes and wildmat(self.config.excludes, art.group):
+            raise ArticleError("group", "excluded by this node")
         removed = self.store.tombstone(art.group)
         if removed:
             raise ArticleError("group", "group was removed by its owner" if removed == "owner"
@@ -355,6 +358,12 @@ class Node:
         for event in self._listeners:
             event.set()
 
+    def excludes(self) -> str:
+        """UN-RFC 0021 section 3: `excludes` from node.toml, plus every dropped group."""
+        parts = [p for p in self.config.excludes.split(",") if p]
+        parts += [g for g in self.store.dropped_groups() if g not in parts]
+        return ",".join(parts)
+
     def node_info(self) -> dict:
         cfg = self.config
         op = cfg.operator or {}
@@ -364,6 +373,9 @@ class Node:
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,
                            "archive": False, "honours_blocks": cfg.honour_blocks,
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
+        excludes = self.excludes()
+        if excludes:
+            info["policy"]["excludes"] = excludes
         for key in ("operator", "contact", "description"):
             value = op.get("key" if key == "operator" else key)
             if value:

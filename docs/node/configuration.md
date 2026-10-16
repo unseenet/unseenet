@@ -34,6 +34,7 @@ groups = "*"
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
+| `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
 | `pull_interval` | `3600` | Seconds between [catch-up pulls](peering.md#catching-up) from each peer. |
 | `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
@@ -64,6 +65,24 @@ information whether it honours them.
 
 This only affects **new** groups. Groups the node already carries keep
 working, and posts in them are checked against the group's own rules.
+
+### `excludes`: groups you leave out
+
+```toml
+[node]
+excludes = "alt.binaries.*,!alt.binaries.test*"
+```
+
+Posts and new groups matching `excludes` are refused, from clients and
+peers alike. The node tells clients what it leaves out (users see it
+under **About this node**), together with every group you have
+[dropped](operations.md#dropping-a-group).
+
+A listed node must carry what most listed nodes carry, *except* what it
+excludes ([UN-RFC 0021](../spec/un-rfc-0021.md)). `excludes` is how you
+stay listed and still leave out something you will not or may not carry
+where your node runs. The project's own groups (`unseenet*`) cannot be
+excluded by a listed node.
 
 ## `[operator]`
 

@@ -94,14 +94,14 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
-    assert setup["names_group"] in owned and len(owned) == 8
+    assert setup["names_group"] in owned and len(owned) == 9
     nodes = f"unseenet.nodes@{setup['project'].fingerprint}"
     talk = f"unseenet@{setup['project'].fingerprint}"
     assert v.data["groups"][nodes]["manifest"]["view"] == "data"
     assert "view" not in v.data["groups"][talk]["manifest"]          # threads, the default
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
-                if e.get("owner")}) == 8
+                if e.get("owner")}) == 9
 
     async def as_published_before(gid, change):
         """Put a newer manifest on the node, as an older script would have made it."""
