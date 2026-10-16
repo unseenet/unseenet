@@ -117,45 +117,81 @@
 
 /* ---- The recordings -------------------------------------------------------- */
 
-.md-typeset figure.un-demo,
-.md-typeset figure.un-boot { margin: 0 0 1.6rem; max-width: none; }
+/* Portable and Bootable side by side, the same size; "Larger" makes one
+   span the full width. One column on narrow screens. */
+.un-recordings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.6rem;
+  margin: 0 0 1.8rem;
+  align-items: start;
+}
+@media screen and (max-width: 44.9375em) {
+  .un-recordings { grid-template-columns: minmax(0, 1fr); }
+  .md-typeset .un-rec__size { display: none; }
+}
 
-.un-term {
+.md-typeset figure.un-rec {
+  display: block;
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+.md-typeset figure.un-rec.is-large { grid-column: 1 / -1; }
+
+.un-rec__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0 0 0.55rem;
+}
+.md-typeset h2.un-rec__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.md-typeset h2.un-rec__title a { color: var(--md-default-fg-color); }
+.md-typeset h2.un-rec__title a:hover { color: var(--md-accent-fg-color); }
+
+.md-typeset .un-rec__size {
+  flex: none;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  cursor: pointer;
+}
+.md-typeset .un-rec__size:hover { color: var(--md-default-fg-color); border-color: var(--md-default-fg-color--light); }
+.md-typeset .un-rec__size:focus-visible { outline: 2px solid var(--md-accent-fg-color); outline-offset: 2px; }
+
+/* Both recordings sit in the same 16:10 frame, so they line up */
+.un-term,
+.un-media {
   border-radius: 10px;
   overflow: hidden;
   background: var(--un-ink);
-  aspect-ratio: 16 / 9;   /* holds the space until the player has loaded */
+  aspect-ratio: 16 / 10;
 }
-.un-term.is-ready { aspect-ratio: auto; }
-.un-term img { display: block; width: 100%; }
-.un-term .ap-wrapper { background: var(--un-ink); }
+.un-term img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.un-term .ap-wrapper { background: var(--un-ink); height: 100%; }
 .un-term .ap-player { border-radius: 0; }
+.un-media { background: #000; }
+.un-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 
-.md-typeset .un-demo figcaption,
-.md-typeset .un-boot figcaption {
-  font-size: 0.75rem;
+.md-typeset .un-rec figcaption {
+  font-size: 0.72rem;
   line-height: 1.55;
   color: var(--md-default-fg-color--light);
   text-align: left;
   max-width: 44em;
-  margin: 0.7rem 0 0;
-}
-.md-typeset .un-boot figcaption strong { color: var(--md-default-fg-color); }
-
-.md-typeset figure.un-boot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.4rem;
-  align-items: center;
-}
-.md-typeset .un-boot figcaption { margin: 0; font-size: 0.8rem; }
-
-.md-typeset video.un-video {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 10px;
-  background: #000;
+  margin: 0.6rem 0 0;
 }
 
 /* ---- How it fits together ------------------------------------------------- */
@@ -212,20 +248,24 @@
 /* ---- Small screens ----------------------------------------------------------- */
 
 @media (max-width: 52em) {
-  .un-how,
-  .md-typeset figure.un-boot { grid-template-columns: 1fr; }
+  .un-how { grid-template-columns: 1fr; }
 }
 @media (max-width: 36em) {
   .un-hero { padding: 1.5rem 1.2rem 1.3rem; border-radius: 10px; }
   .un-hero__icon { width: 2.6rem; }
+  .un-hero__head { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
+  .un-headers { font-size: 0.7rem; }
+  .un-headers dd a { white-space: nowrap; }
   .md-typeset h1.un-subject { margin-top: 1.1rem; }
 }
-
-/* Material sets figures to fit their content; the terminal should use the full width */
-.md-typeset figure.un-demo { width: 100%; display: block; }
-.md-typeset figure.un-demo .un-term { width: 100%; }
 
 /* Four ways in: two by two on wide screens, not three and one */
 @media screen and (min-width: 45em) {
   .md-typeset .grid.cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Version header lines in the hero, filled in at build time (tools/docs_hooks.py) */
+.md-typeset .un-headers dd a { color: var(--un-green); text-decoration: none; }
+.md-typeset .un-headers dd a:hover { color: var(--un-paper); text-decoration: underline; }
+.un-headers .un-dim { color: var(--un-muted); }
+.un-headers .un-dim { white-space: nowrap; }

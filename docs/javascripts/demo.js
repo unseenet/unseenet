@@ -2,6 +2,7 @@
 // asciinema player (assets/asciinema/, Apache-2.0). Nothing is loaded from
 // other sites. A recording starts when it scrolls into view, unless the
 // reader prefers reduced motion; then it waits for a click on play.
+// The "Larger" buttons let one recording on the front page take the full width.
 (function () {
   "use strict";
 
@@ -23,7 +24,7 @@
     el.dataset.mounted = "1";
     var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var player = AsciinemaPlayer.create(base() + el.dataset.cast, el, {
-      fit: "width",
+      fit: "both",          // fills the 16:10 frame the page gives it
       idleTimeLimit: 2,
       loop: true,
       poster: el.dataset.poster || "npt:0:5",
@@ -31,7 +32,6 @@
       theme: "unseenet",
       controls: true
     });
-    el.classList.add("is-ready");
     if (still || !("IntersectionObserver" in window)) return;
     var started = false;
     new IntersectionObserver(function (entries) {
@@ -59,7 +59,30 @@
     document.head.appendChild(style);
   }
 
+  function sizeButtons() {
+    document.querySelectorAll(".un-rec__size").forEach(function (btn) {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.hidden = false;
+      btn.addEventListener("click", function () {
+        var fig = btn.closest(".un-rec");
+        var large = !fig.classList.contains("is-large");
+        document.querySelectorAll(".un-rec.is-large").forEach(function (other) {
+          other.classList.remove("is-large");
+          var b = other.querySelector(".un-rec__size");
+          b.textContent = "Larger";
+          b.setAttribute("aria-expanded", "false");
+        });
+        if (large) fig.classList.add("is-large");
+        btn.textContent = large ? "Smaller" : "Larger";
+        btn.setAttribute("aria-expanded", large ? "true" : "false");
+        fig.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+    });
+  }
+
   function init() {
+    sizeButtons();
     var casts = document.querySelectorAll(".un-term[data-cast]");
     if (!casts.length) return;
     addTheme();
