@@ -8,6 +8,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Report a post: **Report post** in the client sends it, with a note and
+  optionally anonymously, to the group's owner, its moderators, the
+  hierarchy's maintainer and the node's operator - whoever you tick.
+  **Open reported post** takes a recipient to it. (#74)
 - Hierarchy blocks (UN-RFC 0018 section 5.4): a hierarchy's maintainer can
   block an identity across its hierarchy with a public reason, and a
   maintainer of a delegated part (such as `dk.snak.*`) within that part.
