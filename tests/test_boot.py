@@ -63,3 +63,34 @@ async def test_menu_starts(tmp_path, monkeypatch):
         await pilot.press("escape")
         await pilot.pause(0.2)
         assert not isinstance(app.screen, boot.Pick)
+
+
+def test_load_keymap_hands_over_the_bytes(tmp_path, monkeypatch):
+    """A keymap is binary; re-encoded as text it scrambled the keyboard."""
+    import gzip
+    table = bytes(range(256)) * 4
+    (tmp_path / "dk").mkdir()
+    (tmp_path / "dk" / "dk.bmap.gz").write_bytes(gzip.compress(table))
+    monkeypatch.setattr(boot, "KEYMAPS", str(tmp_path))
+    got = {}
+
+    def fake_run(cmd, input=None, **kw):
+        got["cmd"], got["input"] = cmd, input
+        return boot.subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(boot.subprocess, "run", fake_run)
+    assert boot.load_keymap("dk/dk")
+    assert got == {"cmd": ["loadkmap"], "input": table}
+    assert not boot.load_keymap("xx/xx")
+
+
+def test_logo_is_symmetric_and_drawable():
+    from unseenet import logo
+    assert len({len(row) for row in logo.ICON}) == 1
+    assert all(row == row[::-1] for row in logo.ICON)
+    assert set("".join(logo.ICON)) <= set(" " + "".join(logo.COLORS))
+    # only characters the Linux console font (CP437) has
+    drawn = logo.ansi_icon() + logo.WORDMARK
+    plain = boot.ANSI.sub("", drawn).replace("\n", "")
+    plain.encode("cp437")
+    assert logo.rich_icon().plain.count("\n") == len(logo.ICON) // 2 - 1

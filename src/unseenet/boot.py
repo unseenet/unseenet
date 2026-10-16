@@ -27,6 +27,7 @@ from pathlib import Path
 
 from . import __version__
 from .console import console_css
+from .logo import WORDMARK, rich_icon
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -43,14 +44,6 @@ KEYMAPS = "/usr/share/bkeymaps"
 COMMON_KEYMAPS = ["us/us", "dk/dk", "de/de", "gb/gb", "fr/fr", "se/se", "no/no", "fi/fi",
                   "nl/nl", "es/es", "it/it", "ch/ch", "pl/pl", "pt/pt", "be/be", "cz/cz"]
 
-LOGO = r"""      .  -  -  -  -  -  -  .
-  '                           '
-═══════════════════════════════════
-  \        \       |       /        /
-   o────────o──────O──────o────────o"""
-WORDMARK = """█ █ █▄ █ ▄▀▀ █▀▀ █▀▀ █▄ █ █▀▀ ▀█▀
-█ █ █ ▀█  ▀▄ █▀  █▀  █ ▀█ █▀   █
-▀▀▀ ▀  ▀ ▀▀  ▀▀▀ ▀▀▀ ▀  ▀ ▀▀▀  ▀"""
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
@@ -130,7 +123,13 @@ def load_keymap(name: str) -> bool:
         data = gzip.decompress(path.read_bytes())
     except OSError:
         return False
-    return run("loadkmap", input=data.decode("latin-1")).returncode == 0
+    # The keymap is binary: hand it over as bytes. (As text it was re-encoded as
+    # UTF-8, which scrambled the table and left the keyboard dead.)
+    try:
+        return subprocess.run(["loadkmap"], input=data, capture_output=True,
+                              timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def addresses() -> list[tuple[str, str]]:
@@ -386,6 +385,11 @@ ITEMS = [
     ("poweroff", "Shut down"),
 ]
 
+# Screen lines the menu needs with the eye (12) and the wordmark (4) shown.
+LOGO_NEEDS = 37
+WORDMARK_NEEDS = 25
+
+
 class BootMenu(App):
     CSS = MENU_CSS + console_css()
     TITLE = "Unseenet"
@@ -397,7 +401,7 @@ class BootMenu(App):
         self.settings = load_settings(self.media)
 
     def compose(self) -> ComposeResult:
-        yield Static(LOGO, id="logo")
+        yield Static(rich_icon(), id="logo")
         yield Static(WORDMARK, id="wordmark")
         yield Static(f"version {__version__}  -  discussion groups the old Usenet way, over Tor",
                      id="version")
@@ -414,6 +418,15 @@ class BootMenu(App):
         self.query_one("#menu", OptionList).focus()
         self.refresh_status()
         self.set_interval(5, self.refresh_status)
+        self.fit(self.size.height)
+
+    def on_resize(self, event) -> None:
+        self.fit(event.size.height)
+
+    def fit(self, height: int) -> None:
+        """Leave out the eye, then the wordmark, on small screens (80x25 in safe mode)."""
+        self.query_one("#logo").display = height >= LOGO_NEEDS
+        self.query_one("#wordmark").display = height >= WORDMARK_NEEDS
 
     def action_noop(self) -> None:
         pass
