@@ -112,10 +112,10 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
 # Group icons: who may write and read, then how the group is shown. Only
 # characters from WGL4, the set every terminal font has - even the classic
 # Windows console with Consolas - and one cell wide each.
-ICONS = {"threads": "≡", "chat": "»", "moderated": "√", "channel": "►", "closed": "∩",
-         "inbox": "@", "local": "⌂", "unknown": "·"}
-ICON_LEGEND = ("≡ posts  » chat  √ moderated  ► channel  ∩ closed  @ inbox  "
-               "⌂ local (one node)  · not known yet")
+ICONS = {"threads": "≡", "chat": "»", "data": "¤", "moderated": "√", "channel": "►",
+         "closed": "∩", "inbox": "@", "local": "⌂", "unknown": "·"}
+ICON_LEGEND = ("≡ posts  » chat  ¤ data for programs  √ moderated  ► channel  ∩ closed  "
+               "@ inbox  ⌂ local (one node)  · not known yet")
 
 
 def group_icons(gtype: str | None, data: dict | None = None) -> str:
@@ -128,7 +128,7 @@ def group_icons(gtype: str | None, data: dict | None = None) -> str:
         return f"{ICONS['inbox']}  "
     access = ICONS.get(gtype) if gtype in ("moderated", "channel", "closed") else \
         (ICONS["local"] if data.get("local") else " ")
-    view = ICONS["chat"] if data.get("view") == "chat" else ICONS["threads"]
+    view = {"chat": ICONS["chat"], "data": ICONS["data"]}.get(data.get("view"), ICONS["threads"])
     return f"{access} {view}"
 
 
@@ -438,8 +438,10 @@ class BridgesDialog(Dialog):
 
 DELIVERY_CHOICES = [("Discussion - shown as threads", "threads"),
                     ("Chat - shown as a conversation", "chat"),
-                    ("Chat, fast delivery - gives up some anonymity", "fastchat")]
-DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": ("chat", True)}
+                    ("Chat, fast delivery - gives up some anonymity", "fastchat"),
+                    ("Data for programs - hidden when people browse", "data")]
+DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": ("chat", True),
+            "data": ("data", False)}
 
 
 GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
@@ -612,6 +614,8 @@ class EditGroupDialog(Dialog):
     def compose(self) -> ComposeResult:
         d = self.data
         current = "fastchat" if d.get("low_latency") else d.get("view", "threads")
+        if current not in DELIVERY:                  # a view this client does not know
+            current = "threads"
         with Vertical(classes="dialog compose"):
             yield Label(f"Edit {d.get('name', '')} - every node gets the new version", classes="title",
                         markup=False)
@@ -1053,6 +1057,8 @@ class BrowseDialog(Dialog):
             lines.append("Members only: you need an invitation from the owner to read it.")
         if self._not_mine_inbox(g):
             lines.append("An inbox: anyone can write to it, only its owner can read it.")
+        if data.get("view") == "data":
+            lines.append("Data for programs (lists, certificates), not posts for people.")
         if data.get("rules"):
             first = data["rules"].strip().splitlines()[0]
             lines.append(f"Rules:  {first[:90]}" + (" ..." if len(data["rules"].strip()) > len(first) else ""))
@@ -1892,6 +1898,9 @@ class UnseenetApp(App):
         # you write to someone from Contacts
         groups = [g for g in groups if not is_personal_inbox(g.group_id)
                   or g.group_id == self.session.my_inbox]
+        # groups for programs (node list, root list, names) are not for reading,
+        # unless you already follow one (UN-RFC 0008 section 3.1.1)
+        groups = [g for g in groups if g.subscribed or not self.session.is_data_group(g.group_id)]
         await self.push_screen_wait(BrowseDialog(groups))
         self.refresh_groups()
 

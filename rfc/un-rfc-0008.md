@@ -75,11 +75,34 @@ UN-RFC 0004 section 3.1 is extended with:
 
 | Field         | Type    | Default     | Meaning                                         |
 |---------------|---------|-------------|-------------------------------------------------|
-| `view`        | string  | `"threads"` | How clients show the group: `threads` or `chat` |
+| `view`        | string  | `"threads"` | How clients show the group: `threads`, `chat` or `data` |
 | `low_latency` | boolean | `false`     | Nodes forward without random delay              |
 
 `view` is a hint. Readers may switch views; clients SHOULD remember a
-reader's choice per group.
+reader's choice per group. A client that does not know a group's `view`
+MUST show it as `threads`. The owner MAY change `view` in a later
+manifest; unlike the type, it is not fixed at creation.
+
+## 3.1.1 Data Groups
+
+A group with `"view": "data"` carries articles for programs rather than
+for people: lists, certificates and the like, usually as JSON, such as
+the node list (UN-RFC 0010), the root list of hierarchies (UN-RFC 0018)
+and name certificates (UN-RFC 0019). Clients:
+
+- SHOULD NOT offer data groups when a reader browses groups to join, and
+  SHOULD NOT count them as unread. A client knows a group is a data group
+  from its manifest; a client MAY also ship with a list of well-known data
+  groups, such as the project's, so that it can hide them before it has
+  read their manifests, and SHOULD mark any other as a data group as soon
+  as it learns its manifest;
+- read them in the background when they need what they carry, without
+  subscribing the reader;
+- MAY let a reader open one anyway, shown as `threads`, and SHOULD then
+  mark it as a data group.
+
+`data` says nothing about who may post; that is the group's type. A data
+group is usually a channel. Nodes treat it like any other group.
 
 ## 3.2 Forwarding
 

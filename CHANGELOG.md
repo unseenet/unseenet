@@ -8,6 +8,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Data groups (UN-RFC 0008 section 3.1.1): a group whose manifest says
+  `"view": "data"` carries lists and certificates for programs, not posts
+  for people. The client marks it `¤` and leaves it out when you browse for
+  groups to join; the project's node list, root list, names and checkgroups
+  are known as data groups from the start. `tools/project/create_groups.py`
+  gives the project's data groups that view.
 - `unseenet-registrar`: a registrar for names of identities such as
   `@lorensen` (UN-RFC 0019). It runs as several replicas on separate
   machines that make the same decisions without talking to each other, so

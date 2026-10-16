@@ -85,9 +85,23 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
     assert setup["names_group"] in owned and len(owned) == 8
+    nodes = f"unseenet.nodes@{setup['project'].fingerprint}"
+    talk = f"unseenet@{setup['project'].fingerprint}"
+    assert v.data["groups"][nodes]["manifest"]["view"] == "data"
+    assert "view" not in v.data["groups"][talk]["manifest"]          # threads, the default
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
                 if e.get("owner")}) == 8
+
+    # a data group made before views existed gets a new manifest; others are left alone
+    v = Vault.open(setup["vault"], "pw")
+    del v.data["groups"][nodes]["manifest"]["view"]
+    v.save()
+    await run("create_groups")
+    v = Vault.open(setup["vault"], "pw")
+    assert v.data["groups"][nodes]["manifest"]["view"] == "data"
+    assert v.data["groups"][nodes]["manifest"]["serial"] == 2
+    assert v.data["groups"][talk]["manifest"]["serial"] == 1
 
     # 2. wire up the registrar: claim inbox and manifest with `claims`
     await run("setup_registrar")
