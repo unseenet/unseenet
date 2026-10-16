@@ -3,6 +3,8 @@
 
     python tools/announce.py nodes
         post src/unseenet/nodes.json to unseenet.nodes (UN-RFC 0010)
+    python tools/announce.py hierarchies
+        post src/unseenet/hierarchies.json to unseenet.hierarchies (UN-RFC 0018)
     python tools/announce.py release v0.2.0
         post that version's CHANGELOG section to unseenet.announce
     python tools/announce.py message --subject "..." --body-file text.txt
@@ -10,7 +12,7 @@
     --dry-run  build and sign the article, print it, post nothing
 
 The signing key comes from the environment, as a hex seed:
-UNSEENET_ANNOUNCE_SEED. It is a *poster* in the two channel groups, listed in
+UNSEENET_ANNOUNCE_SEED. It is a *poster* in the three channel groups, listed in
 their manifests by the project key, which owns them and never leaves the
 project's own vault. If this key leaks, the owner removes it from the
 manifests and makes a new one; the groups and the project key are not at risk.
@@ -35,6 +37,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from unseenet.core import crypto  # noqa: E402
 from unseenet.core.article import new_article  # noqa: E402
 from unseenet.core.tor import TorProcess, open_connection  # noqa: E402
+from unseenet.hierarchies import HIERARCHIES_GROUP, parse_root_list  # noqa: E402
 from unseenet.known_nodes import ANNOUNCE_GROUP, NODES_GROUP, parse_node_list  # noqa: E402
 from unseenet.nntp import Client  # noqa: E402
 
@@ -83,6 +86,12 @@ def nodes_post() -> tuple[str, str]:
     return f"Known nodes, {updated} ({len(nodes)})", text if text.endswith("\n") else text + "\n"
 
 
+def hierarchies_post() -> tuple[str, str]:
+    text = (ROOT / "src" / "unseenet" / "hierarchies.json").read_text()
+    updated, entries = parse_root_list(text, strict=True)   # never post a list with mistakes
+    return f"Hierarchies, {updated} ({len(entries)})", text if text.endswith("\n") else text + "\n"
+
+
 async def post_everywhere(group: str, subject: str, body: str, key: crypto.Identity,
                           addresses: list[str], dry_run: bool) -> int:
     def build(bits: int) -> bytes:
@@ -125,7 +134,7 @@ async def post_everywhere(group: str, subject: str, body: str, key: crypto.Ident
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("what", choices=["nodes", "release", "message"])
+    p.add_argument("what", choices=["nodes", "hierarchies", "release", "message"])
     p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0")
     p.add_argument("--subject")
     p.add_argument("--body-file", type=Path)
@@ -134,6 +143,8 @@ def main() -> None:
 
     if args.what == "nodes":
         group, (subject, body) = NODES_GROUP, nodes_post()
+    elif args.what == "hierarchies":
+        group, (subject, body) = HIERARCHIES_GROUP, hierarchies_post()
     elif args.what == "release":
         if not args.tag:
             sys.exit("release needs the tag")

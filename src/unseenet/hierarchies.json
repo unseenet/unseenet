@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "updated": "2026-10-16",
+  "hierarchies": [
+    {
+      "name": "unseenet",
+      "policy": "governed",
+      "maintainer": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "list": "unseenet.checkgroups@ph5fc5hop5232qsz",
+      "title": "The Unseenet project",
+      "description": "The project's own groups: announcements, the node list, the root list, names, and talk about Unseenet."
+    },
+    {"name": "alt", "policy": "free", "title": "Anything goes", "description": "Anybody may create anything here, as on Usenet."},
+    {"name": "test", "policy": "free", "title": "Testing", "description": "For trying things out. Nodes keep it only briefly."},
+    {"name": "comp", "policy": "reserved", "title": "Computers", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "humanities", "policy": "reserved", "title": "Humanities", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "misc", "policy": "reserved", "title": "Miscellaneous", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "news", "policy": "reserved", "title": "News about the network", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "rec", "policy": "reserved", "title": "Recreation", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "sci", "policy": "reserved", "title": "Science", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "soc", "policy": "reserved", "title": "Society", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "talk", "policy": "reserved", "title": "Debate", "description": "Usenet Big 8, held for a community that wants to revive it."},
+    {"name": "control", "policy": "reserved", "description": "Never granted (special on Usenet)."},
+    {"name": "junk", "policy": "reserved", "description": "Never granted (special on Usenet)."},
+    {"name": "local", "policy": "reserved", "description": "Never granted. Local groups use the manifest's local field (UN-RFC 0009)."},
+    {"name": "inbox", "policy": "reserved", "description": "Never granted. Personal inboxes are inbox@<fingerprint> (UN-RFC 0009)."},
+    {"name": "all", "policy": "reserved", "description": "Never granted."},
+    {"name": "example", "policy": "reserved", "description": "Never granted; for documentation."},
+    {"name": "invalid", "policy": "reserved", "description": "Never granted; for documentation."}
+  ]
+}

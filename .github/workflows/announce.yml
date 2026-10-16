@@ -3,24 +3,26 @@ name: announce
 #   - unseenet.announce: release notes after a successful release
 #   - unseenet.nodes: the known-node list (src/unseenet/nodes.json) when it
 #     changes, and every month so it never expires on the nodes
+#   - unseenet.hierarchies: the root list (src/unseenet/hierarchies.json), the
+#     same way (UN-RFC 0018)
 #   - either, by hand
 # The key is the repository secret UNSEENET_ANNOUNCE_SEED; it is a poster in
-# both channels, which the project key owns (see tools/announce.py).
+# all three channels, which the project key owns (see tools/announce.py).
 on:
   workflow_run:
     workflows: ["release"]
     types: [completed]
   push:
     branches: [main]
-    paths: ["src/unseenet/nodes.json"]
+    paths: ["src/unseenet/nodes.json", "src/unseenet/hierarchies.json"]
   schedule:
     - cron: "23 5 1 * *"
   workflow_dispatch:
     inputs:
       what:
-        description: "nodes, release (give the tag) or message"
+        description: "nodes, hierarchies, release (give the tag) or message"
         type: choice
-        options: [nodes, release, message]
+        options: [nodes, hierarchies, release, message]
         default: nodes
       tag:
         description: "release: the tag, e.g. v0.2.0"
@@ -60,7 +62,7 @@ jobs:
       - name: Post
         env:
           UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
-          WHAT: ${{ github.event_name == 'workflow_run' && 'release' || (github.event_name == 'workflow_dispatch' && inputs.what || 'nodes') }}
+          WHAT: ${{ github.event_name == 'workflow_run' && 'release' || (github.event_name == 'workflow_dispatch' && inputs.what || 'lists') }}
           TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.tag }}
           SUBJECT: ${{ inputs.subject }}
           BODY: ${{ inputs.body }}
@@ -69,5 +71,7 @@ jobs:
             release) python tools/announce.py release "$TAG" ;;
             message) printf '%s\n' "$BODY" > body.txt
                      python tools/announce.py message --subject "$SUBJECT" --body-file body.txt ;;
-            *)       python tools/announce.py nodes ;;
+            nodes|hierarchies) python tools/announce.py "$WHAT" ;;
+            *)       python tools/announce.py nodes
+                     python tools/announce.py hierarchies ;;
           esac
