@@ -630,9 +630,67 @@ def test_group_icons():
     assert group_icons("inbox", {}) == "@  "
     assert group_icons(None, {}) == "·  "
     assert group_icons(None, {"type": "closed"}) == "∩ ≡"          # from the manifest
+    assert group_icons("channel", {"view": "data"}) == "► ¤"       # UN-RFC 0008 3.1.1
+    assert group_icons("open", {"view": "something new"}) == "  ≡"  # unknown: threads
     # WGL4 only: the classic Windows console shows every one of them
-    for ch in "≡»√►∩@⌂·" + ICON_LEGEND:
-        assert ord(ch) < 0x80 or ch in "≡»√►∩⌂·", ch
+    for ch in "≡»¤√►∩@⌂·" + ICON_LEGEND:
+        assert ord(ch) < 0x80 or ch in "≡»¤√►∩⌂·", ch
+
+
+async def test_tui_browse_hides_data_groups(tmp_path, monkeypatch):
+    """Data groups the client knows of are not offered when browsing; one it does not
+    know yet is marked as soon as its manifest is read (UN-RFC 0008 3.1.1). The
+    owner's settings dialog does not break on views."""
+    import unseenet.known_nodes as kn
+    from unseenet.client.tui import BrowseDialog, EditGroupDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    known = await other.create_group("dk.nodelist", "channel", view="data", min_pow=10)
+    unknown = await other.create_group("dk.list", "channel", view="data", min_pow=10)
+    talk = await other.create_group("dk.talk", "open", min_pow=10)
+    assert other.is_data_group(unknown) and not other.is_data_group(talk)
+    await other.close()
+    monkeypatch.setattr(kn, "DATA_GROUPS", kn.DATA_GROUPS | {known})   # like the project's
+    async with app.run_test(size=(120, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 100)
+        dialog = app.screen
+        listed = {g.group_id for g in dialog.groups}
+        assert talk in listed and unknown in listed and known not in listed
+        tree = dialog.query_one("#browse-tree")
+        leaf = next(n for parent in [tree.root, *tree.root.children] for n in parent.children
+                    if getattr(n.data, "group_id", "") == unknown)
+        tree.move_cursor(leaf)
+        assert await wait_for(pilot, lambda: isinstance(dialog.peeked.get(unknown), tuple), 100)
+        await pilot.pause(0.2)
+        assert "Data for programs" in str(dialog.query_one("#group-details").render())
+        assert "¤" in str(dialog._label(leaf.data))
+        await pilot.click("#cancel")
+        await pilot.pause(0.2)
+        edit = EditGroupDialog({"name": "dk.list", "view": "data"})
+        app.push_screen(edit)
+        await pilot.pause(0.2)
+        assert edit.query_one("#view").value == "data"
+        app.pop_screen()
+        edit = EditGroupDialog({"name": "x", "view": "from-the-future"})
+        app.push_screen(edit)
+        await pilot.pause(0.2)
+        assert edit.query_one("#view").value == "threads"
+        app.pop_screen()
+        await pilot.press("q")
+    server.close()
+
+
+def test_project_data_groups_are_known_before_their_manifests(tmp_path):
+    import unseenet.known_nodes as kn
+    s = Session(Vault.open(tmp_path / "v.vault", "pw", **KDF), status=lambda *_: None)
+    for gid in ("unseenet.nodes@ph5fc5hop5232qsz", "unseenet.names@ph5fc5hop5232qsz",
+                "unseenet.hierarchies@ph5fc5hop5232qsz", "unseenet.checkgroups@ph5fc5hop5232qsz"):
+        assert gid in kn.DATA_GROUPS and s.is_data_group(gid)
+    assert not s.is_data_group(kn.ANNOUNCE_GROUP)
 
 
 async def test_tui_group_list_shows_icons(tmp_path, monkeypatch):

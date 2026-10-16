@@ -127,6 +127,11 @@ A group's settings - signed by its owner - can also carry its **rules**
 delay that otherwise hides where a message entered the network.
 See [UN-RFC 0008](spec/un-rfc-0008.md) and [UN-RFC 0014](spec/un-rfc-0014.md).
 
+Some groups are not for people at all: they carry lists and certificates
+that clients read in the background, such as the list of known nodes and
+the names of identities. They are **data groups** (`¤` in the client),
+and the client leaves them out when you browse for groups to join.
+
 ## Inboxes and private messages
 
 An inbox is the opposite of a closed group: anyone can write, only the

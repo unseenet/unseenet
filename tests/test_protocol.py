@@ -123,3 +123,15 @@ def test_vault_roundtrip():
     assert unseal(blob, "pw") == b"secret"
     with pytest.raises(VaultError):
         unseal(blob, "wrong")
+
+
+def test_manifest_views():
+    """threads, chat and data are views (UN-RFC 0008 section 3.1); others are refused."""
+    from unseenet.core import crypto as _c
+    from unseenet.core.groups import Manifest, make_manifest
+    owner = _c.Identity.generate()
+    for view in ("threads", "chat", "data"):
+        m = Manifest.from_article(make_manifest(owner, "x.y", "channel", view=view, pow_bits=4))
+        assert m.view == view
+    with pytest.raises(ValueError, match="view must be one of"):
+        make_manifest(owner, "x.y", "channel", view="blinking", pow_bits=4)

@@ -27,6 +27,16 @@ from importlib import resources
 PROJECT_KEY = "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya"
 NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
 ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
+# The project's groups for programs, not people (UN-RFC 0008 section 3.1.1). Their
+# manifests say "view": "data"; listing them here lets a client hide them before it
+# has read the manifests.
+DATA_GROUPS = frozenset({
+    NODES_GROUP,
+    "unseenet.hierarchies@ph5fc5hop5232qsz",
+    "unseenet.checkgroups@ph5fc5hop5232qsz",
+    "unseenet.names@ph5fc5hop5232qsz",
+})
+
 # The project's groups a new client starts with, so there is something to read.
 STARTER_GROUPS = ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP,
                   "unseenet.test@ph5fc5hop5232qsz")

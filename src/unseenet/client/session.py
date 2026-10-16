@@ -593,6 +593,11 @@ class Session:
             return bool(entry.get("keys"))    # a member: you have the group's key
         return True                          # open, moderated (goes to approval), inbox
 
+    def is_data_group(self, group_id: str) -> bool:
+        """A group for programs, not people (UN-RFC 0008 section 3.1.1)."""
+        from ..known_nodes import DATA_GROUPS
+        return group_id in DATA_GROUPS or self.manifest_data(group_id).get("view") == "data"
+
     def manifest_data(self, group_id: str) -> dict:
         """The newest manifest seen for a group ({} if none yet)."""
         return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))

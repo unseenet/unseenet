@@ -161,7 +161,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 
 
 MAX_RULES = 8192
-VIEWS = ("threads", "chat")
+VIEWS = ("threads", "chat", "data")      # UN-RFC 0008 section 3.1
 
 
 def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18) -> Article:
@@ -169,7 +169,7 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
     if len(data.get("rules", "")) > MAX_RULES:
         raise ValueError(f"rules are limited to {MAX_RULES} characters")
     if data.get("view", "threads") not in VIEWS:
-        raise ValueError("view must be 'threads' or 'chat'")
+        raise ValueError("view must be one of " + ", ".join(VIEWS))
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
