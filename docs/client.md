@@ -77,6 +77,20 @@ After that the connection is reused.
     Use `--vault` to keep separate vaults, e.g. one per identity or per
     node: `unseenet-tui --vault ~/work.vault`.
 
+
+![The client: your groups on the left, the posts in the selected group, and the selected post below](img/client-main.svg)
+
+On the left are your groups, by hierarchy, with your private messages and
+contacts at the top. On the right are the posts in the selected group as
+threads, and below them the selected post. The authors show who is who:
+`Sonia √` is a contact you named yourself, `Mikkel~` followed by four
+letters someone you have not: the name they chose and the start of their
+key's fingerprint (see [Names](#names)). The
+line at the bottom shows the shortcuts that work where you are; everything
+else is in the command palette, ++ctrl+p++:
+
+![The command palette lists everything the client can do, by name](img/client-palette.svg)
+
 ## Keys
 
 | Key | What it does |
@@ -105,6 +119,8 @@ dot, as in the old newsreaders: `dk.snak` and `dk.teknik` sit under `dk.*`,
 `comp.lang.python` under `comp.*`. Hierarchies with unread posts are bold.
 The same goes for the list of all groups on the node (++g++), where
 large hierarchies start folded.
+
+![The list of all groups on the node, with the icons explained at the top](img/client-browse.svg)
 
 Each group has two icons, in your list and in the list of all groups:
 first who may write and read it, then how it is shown.
@@ -138,6 +154,8 @@ press ++escape++ to use the shortcuts (++n++, ++r++, ++g++, ...) and
 the client remembers your choice per group. Conversations with contacts
 open as a chat.
 
+![A chat group: messages in order and an input line at the bottom](img/client-chat.svg)
+
 A group's owner can mark it as a chat, so it opens that way for
 everybody, and can choose **fast delivery** (shown in the title). Nodes then
 pass its messages on immediately instead of waiting a random time. That
@@ -162,6 +180,8 @@ the group has some.
 Owners change the title, description, rules, view and delivery with
 **Edit group** in the command palette (or the button in the ++question-mark++
 window). Every node gets the new version.
+
+![About a group (?): its owner, type, postage, how long posts are kept, and its rules](img/client-group-info.svg)
 
 ## Leaving and removing groups
 
@@ -219,6 +239,13 @@ whole screen. There, ++r++ replies, ++m++ writes privately to the author,
 ++n++ and ++p++ go to the next and previous post, ++space++ pages down and
 then goes on to the next post, as in the old newsreaders, and ++escape++
 goes back to the list.
+
+![A post on the whole screen](img/client-read.svg)
+
+Writing a post or a reply (++n++, ++r++) opens the compose window, with your
+signature below the `-- ` line. ++ctrl+s++ sends.
+
+![Writing a reply](img/client-compose.svg)
 
 ## Private messages
 
@@ -281,6 +308,8 @@ node list, and keeps them in your vault.
 
 Press `@`, type the name and press ++enter++ (or *Claim*).
 
+![Your names (@): the names you hold, and a field to claim a new one](img/client-names.svg)
+
 - A name **without a dot**, like `lorensen`, is first come, first served.
   Names that are Internet top-level domains (`dk`, `microsoft`) cannot be
   had.
@@ -313,6 +342,8 @@ Press ++o++ for **Your nodes**:
 - **Remove** stops using a node. Groups you read from it move to your
   default node; nothing is deleted on the node itself.
 - **Details** shows who runs the node and lets you write to the operator.
+
+![Your nodes (o)](img/client-nodes.svg)
 
 Each group is read from one node, shown as *Read from* when you press
 ++question-mark++. If that node stops carrying a group, or cannot be reached,

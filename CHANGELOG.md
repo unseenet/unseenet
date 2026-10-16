@@ -8,6 +8,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Screenshots of the client in docs/client.md, made by
+  `tools/docs_screenshots.py` from a local node with made-up content. (#57)
 - Names in the client (UN-RFC 0018 section 8, UN-RFC 0019 sections 5.2, 6.1
   and 8). It reads the root list, the hierarchy lists (including the new
   `unseenet.checkgroups`) and the registrar's group in the background.
