@@ -15,7 +15,9 @@ permissions:
   issues: write
 
 concurrency:
-  group: node-request-${{ github.event.issue.number }}
+  # a new edit replaces a running check; labels get their own lane, so the
+  # "labeled" event that comes with "opened" does not cancel the check
+  group: node-request-${{ github.event.issue.number }}-${{ github.event.action == 'labeled' && github.event.label.name || 'check' }}
   cancel-in-progress: true
 
 jobs:
