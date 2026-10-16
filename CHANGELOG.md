@@ -20,6 +20,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   slrn and Thunderbird list a group in one request instead of fetching
   every article's headers over Tor. Group settings, encrypted posts and
   private messages get a fixed subject in the overview. (#21)
+- *Transfer* and *Release* under `@` in the client: hand a name to another
+  key, or give it up (UN-RFC 0019 section 6.5). (#60)
 - Screenshots of the client in docs/client.md, made by
   `tools/docs_screenshots.py` from a local node with made-up content. (#57)
 - Names in the client (UN-RFC 0018 section 8, UN-RFC 0019 sections 5.2, 6.1

@@ -345,6 +345,16 @@ per group, so others can check it; posts in closed groups and private
 messages never do. A name links everything its identity posts, so do not
 claim one for an identity you keep apart.
 
+Under `@` you can also give a name up or hand it on. Type the name, then:
+
+- **Transfer** gives it to another key - your new identity's when you
+  move to a new key, or someone else's. Paste their key; your own key
+  loses the name.
+- **Release** gives it up at once, and anyone can claim it after that.
+
+Both go to the registrar like a claim, and the answer comes to your
+private messages.
+
 ## Several nodes
 
 Your key lives in your vault, not on a node, so you are the same person
