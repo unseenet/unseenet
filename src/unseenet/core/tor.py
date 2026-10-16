@@ -239,7 +239,11 @@ class TorProcess:
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
-        while not port_file.exists():
+        cookie = self.data_dir / "control_auth_cookie"
+        # Tor writes the port file and the cookie separately; on Windows the
+        # port file can come first. Wait for both, and for a complete port file.
+        while not (port_file.exists() and cookie.exists()
+                   and port_file.read_text().strip().startswith("PORT=")):
             if self.process.returncode is not None or loop.time() > deadline:
                 raise TorError("tor failed to start" + self._log_tail())
             await asyncio.sleep(0.2)
