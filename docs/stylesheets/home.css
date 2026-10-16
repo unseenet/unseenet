@@ -1,0 +1,231 @@
+/* The front page. The hero is set like the head of a Usenet article:
+   header lines, then the subject as the headline. Colours are the logo's
+   (assets/README.md): ink #10302a, green #16a974 / #34d399. No web fonts. */
+
+:root {
+  --un-ink: #10302a;
+  --un-ink-2: #173d35;
+  --un-paper: #e8f3ef;
+  --un-muted: #9cc3b6;
+  --un-green: #34d399;
+  --un-green-deep: #16a974;
+  --un-mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- Hero ---------------------------------------------------------------- */
+
+.un-hero {
+  background: var(--un-ink);
+  color: var(--un-paper);
+  border-radius: 14px;
+  padding: 2.2rem 2.4rem 1.8rem;
+  margin: 0.6rem 0 1.4rem;
+}
+
+.un-hero__head {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.un-hero__icon {
+  width: 3.2rem;
+  height: auto;
+  flex: none;
+}
+
+.un-headers {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.6rem;
+  margin: 0;
+  font-family: var(--un-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+.un-headers dt { color: var(--un-muted); margin: 0; }
+.un-headers dt::after { content: ":"; }
+.un-headers dd { margin: 0; color: var(--un-paper); }
+
+.md-typeset h1.un-subject {
+  font-family: var(--un-mono);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 5.2vw, 3.4rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--un-paper);
+  margin: 1.5rem 0 1rem;
+}
+.un-subject__key {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--un-muted);
+  margin-bottom: 0.35rem;
+}
+
+.md-typeset .un-lede {
+  max-width: 36em;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--un-paper);
+  margin: 0 0 1.4rem;
+}
+
+.un-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+.md-typeset a.un-button {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--un-muted);
+  color: var(--un-paper);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.md-typeset a.un-button:hover { border-color: var(--un-paper); color: var(--un-paper); }
+.md-typeset a.un-button--primary {
+  background: var(--un-green);
+  border-color: var(--un-green);
+  color: var(--un-ink);
+}
+.md-typeset a.un-button--primary:hover {
+  background: var(--un-paper);
+  border-color: var(--un-paper);
+  color: var(--un-ink);
+}
+.md-typeset a.un-button:focus-visible {
+  outline: 2px solid var(--un-green);
+  outline-offset: 3px;
+}
+
+.md-typeset .un-status {
+  margin: 1.6rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(232, 243, 239, 0.15);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--un-muted);
+  max-width: 48em;
+}
+.md-typeset .un-status strong { color: #f5c26b; }
+
+/* ---- The recordings -------------------------------------------------------- */
+
+.md-typeset figure.un-demo,
+.md-typeset figure.un-boot { margin: 0 0 1.6rem; max-width: none; }
+
+.un-term {
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--un-ink);
+  aspect-ratio: 16 / 9;   /* holds the space until the player has loaded */
+}
+.un-term.is-ready { aspect-ratio: auto; }
+.un-term img { display: block; width: 100%; }
+.un-term .ap-wrapper { background: var(--un-ink); }
+.un-term .ap-player { border-radius: 0; }
+
+.md-typeset .un-demo figcaption,
+.md-typeset .un-boot figcaption {
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--md-default-fg-color--light);
+  text-align: left;
+  max-width: 44em;
+  margin: 0.7rem 0 0;
+}
+.md-typeset .un-boot figcaption strong { color: var(--md-default-fg-color); }
+
+.md-typeset figure.un-boot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.4rem;
+  align-items: center;
+}
+.md-typeset .un-boot figcaption { margin: 0; font-size: 0.8rem; }
+
+.md-typeset video.un-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: #000;
+}
+
+/* ---- How it fits together ------------------------------------------------- */
+
+.un-how {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 1.6rem 2.4rem;
+  align-items: start;
+}
+
+.un-diagram { margin: 0; }
+.un-diagram svg { width: 100%; height: auto; display: block; }
+.un-diagram figcaption {
+  font-size: 0.72rem;
+  color: var(--md-default-fg-color--light);
+  text-align: left;
+  max-width: none;
+}
+
+.un-diagram .d-tor path {
+  fill: none;
+  stroke: var(--un-green-deep);
+  stroke-width: 2.5;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+}
+.un-diagram .d-box rect,
+.un-diagram .d-box circle {
+  fill: var(--md-default-bg-color);
+  stroke: var(--md-default-fg-color);
+  stroke-width: 1.6;
+}
+.un-diagram text {
+  fill: var(--md-default-fg-color);
+  font-family: var(--md-text-font-family, sans-serif);
+  font-size: 16px;
+  text-anchor: middle;
+}
+.un-diagram .d-label text { font-weight: 600; }
+.un-diagram text.d-small { font-size: 13px; font-weight: 400; fill: var(--md-default-fg-color--light); }
+.un-diagram .d-note text { fill: var(--un-green-deep); font-size: 12px; font-family: var(--un-mono); }
+.un-diagram .d-vault { fill: var(--un-ink); }
+.un-diagram text.d-vault-text { fill: var(--un-paper); }
+
+[data-md-color-scheme="slate"] .un-diagram .d-tor path { stroke: var(--un-green); }
+[data-md-color-scheme="slate"] .un-diagram .d-note text { fill: var(--un-green); }
+[data-md-color-scheme="slate"] .un-diagram .d-vault { fill: var(--un-ink-2); }
+
+.md-typeset .un-points { margin: 0; }
+.md-typeset .un-points dt { font-weight: 700; margin-top: 0; }
+.md-typeset .un-points dd { margin: 0.15rem 0 0.9rem; }
+
+/* ---- Small screens ----------------------------------------------------------- */
+
+@media (max-width: 52em) {
+  .un-how,
+  .md-typeset figure.un-boot { grid-template-columns: 1fr; }
+}
+@media (max-width: 36em) {
+  .un-hero { padding: 1.5rem 1.2rem 1.3rem; border-radius: 10px; }
+  .un-hero__icon { width: 2.6rem; }
+  .md-typeset h1.un-subject { margin-top: 1.1rem; }
+}
+
+/* Material sets figures to fit their content; the terminal should use the full width */
+.md-typeset figure.un-demo { width: 100%; display: block; }
+.md-typeset figure.un-demo .un-term { width: 100%; }
+
+/* Four ways in: two by two on wide screens, not three and one */
+@media screen and (min-width: 45em) {
+  .md-typeset .grid.cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
