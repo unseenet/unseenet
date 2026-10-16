@@ -5,6 +5,8 @@
     unseenet cli <command> ...   the command-line client (unseenet --help there)
     unseenet node ...            run a node (unusual on a USB stick, but possible)
     unseenet --self-test         check this build: finds Tor, starts it, reaches the network
+             [--offline]         ... without the network
+             [--node ADDRESS]    ... and talks to a node over Tor
     unseenet --version
 """
 
@@ -18,7 +20,7 @@ from pathlib import Path
 from . import __version__
 
 
-def self_test(network: bool = True) -> int:
+def self_test(network: bool = True, node: str | None = None) -> int:
     """Print what this build will use, and try to start Tor. Returns an exit code."""
     from . import portable
     from .core.tor import TorError, TorProcess
@@ -57,12 +59,24 @@ def self_test(network: bool = True) -> int:
             tor = TorProcess(Path(tmp), binary)
             try:
                 await tor.start(timeout=120)
+                print("Tor connected.")
+                if node:
+                    from .nntp import Client
+                    print(f"Reaching node {node} over Tor ...")
+                    client = await asyncio.wait_for(Client.connect(node, tor.socks_port), 120)
+                    caps = await client.fetch_capabilities()
+                    groups = await client.multiline("LIST NEWSGROUPS *", 215)
+                    await client.quit()
+                    print(f"Node answers: {caps[0] if caps else '?'}, {len(groups)} groups.")
             except TorError as exc:
                 print(f"Tor did not connect: {exc}")
                 return 2
+            except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+                print(f"Could not reach the node: {exc}")
+                return 3
             finally:
                 await tor.stop()
-        print("Tor connected. This build works.")
+        print("This build works.")
         return 0
     return asyncio.run(run())
 
@@ -76,7 +90,8 @@ def main(argv: list[str] | None = None) -> None:
         from .cli import node_main
         node_main(args[1:])
     elif args[:1] == ["--self-test"]:
-        sys.exit(self_test(network="--offline" not in args))
+        node = args[args.index("--node") + 1] if "--node" in args[:-1] else None
+        sys.exit(self_test(network="--offline" not in args, node=node))
     elif args[:1] in (["--help"], ["-h"]):
         print(__doc__)
     elif args[:1] == ["--version"]:

@@ -76,7 +76,10 @@ jobs:
         timeout-minutes: 5
         shell: bash
         working-directory: try/Unseenet
-        run: ./${{ matrix.platform }}/unseenet --self-test
+        # the project's test node: proves the whole path, Tor to node, from this build
+        run: >
+          ./${{ matrix.platform }}/unseenet --self-test
+          --node f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion
       - uses: actions/upload-artifact@v4
         with:
           name: unseenet-${{ matrix.platform }}
