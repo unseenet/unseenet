@@ -64,6 +64,11 @@ Unseenet runs its own Tor process with its own settings and ignores
    default) it adds the others too, and reads from them if the first is
    down. Choose *Another node* to enter an address you were given.
 
+The client then subscribes you to the project's groups - `unseenet`
+(the project), `unseenet.announce` (releases and news) and
+`unseenet.test` (say hello) - so there is something to read. You can
+unsubscribe from them like any other group; they are not added again.
+
 The first connection takes 10-30 seconds while Tor builds its circuits, and
 can take a few tries right after Tor starts; the client retries by itself.
 After that the connection is reused.
@@ -153,7 +158,8 @@ can unsubscribe.
 
 ## Signature
 
-Press ++s++ to set a signature. It is added at the bottom of the compose
+A new identity starts with the signature `{name}  ·  {key}`, so others
+can find your key. Press ++s++ to change it, or empty it for none. It is added at the bottom of the compose
 window below a `-- ` line - the old Usenet signature separator - so you
 can see it and change it before sending. Use up to four lines;
 `{name}`, `{key}` and `{fp}` are filled in with your display name, your
@@ -183,6 +189,10 @@ list as *✉ Private messages*.
 
 The recipient's inbox has to be on the node you use, or on a node it is
 replicated to.
+
+The node carries everyone's inbox as a group named `inbox@<fingerprint>`.
+They are not shown when you browse groups (++g++): only the owner can read
+an inbox, and you write to someone with ++m++ instead.
 
 ## Contacts and conversations
 

@@ -29,6 +29,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- A new client is subscribed to the project's groups (`unseenet`,
+  `unseenet.announce`, `unseenet.test`) once, and a new identity gets a
+  default signature with the display name and key.
+- Browsing groups no longer lists other people's inboxes.
 - Node requests must prove that the requester runs the node: the operator
   signs a challenge with `unseenet-node --sign`. Listed nodes are checked
   daily over Tor; unreachable for 3 days gets a note, 10 days removes them.

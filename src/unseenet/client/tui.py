@@ -31,7 +31,7 @@ from .. import __version__
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import personal_inbox_id
+from ..core.groups import INBOX_NAME, personal_inbox_id
 from . import session as _session_module
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
                       default_vault_path, split_signature)
@@ -65,6 +65,10 @@ def group_name_problem(name: str) -> str | None:
     if any(not part[0].isalnum() for part in name.split(".")):
         return "each part must start with a letter or digit"
     return None
+
+
+def is_personal_inbox(group_id: str) -> bool:
+    return group_id.split("@", 1)[0] == INBOX_NAME
 
 
 def by_hierarchy(groups: list[GroupInfo]) -> list[tuple[str, list[GroupInfo]]]:
@@ -890,6 +894,7 @@ class UnseenetApp(App):
                 s.add_node(result["node"])
                 for backup in result.get("backups", []):    # read from if the first is down
                     s.add_node(backup)
+        s.subscribe_starter_groups()
         self._update_subtitle()
         await self.show_offline()
         self.refresh_groups()
@@ -1480,6 +1485,10 @@ class UnseenetApp(App):
             self.notify(str(exc), severity="error")
             return
         self.set_status("")
+        # other people's inboxes are not groups to read (only the owner can);
+        # you write to someone from Contacts
+        groups = [g for g in groups if not is_personal_inbox(g.group_id)
+                  or g.group_id == self.session.my_inbox]
         await self.push_screen_wait(BrowseDialog(groups))
         self.refresh_groups()
 

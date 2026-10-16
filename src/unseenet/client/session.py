@@ -29,6 +29,7 @@ MAX_READ_MARKS = 5000
 MAX_CACHED_PER_GROUP = 2000
 SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3): dash dash space
 MAX_SIG_LINES = 4               # the old netiquette limit
+DEFAULT_SIGNATURE = "{name}  ·  {key}"   # until you set your own; empty means none
 CACHE_SIDECAR = "cache"
 SENT_SIDECAR = "sent"           # copies of private messages you sent (they are sealed to others)
 
@@ -157,7 +158,9 @@ class Session:
         return self.data["identities"][name or self.default_identity_name()]["display"]
 
     def signature_template(self, name: str | None = None) -> str:
-        return self.data["identities"][name or self.default_identity_name()].get("signature", "")
+        # no "signature" yet: the default; one set to "" by the user: none
+        return self.data["identities"][name or self.default_identity_name()].get(
+            "signature", DEFAULT_SIGNATURE)
 
     def set_signature(self, template: str, name: str | None = None) -> None:
         lines = template.strip("\n").split("\n") if template.strip() else []
@@ -179,7 +182,8 @@ class Session:
 
     def new_identity(self, name: str, display: str | None = None) -> crypto.Identity:
         ident = crypto.Identity.generate()
-        self.data["identities"][name] = {"seed": ident.seed.hex(), "display": display or name}
+        self.data["identities"][name] = {"seed": ident.seed.hex(), "display": display or name,
+                                         "signature": DEFAULT_SIGNATURE}
         self.data.setdefault("default_identity", name)
         self.save()
         return ident
@@ -482,6 +486,20 @@ class Session:
         elif not on and group_id in subs:
             subs.remove(group_id)
         self.save()
+
+    def subscribe_starter_groups(self) -> bool:
+        """Subscribe to the project's groups once per vault (a new client has
+        something to read). Groups unsubscribed later are not added again."""
+        if self.data.get("starter_groups") or not self.node:
+            return False
+        from ..known_nodes import STARTER_GROUPS
+        for gid in STARTER_GROUPS:
+            if gid not in self.data["subscribed"]:
+                self.data["subscribed"].append(gid)
+                self.group_entry(gid).setdefault("node", self.node)
+        self.data["starter_groups"] = True
+        self.save()
+        return True
 
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
                            min_pow: int = DEFAULT_POW, local: bool = False,

@@ -107,7 +107,7 @@ def test_signatures(tmp_path):
 
     s = Session(Vault.open(tmp_path / "s.vault", "pw", **KDF), status=lambda *_: None)
     ident = s.new_identity("a", "Andreas")
-    assert s.signature() == ""
+    assert s.signature() == f"Andreas  ·  {ident.key_text}"     # the default
     s.set_signature("{name} ({fp})\n{key}")
     assert s.signature() == f"Andreas ({ident.fingerprint[:4]})\n{ident.key_text}"
     try:
@@ -246,3 +246,20 @@ async def test_one_tor_for_concurrent_connections(tmp_path, monkeypatch):
     assert await s._ensure_tor(lambda *_: None) == 9051
     assert len(started) == 2
     await s.close()
+
+
+def test_new_vault_has_signature_and_project_groups(tmp_path):
+    from unseenet.known_nodes import STARTER_GROUPS
+    s = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("andreas", "Andreas")
+    assert s.signature().startswith("Andreas  ·  ed25519:")
+    s.set_signature("")                       # the user's choice of none is kept
+    assert s.signature() == ""
+
+    assert not s.subscribe_starter_groups()   # no node yet: later
+    s.add_node("127.0.0.1:1119")
+    assert s.subscribe_starter_groups()
+    assert all(g in s.data["subscribed"] for g in STARTER_GROUPS)
+    s.subscribe(STARTER_GROUPS[-1], False)    # unsubscribed groups stay away
+    assert not s.subscribe_starter_groups()
+    assert STARTER_GROUPS[-1] not in s.data["subscribed"]
