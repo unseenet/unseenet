@@ -837,3 +837,42 @@ async def test_ask_for_give_and_revoke_a_name_under_a_name(tmp_path, monkeypatch
     for p in (andreas, sonia, reader):
         await p.close()
     server.close()
+
+
+async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
+    """#109: replies to your posts and posts naming your certified names; a display
+    name or someone else's name under yours does not count."""
+    from unseenet import names as nm
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    me, other = person("andreas"), person("other")
+    reg = crypto.Identity.generate()
+    _registrar_store(me, reg, [nm.make_certificate(reg, "lorensen", me.identity().key_text, 1)])
+    gid = await other.create_group("dk.snak", "open", min_pow=8)
+    me.subscribe(gid)
+    mine = await me.post(gid, "Spørgsmål", "Nogen der ved noget?\n")
+    await other.fetch_group(gid)
+    await other.post(gid, "Re: Spørgsmål", "Ja!\n", references=[mine])
+    await other.post(gid, "Hej", "Spørg @lorensen om det.\n")
+    await other.post(gid, "Ikke dig", "sonia@lorensen og @lorensen.dk og Andreas\n")
+    msgs = {m.subject: m for m in await me.fetch_group(gid)}
+    assert me.for_me(msgs["Re: Spørgsmål"]) == "reply"
+    assert me.for_me(msgs["Hej"]) == "mention"
+    assert me.for_me(msgs["Ikke dig"]) is None
+    assert me.for_me(msgs["Spørgsmål"]) is None                     # your own post
+    assert {m.subject for m in me.for_you()} == {"Hej", "Re: Spørgsmål"}
+    assert me.for_you_count(gid) == 2
+    me.mark_read(msgs["Hej"])
+    assert me.for_you_count(gid) == 1
+    for p in (me, other):
+        await p.close()
+    server.close()

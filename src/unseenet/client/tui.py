@@ -45,6 +45,8 @@ REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (
 REPO_URL = "https://github.com/unseenet/unseenet"
 DOCS_URL = "https://unseenet.org/"
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
+FOR_YOU = "for-you:"          # replies to you and mentions, from all groups (#109)
+REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
 
 
 def node_label(address: str) -> str:
@@ -1295,9 +1297,11 @@ class UnseenetApp(App):
         if s is None or not s.has_identity():
             return True
         gid = self.current_group or ""
+        m = self.current_message
+        if gid == FOR_YOU and m is not None:
+            gid = m.group                         # act as in the post's own group
         contact = gid.startswith(CONTACT)
         group = gid in self.groups
-        m = self.current_message
         chat = bool(gid) and self.view_of(gid) == "chat"
         typing = getattr(self.focused, "id", None) == "chat-input"
         if action == "leave_input":
@@ -1480,8 +1484,14 @@ class UnseenetApp(App):
                 groups[gid].type = s.group_entry(gid).get("type")
             except (SessionError, OSError, ConnectionError):
                 pass
+        before = getattr(self, "_for_you_seen", None)
+        now = len(s.for_you())
         await self._render_groups()
-        if self.current_group in groups or self._current_contact():
+        if before is not None and now > before:
+            self.notify(f"{REPLY_MARK} {now - before} new for you - a reply to your post, or "
+                        "someone naming you. See 'For you' at the top of your groups.", timeout=8)
+        self._for_you_seen = now
+        if self.current_group in groups or self._current_contact() or self.current_group == FOR_YOU:
             self._render_threads()
         elif groups:
             self.select_group(next(iter(groups)))
@@ -1507,7 +1517,9 @@ class UnseenetApp(App):
 
         def label(g: GroupInfo) -> Text:
             unread = self.session.unread_count(g.group_id)
-            text = Text(self._group_label(g) + (f" ({unread})" if unread else ""))
+            mine = self.session.for_you_count(g.group_id) if g.group_id != self.session.my_inbox else 0
+            text = Text(self._group_label(g) + (f" ({unread})" if unread else "")
+                        + (f" {REPLY_MARK}{mine}" if mine else ""))
             if unread:
                 text.stylize("bold")
             return text
@@ -1519,6 +1531,12 @@ class UnseenetApp(App):
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
             nodes[g.group_id] = node
+        for_you = len(self.session.for_you())
+        text = Text(f"{REPLY_MARK} For you" + (f" ({for_you})" if for_you else ""))
+        if for_you:
+            text.stylize("bold")
+        nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
+        self._for_you_seen = getattr(self, "_for_you_seen", for_you)
         contacts = self.session.contacts()
         if contacts:
             total = sum(self.session.unread_from(k) for k, _ in contacts)
@@ -1569,6 +1587,10 @@ class UnseenetApp(App):
         self.current_group = gid
         self.current_message = None
         self.refresh_bindings()
+        if gid == FOR_YOU:
+            self._render_threads()
+            self.query_one("#threads").focus()
+            return
         if gid.startswith(CONTACT):
             try:
                 await self.session.fetch_group(self.session.my_inbox)
@@ -1620,7 +1642,10 @@ class UnseenetApp(App):
     def _render_threads(self) -> None:
         gid = self.current_group
         s = self.session
-        if gid and gid.startswith(CONTACT):
+        mine, patterns = s.my_message_ids(), s._mention_patterns()
+        if gid == FOR_YOU:
+            rows = [(m, 0) for m in s.for_you(unread_only=False)[:200]]   # newest first
+        elif gid and gid.startswith(CONTACT):
             rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
         elif gid == s.my_inbox:
             rows = self._threaded(s.visible(s.private_messages()))   # what you sent, too
@@ -1639,6 +1664,11 @@ class UnseenetApp(App):
                 subject = f"{ICONS['inbox']} " + subject
             elif m.encrypted and m.readable:
                 subject = f"{ICONS['closed']} " + subject
+            why = s.for_me(m, mine, patterns)
+            if why:
+                subject = (REPLY_MARK if why == "reply" else MENTION_MARK) + " " + subject
+            if gid == FOR_YOU:
+                subject += f"  ({s.group_label(m.group)})"
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
@@ -1656,7 +1686,7 @@ class UnseenetApp(App):
 
     # --- chat view (UN-RFC 0008 section 5) ---
     def view_of(self, gid: str | None) -> str:
-        if not gid or gid == self.session.my_inbox:
+        if not gid or gid == self.session.my_inbox or gid == FOR_YOU:
             return "threads"
         views = self.session.data.setdefault("views", {})
         if gid in views:
@@ -1761,6 +1791,12 @@ class UnseenetApp(App):
         gid = self.current_group
         if not gid:
             return
+        if gid == FOR_YOU:
+            n = len(self.session.for_you())
+            self.query_one("#threads-title", Static).update(
+                f"{REPLY_MARK} For you  ·  {REPLY_MARK} replies to your posts, {MENTION_MARK} posts "
+                f"that name you  ·  {n} unread  ·  from all your groups")
+            return
         if gid.startswith(CONTACT):
             key = gid[len(CONTACT):]
             msgs = self.session.conversation(key)
@@ -1860,6 +1896,9 @@ class UnseenetApp(App):
 
     # --- actions ---
     def _need_group(self) -> GroupInfo | None:
+        if self.current_group == FOR_YOU and self.current_message \
+                and self.current_message.group in self.groups:
+            return self.groups[self.current_message.group]
         if not self.current_group or self.current_group not in self.groups:
             self.notify("Select a group first", severity="warning")
             return None
