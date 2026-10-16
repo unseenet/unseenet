@@ -289,3 +289,39 @@ async def test_interrupted_exchange_does_not_poison_the_connection(tmp_path, mon
     assert len(await s.list_groups()) == 3             # a fresh connection
     await s.close()
     server.close()
+
+
+def test_manifest_from_a_node_must_be_signed_by_the_owner(tmp_path):
+    """A hostile node cannot make the client take a manifest signed by another
+    key, or one that changes the group's type (UN-RFC 0004 section 4, #41)."""
+    from unseenet.core import crypto
+    from unseenet.core.groups import make_group_id, make_manifest, manifest_article
+
+    s = Session(Vault.open(tmp_path / "m.vault", "pw", **KDF), status=lambda *_: None)
+    owner, mallory = crypto.Identity.generate(), crypto.Identity.generate()
+    first = make_manifest(owner, "unseenet.nodes", "channel", pow_bits=0)
+    gid = make_group_id("unseenet.nodes", owner.public_key)
+    entry: dict = {}
+
+    def feed(art):
+        raw = art.to_bytes()
+        assert s._parse(1, raw, gid, entry, None) is None      # manifests are not posts
+
+    feed(first)
+    assert entry["manifest"]["serial"] == 1
+
+    # Mallory signs a "newer" manifest for the owner's group, adding herself as poster
+    forged = dict(entry["manifest"], serial=99, posters=[mallory.key_text])
+    feed(manifest_article(mallory, gid, forged, pow_bits=0))
+    assert entry["manifest"]["serial"] == 1
+    assert "posters" not in entry["manifest"]
+
+    # The owner cannot change the type either
+    feed(manifest_article(owner, gid, dict(entry["manifest"], serial=5, type="open"), pow_bits=0))
+    assert entry["manifest"]["type"] == "channel"
+
+    # A real update from the owner is taken; an older one after it is not
+    feed(manifest_article(owner, gid, dict(entry["manifest"], serial=3, title="Nodes"), pow_bits=0))
+    assert entry["manifest"]["serial"] == 3 and entry["title"] == "Nodes"
+    feed(manifest_article(owner, gid, dict(entry["manifest"], serial=2, title="Old"), pow_bits=0))
+    assert entry["manifest"]["title"] == "Nodes"

@@ -95,6 +95,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   connection, which is slow on Windows. The node now says clearly when the
   monitor socket's path is too long for the system (104 bytes on macOS)
   instead of failing with `AF_UNIX path too long`. (#33)
+- The client checks a group's manifest itself before it keeps it: it must
+  be signed by the owner in the group ID, be for that group, keep the type,
+  owner and locality, and be newer. A hostile node could otherwise have
+  served a manifest signed by its own key, for example adding itself to the
+  posters of `unseenet.nodes` or `unseenet.names` (UN-RFC 0004 section 4).
+  (#41)
 - The node's onion key file could be read by other users on the machine
   (it is sealed with the passphrase, but should be the node's alone).
 - After picking another group or a refresh while an answer was still
