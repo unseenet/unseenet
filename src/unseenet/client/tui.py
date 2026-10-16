@@ -646,6 +646,11 @@ class GroupInfoDialog(Dialog):
                  f"Version:   {d.get('serial', 1)}"]
         if self.node:
             lines.append(f"Read from: {self.node}")
+        label = getattr(self.app.session, "identity_label", None)
+        for role, title in (("moderators", "Moderators:"), ("posters", "Posters:  ")):
+            if d.get(role):
+                names = [label(k) if label else k[:20] for k in d[role][:6]]
+                lines.append(f"{title} " + ", ".join(names) + (" ..." if len(d[role]) > 6 else ""))
         bans = [b for b in d.get("banned", []) if isinstance(b, dict)]
         if bans:                                  # public on purpose (UN-RFC 0004, 5.1)
             lines.append(f"Banned:    {len(bans)} "
@@ -2248,6 +2253,14 @@ class UnseenetApp(App):
              "you know", self.action_ignore),
             ("People you ignore", "See who you ignore, and show someone again",
              self.action_ignored),
+            ("Make moderator", "Owner: let someone approve and withdraw posts in this group",
+             lambda: self.action_add_role("moderators")),
+            ("Make poster", "Owner of a channel: let someone post in it",
+             lambda: self.action_add_role("posters")),
+            ("Moderators and posters", "Owner: see them, and remove one",
+             self.action_roles),
+            ("Members of closed group", "Owner: see whom you invited, and remove a member",
+             self.action_members),
             ("Ban from group", "Owner: the selected post's author may no longer post in this "
              "group", self.action_ban),
             ("Banned from group", "Owner: see who is banned and why, and lift a ban",
@@ -2371,6 +2384,99 @@ class UnseenetApp(App):
         self.current_message = None
         self.notify(f"{who} is banned from {s.group_label(gid)}")
         self._render_threads()
+
+    def _owned_group(self, kind: str | None = None) -> str | None:
+        s, gid = self.session, self.current_group
+        if not gid or not s.group_entry(gid).get("owner"):
+            self.notify("Only the group's owner can do this", severity="warning")
+            return None
+        if kind and s.group_entry(gid).get("type") != kind:
+            self.notify(f"This is only for {kind} groups", severity="warning")
+            return None
+        return gid
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_add_role(self, role: str) -> None:
+        """Owner: add a moderator or (in a channel) a poster (UN-RFC 0004)."""
+        gid = self._owned_group("channel" if role == "posters" else None)
+        if not gid:
+            return
+        s, m = self.session, self.current_message
+        mine = s.identity().key_text
+        key = m.author_key if m and not m.private and m.author_key and m.author_key != mine else ""
+        what = "moderator" if role == "moderators" else "poster"
+        key = await self.push_screen_wait(InputDialog(
+            f"Make a {what} of {s.group_label(gid)}",
+            ("Moderators can post directly, approve others' posts and withdraw any post. "
+             if role == "moderators" else "Posters can post in this channel. ")
+            + "Their key - filled in from the selected post:", "ed25519:...", value=key))
+        if not key:
+            return
+        try:
+            await s.set_role(gid, role, key.strip(), True)
+        except (SessionError, OSError, ConnectionError, crypto.CryptoError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"{s.identity_label(key.strip())} is now a {what}")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_roles(self) -> None:
+        gid = self._owned_group()
+        if not gid:
+            return
+        s = self.session
+        data = s.manifest_data(gid)
+        people = [(k, f"{s.identity_label(k)} (moderator)") for k in data.get("moderators", [])]
+        people += [(k, f"{s.identity_label(k)} (poster)") for k in data.get("posters", [])]
+        if not people:
+            self.notify("This group has no moderators or posters. Ctrl+P: Make moderator.")
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Moderators and posters of {s.group_label(gid)}",
+            "Removing someone takes their role away from now on.", people, "Remove"))
+        if not key:
+            return
+        role = "moderators" if key in data.get("moderators", []) else "posters"
+        try:
+            await s.set_role(gid, role, key, False)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify("Removed")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_members(self) -> None:
+        gid = self._owned_group("closed")
+        if not gid:
+            return
+        s = self.session
+        people = [(k, s.identity_label(k)) for k in s.members(gid)]
+        if not people:
+            self.notify("No members recorded here. Members you invited from another device, "
+                        "or before version 0.3.0, are not listed.", timeout=10)
+            return
+        key = await self.push_screen_wait(KeyListDialog(
+            f"Members of {s.group_label(gid)}",
+            "The people you invited from this client. Removing one gives everyone else a new "
+            "key; members you invited elsewhere are not listed and lose access too, so invite "
+            "them again.", people, "Remove member"))
+        if not key:
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Remove {s.identity_label(key)}?",
+                "The group gets a new key that the others receive. They cannot read anything "
+                "new - but they keep everything they have already read.", "Remove",
+                danger=True)):
+            return
+        self.set_status("Making a new key for the group ...")
+        try:
+            await s.remove_member(gid, key)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not removed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify("Removed. The others have the new key.")
 
     @work(group="dialog", exit_on_error=False)
     async def action_banned(self) -> None:

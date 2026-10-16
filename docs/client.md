@@ -444,6 +444,24 @@ Closed groups are end-to-end encrypted, so you need to be invited:
 A minute or so later, when the invitation has reached your node, the
 posts become readable.
 
+## Running your group: moderators, posters and members
+
+As a group's owner you choose who else has a role, in the command palette
+(++ctrl+p++). Select a post by the person first, and their key is filled in.
+
+- **Make moderator**: moderators post directly in a moderated group,
+  approve others' posts, and can withdraw any post in the group.
+- **Make poster** (channels): posters may post in your channel.
+- **Moderators and posters** lists them and removes one.
+- **Members of closed group** lists the people you invited from this
+  client, and **removes** one. The group then gets a new key, sent to
+  everyone else; the removed member cannot read anything new, but keeps
+  what they have already read. Members you invited from another device
+  (or before version 0.3.0) are not on the list and do not get the new
+  key either - invite them again.
+
+*About group* (++question-mark++) shows everyone the moderators and posters.
+
 ## Sending takes a moment
 
 Every post carries a small proof-of-work, about a second of CPU time. It

@@ -630,12 +630,13 @@ class Session:
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
         allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
-                   "retention_days", "banned"}
+                   "retention_days", "banned", "moderators", "posters"}
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
             if value in (None, "", False, []) and key in ("title", "description", "rules",
-                                                         "low_latency", "banned"):
+                                                         "low_latency", "banned", "moderators",
+                                                         "posters"):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -765,6 +766,47 @@ class Session:
                               [crypto.key_from_text(member_key)], grant_only=True,
                               pow_bits=await self.required_pow(group_id))
         await self._post_article(art)
+        members = entry.setdefault("members", [])
+        if member_key not in members:
+            members.append(member_key)
+        self.save()
+
+    def members(self, group_id: str) -> list[str]:
+        """Owner: the keys you invited to a closed group (envelopes do not say whom
+        they are for, so this record is the list). Members invited from another
+        device, or before this was recorded, are missing."""
+        return list(self.data["groups"].get(group_id, {}).get("members", []))
+
+    async def remove_member(self, group_id: str, member_key: str) -> int:
+        """Owner: start a new epoch without the member (UN-RFC 0004, 6.1-6.2).
+        The others get the new key; the removed member keeps what they read.
+        Returns the new epoch."""
+        entry = self.data["groups"].get(group_id)
+        if not entry or not entry.get("owner") or entry.get("type") != "closed":
+            raise SessionError("you can only remove members from closed groups you own")
+        keep = [k for k in entry.get("members", []) if k != member_key]
+        epoch = max(int(e) for e in entry["keys"]) + 1
+        keys = crypto.GroupKeys.generate()
+        art = make_key_update(self.identity(), group_id, epoch, keys,
+                              [crypto.key_from_text(k) for k in keep],
+                              pow_bits=await self.required_pow(group_id))
+        await self._post_article(art)
+        entry["keys"][str(epoch)] = keys.secret.hex()
+        entry["members"] = keep
+        self.save()
+        return epoch
+
+    async def set_role(self, group_id: str, role: str, key_text: str, on: bool = True) -> None:
+        """Owner: add or remove a moderator or a poster (UN-RFC 0004, 3.1 and 5)."""
+        if role not in ("moderators", "posters"):
+            raise SessionError(f"unknown role {role}")
+        crypto.key_from_text(key_text)
+        if role == "posters" and self.group_entry(group_id).get("type") != "channel":
+            raise SessionError("posters are for channels; other groups have moderators")
+        current = [k for k in self.manifest_data(group_id).get(role, []) if k != key_text]
+        if on:
+            current.append(key_text)
+        await self.update_group(group_id, **{role: current})
 
     # ------------------------------------------------------------------
     # inboxes and private messages (UN-RFC 0009)
