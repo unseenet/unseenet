@@ -134,7 +134,8 @@ async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):
     async with app.run_test(size=(140, 40)) as pilot:
         # the personal inbox is created and listed
         assert await wait_for(pilot, lambda: app._inbox_ready, 300)
-        assert app.session.my_inbox in app.groups
+        # the group list is filled right after the inbox is made
+        assert await wait_for(pilot, lambda: app.session.my_inbox in app.groups, 300)
         from unseenet.client.tui import NodeInfoDialog, NodesDialog
         await pilot.press("o")
         assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
