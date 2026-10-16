@@ -7,6 +7,31 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-16
+
+Names, moderation and updates. People and groups get names you can
+remember and trust - registered names, domain names and names under a
+name like `sonia@lorensen` - from a registrar that keeps working when one
+machine is gone. Group owners, moderators and hierarchy maintainers get
+tools against abuse: moderation queues, bans, hierarchy blocks, reports,
+withdrawing posts. Portable and Bootable update themselves. Also:
+newsreader support (`OVER`), Bootable (USB, SSD etc.), a Docker image and
+a node monitor. Pre-alpha: expect breaking changes.
+
+### Protocol
+- Draft UN-RFC 0018 (hierarchies and authority over group names), with
+  hierarchy blocks (section 5.4), and UN-RFC 0019 (names for identities),
+  with registrar replicas, reserved names and names under a name.
+- Draft UN-RFC 0020 (keeping the project's lists from inside the
+  network) and UN-RFC 0021 (listed nodes must be connected).
+- UN-RFC 0004: banned keys (section 5.1), closing an epoch when a member
+  is removed (sections 6.2, 6.5), and what clients do with cancels
+  (section 7).
+- UN-RFC 0009 section 3: submissions reach every moderator.
+- UN-RFC 0008 section 3.1.1: data groups, for lists and certificates that
+  programs read.
+- UN-RFC 0011: `honours_blocks` and excluded groups in node information.
+
 ### Added
 - **Update** in the menu of Bootable (USB, SSD etc.): fetch the newest release over
   Tor (or a development build, or an update zip on the stick) and replace
@@ -124,7 +149,7 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - The project's root list of hierarchies (UN-RFC 0018) is kept in
   `src/unseenet/hierarchies.json`, checked by the tests, and posted to
   `unseenet.hierarchies` when it changes and every month, together with
-  the node list. The client does not use it yet. (#25)
+  the node list. (#25)
 - Development builds: every change to the code is built and self-tested,
   and the zips replace the pre-release
   [Development build](https://github.com/unseenet/unseenet/releases/tag/dev),
@@ -164,15 +189,6 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   get `:<version>` and `:latest`; signed with cosign. See
   docs/node/docker.md and deploy/docker-compose.yml. (#22)
 - Issue forms for the bootable stick and the Docker image.
-
-### Changed
-- UN-RFC 0004 section 7 (cancel) says what a client must do: check a
-  cancel itself before acting on it, drop the target from its cache,
-  remember cancels for posts it has not seen, and tell its user that
-  withdrawing is best effort. Control articles (manifests, key updates,
-  cancels) cannot be cancelled, and the node now refuses that. Also: how
-  long pending cancels are kept, and what a cancel shows in a closed
-  group. (#35)
 
 ### Fixed
 - A member removed from a closed group could go on posting with the
@@ -374,6 +390,7 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/unseenet/unseenet/releases/tag/v0.1.0
