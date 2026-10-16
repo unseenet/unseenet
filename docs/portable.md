@@ -22,19 +22,19 @@ Check the download against `SHA256SUMS.txt` from the same release:
 === "Windows"
 
     ```powershell
-    certutil -hashfile unseenet-0.1.0-usb.zip SHA256
+    certutil -hashfile unseenet-0.2.0-usb.zip SHA256
     ```
 
 === "macOS"
 
     ```bash
-    shasum -a 256 unseenet-0.1.0-usb.zip
+    shasum -a 256 unseenet-0.2.0-usb.zip
     ```
 
 === "Linux"
 
     ```bash
-    sha256sum unseenet-0.1.0-usb.zip
+    sha256sum unseenet-0.2.0-usb.zip
     ```
 
 ## Put it on a stick
