@@ -1,30 +1,36 @@
 name: node-request
 # "Add my node" issues (.github/ISSUE_TEMPLATE/add-node.yml):
-#   opened / edited  -> check the form and reach the node over Tor; comment the result
-#   label "accepted" -> check again, add it to src/unseenet/nodes.json, post the new
-#                       list to unseenet.nodes, comment and close
-# Only people with triage rights can add labels, so only maintainers can accept.
-# The issue text is untrusted: it is read from the event file by
-# tools/node_request.py, never put into a shell command.
+#   opened / edited / a new comment
+#       -> check the form, reach the node over Tor, and check the operator's
+#          signature over the challenge posted here; comment the result
+#   label "accepted" (maintainers only: labels need triage rights)
+#       -> check again, add it to src/unseenet/nodes.json, post the new list
+#          to unseenet.nodes, comment and close
+# Issue text and comments are untrusted: tools/node_request.py reads them from
+# files, they are never put into a shell command.
 on:
   issues:
     types: [opened, edited, labeled]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
   issues: write
 
 concurrency:
-  # a new edit replaces a running check; labels get their own lane, so the
-  # "labeled" event that comes with "opened" does not cancel the check
+  # a new edit or comment replaces a running check; labels get their own lane,
+  # so the "labeled" event that comes with "opened" does not cancel the check
   group: node-request-${{ github.event.issue.number }}-${{ github.event.action == 'labeled' && github.event.label.name || 'check' }}
   cancel-in-progress: true
 
 jobs:
   check:
     if: >
-      (github.event.action == 'opened' || github.event.action == 'edited') &&
-      contains(github.event.issue.labels.*.name, 'node-request')
+      contains(github.event.issue.labels.*.name, 'node-request') &&
+      github.event.issue.state == 'open' &&
+      (github.event.action == 'opened' || github.event.action == 'edited' ||
+       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,9 +40,15 @@ jobs:
           python-version: "3.13"
       - run: pip install .
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
-      - id: check
-        continue-on-error: true
-        run: python tools/node_request.py check --event "$GITHUB_EVENT_PATH" --report report.md
+      - name: Fetch the comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?per_page=100" > comments.json
+      - continue-on-error: true
+        run: >
+          python tools/node_request.py check --event "$GITHUB_EVENT_PATH"
+          --comments comments.json --report report.md
       - env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.issue.number }}
@@ -44,7 +56,8 @@ jobs:
 
   add:
     if: >
-      github.event.action == 'labeled' && github.event.label.name == 'accepted' &&
+      github.event_name == 'issues' && github.event.action == 'labeled' &&
+      github.event.label.name == 'accepted' &&
       contains(github.event.issue.labels.*.name, 'node-request')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -60,9 +73,16 @@ jobs:
           python-version: "3.13"
       - run: pip install .
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
+      - name: Fetch the comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?per_page=100" > comments.json
       - id: add
         continue-on-error: true
-        run: python tools/node_request.py add --event "$GITHUB_EVENT_PATH" --report report.md
+        run: >
+          python tools/node_request.py add --event "$GITHUB_EVENT_PATH"
+          --comments comments.json --report report.md
       - name: Commit the new list
         if: steps.add.outcome == 'success'
         env:
@@ -70,8 +90,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/unseenet/nodes.json
+          git add src/unseenet/nodes.json tools/node-health.json
           git commit -m "Known nodes: add the node from #$NUMBER"
+          git pull --rebase -q origin main
           git push origin HEAD:main
       - name: Post the new list to unseenet.nodes
         if: steps.add.outcome == 'success'

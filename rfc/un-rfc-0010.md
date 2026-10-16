@@ -110,6 +110,16 @@ an automated poster publishes it when it changes and every month. Its
 announcements (releases, security notices) are in the channel
 `unseenet.announce@ph5fc5hop5232qsz`.
 
+The project lists a node only if (informative):
+
+- it answers over Tor as an Unseenet node and reports the node key in its
+  request;
+- the operator signs a challenge with the node key (purpose
+  `UNSEENET-NODE-CLAIM-1`, over the challenge text), which shows that the
+  request comes from whoever runs the node - a node key alone is public;
+- it keeps answering: listed nodes are checked daily, and a node that has
+  not answered for 10 days is removed.
+
 This is a convenience of the reference client, not part of the protocol.
 Other clients and users may pin other publishers, or none.
 

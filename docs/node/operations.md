@@ -62,12 +62,26 @@ on GitHub. You need:
 - optionally your **operator key**, as in `[operator]`;
 - a short **description** for users.
 
-A check runs at once: it connects to your node over Tor and compares the
-node key the node reports with the one in the form, and comments the result
-on the issue. Fix what it finds by editing the issue; it checks again.
-When a maintainer accepts the request, your node is added to
-`src/unseenet/nodes.json`, the new list is posted to `unseenet.nodes`, and
-clients pick it up the next time they connect.
+A check runs at once: it connects to your node over Tor, compares the node
+key the node reports with the one in the form, and comments the result on
+the issue. Fix what it finds by editing the issue; it checks again.
+
+Because a node key is public, the check also asks you to **prove that you
+run the node**: it posts a challenge, which you sign on the node:
+
+```bash
+sudo -u unseenet bash -c 'cd ~ && set -a && . /etc/unseenet-node.env && \
+  unseenet/.venv/bin/unseenet-node --data node-data --sign "unseenet-node-claim ..."'
+```
+
+Paste the `ed25519:...` line it prints as a comment on the issue. Only the node's
+passphrase can make that signature. When a maintainer accepts the request,
+your node is added to `src/unseenet/nodes.json`, the new list is posted to
+`unseenet.nodes`, and clients pick it up the next time they connect.
+
+Listed nodes are reached over Tor **every day**. If yours does not answer
+for 3 days, you get a note on your request; after 10 days it is taken off
+the list. Ask again when it is back.
 
 (A pull request that edits `src/unseenet/nodes.json` works too.)
 

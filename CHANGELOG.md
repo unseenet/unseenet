@@ -24,6 +24,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- Node requests must prove that the requester runs the node: the operator
+  signs a challenge with `unseenet-node --sign`. Listed nodes are checked
+  daily over Tor; unreachable for 3 days gets a note, 10 days removes them.
 - "Add my node" issue form: a check reaches the node over Tor and compares
   its node key; the `accepted` label adds it to the list, posts the list to
   `unseenet.nodes`, and closes the issue.

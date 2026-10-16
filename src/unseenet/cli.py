@@ -147,9 +147,19 @@ def node_main(argv=None) -> None:
                    help="stop carrying a group on this node, delete its posts, and exit")
     p.add_argument("--show-key", action="store_true",
                    help="print this node's key (for your peers' node.toml) and exit")
+    p.add_argument("--sign", metavar="CHALLENGE",
+                   help="sign a challenge with this node's key, to prove you run it "
+                        "(e.g. when asking to be listed), and exit")
     p.add_argument("--undrop-group", metavar="GROUP_ID",
                    help="allow a group dropped with --drop-group again, and exit")
     args = p.parse_args(argv)
+    if args.sign:
+        key_file = Path(args.data) / "node_key.vault"
+        if not key_file.exists():
+            sys.exit(f"no node key in {args.data}; is --data the node's data directory?")
+        key = load_node_key(Path(args.data), _passphrase("Node passphrase: ", "UNSEENET_NODE_PASSPHRASE"))
+        print(key.sign_text(crypto.PURPOSE_NODE_CLAIM, args.sign.strip().encode()))
+        return
     if args.show_key:
         data = Path(args.data)
         data.mkdir(parents=True, exist_ok=True, mode=0o700)

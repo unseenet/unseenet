@@ -8,9 +8,15 @@ body:
       value: |
         Clients offer the nodes on the project's list to new users. Fill this in,
         and a check runs at once: it connects to your node over Tor and compares the
-        node key it reports with the one you give here. When a maintainer accepts the
-        request, your node is added to `src/unseenet/nodes.json` and the new list is
-        posted to `unseenet.nodes` on Unseenet - clients pick it up automatically.
+        node key it reports with the one you give here. It also posts a short
+        challenge, which you sign **on the node** (`unseenet-node --sign "..."`) and
+        paste back as a comment - that shows you run the node, not just know of it.
+        When a maintainer accepts the request, your node is added to
+        `src/unseenet/nodes.json` and the new list is posted to `unseenet.nodes` on
+        Unseenet - clients pick it up automatically.
+
+        Listed nodes are checked every day: one that cannot be reached for 10 days
+        is taken off the list (with a note after 3 days).
 
         Before you ask, read [Your responsibility](https://andlo.github.io/unseenet/node/responsibility/).
   - type: input
