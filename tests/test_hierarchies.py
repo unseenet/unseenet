@@ -86,7 +86,7 @@ def hierarchy_list(hierarchy, groups, sub=()):
 
 def test_project_checkgroups_endorse_the_project_groups():
     lst = hz.builtin_checkgroups()
-    assert lst.hierarchy == "unseenet" and len(lst.groups) == 8
+    assert lst.hierarchy == "unseenet" and len(lst.groups) == 9
     assert all(g.endswith("@ph5fc5hop5232qsz") for g in lst.groups.values())
     assert lst.groups["unseenet.announce"] == "unseenet.announce@ph5fc5hop5232qsz"
 

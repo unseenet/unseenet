@@ -32,7 +32,7 @@ jobs:
       (github.event.action == 'opened' || github.event.action == 'edited' ||
        (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 80                 # the canary check waits up to an hour
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,6 +46,10 @@ jobs:
           NUMBER: ${{ github.event.issue.number }}
         run: gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?per_page=100" > comments.json
       - continue-on-error: true
+        env:
+          # signs the canaries (UN-RFC 0021); only our own code reads it, the
+          # issue text is parsed as data
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
         run: >
           python tools/node_request.py check --event "$GITHUB_EVENT_PATH"
           --comments comments.json --report report.md

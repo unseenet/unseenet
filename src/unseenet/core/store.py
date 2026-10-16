@@ -260,6 +260,12 @@ class Store:
                         (group_id, int(time.time()), reason, message_id, raw))
         self.db.commit()
 
+    def dropped_groups(self) -> list[str]:
+        """Groups the operator has dropped (UN-RFC 0013 section 3), sorted."""
+        rows = self.db.execute("SELECT group_id FROM tombstones WHERE reason='operator' "
+                               "ORDER BY group_id").fetchall()
+        return [r[0] for r in rows]
+
     def lift_tombstone(self, group_id: str) -> bool:
         cur = self.db.execute("DELETE FROM tombstones WHERE group_id=? AND reason='operator'", (group_id,))
         self.db.commit()

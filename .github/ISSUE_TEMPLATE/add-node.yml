@@ -15,8 +15,15 @@ body:
         `src/unseenet/nodes.json` and the new list is posted to `unseenet.nodes` on
         Unseenet - clients pick it up automatically.
 
-        Listed nodes are checked every day: one that cannot be reached for 10 days
-        is taken off the list (with a note after 3 days).
+        A listed node must also be **connected** to the other listed nodes and
+        carry the groups they carry, except groups it excludes openly (UN-RFC 0021):
+        [peer](https://unseenet.org/node/peering/) with at least one listed node
+        before you ask. The check posts a small canary each way and waits up to
+        an hour for them.
+
+        Listed nodes are checked every day: one that cannot be reached, is not
+        connected or does not carry the groups for 10 days is taken off the list
+        (with a note after 3 days).
 
         Before you ask, read [Your responsibility](https://unseenet.org/node/responsibility/).
   - type: input
@@ -59,6 +66,17 @@ body:
       placeholder: "Small node in Aarhus, Denmark; carries dk.* and unseenet*"
     validations:
       required: true
+  - type: input
+    id: peers
+    attributes:
+      label: Peers
+      description: >-
+        Which listed nodes does your node peer with (both sides list each other)?
+        A listed node must be connected to the others: the check posts a canary
+        each way and waits up to an hour for it. Not checked, but it helps us help you.
+      placeholder: "node1, node2"
+    validations:
+      required: false
   - type: checkboxes
     id: promises
     attributes:
@@ -66,5 +84,5 @@ body:
       options:
         - label: I run this node and intend to keep it running for a while.
           required: true
-        - label: I have set up require_peer_auth and peer with node keys, and I have read "Your responsibility".
+        - label: I have set up require_peer_auth, peer with at least one listed node using node keys, and I have read "Your responsibility".
           required: true

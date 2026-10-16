@@ -190,3 +190,19 @@ def test_peer_accept_pattern():
     node.accept(art.to_bytes())                          # a client may post there
     ok = new_article(dk.group, "hej", "x", from_name="u").finalize(user, BITS)
     node.accept(ok.to_bytes(), source="aarhus", from_peer=True)
+
+
+def test_excludes():
+    """UN-RFC 0021 section 3: excluded groups are refused and published, with dropped groups."""
+    node = make_node(excludes="alt.*")
+    owner = crypto.Identity.generate()
+    alt = make_manifest(owner, "alt.test", "open", pow_bits=BITS)
+    dk = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    with pytest.raises(ArticleError) as e:
+        node.accept(alt.to_bytes())
+    assert e.value.reason == "group" and "excluded" in e.value.detail
+    node.accept(dk.to_bytes())
+    assert node.node_info()["policy"]["excludes"] == "alt.*"
+    node.drop_group(dk.group)
+    assert node.node_info()["policy"]["excludes"] == f"alt.*,{dk.group}"
+    assert "excludes" not in make_node().node_info()["policy"]

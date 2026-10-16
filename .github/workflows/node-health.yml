@@ -1,8 +1,9 @@
 name: node-health
-# Every day, reach each known node (src/unseenet/nodes.json) over Tor. A node
-# that does not answer for 3 days gets a note to its operator; after 10 days
-# it is taken off the list and the new list is posted to unseenet.nodes.
-# See tools/node_health.py.
+# Every day, reach each known node (src/unseenet/nodes.json) over Tor, and
+# check with canary posts that it is connected to the others and carries their
+# groups (UN-RFC 0021). A node that fails for 3 days gets a note to its
+# operator; after 10 days it is taken off the list and the new list is posted
+# to unseenet.nodes. See tools/node_health.py and tools/canary.py.
 on:
   schedule:
     - cron: "41 4 * * *"
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +30,9 @@ jobs:
           python-version: "3.13"
       - run: pip install .
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
-      - run: python tools/node_health.py --actions actions.json
+      - env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}   # signs the canaries
+        run: python tools/node_health.py --actions actions.json
       - name: Commit changes
         run: |
           if git diff --quiet; then echo "no changes"; exit 0; fi

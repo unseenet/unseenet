@@ -16,6 +16,11 @@ Three things must hold before a node is listed:
    ``unseenet-node --sign "<challenge>"``, which needs the node's passphrase,
    and pastes the signature as a comment. It must verify with the node key.
 
+When those hold, ``check`` also posts a canary to the node and one to a
+listed node and waits up to an hour for each to show up on the other side:
+the node must be connected to the listed network (UN-RFC 0021,
+tools/canary.py). ``add`` does not repeat that wait.
+
 ``add`` then puts the node in src/unseenet/nodes.json and records who asked,
 for the daily health check (tools/node_health.py). Both write a Markdown
 report for the issue; ``add`` exits non-zero unless the node was added.
@@ -38,6 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from unseenet.core import crypto  # noqa: E402
 from unseenet.known_nodes import parse_node_list  # noqa: E402
@@ -190,6 +196,26 @@ async def check_node_via(address: str, node_key: str, socks_port: int) -> list[s
     return problems
 
 
+async def check_connection(f: dict[str, str]) -> list[str] | None:
+    """UN-RFC 0021: canaries both ways. None when there is nothing to check against."""
+    import canary
+    from types import SimpleNamespace
+    from unseenet.core.tor import TorProcess
+    key = canary.poster_key()
+    _, nodes = parse_node_list(NODES.read_text())
+    listed = [n for n in nodes if n.node_key]
+    if key is None or not listed:
+        return None
+    new = SimpleNamespace(name=f["name"], address=f["address"], node_key=f["node_key"])
+    with tempfile.TemporaryDirectory(prefix="unseenet-canary-") as tmp:
+        tor = TorProcess(Path(tmp), TorProcess.find_binary())
+        await tor.start(timeout=180)
+        try:
+            return await canary.request_check(new, listed, tor.socks_port, key, date.today())
+        finally:
+            await tor.stop()
+
+
 # ---------------------------------------------------------------------------
 def add(f: dict[str, str], issue: dict) -> None:
     data = json.loads(NODES.read_text())
@@ -250,6 +276,19 @@ def main() -> None:
                          "challenge below. Sign exactly the challenge, on this node.")
         parts.append(how_to_prove(challenge))
     ready = not errors and owner_ok
+    if ready and args.action == "check" and not args.no_network:
+        connection = asyncio.run(check_connection(f))
+        if connection is None:
+            pass                                    # nothing to check against, or no key
+        elif connection:
+            ready = False
+            parts.append("The connection check found problems:\n\n"
+                         + "\n".join(f"- {e}" for e in connection)
+                         + "\n\nSee [Peering](https://unseenet.org/node/peering/). Comment "
+                         "here when it is fixed; the check runs again.")
+        else:
+            parts.append("Canaries went both ways between this node and the listed nodes: "
+                         "it is connected. ✓")
 
     if args.action == "check":
         parts.append("Everything checks out. A maintainer will add the node by labelling this "

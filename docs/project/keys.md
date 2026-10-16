@@ -60,6 +60,7 @@ project's list.
 | `unseenet.nodes` | channel | the GitHub poster: the node list ([UN-RFC 0010](../spec/un-rfc-0010.md)) |
 | `unseenet.hierarchies` | channel | the GitHub poster: the root list ([UN-RFC 0018](../spec/un-rfc-0018.md)) |
 | `unseenet.checkgroups` | channel | the GitHub poster: the groups of `unseenet.*` (UN-RFC 0018 section 5) |
+| `unseenet.canary` | channel | the GitHub poster: daily connection checks ([UN-RFC 0021](../spec/un-rfc-0021.md)) |
 | `unseenet.names` | channel | the registrar's replicas ([UN-RFC 0019](../spec/un-rfc-0019.md)) |
 | `unseenet.admin` | open | anyone: hierarchy requests and name disputes |
 

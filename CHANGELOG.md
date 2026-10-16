@@ -8,6 +8,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Listed nodes must be connected (UN-RFC 0021): the daily health check
+  posts a small canary to each listed node in `unseenet.canary` and reads
+  the next day where they arrived. A node whose canary does not reach more
+  than half of the others, that misses theirs, or that does not carry what
+  most of them carry, gets a note after 3 days and is taken off the list
+  after 10. The "Add my node" check sends a canary each way first. (#87)
+- `excludes` in `[node]`: groups the node does not carry by choice. They
+  are refused, and published in the node information with every dropped
+  group; clients show them under **About this node**. (#87)
 - Per-peer `accept` in `[[peer]]`: which groups the node takes from that
   peer, pushed or pulled. `groups` only ever limited what is sent, so a
   peering "for dk.* only" can now be held on both sides. (#86)
