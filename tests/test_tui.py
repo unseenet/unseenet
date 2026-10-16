@@ -646,3 +646,89 @@ async def test_tui_group_list_shows_icons(tmp_path, monkeypatch):
         app.save_screenshot(str(tmp_path / "icons.svg"))
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_sent_private_messages_and_full_screen(tmp_path, monkeypatch):
+    """Private messages you sent show in Private messages (also to keys that are
+    not contacts); Enter reads a message on the whole screen, n/p move, Esc goes back."""
+    from unseenet.client.tui import ReadScreen
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    await other.ensure_inbox()
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    await me.send_private(other.my_inbox, "Hej du", "Første\n", owner_key=other.identity().public_key)
+    await me.send_private(other.my_inbox, "Igen", "Anden\n", owner_key=other.identity().public_key)
+    assert [m.subject for m in me.private_messages()] == ["Hej du", "Igen"]
+    assert all(m.to_key == other.identity().key_text for m in me.sent_messages())
+    await me.close(); await other.close()
+
+    async with app.run_test(size=(120, 36)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        app.select_group(app.session.my_inbox)
+        assert await wait_for(pilot, lambda: len(app.messages) == 2, 100)
+        await pilot.pause(0.3)
+        table = app.query_one("#threads")
+        whos = [str(table.get_row_at(i)[2]) for i in range(table.row_count)]
+        assert all(w.startswith("You → ") for w in whos), whos
+        table.focus()
+        table.move_cursor(row=0)
+        await pilot.pause(0.2)
+        first = app.current_message
+        await pilot.press("enter")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ReadScreen), 50)
+        assert first.subject in str(app.screen.query_one("#read-head").render())
+        await pilot.press("n")
+        await pilot.pause(0.3)
+        assert app.screen.msg is not first and app.current_message is app.screen.msg
+        await pilot.press("p")
+        await pilot.pause(0.3)
+        assert app.screen.msg is first
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        assert not isinstance(app.screen, ReadScreen) and app.is_running
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_browse_space_and_click_on_box(tmp_path, monkeypatch):
+    """Space subscribes; a click on the line only shows the group, a click on
+    [ ] subscribes."""
+    from unseenet.client.tui import BrowseDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    gid = await other.create_group("alt.test", "open", min_pow=10)
+    await other.close()
+    async with app.run_test(size=(120, 36)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 100)
+        dialog = app.screen
+        tree = dialog.query_one("#browse-tree")
+        leaf = next(n for n in tree.root.children if getattr(n.data, "group_id", "") == gid)
+        tree.move_cursor(leaf)
+        await pilot.pause(0.2)
+        subscribed = lambda: gid in app.session.data["subscribed"]   # noqa: E731
+        await pilot.press("space")
+        await pilot.pause(0.2)
+        assert subscribed()
+        await pilot.press("space")
+        await pilot.pause(0.2)
+        assert not subscribed()
+
+        region = tree._get_label_region(leaf.line)
+        y = leaf.line - tree.scroll_offset.y + tree.gutter.top
+        x0 = region.x - tree.scroll_offset.x + tree.gutter.left
+        await pilot.click(tree, offset=(x0 + 12, y))           # on the name
+        await pilot.pause(0.2)
+        assert not subscribed() and tree.cursor_node is leaf
+        await pilot.click(tree, offset=(x0 + 1, y))            # on the box
+        await pilot.pause(0.2)
+        assert subscribed()
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        await pilot.press("q")
+    server.close()

@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from textual import on, work
+from textual.message import Message as Message_
 from textual.worker import Worker, WorkerState
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
@@ -642,6 +643,70 @@ class EditGroupDialog(Dialog):
                       "view": view, "low_latency": fast, "min_pow": min_pow})
 
 
+class ReadScreen(Screen):
+    """One message on the whole screen. r replies, m writes privately, n and p
+    go to the next and previous message, Esc goes back."""
+    BINDINGS = [
+        Binding("escape", "back", "Back"),
+        Binding("q", "back", "Back", show=False),
+        Binding("r", "reply", "Reply"),
+        Binding("m", "message", "Message"),
+        Binding("n", "next", "Next"),
+        Binding("p", "previous", "Previous"),
+        Binding("space", "page", "Page down", show=False),
+    ]
+    CSS = """
+    ReadScreen #read-head { padding: 0 1; background: $boost; color: $text; }
+    ReadScreen #read-scroll { height: 1fr; padding: 0 2; }
+    """
+
+    def __init__(self, msg: Message):
+        super().__init__()
+        self.msg = msg
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static("", id="read-head")
+        with VerticalScroll(id="read-scroll"):
+            yield Static("", id="read-body")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.show(self.msg)
+        self.query_one("#read-scroll").focus()
+
+    def show(self, msg: Message) -> None:
+        self.msg = msg
+        head, body = self.app.article(msg)
+        self.query_one("#read-head", Static).update(head)
+        self.query_one("#read-body", Static).update(body)
+        self.query_one("#read-scroll").scroll_home(animate=False)
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_reply(self) -> None:
+        self.app.action_reply()
+
+    def action_message(self) -> None:
+        self.app.action_message()
+
+    def action_next(self) -> None:
+        if self.app.neighbour(+1) is None:
+            self.app.notify("That was the last one")
+
+    def action_previous(self) -> None:
+        if self.app.neighbour(-1) is None:
+            self.app.notify("That was the first one")
+
+    def action_page(self) -> None:
+        scroll = self.query_one("#read-scroll")
+        if scroll.scroll_y >= scroll.max_scroll_y:
+            self.action_next()                 # like the old newsreaders: space reads on
+        else:
+            scroll.scroll_page_down(animate=False)
+
+
 class AboutDialog(Dialog):
     """F1: what this program is, and where the project lives."""
 
@@ -834,6 +899,40 @@ class NodeInfoDialog(Dialog):
         self.dismiss(True)
 
 
+class BrowseTree(Tree):
+    """The tree of all groups. Space or Enter subscribes; with the mouse, only a
+    click on the [ ] box does - a click on the rest of the line only shows what
+    the group is."""
+    BINDINGS = [Binding("space", "toggle_subscription", "Subscribe", show=False)]
+    BOX = 3                                      # "[x]" at the start of a group's label
+
+    class Toggle(Message_):
+        def __init__(self, node) -> None:
+            super().__init__()
+            self.node = node
+
+    def action_toggle_subscription(self) -> None:
+        node = self.cursor_node
+        if node is None:
+            return
+        if isinstance(node.data, GroupInfo):
+            self.post_message(self.Toggle(node))
+        else:
+            node.toggle()                        # a hierarchy: open or close it
+
+    async def _on_click(self, event) -> None:
+        meta = event.style.meta
+        node = self.get_node_at_line(meta["line"]) if "line" in meta else None
+        if node is None or not isinstance(node.data, GroupInfo) or meta.get("toggle"):
+            return                               # Tree's own handler: hierarchies as before
+        event.prevent_default()                  # not Tree's: a click must not subscribe
+        self.cursor_line = meta["line"]          # shows the group's details
+        region = self._get_label_region(meta["line"])
+        x = event.x + self.scroll_offset.x - self.gutter.left
+        if region is not None and region.x <= x < region.x + self.BOX:
+            self.post_message(self.Toggle(node))
+
+
 class BrowseDialog(Dialog):
     """All groups on the node, by hierarchy; Enter toggles subscription."""
     CANCEL_RESULT = True
@@ -848,10 +947,10 @@ class BrowseDialog(Dialog):
         with Vertical(classes="dialog list"):
             several = len(self.app.session.nodes) > 1
             yield Label("Groups on your nodes" if several else "Groups on this node", classes="title")
-            yield Label("Enter: subscribe or unsubscribe a group, open or close a "
-                        "hierarchy.  Esc: close.", classes="hint")
+            yield Label("Space, Enter or a click on [ ]: subscribe or unsubscribe. "
+                        "Enter on a hierarchy opens or closes it.  Esc: close.", classes="hint")
             yield Label(ICON_LEGEND, classes="hint", markup=False)
-            tree: Tree = Tree("groups", id="browse-tree")
+            tree: Tree = BrowseTree("groups", id="browse-tree")
             tree.show_root = False
             expand = len(self.groups) <= 15
             for top, items in by_hierarchy(self.groups):
@@ -971,8 +1070,15 @@ class BrowseDialog(Dialog):
             self.app.session.my_inbox.rpartition("@")[2]
 
     @on(Tree.NodeSelected, "#browse-tree")
-    def _toggle(self, event: Tree.NodeSelected) -> None:
-        g = event.node.data
+    def _selected(self, event: Tree.NodeSelected) -> None:
+        self._toggle(event.node)
+
+    @on(BrowseTree.Toggle)
+    def _clicked(self, event: "BrowseTree.Toggle") -> None:
+        self._toggle(event.node)
+
+    def _toggle(self, node) -> None:
+        g = node.data
         if not isinstance(g, GroupInfo):
             return
         if not g.subscribed and self._not_mine_inbox(g):
@@ -983,7 +1089,7 @@ class BrowseDialog(Dialog):
         g.subscribed = not g.subscribed
         self.app.session.subscribe(g.group_id, g.subscribed,
                                    node=g.nodes[0] if g.subscribed and g.nodes else None)
-        event.node.set_label(self._label(g))
+        node.set_label(self._label(g))
 
 
 
@@ -1008,6 +1114,7 @@ class UnseenetApp(App):
         Binding("a", "add_contact", "Add contact", show=False),
         Binding("question_mark", "group_info", "About group", show=False),
         Binding("v", "toggle_view", "Chat/threads"),
+        Binding("f", "read", "Full screen", show=False),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
         Binding("f1", "about", "About"),
@@ -1281,6 +1388,8 @@ class UnseenetApp(App):
 
     # --- threads ---
     def _threaded(self, msgs: list[Message]) -> list[tuple[Message, int]]:
+        """Threads, newest first; ``msgs`` is in the order the messages came."""
+        pos = {m.message_id: i for i, m in enumerate(msgs)}
         by_id = {m.message_id: m for m in msgs}
         threads: dict[str, list[Message]] = {}
         for m in msgs:
@@ -1288,8 +1397,8 @@ class UnseenetApp(App):
             threads.setdefault(root, []).append(m)
         out = []
         for root, items in sorted(threads.items(),
-                                  key=lambda kv: max(x.number for x in kv[1]), reverse=True):
-            for m in sorted(items, key=lambda x: x.number):
+                                  key=lambda kv: max(pos[x.message_id] for x in kv[1]), reverse=True):
+            for m in sorted(items, key=lambda x: pos[x.message_id]):
                 depth = 0 if m.message_id == root else min(len(m.references), 4)
                 out.append((m, depth))
         return out
@@ -1299,6 +1408,8 @@ class UnseenetApp(App):
         s = self.session
         if gid and gid.startswith(CONTACT):
             rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
+        elif gid == s.my_inbox:
+            rows = self._threaded(s.private_messages())        # what you sent, too
         else:
             msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
             rows = self._threaded(msgs)
@@ -1410,12 +1521,23 @@ class UnseenetApp(App):
             self._render_threads()
 
     def _who(self, m: Message) -> str:
+        if m.to_key and self.current_group == self.session.my_inbox:
+            return f"You → {self._key_label(m.to_key)}"
         if m.from_name == "You" and m.author_key == self.session.identity().key_text:
             return "You"
         petname = self.session.contact_name(m.author_key)
         if petname:
             return f"{petname} √ ({m.author_fp})"         # your own name for a key you know
         return f"{m.from_name} ({m.author_fp})"
+
+    def _key_label(self, key_text: str) -> str:
+        """A contact's name, else the start of the key and its fingerprint."""
+        name = self.session.contact_name(key_text)
+        try:
+            fp = crypto.fingerprint(crypto.key_from_text(key_text))[:4]
+        except crypto.CryptoError:
+            fp = "????"
+        return f"{name} √ ({fp})" if name else f"{key_text[8:20]}… ({fp})"
 
     def _render_title(self) -> None:
         gid = self.current_group
@@ -1439,24 +1561,23 @@ class UnseenetApp(App):
         self.query_one("#threads-title", Static).update(
             f"{name}  ·  {kind}{fast}  ·  {total} posts, {unread} unread{rules}")
 
-    @on(DataTable.RowHighlighted, "#threads")
-    def _row(self, event: DataTable.RowHighlighted) -> None:
-        msg = self.messages.get(event.row_key.value)
-        if msg is None:
-            return
-        self.current_message = msg
+    def article(self, msg: Message) -> tuple[str, Text]:
+        """The header (markup) and the body of a message, as the reader shows them."""
         date = msg.date.astimezone().strftime("%A %d %B %Y %H:%M") if msg.date else ""
-        if msg.private and msg.readable and not msg.sender_key:
+        if msg.to_key:
+            who = f"you  ·  to [b]{escape(self._key_label(msg.to_key))}[/b]"
+        elif msg.private and msg.readable and not msg.sender_key:
             who = "anonymous (the sender did not identify themselves)"
         else:
             petname = self.session.contact_name(msg.author_key)
             who = (f"{escape(msg.from_name)}  ·  key {escape(msg.author_key[:24])}…  ({msg.author_fp})"
                    + ("  ·  verified" if msg.sender_key else "")
                    + (f"  ·  your contact [b]{escape(petname)}[/b]" if petname else ""))
-        note = ("\n@ private message - only you can read it" if msg.private
+        note = ("\n@ private message you sent - only they can read the copy on the node"
+                if msg.to_key else
+                "\n@ private message - only you can read it" if msg.private
                 else "\n∩ end-to-end encrypted" if msg.encrypted else "")
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
-        self.query_one("#article-head", Static).update(head)
         if msg.readable:
             text, sig = split_signature(msg.body)
             body = Text("\n" + text)
@@ -1464,7 +1585,42 @@ class UnseenetApp(App):
                 body.append(SIG_SEPARATOR + sig, style="dim")
         else:
             body = Text("\n" + (msg.error or msg.subject))
+        return head, body
+
+    def neighbour(self, step: int) -> Message | None:
+        """Move to the next (+1) or previous (-1) message in the list."""
+        table = self.query_one("#threads", DataTable)
+        row = table.cursor_row + step
+        if not table.row_count or not 0 <= row < table.row_count:
+            return None
+        table.move_cursor(row=row)
+        return self.messages.get(table.coordinate_to_cell_key((row, 0)).row_key.value)
+
+    @on(DataTable.RowSelected, "#threads")
+    def _open(self, event: DataTable.RowSelected) -> None:
+        """Enter on a message: read it on the whole screen."""
+        msg = self.messages.get(event.row_key.value)
+        if msg is not None:
+            self.current_message = msg
+            self.push_screen(ReadScreen(msg))
+
+    def action_read(self) -> None:
+        if self.current_message is None:
+            self.notify("Select a post first", severity="warning")
+            return
+        self.push_screen(ReadScreen(self.current_message))
+
+    @on(DataTable.RowHighlighted, "#threads")
+    def _row(self, event: DataTable.RowHighlighted) -> None:
+        msg = self.messages.get(event.row_key.value)
+        if msg is None:
+            return
+        self.current_message = msg
+        head, body = self.article(msg)
+        self.query_one("#article-head", Static).update(head)
         self.query_one("#article-body", Static).update(body)
+        if isinstance(self.screen, ReadScreen):
+            self.screen.show(msg)
         if not self.session.is_read(msg):
             self.session.mark_read(msg, save=False)
             self._save_soon()
@@ -1522,6 +1678,12 @@ class UnseenetApp(App):
         subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
         text = split_signature(m.body)[0]          # never quote the signature
         quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in text.rstrip().split("\n")) + "\n"
+        if m.private and m.to_key:               # one you sent: write to them again
+            self.compose_private(m.reply_inbox or personal_inbox_id(crypto.key_from_text(m.to_key)),
+                                 f"Private message to {self._key_label(m.to_key)}", subject, quote,
+                                 owner_key=crypto.key_from_text(m.to_key),
+                                 references=[*m.references, m.message_id])
+            return
         if m.private:
             target = self.session.reply_target(m)
             if not target:

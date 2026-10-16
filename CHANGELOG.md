@@ -17,6 +17,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   moderated, `►` channel, `∩` closed, `@` inbox, `⌂` local. They and the
   client's other symbols are from the basic character set every terminal
   font has, so they show in the classic Windows console too. (#14)
+- Read a post on the whole screen: Enter (or a second click). There, r
+  replies, m writes privately, n and p go to the next and previous post,
+  Space pages down and reads on, Esc goes back. (#16)
+- In the group list, Space subscribes and unsubscribes; with the mouse,
+  only a click on `[ ]` does, so a click on the line just shows the
+  group. (#17)
 
 ### Fixed
 - After picking another group or a refresh while an answer was still
@@ -28,6 +34,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - The group list marks inboxes you do not own, such as a node operator's
   contact inbox, and Enter explains how to write to them instead of
   subscribing to messages only their owner can read. (#11)
+- Private messages you sent are shown in Private messages ("You → name"),
+  not only in conversations with contacts; before, a message to a key you
+  pasted or to a node operator could not be seen again. (#15)
 
 ## [0.2.0] - 2026-10-16
 

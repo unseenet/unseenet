@@ -56,6 +56,7 @@ class Message:
     private: bool = False                 # an inbox message (UN-RFC 0009)
     sender_key: str | None = None         # verified sender of a private message
     reply_inbox: str | None = None
+    to_key: str | None = None             # a private message you sent: its recipient
 
     @property
     def author_fp(self) -> str:
@@ -804,29 +805,48 @@ class Session:
         return sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
                       key=lambda kv: kv[1].lower())
 
-    def conversation(self, key_text: str) -> list["Message"]:
-        """All private messages between you and a key, both directions, oldest first."""
-        received = [m for m in self.cache.get(self.my_inbox, {}).values()
-                    if m.sender_key == key_text]
+    def sent_messages(self, to: str | None = None) -> list["Message"]:
+        """Your copies of the private messages you sent (to one key, or all).
+
+        They are sealed to their recipients, so the node's copies are unreadable to
+        you; these come from the encrypted ``sent`` sidecar of the vault.
+        """
         mine = self.identity().key_text
-        sent = []
+        out = []
         for i, e in enumerate(self.sent):
-            if e.get("to") != key_text:
+            if to is not None and e.get("to") != to:
                 continue
             msg = Message(-1 - i, e["msgid"], self.my_inbox, subject=e["subject"],
                           from_name="You", author_key=mine, body=e["body"],
                           references=e.get("references", []), encrypted=True, private=True,
-                          sender_key=mine)
+                          sender_key=mine, reply_inbox=e.get("group"), to_key=e.get("to"))
             try:
                 msg.date = datetime.fromisoformat(e["date"])
             except (KeyError, ValueError):
                 pass
-            sent.append(msg)
+            out.append(msg)
+        return out
+
+    def _in_order(self, received: list["Message"], sent: list["Message"]) -> list["Message"]:
+        """Received and sent private messages together, oldest first. Inbox dates are
+        rounded to 10 minutes for privacy, so a sent message is placed after the
+        received messages that had arrived when it was written."""
         after = {e["msgid"]: e.get("after", 0) for e in self.sent}
         order = {m.message_id: (m.number, 0, 0) for m in received}
         for i, m in enumerate(sent):
             order[m.message_id] = (after.get(m.message_id, 0), 1, i)
         return sorted(received + sent, key=lambda m: order[m.message_id])
+
+    def conversation(self, key_text: str) -> list["Message"]:
+        """All private messages between you and a key, both directions, oldest first."""
+        received = [m for m in self.cache.get(self.my_inbox, {}).values()
+                    if m.sender_key == key_text]
+        return self._in_order(received, self.sent_messages(key_text))
+
+    def private_messages(self) -> list["Message"]:
+        """Everything in your inbox and everything you sent privately, oldest first."""
+        return self._in_order(list(self.cache.get(self.my_inbox, {}).values()),
+                              self.sent_messages())
 
     def unread_from(self, key_text: str) -> int:
         return sum(1 for m in self.cache.get(self.my_inbox, {}).values()

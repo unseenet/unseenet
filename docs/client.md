@@ -81,7 +81,8 @@ After that the connection is reused.
 
 | Key | What it does |
 |-----|--------------|
-| ++g++ | Browse the groups on the node; ++enter++ subscribes or unsubscribes. The group under the cursor is described below the list |
+| ++g++ | Browse the groups on the node; ++space++, ++enter++ or a click on `[ ]` subscribes or unsubscribes. A click elsewhere on the line, like the cursor, shows what the group is below the list |
+| ++enter++ | Read the selected post on the whole screen (or click it a second time; ++f++ does the same) |
 | ++n++ | New post in the current group |
 | ++r++ | Reply to the selected post |
 | ++ctrl+s++ | Send (in the compose window) |
@@ -191,11 +192,21 @@ key and its short fingerprint, e.g.:
 When you reply, the other person's signature is left out of the quote,
 and signatures are shown dimmed when you read.
 
+## Reading on the whole screen
+
+Press ++enter++ on a post (or click it a second time) to read it on the
+whole screen. There, ++r++ replies, ++m++ writes privately to the author,
+++n++ and ++p++ go to the next and previous post, ++space++ pages down and
+then goes on to the next post, as in the old newsreaders, and ++escape++
+goes back to the list.
+
 ## Private messages
 
 Every identity has a personal **inbox**. The client creates it on the
 node the first time you connect, and it is shown at the top of the group
-list as *@ Private messages*.
+list as *@ Private messages*, with the messages you sent among them
+(*You → name*): the copy on the node is sealed to the recipient, so the
+client keeps its own, encrypted in your vault.
 
 - To write to someone, press ++m++ and paste their key (they find it with
   ++k++). If you have a post by them selected, their key is filled in.
