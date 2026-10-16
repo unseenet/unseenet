@@ -217,6 +217,17 @@ If you have lost the identity that owns a group, the group cannot be removed
 from the network. A node operator can still
 [drop it from their own node](node/operations.md#dropping-a-group).
 
+## Ignoring someone
+
+Select a post by the person and choose **Ignore this person** in the
+command palette (++ctrl+p++). Their posts and private messages are hidden
+from you in every group, like a killfile in the old newsreaders. Replies
+to them by others stay, so a discussion does not lose its middle.
+
+Only you know: the list is kept in your vault and never sent anywhere,
+and the person is not told. **People you ignore** in the command palette
+shows the list, and shows someone again.
+
 ## Withdrawing a post
 
 Select a post and choose **Withdraw post** in the command palette

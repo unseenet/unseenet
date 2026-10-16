@@ -380,3 +380,41 @@ async def test_withdraw_posts_and_honour_cancels(tmp_path, monkeypatch):
     for p in (owner, author, reader):
         await p.close()
     server.close()
+
+
+async def test_ignore_a_person(tmp_path, monkeypatch):
+    """#72: the reader's own killfile - hidden everywhere, kept in the vault, nothing sent."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    me, troll, friend = person("me"), person("troll"), person("friend")
+    gid = await friend.create_group("dk.snak", "open", min_pow=8)
+    me.subscribe(gid)
+    await troll.post(gid, "Spam", "Køb nu\n")
+    await friend.post(gid, "Hej", "Hej alle\n")
+    msgs = await me.fetch_group(gid)
+    articles_before = len(node.store.numbers(gid))
+    assert me.unread_count(gid) == 2
+
+    me.ignore(troll.identity().key_text, "Trolden")
+    assert [m.subject for m in me.visible(msgs)] == ["Hej"]
+    assert me.unread_count(gid) == 1
+    assert len(node.store.numbers(gid)) == articles_before       # nothing was sent
+    with pytest.raises(sess.SessionError):
+        me.ignore(me.identity().key_text)
+
+    me.save()
+    again = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    assert again.ignored() == [(troll.identity().key_text, "Trolden")]
+    again.unignore(troll.identity().key_text)
+    assert len(again.visible(msgs)) == 2
+    for p in (me, troll, friend):
+        await p.close()
+    server.close()

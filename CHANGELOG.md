@@ -8,6 +8,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Ignore a person: **Ignore this person** in the client's command palette
+  hides everything they write, in every group and in private messages.
+  The list stays in your vault and is never sent; **People you ignore**
+  shows someone again. (#72)
 - Withdraw a post (UN-RFC 0004 section 7): **Withdraw post** in the
   command palette or Shift+D in the client, and `unseenet withdraw` on
   the command line, for your own posts and any post in a group you own or
