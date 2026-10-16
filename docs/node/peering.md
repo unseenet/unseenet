@@ -4,6 +4,26 @@ Peering is how nodes share groups. When your node gets a new post, it
 pushes it to each peer whose `groups` pattern matches - the same
 store-and-forward model Usenet used.
 
+!!! important "Peering is two-way"
+    Both operators add each other: you put the other node's address and
+    key in your `node.toml`, and they put yours in theirs. A node only
+    pushes to the peers in its own list, and only takes posts pushed by
+    peers in its own list.
+
+    | Who lists whom | What happens |
+    |---|---|
+    | Only you list them | Your pushes are refused ("does it list ed25519:...?" in your log). You can still [pull](#catching-up) from them. |
+    | Only they list you | The same, the other way round. |
+    | Both | Posts flow both ways. |
+
+## Peering and the list of known nodes
+
+The [list of known nodes](operations.md#getting-your-node-listed) is for
+**clients**: it is the nodes a new user is offered. Being on it does not
+peer your node with anyone, and you do not need to be on it to peer. Any
+two operators can peer by swapping addresses and keys as below, whether
+their nodes are listed or not.
+
 ## Node keys
 
 Every node has a **node key**, created the first time it starts and kept
@@ -82,7 +102,31 @@ Bob, and Bob decides what he sends to Alice. Each node also decides, via
 [`new_groups`](configuration.md#new_groups-which-groups-the-node-carries),
 which new groups it takes.
 
+## Several peers
+
+Add one `[[peer]]` section per peer. Each has its own patterns:
+
+```toml
+[[peer]]
+name = "bob"
+address = "bbbb...bbbb.onion:119"
+key = "ed25519:bob's node key"
+
+[[peer]]
+name = "aarhus"
+address = "dddd...dddd.onion:119"
+key = "ed25519:aarhus' node key"
+groups = "dk.*,unseenet*"     # send only Danish groups and the project groups
+pull = "dk.*,unseenet*"       # and catch up only on those
+```
+
+Each of them must have a `[[peer]]` for your node too. A post that
+arrives from one peer is passed on to the others, so with several peers
+your node also links them.
+
 ## Choosing what to share
+
+`groups` decides what **you send** to a peer:
 
 ```toml
 [[peer]]
@@ -91,6 +135,13 @@ address = "bbbb...bbbb.onion:119"
 key = "ed25519:..."
 groups = "dk.*,unseenet*"     # only Danish groups and the project groups
 ```
+
+It does not limit what the peer sends you. Your node takes any post a
+peer pushes, in any group it carries or that
+[`new_groups`](configuration.md#new_groups-which-groups-the-node-carries)
+lets in. If you agree to exchange only some groups, both of you set
+`groups` accordingly. (A per-peer limit on what you accept is planned,
+[#86](https://github.com/unseenet/unseenet/issues/86).)
 
 ## Ending a peering, or a lost key
 

@@ -7,8 +7,20 @@ new_groups = "accept"          # accept | trusted | manual
 trusted_owners = []            # ed25519:... keys, used with new_groups = "trusted"
 require_peer_auth = true       # only configured peers may push posts
 
+# One [[peer]] section per peer. Peering is two-way: each peer must also
+# have a [[peer]] section with YOUR address and node key, or it refuses
+# what you push. See docs/node/peering.md.
+#
 # [[peer]]
 # name = "friend"
 # address = "abcdef...xyz.onion:119"
 # key = "ed25519:..."                   # the friend's node key (UN-RFC 0016)
+# groups = "*"                          # what we send to it
+# pull = "*"                            # what we catch up on from it
+#
+# [[peer]]
+# name = "aarhus"
+# address = "ghijkl...uvw.onion:119"
+# key = "ed25519:..."
 # groups = "dk.*,comp.*"
+# pull = "dk.*,comp.*"

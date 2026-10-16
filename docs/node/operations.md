@@ -89,6 +89,10 @@ the list. Ask again when it is back.
 
 (A pull request that edits `src/unseenet/nodes.json` works too.)
 
+Being listed does not peer your node with anyone: to share groups with
+other nodes, [peer](peering.md) with them yourself. A listed node that
+peers with nobody shows its users only its own posts.
+
 Being listed means more users and more responsibility - read
 [Your responsibility](responsibility.md) first.
 
