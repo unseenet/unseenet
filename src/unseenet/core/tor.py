@@ -249,6 +249,8 @@ class TorProcess:
                 raise TorError("tor failed to start" + self._log_tail())
             await asyncio.sleep(0.2)
         host, port = port_file.read_text().strip().split("=", 1)[1].rsplit(":", 1)
+        if self.process.returncode is not None:
+            raise TorError("tor exited during start" + self._log_tail())
         self.control = await TorControl.connect(host, int(port))
         await self.control.authenticate_cookie(self.data_dir / "control_auth_cookie")
         socks = (await self.control.command("GETINFO net/listeners/socks"))[0]
@@ -260,6 +262,9 @@ class TorProcess:
             if loop.time() > deadline:
                 raise TorError("tor bootstrap timed out" + self._log_tail())
             await asyncio.sleep(1)
+
+    def alive(self) -> bool:
+        return self.process is not None and self.process.returncode is None
 
     def _log_tail(self, lines: int = 5) -> str:
         try:

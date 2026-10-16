@@ -110,6 +110,7 @@ class Session:
         self.vault = vault
         self.status = status            # callback for progress messages
         self.tor: TorProcess | None = None
+        self._tor_lock = asyncio.Lock()   # one Tor per session, however many connect at once
         self._clients: dict[str, Client] = {}          # one connection per node
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
@@ -314,6 +315,25 @@ class Session:
         status = (lambda *_: None) if quiet else self.status
         socks = None
         if address.split(":")[0].endswith(".onion"):
+            socks = await self._ensure_tor(status)
+        status(f"Connecting to {address} ...")
+        client = await Client.connect(address, socks)
+        await client.fetch_capabilities()
+        status(f"Connected to {address}")
+        return client
+
+    async def _ensure_tor(self, status) -> int:
+        """Our Tor's SOCKS port, starting Tor first if it is not running.
+
+        Several connections (each node, the watch connections) start at once. Without
+        the lock each started its own Tor on the same data directory: the extra ones
+        died ("another Tor process is running"), but first overwrote the control-port
+        file, so a client could end up talking to a Tor that was gone.
+        """
+        async with self._tor_lock:
+            if self.tor is not None and not self.tor.alive():
+                await self.tor.stop()
+                self.tor = None
             if self.tor is None:
                 tor_dir = self.vault.path.resolve().parent / "unseenet-tor"
                 try:
@@ -334,12 +354,7 @@ class Session:
                             " If this network blocks Tor, try bridges (Ctrl+P: Tor bridges).")
                     raise SessionError(f"{exc}.{hint}") from exc
                 self.tor = tor
-            socks = self.tor.socks_port
-        status(f"Connecting to {address} ...")
-        client = await Client.connect(address, socks)
-        await client.fetch_capabilities()
-        status(f"Connected to {address}")
-        return client
+            return self.tor.socks_port
 
     async def watch(self, on_new, pattern: str = "*", node: str | None = None) -> bool:
         """Listen for new articles (UN-RFC 0008) on a second connection.
@@ -404,9 +419,10 @@ class Session:
             except Exception:  # noqa: BLE001
                 pass
         self._clients.clear()
-        if self.tor:
-            await self.tor.stop()
-            self.tor = None
+        async with self._tor_lock:
+            if self.tor:
+                await self.tor.stop()
+                self.tor = None
 
     # ------------------------------------------------------------------
     # groups

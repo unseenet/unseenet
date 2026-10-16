@@ -210,3 +210,39 @@ async def test_old_vault_learns_manifest_and_rules(tmp_path, monkeypatch):
     assert s.manifest_data(gid)["rules"] == "Vær søde ved hinanden"
     await s.close()
     server.close()
+
+
+async def test_one_tor_for_concurrent_connections(tmp_path, monkeypatch):
+    """Several connections at once start one Tor, not one each (seen on Windows:
+    the extra ones died and left a client talking to a Tor that was gone)."""
+    import asyncio
+
+    started = []
+
+    class FakeTor:
+        def __init__(self, data_dir, binary, bridges=None):
+            self.socks_port = 9050 + len(started)
+            self.running = False
+
+        async def start(self):
+            started.append(self)
+            await asyncio.sleep(0.05)
+            self.running = True
+
+        def alive(self):
+            return self.running
+
+        async def stop(self):
+            self.running = False
+
+    monkeypatch.setattr(sess, "TorProcess", FakeTor)
+    monkeypatch.setattr(FakeTor, "find_binary", staticmethod(lambda: "tor"), raising=False)
+    s = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    ports = await asyncio.gather(*(s._ensure_tor(lambda *_: None) for _ in range(5)))
+    assert len(started) == 1 and set(ports) == {9050}
+
+    # a Tor that died is replaced on the next connection
+    s.tor.running = False
+    assert await s._ensure_tor(lambda *_: None) == 9051
+    assert len(started) == 2
+    await s.close()

@@ -17,6 +17,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and history).
 
 ### Fixed
+- The client started one Tor per connection when several connected at once
+  (each node and the live-update connections). The extra ones died on the
+  shared data directory, but first overwrote its control-port file, so the
+  client could end up using a Tor that was gone ("WinError 64" on Windows).
+  The session now starts exactly one Tor, and replaces it if it has died.
 - Tor's SOCKS refusals when reaching an onion service (common right after
   Tor starts) are retried and reported with a readable reason, instead of
   failing with a "proxy" error.
