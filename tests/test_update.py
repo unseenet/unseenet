@@ -12,7 +12,7 @@ import pytest
 from unseenet import update
 from unseenet.core.crypto import Identity
 
-V_OLD, V_NEW = "0.2.1", "0.3.0"
+V_OLD, V_NEW = "0.2.1", "9.0.0"     # newer than any real version, so the tests outlive releases
 
 
 @pytest.fixture
@@ -155,7 +155,7 @@ def test_not_enough_room_changes_nothing(tmp_path, monkeypatch):
 def test_command_downloads_checks_and_updates(keys, tmp_path, monkeypatch, capsys):
     project, release = keys
     media = stick(tmp_path, OLD)
-    z = update_zip(tmp_path, {"boot/vmlinuz-lts": "new kernel"}, version="0.3.1.dev2")
+    z = update_zip(tmp_path, {"boot/vmlinuz-lts": "new kernel"}, version="9.0.1.dev2")
     sums = sums_for(z)
     served = {update.SUMS: sums, update.SIG: update.signature_text(sums, release).encode(),
               z.name: z.read_bytes()}
