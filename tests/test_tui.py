@@ -1047,3 +1047,38 @@ async def test_tui_moderation_queue(tmp_path, monkeypatch):
         assert sess.SUBMISSION_TYPE == "message/unseenet"
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_report_post(tmp_path, monkeypatch):
+    """#74: Report post lists who can act on it and sends the report."""
+    from unseenet.client.tui import ReportDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    owner = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    owner.new_identity("o", "Ejer"); owner.add_node(addr)
+    await owner.ensure_inbox()
+    gid = await owner.create_group("dk.snak", "open", min_pow=10)
+    await owner.post(gid, "Grimt", "x\n")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        app.session.subscribe(gid)
+        await app._render_groups()
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        app.current_message = next(iter(app.messages.values()))
+        app.action_report()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ReportDialog), 300)
+        assert len(app.screen.targets) == 1                  # the owner (no operator here)
+        await pilot.pause(0.2)
+        app.screen.query_one("#note").value = "Trusler"
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: not isinstance(app.screen, ReportDialog), 200)
+        for _ in range(100):                                 # sent in the background
+            await owner.fetch_group(owner.my_inbox)
+            if any(owner.reported_post(m) for m in owner.private_messages()):
+                break
+            await pilot.pause(0.1)
+        assert any(owner.reported_post(m) for m in owner.private_messages())
+        await pilot.press("q")
+    await owner.close()
+    server.close()

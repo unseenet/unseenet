@@ -650,3 +650,49 @@ async def test_hierarchy_blocks(tmp_path, monkeypatch):
         await p.close()
     for srv in servers:
         srv.close()
+
+
+async def test_report_a_post(tmp_path, monkeypatch):
+    """#74: a report goes as a private message to the owner, the moderators and the
+    node's operator; recipients find the reported post from it."""
+    from unseenet.core import crypto
+    from unseenet.core.groups import personal_inbox_id
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    operator = Session(Vault.open(tmp_path / "op.vault", "pw", **KDF), status=lambda *_: None)
+    op = operator.new_identity("op", "Op")
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0), name="node1",
+                                    operator={"key": op.key_text,
+                                              "contact": personal_inbox_id(op.public_key)}))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    owner, mod, troll, reader = (person(n) for n in ("owner", "mod", "troll", "reader"))
+    for p in (owner, mod):
+        await p.ensure_inbox()
+    operator.add_node(addr)
+    await operator.ensure_inbox()
+
+    gid = await owner.create_group("dk.snak", "open", min_pow=8)
+    await owner.set_role(gid, "moderators", mod.identity().key_text)
+    troll.subscribe(gid)
+    await troll.post(gid, "Trussel", "Jeg ved hvor du bor\n")
+    reader.subscribe(gid)
+    post = (await reader.fetch_group(gid))[0]
+
+    targets = await reader.report_targets(post)
+    assert [k for _, _, k in targets] == [owner.identity().key_text, mod.identity().key_text,
+                                          op.key_text]
+    assert await reader.report(post, targets, "Trusler mod et medlem", anonymous=True) == 3
+    for p in (owner, mod, operator):
+        await p.fetch_group(p.my_inbox)
+        reports = [m for m in p.private_messages() if p.reported_post(m)]
+        assert len(reports) == 1 and p.reported_post(reports[0]) == (gid, post.message_id)
+        assert "Trusler mod et medlem" in reports[0].body and reports[0].sender_key is None
+    for p in (owner, mod, troll, reader, operator):
+        await p.close()
+    server.close()

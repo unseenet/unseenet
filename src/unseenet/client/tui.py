@@ -583,6 +583,39 @@ class KeyListDialog(Dialog):
             self.dismiss(who)
 
 
+class ReportDialog(Dialog):
+    """Report a post to the people who can act on it (#74)."""
+
+    def __init__(self, subject: str, targets: list[tuple[str, str, str]]):
+        super().__init__()
+        self.subject, self.targets = subject, targets
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label(f"Report \"{self.subject}\"", classes="title", markup=False)
+            yield Label("For posts that break the group's rules or the law. The people you "
+                        "choose get the post and your note as a private message. In an "
+                        "emergency, contact the police: nobody on Unseenet can see who anyone is.",
+                        classes="hint")
+            for i, (who, _, _) in enumerate(self.targets):
+                yield Checkbox(who, value=True, id=f"t{i}")
+            yield Input(placeholder="What is wrong with it? (optional)", id="note")
+            yield Checkbox("Anonymous - they cannot see who reported it or answer you",
+                           value=False, id="anon")
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Report", variant="error", id="ok")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        chosen = [t for i, t in enumerate(self.targets) if self.query_one(f"#t{i}", Checkbox).value]
+        if not chosen:
+            self.app.notify("Choose at least one", severity="warning")
+            return
+        self.dismiss((chosen, self.query_one("#note", Input).value,
+                      self.query_one("#anon", Checkbox).value))
+
+
 class ModerationDialog(Dialog):
     """Submissions to groups you moderate (UN-RFC 0009 section 3)."""
 
@@ -2295,6 +2328,10 @@ class UnseenetApp(App):
              "you know", self.action_ignore),
             ("People you ignore", "See who you ignore, and show someone again",
              self.action_ignored),
+            ("Report post", "Tell the group's owner, moderators, maintainer or node operator "
+             "about a post that breaks the rules or the law", self.action_report),
+            ("Open reported post", "From a report you received: go to the post it is about",
+             self.action_open_reported),
             ("Moderation queue", "Moderators: posts waiting for approval in groups you "
              "moderate", self.action_moderation),
             ("Make moderator", "Owner: let someone approve and withdraw posts in this group",
@@ -2434,6 +2471,56 @@ class UnseenetApp(App):
         self.current_message = None
         self.notify(f"{who} is banned from {s.group_label(gid)}")
         self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_report(self) -> None:
+        m, s = self.current_message, self.session
+        if m is None or m.private or not m.readable:
+            self.notify("Select the post you want to report", severity="warning")
+            return
+        self.set_status("Finding who can act on it ...")
+        targets = await s.report_targets(m)
+        self.set_status("")
+        if not targets:
+            self.notify("Nobody to report this to: the group has no owner, moderator, "
+                        "maintainer or node operator you can reach", severity="warning", timeout=8)
+            return
+        result = await self.push_screen_wait(ReportDialog(m.subject or "(no subject)", targets))
+        if not result:
+            return
+        chosen, note, anonymous = result
+        self.set_status("Sending the report ...")
+        try:
+            n = await s.report(m, chosen, note, anonymous)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify(f"Reported to {n} " + ("person" if n == 1 else "people"))
+
+    async def action_open_reported(self) -> None:
+        m, s = self.current_message, self.session
+        found = s.reported_post(m) if m else None
+        if not found:
+            self.notify("Select a report in your private messages first", severity="warning")
+            return
+        gid, msgid = found
+        if gid not in self.groups:
+            self.notify(f"You do not follow {s.group_label(gid)}; subscribe to it with g, "
+                        f"then look for {msgid}", severity="warning", timeout=10)
+            return
+        self.select_group(gid)
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if msgid in self.messages:
+                break
+        if msgid in self.messages:
+            self.current_message = self.messages[msgid]
+            self.notify("This is the reported post: withdraw it, ban or block its author "
+                        "from the command palette", timeout=10)
+        else:
+            self.notify("The post is not there any more - perhaps it was withdrawn", timeout=8)
 
     @work(group="dialog", exit_on_error=False)
     async def action_moderation(self) -> None:

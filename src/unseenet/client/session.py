@@ -1127,6 +1127,74 @@ class Session:
         self.sent.append(entry)
         self.vault.write_sidecar(SENT_SIDECAR, json.dumps({"v": 1, "sent": self.sent}).encode())
 
+    # --- reporting a post (#74): private messages to those who can act on it ---
+    async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:
+        """(who, inbox, key) of the people who can act on a post: the group's owner,
+        its moderators, the maintainers of its hierarchy and the operator of the
+        node it was read from."""
+        out: list[tuple[str, str, str]] = []
+        data = self.manifest_data(msg.group)
+        me = self.identity().key_text
+
+        def add(who: str, key: str | None, inbox: str | None = None) -> None:
+            if not key or key == me or any(k == key for _, _, k in out):
+                return
+            try:
+                inbox = inbox or personal_inbox_id(crypto.key_from_text(key))
+            except crypto.CryptoError:
+                return
+            out.append((who, inbox, key))
+
+        if data.get("owner"):
+            add(f"The group's owner ({self.identity_label(data['owner'])})", data["owner"])
+        for k in data.get("moderators", []):
+            add(f"Moderator {self.identity_label(k)}", k)
+        for h in naming.governing(self, msg.group):
+            add(f"Maintainer of {h.name}.* ({self.identity_label(h.maintainer)})", h.maintainer)
+        try:
+            info = await self.node_info(self.node_for(msg.group))
+        except (SessionError, OSError, ConnectionError, ValueError):
+            info = {}
+        if info.get("operator") and info.get("contact"):
+            add(f"The operator of {info.get('name', 'the node')}", info["operator"], info["contact"])
+        return out
+
+    async def report(self, msg: "Message", targets: list[tuple[str, str, str]], note: str = "",
+                     anonymous: bool = False) -> int:
+        """Send a report of a post to the chosen people. Returns how many got it."""
+        if not targets:
+            raise SessionError("choose at least one person to report to")
+        quote = "\n".join("> " + line for line in (msg.body or "").rstrip("\n").splitlines()[:40])
+        body = (f"Report of a post\n\nGroup: {msg.group}\nMessage-ID: {msg.message_id}\n"
+                f"Author key: {msg.author_key}\n"
+                + (f"\nNote from the reporter:\n{note.strip()}\n" if note.strip() else "")
+                + f"\nThe post, as the reporter saw it:\nFrom: {msg.from_name}\n"
+                f"Subject: {msg.subject}\n\n{quote}\n")
+        sent, errors = 0, []
+        for _, inbox, key in targets:
+            try:
+                await self.send_private(inbox, f"Report: {msg.subject or '(no subject)'}", body,
+                                        owner_key=crypto.key_from_text(key),
+                                        content_type=REPORT_TYPE + "; charset=utf-8",
+                                        anonymous=anonymous,
+                                        remember=False)
+                sent += 1
+            except (SessionError, OSError, ConnectionError) as exc:
+                errors.append(str(exc))
+        if not sent:
+            raise SessionError("the report could not be sent: " + "; ".join(errors))
+        return sent
+
+    @staticmethod
+    def reported_post(msg: "Message") -> tuple[str, str] | None:
+        """(group, Message-ID) named in a report you received."""
+        if not msg.content_type.startswith(REPORT_TYPE):
+            return None
+        found = dict(re.findall(r"^(Group|Message-ID): (\S+)$", msg.body or "", re.M))
+        if "Group" in found and "Message-ID" in found:
+            return found["Group"], found["Message-ID"]
+        return None
+
     async def node_info(self, node: str | None = None) -> dict:
         """UN-RFC 0011 node information, or {} if the node does not offer it."""
         async def run(c: Client) -> dict:
@@ -1516,6 +1584,7 @@ class Session:
 
 
 SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
+REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74)
 
 
 def default_vault_path() -> Path:

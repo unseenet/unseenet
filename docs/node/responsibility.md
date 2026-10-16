@@ -32,6 +32,11 @@ node is open to anyone.
   host, drop it from your node with `--drop-group` (see
   [Operations](operations.md#dropping-a-group)). The node deletes it and
   refuses it from then on.
+- **Read your contact inbox.** Readers can [report a post](../client.md#reporting-a-post)
+  to you through your node's contact inbox (UN-RFC 0011). Look at reports
+  and act on them: drop the group, or turn on
+  [`honour_blocks`](configuration.md#honour_blocks-maintainers-blocks) to
+  follow the blocks of hierarchy maintainers.
 - **Know the law where you live.** Hosting other people's content is
   treated differently from country to country. Unseenet's design reduces
   the risk; it does not remove your responsibility.

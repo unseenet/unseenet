@@ -251,6 +251,22 @@ posts it ([UN-RFC 0018](spec/un-rfc-0018.md) section 5.4). A block does
 not delete anything and gives you no power over the groups themselves;
 for real crimes, contact the police.
 
+## Reporting a post
+
+If a post breaks the group's rules or the law - threats, plans for
+violence, abuse - select it and choose **Report post** in the command
+palette. Tick who should get it: the group's owner, its moderators, the
+maintainer of its hierarchy and the operator of the node you read it
+from, and add a note. They get the post and your note as a private
+message, and can withdraw the post, ban or block its author. A report can
+be anonymous; then they cannot answer you.
+
+If you receive a report, select it and choose **Open reported post** to
+go to the post it is about.
+
+In an emergency, contact the police. Nobody on Unseenet - not the node
+operators, not the project - can see who anyone is.
+
 ## Ignoring someone
 
 Select a post by the person and choose **Ignore this person** in the
