@@ -902,7 +902,8 @@ async def test_tui_names_transfer_and_release(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.session is not None, 300)
         for action in ("transfer", "release"):
             app.action_names()
-            assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog), 300)
+            assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog)
+                                  and app.screen.query("#value"), 300)
             app.screen.query_one("#value").value = "lorensen"
             await pilot.pause(0.3)
             app.screen.query_one(f"#{action}").press()
