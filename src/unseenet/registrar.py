@@ -184,6 +184,9 @@ class Registrar:
             return None, Outcome(refuse=str(exc))
         name, action = data["name"], data["action"]
         kind = nm.kind_of(name)
+        if kind == "sub":
+            return name, Outcome(refuse="a name under a registered name, like sonia@lorensen, "
+                                        "is given by the holder of that name, not the registrar")
         cur, disputed = self.holder(name, c.date, c.id)
         if disputed:
             return name, Outcome(refuse="the name is disputed; ask in unseenet.admin")
