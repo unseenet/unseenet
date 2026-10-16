@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .. import __version__
-from ..core.groups import canonical_json
+from ..core.groups import canonical_json, parse_canonical_json
 from ..core import crypto
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, parse_key_update,
@@ -172,7 +172,8 @@ class Node:
             self._accept_control(art, manifest, raw)
         else:
             self._check_cancelled(art, manifest)
-            check_permitted(art, manifest, self.store.epochs(art.group))
+            check_permitted(art, manifest, self.store.epochs(art.group),
+                            self.store.closed_before(art.group))
             self._check_blocked(art)
             self.store.add(art, raw)
         self._enqueue(art, source)
@@ -238,6 +239,8 @@ class Node:
             self.store.add(art, raw)
             if member_key is not None:
                 self.store.set_epoch(art.group, epoch, member_key, art.message_id)
+                if parse_canonical_json(art.body).get("closes_previous") is True:
+                    self.store.close_previous(art.group, epoch)
         elif ctl[0] == "cancel" and len(ctl) == 2:
             target = ctl[1]
             meta = self.store.get_meta(target)
