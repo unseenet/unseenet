@@ -123,6 +123,26 @@ If you forget the passphrase, the vault cannot be opened.
 The same `data/` works with every program in the folder: start on Windows
 at work, continue on Linux at home.
 
+## Updating
+
+In the client, open the command palette (Ctrl+P) and choose **Update
+Unseenet**. It fetches the newest release over Tor, checks that it is
+signed by the project and that nothing was changed on the way, and replaces
+the programs; **`data/` is kept**. Start Unseenet again afterwards. From a
+terminal it is `unseenet update` (in the folder: `./linux-x86_64/unseenet
+update`, `windows-x86_64\unseenet.exe update`), with `--check` to only see
+whether there is something newer and `--channel dev` for development builds.
+
+A folder with every platform (the USB zip) gets the USB zip; a folder with
+one platform gets that platform's zip; a [bootable stick](bootable.md#updating)
+gets its own update, which includes the portable builds. On Windows, programs
+that are running are moved aside and deleted the next time Unseenet starts.
+Without a network, put the right zip and the release's `SHA256SUMS.txt` and
+`SHA256SUMS.txt.sig` in one folder and run `unseenet update --zip <the zip>`.
+
+Updating uses Tor without bridges. Where Tor is blocked, download the zip
+some other way and update with `--zip`.
+
 ## What stays on the computer
 
 Unseenet writes only inside its folder: no installation, no registry, no

@@ -86,9 +86,9 @@ instead, and a file `unseenet-*-update.zip` that you put in the stick's
 root, together with `SHA256SUMS.txt` and `SHA256SUMS.txt.sig` from the same
 release, is offered for updating without a network.
 
-On a running Linux computer the same is
-`python -m unseenet.update --media /run/media/you/UNSEENET` (`--check` only
-says whether there is something newer).
+On a computer that is running, start Unseenet from the stick and choose
+**Update Unseenet** in the command palette (Ctrl+P), or run
+`unseenet update`; see [Portable](portable.md#updating).
 
 How it can be trusted: every release has a `SHA256SUMS.txt`, signed in
 `SHA256SUMS.txt.sig`. The stick only updates when the signature is from a key
@@ -111,8 +111,7 @@ loader (`ldlinux.sys`) is never rewritten.
 
 !!! note "Coming"
     Going back to the previous version, and growing the partition to the
-    whole stick so there is room for it; updating from the portable client
-    on Windows and macOS (#68).
+    whole stick so there is room for it (#68).
 
 ## Your data
 

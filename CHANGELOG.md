@@ -15,6 +15,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   releases signed with the project key (`tools/project/sign_release.py`),
   development builds with a separate release key in CI. Also
   `python -m unseenet.update`. (#68)
+- **Update Unseenet** in the client's command palette and `unseenet update`
+  for portable folders and USB sticks on Windows, macOS and Linux: the USB
+  zip or the platform's zip, checked the same way, `data/` kept. Running
+  programs on Windows are moved aside and removed at the next start. (#68)
 - Withdraw a post (UN-RFC 0004 section 7): **Withdraw post** in the
   command palette or Shift+D in the client, and `unseenet withdraw` on
   the command line, for your own posts and any post in a group you own or

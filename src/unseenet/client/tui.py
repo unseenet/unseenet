@@ -29,6 +29,7 @@ from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input,
                              Select, Static, TextArea, Tree)
 
 from .. import __version__
+from ..portable import portable_root
 from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
@@ -1863,6 +1864,23 @@ class UnseenetApp(App):
     def action_about(self) -> None:
         self.push_screen(AboutDialog())
 
+    async def action_update(self) -> None:
+        """Run the updater (unseenet.update) on the console; quit if it updated us."""
+        import subprocess
+        import sys
+        root = portable_root()
+        if root is None:
+            return
+        cmd = ([sys.executable, "update"] if getattr(sys, "frozen", False)
+               else [sys.executable, "-m", "unseenet.update"]) + ["--media", str(root), "--pause"]
+        with self.suspend():
+            code = subprocess.run(cmd).returncode
+        if code == 0:                    # the files under this program are new: start again
+            if self.session:
+                self.session.save()
+                await self.session.close()
+            self.exit(message="Unseenet was updated. Start it again to use the new version.")
+
     @work(group="dialog", exit_on_error=False)
     async def action_node_info(self) -> None:
         """Your nodes: add, remove, choose the default, see who runs them."""
@@ -2186,6 +2204,9 @@ class UnseenetApp(App):
                             self.action_about)
         yield SystemCommand("Tor bridges", "Connect through bridges where Tor is blocked",
                             self.action_bridges)
+        if portable_root() is not None:
+            yield SystemCommand("Update Unseenet", "Get the newest release onto this stick or "
+                                "folder, over Tor - data/ is kept", self.action_update)
         if self.session is None:
             return
         commands = [

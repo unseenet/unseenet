@@ -167,6 +167,7 @@ def pyinstaller(plat: str, work: Path) -> Path:
            "--collect-submodules", "unseenet", "--collect-data", "unseenet",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
            "--collect-all", "nacl", "--hidden-import", "_cffi_backend",
+           "--collect-data", "certifi",            # HTTPS for updates (unseenet.update)
            # Pillow is only here to convert the icon; none of these are used at run time
            "--exclude-module", "PIL", "--exclude-module", "tkinter",
            "--exclude-module", "unittest", "--exclude-module", "pydoc_data"]
@@ -244,8 +245,19 @@ def build(plat: str, tor_archive: Path, out: Path, keep: bool = False) -> Path:
 # ---------------------------------------------------------------------------
 # Zips that keep execute bits, and the all-in-one USB zip
 # ---------------------------------------------------------------------------
+def stamp(stage: Path) -> None:
+    """UNSEENET-VERSION and UNSEENET-FILES, which unseenet.update reads: the version
+    a folder has, and what it put there (the next update removes what it no longer has)."""
+    (stage / "UNSEENET-VERSION").write_text(version() + "\n")
+    files = sorted(p.relative_to(stage).as_posix() for p in stage.rglob("*")
+                   if (p.is_file() or p.is_symlink()) and p.relative_to(stage).parts[0] != "data")
+    names = sorted(set(files) | {"UNSEENET-FILES", "UNSEENET-VERSION"})
+    (stage / "UNSEENET-FILES").write_text("\n".join(names) + "\n")
+
+
 def write_zip(stage: Path, zip_path: Path) -> None:
     """Zip ``stage`` (the Unseenet/ folder) keeping Unix modes and symlinks."""
+    stamp(stage)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for path in sorted(stage.rglob("*")):
             arc = (Path(TOP) / path.relative_to(stage)).as_posix()

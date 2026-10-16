@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import zipfile
 from pathlib import Path
 
@@ -86,6 +87,7 @@ def test_pinned_keys_are_real_keys():
 
 OLD = {
     update.VERSION_FILE: V_OLD,
+    "unseenet.apkovl.tar.gz": "the bootable system",
     update.FILES_LIST: "UNSEENET-VERSION\nboot/vmlinuz-lts\nold-only.txt\nboot/syslinux/menu.c32\n",
     "boot/vmlinuz-lts": "old kernel",
     "boot/syslinux/ldlinux.sys": "sectors",
@@ -198,3 +200,105 @@ def test_offline_zip_needs_its_signed_sums(keys, tmp_path, capsys):
         update.main(args)
     assert exit_.value.code == 0
     assert (media / "boot/vmlinuz-lts").read_text() == "new kernel"
+
+
+# --- portable folders (the usb zip and the per-platform zips) -----------------
+
+def portable_zip(tmp_path: Path, version: str = V_NEW, what: str = "usb") -> Path:
+    z = tmp_path / f"unseenet-{version}-{what}.zip"
+    files = {"UNSEENET-PORTABLE": "", "UNSEENET-VERSION": version + "\n",
+             "linux-x86_64/unseenet": "new linux", "windows-x86_64/unseenet.exe": "new exe",
+             "macos-aarch64/_internal/Python.framework/Versions/3.13/Python": "py",
+             "macos-aarch64/_internal/Python.framework/Versions/3.13/Resources/Info.plist": "pl"}
+    links = {"macos-aarch64/_internal/Python": "Python.framework/Versions/3.13/Python",
+             "macos-aarch64/_internal/Python.framework/Versions/Current": "3.13"}
+    with zipfile.ZipFile(z, "w") as zf:
+        for name, text in files.items():
+            info = zipfile.ZipInfo(f"{update.TOP}/{name}")
+            info.create_system = 3
+            info.external_attr = (0o100755 if name.endswith("unseenet") else 0o100644) << 16
+            zf.writestr(info, text)
+        for name, target in links.items():
+            info = zipfile.ZipInfo(f"{update.TOP}/{name}")
+            info.create_system = 3
+            info.external_attr = 0o120777 << 16
+            zf.writestr(info, target)
+    return z
+
+
+PORTABLE = {"UNSEENET-PORTABLE": "", "linux-x86_64/unseenet": "old", "windows-x86_64/unseenet.exe": "old",
+            "macos-aarch64/_internal/x": "old", "data/unseenet.vault": "secret"}
+
+
+def test_kind_of_installation(tmp_path):
+    assert update.stick_kind(stick(tmp_path, OLD | {"unseenet.apkovl.tar.gz": ""})) == "x86_64-update"
+    assert update.stick_kind(stick(tmp_path / "a", PORTABLE)) == "usb"
+    one = stick(tmp_path / "b", {"UNSEENET-PORTABLE": "", "windows-x86_64/unseenet.exe": "x"})
+    assert update.stick_kind(one) == "windows-x86_64"
+
+
+def test_portable_zip_strips_its_folder_keeps_modes_and_links(tmp_path):
+    media = stick(tmp_path, PORTABLE)
+    update.apply(media, portable_zip(tmp_path), say=lambda _: None)
+    assert (media / "linux-x86_64/unseenet").read_text() == "new linux"
+    assert (media / "data/unseenet.vault").read_text() == "secret"
+    assert not (media / update.TOP).exists()
+    if os.name != "nt":
+        assert (media / "linux-x86_64/unseenet").stat().st_mode & 0o111
+    py = media / "macos-aarch64/_internal/Python"
+    assert py.read_text() == "py"                 # a link, or a copy where links fail
+    current = media / "macos-aarch64/_internal/Python.framework/Versions/Current"
+    assert (current / "Resources/Info.plist").read_text() == "pl"
+
+
+def test_links_become_copies_where_the_file_system_has_none(tmp_path, monkeypatch):
+    def no_links(*_a, **_k):
+        raise OSError("FAT has no links")
+    monkeypatch.setattr(update.os, "symlink", no_links)
+    media = stick(tmp_path, PORTABLE)
+    update.apply(media, portable_zip(tmp_path), say=lambda _: None)
+    py = media / "macos-aarch64/_internal/Python"
+    assert not py.is_symlink() and py.read_text() == "py"
+    current = media / "macos-aarch64/_internal/Python.framework/Versions/Current"
+    assert current.is_dir() and not current.is_symlink()
+    assert (current / "Resources/Info.plist").read_text() == "pl"
+
+
+def test_a_running_program_is_moved_aside(tmp_path, monkeypatch):
+    media = stick(tmp_path, PORTABLE)
+    exe = media / "windows-x86_64/unseenet.exe"
+    real = os.replace
+    busy = {str(exe)}
+
+    def replace(src, dst):                 # Windows: a running .exe cannot be replaced
+        if str(dst) in busy and not str(src).endswith(update.OLD_SUFFIX):
+            if Path(src).name.endswith(".new"):
+                busy.discard(str(dst))
+                raise PermissionError("in use")
+        return real(src, dst)
+    monkeypatch.setattr(update.os, "replace", replace)
+    update.apply(media, portable_zip(tmp_path), say=lambda _: None)
+    assert exe.read_text() == "new exe"
+    aside = exe.with_name(exe.name + update.OLD_SUFFIX)
+    assert aside.read_text() == "old"
+    update.clean_old(media)
+    assert not aside.exists() and (media / "data/unseenet.vault").exists()
+
+
+def test_offline_zip_must_be_for_this_kind(keys, tmp_path, capsys):
+    project, _ = keys
+    media = stick(tmp_path, PORTABLE)
+    folder = tmp_path / "dl"
+    folder.mkdir()
+    z = update_zip(folder, {"boot/vmlinuz-lts": "k"})       # the image's, not the usb zip
+    with pytest.raises(SystemExit) as exit_:
+        update.main(["--media", str(media), "--zip", str(z), "--yes"])
+    assert exit_.value.code == 2 and "not the zip for this stick" in capsys.readouterr().err
+    z = portable_zip(folder)
+    sums = sums_for(z)
+    (folder / update.SUMS).write_bytes(sums)
+    (folder / update.SIG).write_text(update.signature_text(sums, project))
+    with pytest.raises(SystemExit) as exit_:
+        update.main(["--media", str(media), "--zip", str(z), "--yes"])
+    assert exit_.value.code == 0
+    assert (media / "windows-x86_64/unseenet.exe").read_text() == "new exe"
