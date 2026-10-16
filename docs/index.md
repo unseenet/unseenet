@@ -11,6 +11,7 @@ hide:
   <dl class="un-headers" aria-label="Article headers">
     <dt>From</dt><dd>the Unseenet project</dd>
     <dt>Newsgroups</dt><dd>unseenet</dd>
+<!-- unseenet:versions -->
   </dl>
 </div>
 
@@ -24,7 +25,8 @@ account, nothing left behind.
 </p>
 
 <div class="un-actions">
-  <a class="un-button un-button--primary" href="portable/">Get the portable client</a>
+  <a class="un-button un-button--primary" href="portable/">Portable (Linux, macOS, Windows)</a>
+  <a class="un-button" href="bootable/">Bootable (USB, SSD etc.)</a>
   <a class="un-button" href="node/install/">Run a node</a>
 </div>
 
@@ -36,30 +38,41 @@ protect anyone yet.
 
 </div>
 
-<figure class="un-demo">
+<div class="un-recordings">
+
+<figure class="un-rec" id="see-portable">
+  <div class="un-rec__head">
+    <h2 class="un-rec__title"><a href="portable/">Portable (Linux, macOS, Windows)</a></h2>
+    <button type="button" class="un-rec__size" aria-expanded="false" hidden>Larger</button>
+  </div>
   <div class="un-term" data-cast="img/demo.cast" data-poster="npt:0:9.5">
     <noscript><img src="img/demo.gif" alt="The Unseenet terminal client: unlocking the vault, reading a thread, replying, chatting and browsing groups"></noscript>
   </div>
   <figcaption>
-    The real client from a USB stick: unlock your vault, read a thread, reply,
-    chat, find more groups. Recorded against a test node on one machine, so
-    Tor starting up (10-30 seconds) is left out.
-    <a href="portable/">Start it from a stick</a>
+    Unzip and start, on a computer or from a USB stick. Unlock your vault, read
+    a thread, reply, chat, find more groups. Recorded against a test node, so
+    Tor starting (10-30 seconds) is left out.
   </figcaption>
 </figure>
 
-<figure class="un-boot">
-  <video class="un-video" src="img/boot.webm" poster="img/boot-poster.png"
-         controls muted loop playsinline preload="none"
-         aria-label="Booting the Unseenet stick in a virtual machine: the boot menu, the client, making a new vault and choosing a name"></video>
+<figure class="un-rec" id="see-bootable">
+  <div class="un-rec__head">
+    <h2 class="un-rec__title"><a href="bootable/">Bootable (USB, SSD etc.)</a></h2>
+    <button type="button" class="un-rec__size" aria-expanded="false" hidden>Larger</button>
+  </div>
+  <div class="un-media">
+    <video class="un-video" src="img/boot.webm" poster="img/boot-poster.png"
+           controls muted loop playsinline preload="none"
+           aria-label="Booting the Unseenet stick in a virtual machine: the boot menu, the client, making a new vault and choosing a name"></video>
+  </div>
   <figcaption>
-    <strong>Or boot from the stick.</strong> Unseenet then runs from memory and
-    touches nothing on the computer's disks. Your vault is the same one either
-    way. The video speeds up the waiting for the computer and stops where
-    you pick a name, before Tor connects.
-    <a href="bootable/">The bootable stick</a>
+    Boot from it and Unseenet runs from memory, touching nothing on the
+    computer's disks. Same vault as the portable. The waiting is sped up, and
+    the video stops where you pick a name, before Tor connects.
   </figcaption>
 </figure>
+
+</div>
 
 ## How it fits together
 
@@ -125,8 +138,9 @@ protect anyone yet.
 <div class="grid cards" markdown>
 
 - **I want to read and post**  
-  Install the client, connect to a node and join a group.  
-  [:octicons-arrow-right-24: Using the client](client.md)
+  Unzip and start on Linux, macOS or Windows, or boot from a stick. Tor is included.  
+  [:octicons-arrow-right-24: Portable](portable.md) &nbsp;
+  [:octicons-arrow-right-24: Bootable](bootable.md)
 
 - **I want to run a node**  
   One command on a Debian/Ubuntu box, a Raspberry Pi or a Proxmox LXC.  

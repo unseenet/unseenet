@@ -34,6 +34,9 @@ theme:
     - content.code.copy
     - search.highlight
 
+hooks:
+  - tools/docs_hooks.py
+
 exclude_docs: |
   assets/asciinema/README.md
 

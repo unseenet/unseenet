@@ -2,7 +2,11 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "tools/docs_hooks.py", ".github/workflows/docs.yml"]
+  # After a release or a new development build, so the front page shows its version
+  workflow_run:
+    workflows: [release, portable]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -16,14 +20,23 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'pull_request')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0               # tags, for the version on the front page without network
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install mkdocs-material
       - run: tools/build_docs.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}   # the front page asks for the newest releases
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
