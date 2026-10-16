@@ -8,7 +8,8 @@ asks nobody. The docs workflow builds the site again after every release
 and development build, which keeps the numbers current.
 
 Without a network the release comes from the newest ``v*`` git tag and the
-development build is left out; if neither is known the marker just
+development build is left out, as it is when it is not newer than the
+release (right after a release). If neither is known the marker just
 disappears.
 """
 
@@ -86,8 +87,20 @@ def versions() -> tuple[dict | None, dict | None]:
     return release, dev
 
 
+def _newer(dev: dict, release: dict) -> bool:
+    """Whether the development build is newer than the release (right after a
+    release, the dev build is older until the next one is made)."""
+    try:
+        from packaging.version import Version  # comes with mkdocs
+        return Version(dev["version"]) > Version(release["version"])
+    except Exception:
+        return True
+
+
 def header_lines() -> str:
     release, dev = versions()
+    if dev and release and not _newer(dev, release):
+        dev = None
     out = []
     if release:
         note = " ".join(x for x in (release["date"],) if x)
