@@ -1,34 +1,71 @@
-"""Nodes a new client can start with, so nobody has to know an address first.
+"""Nodes a client can start with, and the signed list that keeps them current.
 
-This is a starting point, like the bootstrap list of any network. It is not
-a directory: anyone can run a node, and a client can use any node it is told
-about (an ``unseenet:join`` link names one). A signed, updatable list is the
-subject of a future UN-RFC (0010, node discovery).
+A new client has to connect *somewhere* before it can learn anything, so it
+ships with a list of known nodes (``nodes.json``, kept in the repository and
+changed by pull request). Once connected, it reads the newest list from the
+project's channel group ``unseenet.nodes`` (UN-RFC 0010). That list is:
 
-Each entry gives the node key (UN-RFC 0016) as well, so that a client can check
-it reached the node the list means.
+- **signed**: only the group's owner - the project key pinned below, whose
+  fingerprint is in the group ID - and the posters in its signed manifest
+  can post there, and the client checks it again itself;
+- **fetched over Tor**, from whichever node the client already uses, so
+  nobody sees a request to GitHub or anywhere else.
+
+It is a starting point, not a directory: anyone can run a node, and a client
+can use any node it is told about (an ``unseenet:join`` link names one).
 """
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from importlib import resources
+
+# The Unseenet project's key. It owns the project's groups; its fingerprint
+# ph5fc5hop5232qsz is part of their IDs.
+PROJECT_KEY = "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya"
+NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
+ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
+
+_ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
+MAX_NODES = 200
 
 
 @dataclass(frozen=True)
 class KnownNode:
     name: str
     address: str
-    description: str
-    node_key: str
+    description: str = ""
+    node_key: str = ""
+    operator: str = ""
 
 
-KNOWN_NODES: tuple[KnownNode, ...] = (
-    KnownNode("unseenet-node1",
-              "f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion",
-              "Project test node 1, Denmark - pre-alpha, may be reset",
-              "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka"),
-    KnownNode("unseenet-node2",
-              "ze4aqpjfyteij4tqaaztyujoj7wsjgbv4cliexljckdfp5eomkshfead.onion",
-              "Project test node 2, Denmark - pre-alpha, may be reset",
-              "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a"),
-)
+def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
+    """(updated, nodes) from a UN-RFC 0010 node list. Raises ValueError if malformed."""
+    data = json.loads(text)
+    if not isinstance(data, dict) or data.get("v") != 1 or not isinstance(data.get("nodes"), list):
+        raise ValueError("not a version 1 node list")
+    nodes = []
+    for item in data["nodes"][:MAX_NODES]:
+        if not isinstance(item, dict):
+            continue
+        address = str(item.get("address", "")).strip()
+        if not _ADDRESS.match(address):
+            continue                  # one bad entry does not spoil the list
+        nodes.append(KnownNode(name=str(item.get("name", address))[:64],
+                               address=address,
+                               description=str(item.get("description", ""))[:200],
+                               node_key=str(item.get("node_key", ""))[:80],
+                               operator=str(item.get("operator", ""))[:80]))
+    if not nodes:
+        raise ValueError("the list has no usable nodes")
+    return str(data.get("updated", ""))[:32], nodes
+
+
+def builtin_list() -> tuple[str, list[KnownNode]]:
+    """The list that came with this version of the client."""
+    return parse_node_list(resources.files("unseenet").joinpath("nodes.json").read_text())
+
+
+KNOWN_NODES: tuple[KnownNode, ...] = tuple(builtin_list()[1])

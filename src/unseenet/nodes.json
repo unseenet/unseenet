@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "updated": "2026-10-16",
+  "nodes": [
+    {
+      "name": "unseenet-node1",
+      "address": "f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion",
+      "node_key": "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "Project test node 1, Denmark - pre-alpha, may be reset"
+    },
+    {
+      "name": "unseenet-node2",
+      "address": "ze4aqpjfyteij4tqaaztyujoj7wsjgbv4cliexljckdfp5eomkshfead.onion",
+      "node_key": "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "Project test node 2, Denmark - pre-alpha, may be reset"
+    }
+  ]
+}

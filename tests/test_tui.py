@@ -454,7 +454,12 @@ async def test_tui_nodes_add_default_remove(tmp_path, monkeypatch):
         await pilot.press("o")
         assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))
         await pilot.click("#add")
-        await pilot.pause(0.3)
+        from textual.widgets import Select
+        from unseenet.client.tui import OTHER_NODE, AddNodeDialog
+        assert await wait_for(pilot, lambda: isinstance(app.screen, AddNodeDialog))
+        app.screen.query_one("#known", Select).value = OTHER_NODE     # not a known node
+        await pilot.pause(0.2)
+        app.screen.query_one("#node").focus()
         await pilot.press(*addrs[1], "enter")
         assert await wait_for(pilot, lambda: addrs[1] in app.session.nodes)
         assert await wait_for(pilot, lambda: isinstance(app.screen, NodesDialog))

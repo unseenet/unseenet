@@ -164,7 +164,7 @@ def pyinstaller(plat: str, work: Path) -> Path:
            "--specpath", str(work),
            # Textual and Rich import parts of themselves lazily, by name
            "--collect-all", "textual", "--collect-submodules", "rich",
-           "--collect-submodules", "unseenet",
+           "--collect-submodules", "unseenet", "--collect-data", "unseenet",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
            "--collect-all", "nacl", "--hidden-import", "_cffi_backend",
            # Pillow is only here to convert the icon; none of these are used at run time

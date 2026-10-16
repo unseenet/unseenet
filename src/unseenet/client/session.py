@@ -250,6 +250,55 @@ class Session:
             entry["node"] = address
             self.save()
 
+    # --- the known nodes (UN-RFC 0010) ---
+    def known_nodes(self) -> list:
+        """The newest node list this client has: read from the network, else built in."""
+        from ..known_nodes import KNOWN_NODES, KnownNode
+        cached = self.data.get("known_nodes")
+        if cached and cached.get("nodes"):
+            return [KnownNode(**n) for n in cached["nodes"]]
+        return list(KNOWN_NODES)
+
+    async def refresh_known_nodes(self) -> bool:
+        """Read the newest signed node list from the project's channel. True if it changed.
+
+        The group ID carries the project key's fingerprint, its manifest is
+        signed by that key, and only the owner and the manifest's posters may
+        post: the node enforces that, and we check it again here.
+        """
+        from dataclasses import asdict
+        from ..known_nodes import NODES_GROUP, PROJECT_KEY, parse_node_list
+        subscribed = NODES_GROUP in self.data["subscribed"]
+        try:
+            messages = await self.fetch_group(NODES_GROUP)
+        finally:
+            if not subscribed:          # read it, but do not keep it around
+                self.cache.pop(NODES_GROUP, None)
+                self._raw.pop(NODES_GROUP, None)
+                self._high.pop(NODES_GROUP, None)
+        manifest = self.manifest_data(NODES_GROUP)
+        if manifest.get("owner") != PROJECT_KEY:
+            return False
+        allowed = {PROJECT_KEY, *manifest.get("posters", [])}
+        best = None
+        for m in messages:
+            if not m.readable or m.author_key not in allowed:
+                continue
+            try:
+                updated, nodes = parse_node_list(m.body)
+            except ValueError:
+                continue
+            if best is None or (m.date and (best[0] is None or m.date > best[0])):
+                best = (m.date, updated, nodes)
+        if best is None:
+            return False
+        new = {"updated": best[1], "nodes": [asdict(n) for n in best[2]]}
+        if self.data.get("known_nodes") == new:
+            return False
+        self.data["known_nodes"] = new
+        self.save()
+        return True
+
     def _forget_numbers(self, group_id: str) -> None:
         """Article numbers belong to one node: drop them when a group moves."""
         for store in (self.cache, self._raw, self._high):

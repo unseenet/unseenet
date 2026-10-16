@@ -167,9 +167,11 @@ OTHER_NODE = "__other__"
 class SetupDialog(Dialog):
     """First run: identity and node."""
 
-    def __init__(self, need_identity: bool, need_node: bool):
+    def __init__(self, need_identity: bool, need_node: bool, known: list | None = None):
         super().__init__()
         self.need_identity, self.need_node = need_identity, need_node
+        from ..known_nodes import KNOWN_NODES
+        self.known = list(known or KNOWN_NODES)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
@@ -179,10 +181,9 @@ class SetupDialog(Dialog):
                             classes="hint")
                 yield Input(placeholder="Display name, e.g. Andreas", id="display")
             if self.need_node:
-                from ..known_nodes import KNOWN_NODES
                 yield Label("Which node do you want to connect to? Pick one of the known nodes, "
                             "or enter the address of another you were given.", classes="hint")
-                choices = [(f"{n.name} - {n.description}", n.address) for n in KNOWN_NODES]
+                choices = [(f"{n.name} - {n.description}", n.address) for n in self.known]
                 choices.append(("Another node - enter its address", OTHER_NODE))
                 yield Select(choices, value=choices[0][1], allow_blank=False, id="known")
                 other = Input(placeholder="xyz...abc.onion  (or host:port for testing)", id="node")
@@ -209,7 +210,6 @@ class SetupDialog(Dialog):
                 self.app.notify("Please choose a display name", severity="error")
                 return
         if self.need_node:
-            from ..known_nodes import KNOWN_NODES
             known = self.query_one("#known", Select).value
             node = self.query_one("#node", Input).value.strip() if known == OTHER_NODE else known
             if not node:
@@ -217,7 +217,7 @@ class SetupDialog(Dialog):
                 return
             result["node"] = node
             if self.query_one("#backups", Checkbox).value:
-                result["backups"] = [n.address for n in KNOWN_NODES if n.address != node]
+                result["backups"] = [n.address for n in self.known if n.address != node]
         self.dismiss(result)
 
 
@@ -649,6 +649,43 @@ class NodesDialog(Dialog):
             self.dismiss((event.button.id, address))
 
 
+class AddNodeDialog(Dialog):
+    """Add a node: one of the known nodes you do not use yet, or any address."""
+
+    def __init__(self, known: list, used: list[str]):
+        super().__init__()
+        self.choices = [(f"{n.name} - {n.description}", n.address)
+                        for n in known if n.address not in used]
+        self.choices.append(("Another node - enter its address", OTHER_NODE))
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Add a node", classes="title")
+            yield Label("You keep your key and your groups; the node's groups are added to "
+                        "what you can browse (g).", classes="hint")
+            yield Select(self.choices, value=self.choices[0][1], allow_blank=False, id="known")
+            other = Input(placeholder="xyz...abc.onion  (add :port if it is not 119)", id="node")
+            other.display = len(self.choices) == 1
+            yield other
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Add", variant="primary", id="ok")
+
+    @on(Select.Changed, "#known")
+    def _changed(self, event: Select.Changed) -> None:
+        self.query_one("#node").display = event.value == OTHER_NODE
+
+    @on(Input.Submitted)
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        choice = self.query_one("#known", Select).value
+        address = self.query_one("#node", Input).value.strip() if choice == OTHER_NODE else choice
+        if not address:
+            self.app.notify("Enter the node's address", severity="error")
+            return
+        self.dismiss(address)
+
+
 class NodeInfoDialog(Dialog):
     """UN-RFC 0011 node information; can start a message to the operator."""
 
@@ -841,7 +878,8 @@ class UnseenetApp(App):
                 error, passphrase = str(exc), None
         s = self.session
         if not s.has_identity() or not s.node:
-            result = await self.push_screen_wait(SetupDialog(not s.has_identity(), not s.node))
+            result = await self.push_screen_wait(SetupDialog(not s.has_identity(), not s.node,
+                                                             s.known_nodes()))
             if result is None:
                 self.exit()
                 return
@@ -856,6 +894,14 @@ class UnseenetApp(App):
         await self.show_offline()
         self.refresh_groups()
         self.set_interval(REFRESH_SECONDS, self.action_refresh)
+
+    @work(group="known-nodes", exclusive=True, exit_on_error=False)
+    async def update_known_nodes(self) -> None:
+        """Read the signed node list (UN-RFC 0010) in the background; quiet on failure."""
+        try:
+            await self.session.refresh_known_nodes()
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
+            pass
 
     def _update_subtitle(self) -> None:
         s = self.session
@@ -901,6 +947,7 @@ class UnseenetApp(App):
                 await s.ensure_inbox()
                 self._inbox_ready = True
                 self._start_watches()
+                self.update_known_nodes()
                 available = {g.group_id: g for g in await s.list_groups()}
             except (SessionError, OSError, ConnectionError) as exc:
                 self.set_status(f"Could not set up your inbox: {exc}")
@@ -1365,9 +1412,7 @@ class UnseenetApp(App):
                 return
             action, address = result
             if action == "add":
-                value = await self.push_screen_wait(InputDialog(
-                    "Add a node", "Its address, e.g. xxxx.onion (add :port if it is not 119). "
-                    "You keep your key and your groups.", "xxxx.onion"))
+                value = await self.push_screen_wait(AddNodeDialog(s.known_nodes(), s.nodes))
                 if value:
                     s.add_node(value)
                     self.notify(f"Added {value} - its groups are now in the group list (g)")
