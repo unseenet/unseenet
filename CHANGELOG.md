@@ -24,6 +24,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- "Add my node" issue form: a check reaches the node over Tor and compares
+  its node key; the `accepted` label adds it to the list, posts the list to
+  `unseenet.nodes`, and closes the issue.
 - Known nodes (UN-RFC 0010, draft): one list in `src/unseenet/nodes.json`;
   the client ships with it and reads the newest signed list from the
   channel `unseenet.nodes` over Tor. "Add a node" offers the known nodes.

@@ -1,0 +1,89 @@
+name: node-request
+# "Add my node" issues (.github/ISSUE_TEMPLATE/add-node.yml):
+#   opened / edited  -> check the form and reach the node over Tor; comment the result
+#   label "accepted" -> check again, add it to src/unseenet/nodes.json, post the new
+#                       list to unseenet.nodes, comment and close
+# Only people with triage rights can add labels, so only maintainers can accept.
+# The issue text is untrusted: it is read from the event file by
+# tools/node_request.py, never put into a shell command.
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: node-request-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'edited') &&
+      contains(github.event.issue.labels.*.name, 'node-request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
+      - id: check
+        continue-on-error: true
+        run: python tools/node_request.py check --event "$GITHUB_EVENT_PATH" --report report.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$NUMBER" --body-file report.md
+
+  add:
+    if: >
+      github.event.action == 'labeled' && github.event.label.name == 'accepted' &&
+      contains(github.event.issue.labels.*.name, 'node-request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: nodes-json                 # one change to the list at a time
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
+      - id: add
+        continue-on-error: true
+        run: python tools/node_request.py add --event "$GITHUB_EVENT_PATH" --report report.md
+      - name: Commit the new list
+        if: steps.add.outcome == 'success'
+        env:
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/unseenet/nodes.json
+          git commit -m "Known nodes: add the node from #$NUMBER"
+          git push origin HEAD:main
+      - name: Post the new list to unseenet.nodes
+        if: steps.add.outcome == 'success'
+        env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+        run: python tools/announce.py nodes
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          OUTCOME: ${{ steps.add.outcome }}
+        run: |
+          gh issue comment "$NUMBER" --body-file report.md
+          if [ "$OUTCOME" = "success" ]; then
+            gh issue close "$NUMBER" --reason completed
+          else
+            gh issue edit "$NUMBER" --remove-label accepted
+          fi

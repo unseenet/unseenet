@@ -52,24 +52,26 @@ The command works while the node is running.
 ## Getting your node listed
 
 Clients offer the nodes in the project's list of known nodes
-([UN-RFC 0010](../spec/un-rfc-0010.md)) to new users. To be listed, open a
-pull request that adds your node to
-[`src/unseenet/nodes.json`](https://github.com/andlo/unseenet/blob/main/src/unseenet/nodes.json):
+([UN-RFC 0010](../spec/un-rfc-0010.md)) to new users. To be listed, fill in
+the form
+**[Add my node](https://github.com/andlo/unseenet/issues/new?template=add-node.yml)**
+on GitHub. You need:
 
-```json
-{
-  "name": "mynode",
-  "address": "xyz...xyz.onion",
-  "node_key": "ed25519:...",
-  "operator": "ed25519:...",
-  "description": "A few words: where, who, what you carry"
-}
-```
+- the node's **onion address** and **node key** - both are printed when
+  the node starts (`journalctl -u unseenet-node | grep -E "reachable|Node key"`);
+- optionally your **operator key**, as in `[operator]`;
+- a short **description** for users.
 
-`node_key` is printed when your node starts; `operator` is your own key,
-as in `[operator]`. When the pull request is merged, the list is posted to
-`unseenet.nodes` automatically, and clients pick it up the next time they
-connect. Being listed means more users and more responsibility - read
+A check runs at once: it connects to your node over Tor and compares the
+node key the node reports with the one in the form, and comments the result
+on the issue. Fix what it finds by editing the issue; it checks again.
+When a maintainer accepts the request, your node is added to
+`src/unseenet/nodes.json`, the new list is posted to `unseenet.nodes`, and
+clients pick it up the next time they connect.
+
+(A pull request that edits `src/unseenet/nodes.json` works too.)
+
+Being listed means more users and more responsibility - read
 [Your responsibility](responsibility.md) first.
 
 ## Backup

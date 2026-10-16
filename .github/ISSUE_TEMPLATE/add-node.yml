@@ -1,0 +1,64 @@
+name: Add my node to the list of known nodes
+description: Ask for your Unseenet node to be offered to new users (UN-RFC 0010).
+title: "Add node: "
+labels: ["node-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Clients offer the nodes on the project's list to new users. Fill this in,
+        and a check runs at once: it connects to your node over Tor and compares the
+        node key it reports with the one you give here. When a maintainer accepts the
+        request, your node is added to `src/unseenet/nodes.json` and the new list is
+        posted to `unseenet.nodes` on Unseenet - clients pick it up automatically.
+
+        Before you ask, read [Your responsibility](https://andlo.github.io/unseenet/node/responsibility/).
+  - type: input
+    id: name
+    attributes:
+      label: Node name
+      description: A short label, as clients will show it (letters, digits, - and _).
+      placeholder: mynode
+    validations:
+      required: true
+  - type: input
+    id: address
+    attributes:
+      label: Onion address
+      description: Printed when the node starts ("Node is reachable at ..."). Add :port only if it is not 119.
+      placeholder: xyz...xyz.onion
+    validations:
+      required: true
+  - type: input
+    id: node_key
+    attributes:
+      label: Node key
+      description: Printed when the node starts ("Node key ..."), or `unseenet-node --show-key`.
+      placeholder: "ed25519:..."
+    validations:
+      required: true
+  - type: input
+    id: operator
+    attributes:
+      label: Operator key (optional)
+      description: Your own identity key, as in the [operator] section of node.toml.
+      placeholder: "ed25519:..."
+    validations:
+      required: false
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: A few words for users - where, who, what you carry. At most 200 characters.
+      placeholder: "Small node in Aarhus, Denmark; carries dk.* and unseenet*"
+    validations:
+      required: true
+  - type: checkboxes
+    id: promises
+    attributes:
+      label: As the operator
+      options:
+        - label: I run this node and intend to keep it running for a while.
+          required: true
+        - label: I have set up require_peer_auth and peer with node keys, and I have read "Your responsibility".
+          required: true
