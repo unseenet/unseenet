@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
+First release with portable builds: unzip, start, done - on Windows, macOS
+and Linux, from a USB stick if you like. Pre-alpha: expect breaking changes.
+
 ### Protocol
 - Draft UN-RFC 0010 (lists of known nodes).
 - Draft UN-RFC 0017 (catching up by pull, and group state).
@@ -22,6 +27,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   shared data directory, but first overwrote its control-port file, so the
   client could end up using a Tor that was gone ("WinError 64" on Windows).
   The session now starts exactly one Tor, and replaces it if it has died.
+  (#3)
+- Browsing groups no longer lists other people's inboxes, which only their
+  owner can read. (#5)
 - Tor's SOCKS refusals when reaching an onion service (common right after
   Tor starts) are retried and reported with a readable reason, instead of
   failing with a "proxy" error.
@@ -31,13 +39,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ### Added
 - A new client is subscribed to the project's groups (`unseenet`,
   `unseenet.announce`, `unseenet.test`) once, and a new identity gets a
-  default signature with the display name and key.
-- Browsing groups no longer lists other people's inboxes.
+  default signature with the display name and key. (#4)
 - Browsing groups describes the highlighted group below the list: title,
   type, number of posts, owner, nodes and the first line of its rules,
-  read from the group's signed manifest without subscribing.
+  read from the group's signed manifest without subscribing. (#6)
 - Your nodes, adding a node and the first start describe the highlighted
-  node: description, operator, address and policy.
+  node: description, operator, address and policy. (#6)
+- Issue forms for the client, the node, the protocol, ideas and the
+  documentation, with type and area labels, and `SECURITY.md` with private
+  vulnerability reporting.
 - Node requests must prove that the requester runs the node: the operator
   signs a challenge with `unseenet-node --sign`. Listed nodes are checked
   daily over Tor; unreachable for 3 days gets a note, 10 days removes them.
@@ -132,7 +142,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - Dialogs with lists fill the window, buttons stay visible at the bottom
   of every dialog in small terminals, and long hints wrap. The group list
   closes with OK. An invalid group name is shown under the name field
-  instead of in a message that covered the buttons.
+  instead of in a message that covered the buttons. (#6)
+- The project moved to the `unseenet` organization:
+  https://github.com/unseenet/unseenet, and the documentation to
+  https://unseenet.org (the old addresses redirect). (#7)
 
 ## [0.1.0] - 2026-10-15
 
@@ -159,5 +172,6 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/unseenet/unseenet/releases/tag/v0.1.0
