@@ -94,6 +94,14 @@ groups = "dk.*,comp.*"
 key = "ed25519:..."            # the friend's node key (UN-RFC 0016)
 ```
 
+The documentation is built with `tools/build_docs.sh` (`pip install
+mkdocs-material`). The screenshots of the client in
+[Using the client](client.md) are made by `tools/docs_screenshots.py`: it
+starts a node on your machine without Tor, fills it with made-up people,
+groups and posts, drives `unseenet-tui` headless and writes
+`docs/img/client-*.svg`. Run it again when the client's look changes, and
+commit the files.
+
 ## Design Decisions (so far)
 
 Each decision lists where it is specified and the reasoning. Changing one
