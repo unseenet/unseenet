@@ -1,0 +1,43 @@
+name: tor-update
+# Tor gets security releases; the portable builds should follow. Once a week,
+# check for a newer stable Tor Expert Bundle and open an issue if there is one.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - id: check
+        run: |
+          set +e
+          OUT=$(python tools/build_portable.py --check-tor); STATUS=$?
+          echo "$OUT"
+          echo "newer=$([ $STATUS -ne 0 ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "latest=$(echo "$OUT" | sed 's/.*latest //')" >> "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.newer == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          TITLE="Tor Expert Bundle $LATEST is out"
+          if gh issue list --state open --search "$TITLE in:title" --json number -q '.[0].number' | grep -q .; then
+            echo "issue exists"; exit 0
+          fi
+          gh issue create --title "$TITLE" --body "A newer stable Tor is available for the portable builds.
+
+          1. Put \`$LATEST\` in \`tools/tor-version.txt\`.
+          2. Run the *portable* workflow (or push a tag) and check the self-tests.
+          3. Release, so USB users get Tor's fixes.
+
+          Release notes: https://blog.torproject.org/"

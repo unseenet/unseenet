@@ -25,6 +25,16 @@ def self_test(network: bool = True) -> int:
 
     root = portable.portable_root()
     print(f"Unseenet {__version__}, Python {sys.version.split()[0]} on {sys.platform}")
+    try:   # everything the client loads, so a build missing a part fails here
+        import nacl.bindings  # noqa: F401
+        from .cli import client_main  # noqa: F401
+        from .client import tui  # noqa: F401
+        from .core import crypto
+        crypto.Identity.generate()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Parts:     BROKEN ({type(exc).__name__}: {exc})")
+        return 1
+    print("Parts:     client, terminal UI and cryptography load")
     print(f"Program:   {portable.program_dir()}")
     print(f"Portable:  {root if root else 'no (files go in the current directory)'}")
     print(f"Vault:     {portable.default_vault_path().resolve()}")

@@ -16,3 +16,4 @@ unseenet-tor/
 docs/spec/
 site/
 unseenet-tui-errors.log
+dist-portable/
