@@ -1,5 +1,5 @@
 name: Bug in the client
-description: Something is wrong in unseenet-tui, the command line client or a portable build.
+description: Something is wrong in unseenet-tui, the command line client or Portable.
 title: "Client: "
 labels: ["bug", "area: client", "triage"]
 body:
@@ -29,7 +29,7 @@ body:
     attributes:
       label: How do you run it?
       options:
-        - Portable build (zip / USB stick)
+        - Portable (Linux, macOS, Windows)
         - pip install
         - From source (git checkout)
     validations:
@@ -60,5 +60,5 @@ body:
       label: Logs
       description: |
         `data/unseenet-tui-errors.log` and the end of `data/unseenet-tor/tor.log`
-        (next to `unseenet.vault`). For a portable build, `--self-test` output helps too.
+        (next to `unseenet.vault`). With Portable, `--self-test` output helps too.
       render: text
