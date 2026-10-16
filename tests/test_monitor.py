@@ -76,8 +76,9 @@ async def test_monitor_several_nodes_and_one_down(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.snapshot is not None)
         assert app.check_action("next_node", ())
         await pilot.press("n")
-        await pilot.pause(0.5)
-        assert "Not reachable" in str(app.query_one("#node").render())
+        # A refused connection takes about two seconds on Windows
+        assert await wait_for(pilot, lambda: "Not reachable" in str(app.query_one("#node").render()),
+                              tries=400)
         await pilot.press("p")
         assert await wait_for(pilot, lambda: "node1" in str(app.query_one("#node").render()))
         await pilot.press("q")

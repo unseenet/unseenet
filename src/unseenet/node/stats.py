@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -270,6 +271,11 @@ def parse_listen(value: str) -> tuple[str, str | int]:
     return "tcp", int(port)
 
 
+# Unix socket paths are limited by sun_path: 104 bytes on macOS and the BSDs,
+# 108 on Linux, including the closing NUL.
+UNIX_PATH_MAX = 103 if sys.platform == "darwin" or "bsd" in sys.platform else 107
+
+
 async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
     kind, where = parse_listen(listen)
 
@@ -298,6 +304,9 @@ async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
 
     if kind == "unix":
         path = Path(where)
+        if len(os.fsencode(path)) > UNIX_PATH_MAX:
+            raise ValueError(f"the monitor socket path is too long for this system "
+                             f"({len(os.fsencode(path))} bytes, at most {UNIX_PATH_MAX}): {path}")
         path.unlink(missing_ok=True)
         old = os.umask(0o117)                     # owner and group only: rw-rw----
         try:
