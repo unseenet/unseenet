@@ -90,6 +90,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - Issue forms for the bootable stick and the Docker image.
 
 ### Fixed
+- In *Your names* (`@`) the claim field no longer sits against the line
+  with your key. (#61)
 - The tests pass on macOS and Windows again: the stats test makes its Unix
   socket under a short path, and the monitor test waits for a refused
   connection, which is slow on Windows. The node now says clearly when the
