@@ -176,22 +176,24 @@ problems binary groups brought to Usenet.
 
 These are not decided. Discussion welcome — ideally as Draft UN-RFCs.
 
-1. **Chats.** Closed groups with short retention work today, but polling
-   is slow over Tor. Option: an `XUN-WATCH`-style push command or IDLE
-   (reserved UN-RFC 0008).
-2. **Moderation queue.** How does an unapproved post reach a moderator
-   without leaking it publicly? (reserved UN-RFC 0009)
-3. **Node discovery.** Today peers are configured by hand. A signed list
-   of nodes inside a well-known group? (reserved UN-RFC 0010)
-4. **Ownership transfer and co-owners** for groups.
-5. **Hiding the reading pattern** from the node (cover traffic, reading
+1. **Co-owners** for groups. (Transferring ownership is
+   [UN-RFC 0015](spec/un-rfc-0015.md).)
+2. **Hiding the reading pattern** from the node (cover traffic, reading
    from several nodes).
-6. **Author-Key visibility** in closed groups. Could be hidden by signing
+3. **Author-Key visibility** in closed groups. Could be hidden by signing
    only with the member key, at the cost of in-group accountability.
-7. **Post-quantum** signatures and key exchange.
-8. **Abuse handling for node operators** — a clear, documented way to
+4. **Post-quantum** signatures and key exchange.
+5. **Abuse handling for node operators** — a clear, documented way to
    drop groups and peers, and what to tell operators about their
    responsibilities.
+
+Settled since this list was first written: chat and low latency
+([UN-RFC 0008](spec/un-rfc-0008.md)), the moderation queue and private
+messages ([UN-RFC 0009](spec/un-rfc-0009.md)), node discovery
+([UN-RFC 0010](spec/un-rfc-0010.md)), ownership transfer
+([UN-RFC 0015](spec/un-rfc-0015.md)), authority over group names
+([UN-RFC 0018](spec/un-rfc-0018.md)) and names for identities
+([UN-RFC 0019](spec/un-rfc-0019.md)).
 
 ## Code Status
 
@@ -324,6 +326,7 @@ the release notes can say what changed and link to the discussion:
 | `triage` | New, not looked at yet |
 | `good first issue`, `help wanted` | For contributors |
 | `node-request`, `accepted` | Requests to join the known-node list (UN-RFC 0010) |
+| `hierarchy-request` | Requests for a hierarchy in the project's root list (UN-RFC 0018) |
 
 ## Coding Conventions
 
