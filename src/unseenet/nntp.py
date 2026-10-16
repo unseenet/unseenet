@@ -73,6 +73,10 @@ class Client:
         line = (await self.reader.readline()).decode("utf-8", "replace").rstrip("\r\n")
         if not line:
             raise ConnectionError("connection closed")
+        if len(line) < 3 or not line[:3].isdigit():
+            # Not a status line: we are out of step with the node (e.g. the rest of
+            # an answer whose reader was cancelled). The connection cannot be used.
+            raise ConnectionError(f"unexpected reply from the node: {line[:40]!r}")
         return int(line[:3]), line[4:]
 
     async def command(self, line: str, expect: tuple[int, ...] = ()) -> tuple[int, str]:

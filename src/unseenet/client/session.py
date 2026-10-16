@@ -392,12 +392,29 @@ class Session:
             for attempt in (1, 2):
                 if address not in self._clients:
                     self._clients[address] = await self._connect(address)
+                client = self._clients[address]
                 try:
-                    return await fn(self._clients[address])
+                    return await fn(client)
                 except (ConnectionError, OSError, asyncio.IncompleteReadError):
-                    self._clients.pop(address, None)
+                    self._drop(address, client)
                     if attempt == 2:
                         raise
+                except (NNTPError, SessionError):
+                    raise                   # a complete answer: the connection is fine
+                except BaseException:
+                    # Interrupted half-way (cancelled, timed out, a bug): the rest of
+                    # an answer may still be on its way, and the next command would
+                    # read it as its own. Never reuse such a connection.
+                    self._drop(address, client)
+                    raise
+
+    def _drop(self, address: str, client: Client) -> None:
+        if self._clients.get(address) is client:
+            del self._clients[address]
+        try:
+            client.writer.close()
+        except Exception:  # noqa: BLE001
+            pass
 
     # ------------------------------------------------------------------
     # Tor bridges, for networks that block Tor

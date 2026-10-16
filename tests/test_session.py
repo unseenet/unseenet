@@ -263,3 +263,29 @@ def test_new_vault_has_signature_and_project_groups(tmp_path):
     s.subscribe(STARTER_GROUPS[-1], False)    # unsubscribed groups stay away
     assert not s.subscribe_starter_groups()
     assert STARTER_GROUPS[-1] not in s.data["subscribed"]
+
+
+async def test_interrupted_exchange_does_not_poison_the_connection(tmp_path, monkeypatch):
+    """A reader cancelled half-way through an answer (the TUI cancels a fetch when
+    you pick another group) left the rest on the connection; every later command
+    then read it as its own status line ("invalid literal for int(): 'dk.'")."""
+    import asyncio
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    s = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("a", "A")
+    s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
+    for n in ("dk.snak", "dk.teknik", "alt.test"):
+        await s.create_group(n, "open", min_pow=10)
+
+    async def cancelled_half_way(c):
+        await c.command("LIST NEWSGROUPS *", (215,))   # the list itself is not read
+        raise asyncio.CancelledError
+    try:
+        await s._call(cancelled_half_way)
+    except asyncio.CancelledError:
+        pass
+    assert len(await s.list_groups()) == 3             # a fresh connection
+    await s.close()
+    server.close()

@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+- After picking another group or a refresh while an answer was still
+  arriving over Tor, the connection to the node got out of step, and every
+  later command failed ("invalid literal for int()") until a restart. An
+  interrupted connection is now closed and a new one opened. (#9)
+
 ## [0.2.0] - 2026-10-16
 
 First release with portable builds: unzip, start, done - on Windows, macOS
