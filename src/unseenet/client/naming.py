@@ -540,7 +540,6 @@ async def give_subname(s: "Session", name: str, key_text: str,
     serial = 1 + max((nm.parse_certificate(t).serial for t in st["issued"]
                       if nm.parse_certificate(t).name == name), default=0)
     cert = nm.make_subname(s.identity(), name, key_text, serial, lifetime)
-    st["issued"].append(cert.to_json())
     if key_text == s.identity().key_text:
         note_certificate(s, key_text, cert.header_value())
     else:
@@ -551,6 +550,7 @@ async def give_subname(s: "Session", name: str, key_text: str,
                                  content_type=CERT_TYPE, remember=False)
         except SessionError:
             pass                    # they get it with the next renewal; the certificate stands
+    st["issued"].append(cert.to_json())         # after sending: then it is on its way
     s.save()
     return cert
 
