@@ -133,7 +133,9 @@ private messages with @.
 
 Any group - and any conversation with a contact - can be shown as a
 **chat**: messages in order, newest at the bottom, and an input line
-where ++enter++ sends. Press ++v++ to switch between chat and threads;
+where ++enter++ sends. While you write, the letters go into the line;
+press ++escape++ to use the shortcuts (++n++, ++r++, ++g++, ...) and
+++enter++ to write again. Press ++v++ to switch between chat and threads;
 the client remembers your choice per group. Conversations with contacts
 open as a chat.
 

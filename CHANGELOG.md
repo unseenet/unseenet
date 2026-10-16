@@ -23,6 +23,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - In the group list, Space subscribes and unsubscribes; with the mouse,
   only a click on `[ ]` does, so a click on the line just shows the
   group. (#17)
+- The footer shows only the shortcuts that work where you are (Invite only
+  in closed groups you own, New post only where you may post, ...). In chat
+  view, Esc leaves the input line so the letters are shortcuts again, and
+  Enter goes back to writing. (#18)
 
 ### Fixed
 - After picking another group or a refresh while an answer was still

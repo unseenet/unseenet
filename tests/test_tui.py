@@ -732,3 +732,43 @@ async def test_tui_browse_space_and_click_on_box(tmp_path, monkeypatch):
         await pilot.pause(0.2)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_shortcuts_follow_where_you_are(tmp_path, monkeypatch):
+    """Invite only in closed groups you own, no new post in your inbox, and in a
+    chat the letters are shortcuts again after Esc (Enter writes again)."""
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(120, 36)) as pilot:
+        assert await wait_for(pilot, lambda: app._inbox_ready, 300)
+        open_gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        closed = await app.session.create_group("familie", "closed", min_pow=10)
+        chat = await app.session.create_group("snak", "open", min_pow=10, view="chat")
+        app.refresh_groups()
+        assert await wait_for(pilot, lambda: closed in app.groups and chat in app.groups, 300)
+
+        def shown(action):
+            return app.check_action(action, ())
+        app.select_group(app.session.my_inbox)
+        await pilot.pause(0.3)
+        assert not shown("new_post") and not shown("invite") and shown("message")
+        app.select_group(open_gid)
+        await pilot.pause(0.3)
+        assert shown("new_post") and not shown("invite") and not shown("reply")
+        app.select_group(closed)
+        await pilot.pause(0.3)
+        assert shown("invite")
+
+        app.select_group(chat)
+        await pilot.pause(0.5)
+        assert app.focused.id == "chat-input"
+        assert shown("leave_input") and not shown("write")
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        assert app.focused.id == "chat-log" and shown("write") and shown("new_post")
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert app.focused.id == "chat-input"
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        await pilot.press("q")
+    server.close()

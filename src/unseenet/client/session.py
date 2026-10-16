@@ -577,6 +577,22 @@ class Session:
         self.subscribe(art.group)
         return art.group
 
+    def may_post(self, group_id: str) -> bool:
+        """Whether a new post of yours would be accepted here (UN-RFC 0004, 2).
+        Unknown groups count as yes: the node has the last word."""
+        if group_id == self.my_inbox:
+            return False                     # nobody posts to their own inbox
+        entry = self.data["groups"].get(group_id, {})
+        data = entry.get("manifest") or {}
+        gtype = data.get("type") or entry.get("type")
+        if entry.get("owner") or not gtype:
+            return True
+        if gtype == "channel":
+            return self.identity().key_text in data.get("posters", [])
+        if gtype == "closed":
+            return bool(entry.get("keys"))    # a member: you have the group's key
+        return True                          # open, moderated (goes to approval), inbox
+
     def manifest_data(self, group_id: str) -> dict:
         """The newest manifest seen for a group ({} if none yet)."""
         return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))

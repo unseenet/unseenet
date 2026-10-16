@@ -1101,6 +1101,10 @@ class UnseenetApp(App):
     TITLE = "unseenet"
     CSS = CSS
     BINDINGS = [
+        # chat: the input line takes the letters; Esc leaves it, Enter goes back
+        # (first, so the footer always has room for them)
+        Binding("escape", "leave_input", "Shortcuts"),
+        Binding("enter", "write", "Write"),
         Binding("n", "new_post", "New post"),
         Binding("r", "reply", "Reply"),
         Binding("g", "browse", "Groups"),
@@ -1120,6 +1124,43 @@ class UnseenetApp(App):
         Binding("f1", "about", "About"),
         Binding("q", "quit", "Quit"),
     ]
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Show only the shortcuts that do something where you are (False hides one)."""
+        s = self.session
+        if isinstance(self.screen, ReadScreen):
+            return action in ("about", "refresh")    # it has its own r, m, n, p
+        if s is None or not s.has_identity():
+            return True
+        gid = self.current_group or ""
+        contact = gid.startswith(CONTACT)
+        group = gid in self.groups
+        m = self.current_message
+        chat = bool(gid) and self.view_of(gid) == "chat"
+        typing = getattr(self.focused, "id", None) == "chat-input"
+        if action == "leave_input":
+            return typing
+        if action == "write":
+            return chat and not typing
+        if action == "new_post":
+            return contact or (group and s.may_post(gid))
+        if action == "reply":
+            return contact or (m is not None and m.readable and (m.private or s.may_post(gid)))
+        if action == "invite":
+            g = self.groups.get(gid)
+            return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
+        if action == "add_contact":
+            return bool(m and m.readable and m.author_key
+                        and m.author_key != s.identity().key_text)
+        if action in ("group_info", "toggle_view"):
+            return group and gid != s.my_inbox
+        return True
+
+    def action_leave_input(self) -> None:
+        self.query_one("#chat-log").focus()          # now the letters are shortcuts again
+
+    def action_write(self) -> None:
+        self.query_one("#chat-input").focus()
 
     def __init__(self, vault_path: Path):
         super().__init__()
@@ -1147,7 +1188,8 @@ class UnseenetApp(App):
                     yield Static("", id="article-body", markup=False)
                 with Vertical(id="chat"):
                     yield RichLog(id="chat-log", wrap=True, markup=False, highlight=False)
-                    yield Input(placeholder="Write a message - Enter sends", id="chat-input")
+                    yield Input(placeholder="Write a message - Enter sends, Esc for the shortcuts",
+                                id="chat-input")
         yield Static("", id="status", markup=False)
         yield Footer()
 
@@ -1355,6 +1397,7 @@ class UnseenetApp(App):
     async def select_group(self, gid: str) -> None:
         self.current_group = gid
         self.current_message = None
+        self.refresh_bindings()
         if gid.startswith(CONTACT):
             try:
                 await self.session.fetch_group(self.session.my_inbox)
@@ -1616,6 +1659,7 @@ class UnseenetApp(App):
         if msg is None:
             return
         self.current_message = msg
+        self.refresh_bindings()
         head, body = self.article(msg)
         self.query_one("#article-head", Static).update(head)
         self.query_one("#article-body", Static).update(body)
