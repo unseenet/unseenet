@@ -96,4 +96,5 @@ nav:
   - The project:
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md
+      - The project's nodes: project/nodes.md
   - Development: development.md
