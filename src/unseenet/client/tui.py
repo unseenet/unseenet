@@ -1162,6 +1162,7 @@ class UnseenetApp(App):
         Binding("at", "names", "Names", show=False),
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
+        Binding("D", "withdraw", "Withdraw", show=False),
         Binding("question_mark", "group_info", "About group"),
         Binding("v", "toggle_view", "Chat/threads"),
         Binding("f", "read", "Full screen", show=False),
@@ -1195,6 +1196,8 @@ class UnseenetApp(App):
         if action == "invite":
             g = self.groups.get(gid)
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
+        if action == "withdraw":
+            return bool(m and group and s.may_cancel(m))
         if action == "add_contact":
             return bool(m and m.readable and m.author_key
                         and m.author_key != s.identity().key_text)
@@ -2183,6 +2186,8 @@ class UnseenetApp(App):
              self.action_mark_all_read),
             ("Unsubscribe from group", "Stop following the current group and forget it locally",
              self.action_unsubscribe),
+            ("Withdraw post", "Take your post (or one in a group you own) back from the network  [D]",
+             self.action_withdraw),
             ("Remove group from the network", "Delete a group you own from every node - final",
              self.action_remove_group),
         ]
@@ -2347,6 +2352,35 @@ class UnseenetApp(App):
         self.current_group = None
         self.notify(f"{self.session.group_label(g.group_id)} removed")
         self.refresh_groups()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_withdraw(self) -> None:
+        """Withdraw the selected post (UN-RFC 0004, section 7)."""
+        m, s = self.current_message, self.session
+        if m is None or not s.may_cancel(m):
+            self.notify("You can withdraw your own posts, and any post in a group you own "
+                        "or moderate.", severity="warning")
+            return
+        mine = m.author_key == s.identity().key_text
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Withdraw \"{m.subject or '(no subject)'}\"?",
+                ("Your post" if mine else "This post") + " is taken back from every node "
+                "that follows the protocol, and other clients stop showing it.\n\n"
+                "It is withdrawn, not deleted: people who have read it may have kept a "
+                "copy, and nodes or programs that ignore withdrawals can keep it.",
+                "Withdraw", danger=True)):
+            return
+        self.set_status("Withdrawing ...")
+        try:
+            await s.cancel(m)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not withdrawn: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.current_message = None
+        self._render_threads()
+        self.notify("Withdrawn")
 
     def action_open_inbox(self) -> None:
         gid = self.session.my_inbox

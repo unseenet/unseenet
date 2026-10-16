@@ -858,3 +858,27 @@ async def test_tui_names_dialog(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: any("registrar is not set up" in n for n in notes), 300)
         assert not isinstance(app.screen, NamesDialog)
     server.close()
+
+
+async def test_tui_withdraw_own_post(tmp_path, monkeypatch):
+    """D withdraws your own post after a warning that it is best effort (UN-RFC 0004, 7)."""
+    from unseenet.client.tui import ConfirmDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        await app.session.post(gid, "Ups", "Forkert\n")
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.session.cache.get(gid, {})) == 1, 300)
+        await pilot.pause(0.3)
+        app.query_one("#threads").focus()
+        await pilot.press("down")
+        assert await wait_for(pilot, lambda: app.current_message is not None, 100)
+        assert app.check_action("withdraw", ())
+        await pilot.press("D")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 100)
+        assert "not deleted" in " ".join(str(w.render()) for w in app.screen.query("Static"))
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: not app.session.cache.get(gid), 300)
+        await pilot.press("q")
+    server.close()

@@ -975,9 +975,11 @@ class Session:
             raws[n] = raw
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
+        if entry.get("cancels") and self._apply_cancels(group_id):
+            changed = True
         if changed:
             self.save()
-        if fetched:
+        if fetched or changed:
             self.save_offline()
         return sorted(cache.values(), key=lambda m: m.number)
 
@@ -1015,6 +1017,8 @@ class Session:
                 if msg is not None:
                     cache[n], raws[n] = msg, raw
                     loaded += 1
+            if entry.get("cancels"):
+                self._apply_cancels(gid)
         return loaded
 
     def save_offline(self) -> None:
@@ -1025,6 +1029,77 @@ class Session:
                            "articles": {str(n): base64.b64encode(raws[n]).decode() for n in keep}}
         payload = json.dumps({"v": 2, "groups": groups}).encode()
         self.vault.write_sidecar(CACHE_SIDECAR, payload)
+
+    def may_cancel(self, msg: Message) -> bool:
+        """Your own post, or any post in a group you own or moderate (UN-RFC 0004, 7.1)."""
+        if msg is None or msg.private or msg.group not in self.data["groups"]:
+            return False
+        me = self.identity().key_text
+        manifest = self.manifest_data(msg.group)
+        return msg.author_key == me or manifest.get("owner") == me \
+            or me in manifest.get("moderators", [])
+
+    async def cancel(self, msg: Message, reason: str = "") -> str:
+        """Withdraw a post from the network (UN-RFC 0004, section 7). Best effort:
+        people who read it already, and nodes that ignore cancels, may keep it."""
+        if not self.may_cancel(msg):
+            raise SessionError("you can only withdraw your own posts, or posts in a group "
+                               "you own or moderate")
+        group_id = msg.group
+        if self.group_entry(group_id).get("type") == "closed":
+            reason = ""                     # the nodes could read it (section 7.5)
+        me = self.identity()
+        art = await self._post_with_postage(group_id, lambda bits: new_article(
+            group_id, None, reason, extra=[("Control", f"cancel {msg.message_id}")]
+        ).finalize(me, bits))
+        entry = self.group_entry(group_id)
+        entry.setdefault("cancels", {})[msg.message_id] = {"by": me.key_text, "date": art["Date"]}
+        self._apply_cancels(group_id)
+        self.save()
+        self.save_offline()
+        return art.message_id
+
+    def _apply_cancels(self, group_id: str) -> bool:
+        """Drop posts withdrawn by a valid cancel (UN-RFC 0004, 7.1 and 7.3).
+
+        The client checks each cancel itself: signed (checked in _parse) by the
+        target's author, or by the group's owner or a moderator. Cancels whose
+        target has not arrived are kept for the group's retention, then dropped.
+        True if anything changed."""
+        entry = self.group_entry(group_id)
+        cancels = entry.get("cancels") or {}
+        cache = self.cache.get(group_id, {})
+        raws = self._raw.get(group_id, {})
+        manifest = self.manifest_data(group_id)
+        privileged = {manifest.get("owner")} | set(manifest.get("moderators", []))
+        by_id = {m.message_id: n for n, m in cache.items()}
+        keep_days = int(manifest.get("retention_days", 90))
+        now = datetime.now(timezone.utc)
+        changed = False
+        for target, c in list(cancels.items()):
+            n = by_id.get(target)
+            if n is None:
+                try:
+                    old = (now - parse_date(c.get("date", ""))).days > keep_days
+                except (TypeError, ValueError):
+                    old = True
+                if old:                     # pending too long (section 7.2)
+                    del cancels[target]
+                    changed = True
+                continue
+            try:                            # the target's signer, also for private messages
+                target_author = Article.from_bytes(raws[n])["Author-Key"] if n in raws \
+                    else cache[n].author_key
+            except (ArticleError, KeyError, ValueError):
+                target_author = cache[n].author_key
+            if c.get("by") == target_author or c.get("by") in privileged:
+                del cache[n]
+                raws.pop(n, None)
+                changed = True
+            else:                           # not valid for this target: forget it
+                del cancels[target]
+                changed = True
+        return changed
 
     @staticmethod
     def _take_manifest(art: Article, group_id: str, entry: dict) -> bool:
@@ -1074,6 +1149,11 @@ class Session:
                 epoch, keys = opened
                 entry["keys"][str(epoch)] = keys.secret.hex()
                 self._redecrypt(group_id)
+            return None
+        if ctl and ctl[0] == "cancel" and len(ctl) == 2:
+            # checked against the target in _apply_cancels (UN-RFC 0004, 7.3)
+            entry.setdefault("cancels", {}).setdefault(ctl[1], {
+                "by": art["Author-Key"], "date": art.get("Date", "")})
             return None
         if ctl:
             return None
