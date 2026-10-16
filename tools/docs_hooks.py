@@ -1,16 +1,16 @@
 """MkDocs hooks for the documentation site (see mkdocs.yml, ``hooks:``).
 
-Puts the newest release and the newest development build into the header
+Puts the newest release, pre-release and development build into the header
 lines at the top of the front page, where docs/index.md has the marker
 ``<!-- unseenet:versions -->``. They are looked up once per build, from the
 GitHub API (with ``GITHUB_TOKEN`` if it is set), so the reader's browser
 asks nobody. The docs workflow builds the site again after every release
 and development build, which keeps the numbers current.
 
-Without a network the release comes from the newest ``v*`` git tag and the
-development build is left out, as it is when it is not newer than the
-release (right after a release). If neither is known the marker just
-disappears.
+A pre-release (0.3.0a1) is shown only when it is newer than the release,
+and the development build only when it is newer than both. Without a
+network the versions come from the ``v*`` git tags and the development
+build is left out. If nothing is known the marker just disappears.
 """
 
 from __future__ import annotations
@@ -44,15 +44,6 @@ def _api_releases() -> list[dict]:
         return json.load(resp)
 
 
-def _git_release() -> str | None:
-    try:
-        out = subprocess.run(["git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
-                             capture_output=True, text=True, timeout=10, check=True)
-        return out.stdout.strip() or None
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
 def _day(stamp: str | None) -> str:
     if not stamp:
         return ""
@@ -62,56 +53,75 @@ def _day(stamp: str | None) -> str:
         return ""
 
 
-def versions() -> tuple[dict | None, dict | None]:
-    """(newest release, newest development build), each {version, url, date}."""
-    release = dev = None
+def _version(text: str):
+    from packaging.version import InvalidVersion, Version  # comes with mkdocs
+    try:
+        return Version(text)
+    except InvalidVersion:
+        return None
+
+
+def versions() -> list[tuple[str, dict]]:
+    """The header lines: [(label, {version, url, date})], newest last.
+
+    Release is the newest full release; Pre-release (an alpha, beta or
+    candidate, by its version number) and Development only when they are
+    newer than everything above them - right after a release the dev build
+    is the one from before it until the next is made.
+    """
+    found: list[dict] = []   # {version, url, date, kind}
     try:
         for r in _api_releases():
             if r.get("draft"):
                 continue
             tag = r.get("tag_name", "")
-            if tag == "dev" and dev is None:
+            if tag == "dev":
                 m = re.search(r"(\d+\.\d+\.\d+\S*)", r.get("name") or "")
                 if m:
-                    dev = {"version": m.group(1), "url": r["html_url"],
-                           "date": _day(r.get("published_at"))}
-            elif re.fullmatch(r"v\d+\.\d+\.\d+\S*", tag) and release is None:
-                release = {"version": tag[1:], "url": r["html_url"],
-                           "date": _day(r.get("published_at")),
-                           "pre": bool(r.get("prerelease"))}
+                    found.append({"version": m.group(1), "url": r["html_url"],
+                                  "date": _day(r.get("published_at")), "kind": "dev"})
+            elif re.fullmatch(r"v\d+\.\d+\.\d+\S*", tag):
+                found.append({"version": tag[1:], "url": r["html_url"],
+                              "date": _day(r.get("published_at")), "kind": "tag"})
     except Exception as exc:  # no network, rate limit: fall back to git
         log.info("unseenet: could not ask GitHub for releases (%s); using git", exc)
-        tag = _git_release()
-        if tag:
-            release = {"version": tag[1:], "url": f"{RELEASES}/tag/{tag}", "date": "", "pre": False}
-    return release, dev
+        for tag in _git_tags():
+            found.append({"version": tag[1:], "url": f"{RELEASES}/tag/{tag}", "date": "", "kind": "tag"})
+
+    def newest(items):
+        items = [x for x in items if x["v"] is not None]
+        return max(items, key=lambda x: x["v"]) if items else None
+
+    for x in found:
+        x["v"] = _version(x["version"])
+    tags = [x for x in found if x["kind"] == "tag"]
+    release = newest([x for x in tags if x["v"] and not x["v"].is_prerelease])
+    pre = newest([x for x in tags if x["v"] and x["v"].is_prerelease])
+    dev = newest([x for x in found if x["kind"] == "dev"])
+
+    lines, top = [], None
+    for label, item in (("Release", release), ("Pre-release", pre), ("Development", dev)):
+        if item and (top is None or item["v"] > top):
+            lines.append((label, item))
+            top = item["v"]
+    return lines
 
 
-def _newer(dev: dict, release: dict) -> bool:
-    """Whether the development build is newer than the release (right after a
-    release, the dev build is older until the next one is made)."""
+def _git_tags() -> list[str]:
     try:
-        from packaging.version import Version  # comes with mkdocs
-        return Version(dev["version"]) > Version(release["version"])
-    except Exception:
-        return True
+        out = subprocess.run(["git", "tag", "--list", "v[0-9]*"],
+                             capture_output=True, text=True, timeout=10, check=True)
+        return out.stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return []
 
 
 def header_lines() -> str:
-    release, dev = versions()
-    if dev and release and not _newer(dev, release):
-        dev = None
     out = []
-    if release:
-        note = " ".join(x for x in (release["date"],) if x)
-        out.append(f'    <dt>Release</dt><dd><a href="{html.escape(release["url"])}">'
-                   f'{html.escape(release["version"])}</a>'
-                   + (f' <span class="un-dim">{html.escape(note)}</span>' if note else "")
-                   + "</dd>")
-    if dev:
-        out.append(f'    <dt>Development</dt><dd><a href="{html.escape(dev["url"])}">'
-                   f'{html.escape(dev["version"])}</a>'
-                   + (f' <span class="un-dim">{html.escape(dev["date"])}</span>' if dev["date"] else "")
+    for label, item in versions():
+        out.append(f'    <dt>{label}</dt><dd><a href="{html.escape(item["url"])}">'
+                   f'{html.escape(item["version"])}</a>'
+                   + (f' <span class="un-dim">{html.escape(item["date"])}</span>' if item["date"] else "")
                    + "</dd>")
     return "\n".join(out)
 
