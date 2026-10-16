@@ -1,4 +1,4 @@
-# Portable: USB stick, Windows, macOS
+# Portable (Linux, macOS, Windows)
 
 The portable builds are the easiest way to use Unseenet: one folder with the
 client **and Tor** inside, nothing to install. Unzip it, start it, done. Put
@@ -125,23 +125,10 @@ at work, continue on Linux at home.
 
 ## Updating
 
-In the client, open the command palette (Ctrl+P) and choose **Update
-Unseenet**. It fetches the newest release over Tor, checks that it is
-signed by the project and that nothing was changed on the way, and replaces
-the programs; **`data/` is kept**. Start Unseenet again afterwards. From a
-terminal it is `unseenet update` (in the folder: `./linux-x86_64/unseenet
-update`, `windows-x86_64\unseenet.exe update`), with `--check` to only see
-whether there is something newer and `--channel dev` for development builds.
-
-A folder with every platform (the USB zip) gets the USB zip; a folder with
-one platform gets that platform's zip; a [bootable stick](bootable.md#updating)
-gets its own update, which includes the portable builds. On Windows, programs
-that are running are moved aside and deleted the next time Unseenet starts.
-Without a network, put the right zip and the release's `SHA256SUMS.txt` and
-`SHA256SUMS.txt.sig` in one folder and run `unseenet update --zip <the zip>`.
-
-Updating uses Tor without bridges. Where Tor is blocked, download the zip
-some other way and update with `--zip`.
+In the client: **Ctrl+P** and **Update Unseenet**, or `unseenet update` in
+a terminal. It fetches the newest release over Tor, checks its signature and
+replaces the programs. **`data/` is kept.** All about it, also without a
+network: [Updating](updating.md).
 
 ## What stays on the computer
 

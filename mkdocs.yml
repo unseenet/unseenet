@@ -55,12 +55,15 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started:
-      - Portable (USB, Windows, macOS): portable.md
-      - Bootable stick: bootable.md
+      - Portable (Linux, macOS, Windows): portable.md
+      - Bootable (USB, SSD etc.): bootable.md
       - Using the client: client.md
-      - Other newsreaders: other-clients.md
+      - Updating: updating.md
+  - How it works:
       - Concepts: concepts.md
       - Tor and Tails: tor.md
+  - More ways to use it:
+      - Other newsreaders: other-clients.md
   - Running a node:
       - Installation: node/install.md
       - Configuration: node/configuration.md
