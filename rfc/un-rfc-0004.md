@@ -128,9 +128,9 @@ satisfy the rule for the group's type under the current manifest:
     angle brackets, as ASCII).
 
   Because `Approved-By` and `Approval` are outside the canonical form,
-  approving an article does not change its Message-ID. How an
-  unapproved article reaches a moderator is not specified in this
-  version (reserved: UN-RFC 0009); clients MAY hand it over out of band.
+  approving an article does not change its Message-ID. An unapproved
+  article reaches the moderators as a submission (UN-RFC 0009 section
+  3).
 - **closed:** see section 6.5.
 
 ## 5.1 Banned Keys

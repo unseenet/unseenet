@@ -8,6 +8,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Moderated groups work for everyone: a non-moderator's post goes, sealed,
+  to the owner and every moderator (UN-RFC 0009 section 3, now covering
+  several moderators), and **Moderation queue** in the client approves it
+  unchanged or rejects it. The first moderator to act decides. (#71)
 - Owners run their groups from the client: **Make moderator**, **Make
   poster** (channels), **Moderators and posters** (remove), and **Members
   of closed group**, which removes a member by giving everyone else a new

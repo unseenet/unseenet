@@ -530,3 +530,55 @@ async def test_moderators_posters_and_removing_members(tmp_path, monkeypatch):
     for p in (owner, mod, user):
         await p.close()
     server.close()
+
+
+async def test_moderation_queue(tmp_path, monkeypatch):
+    """UN-RFC 0009 section 3: a non-moderator's post to a moderated group goes to
+    the owner and every moderator; the first approval posts it, unchanged."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    owner, mod, user = person("owner"), person("mod"), person("user")
+    for p in (owner, mod, user):
+        await p.ensure_inbox()
+    gid = await owner.create_group("dk.mod", "moderated", min_pow=8)
+    await owner.set_role(gid, "moderators", mod.identity().key_text)
+    for p in (mod, user):
+        p.subscribe(gid)
+        await p.fetch_group(gid)
+
+    msgid = await user.post(gid, "Spørgsmål", "Må jeg spørge om noget?\n")
+    assert user.was_submitted(gid, msgid)
+    assert await user.fetch_group(gid) == []                   # not in the group yet
+
+    for p in (owner, mod):
+        await p.fetch_group(p.my_inbox)
+    queue = mod.submissions()
+    assert [(a.message_id, a["Subject"]) for _, a in queue] == [(msgid, "Spørgsmål")]
+    assert len(owner.submissions()) == 1
+    assert user.sent_messages() == []                          # no copies of submissions
+
+    await mod.approve_submission(*queue[0])
+    posted = await user.fetch_group(gid)
+    assert [m.message_id for m in posted] == [msgid]           # same Message-ID
+    await owner.fetch_group(gid)
+    assert owner.submissions() == []                           # handled by the other moderator
+
+    # a rejection with a reason reaches the submitter
+    msgid2 = await user.post(gid, "Spam", "køb\n")
+    await mod.fetch_group(mod.my_inbox)
+    m2, a2 = next((m, a) for m, a in mod.submissions() if a.message_id == msgid2)
+    await mod.reject_submission(m2, "Ikke relevant her")
+    assert mod.submissions() == []
+    await user.fetch_group(user.my_inbox)
+    assert any("Ikke relevant" in m.body for m in user.private_messages())
+    for p in (owner, mod, user):
+        await p.close()
+    server.close()

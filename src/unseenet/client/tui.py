@@ -583,6 +583,39 @@ class KeyListDialog(Dialog):
             self.dismiss(who)
 
 
+class ModerationDialog(Dialog):
+    """Submissions to groups you moderate (UN-RFC 0009 section 3)."""
+
+    def __init__(self, items: list[tuple[str, str, str]]):
+        super().__init__()
+        self.items = items                  # (id, label, preview)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog list"):
+            yield Label("Moderation queue", classes="title")
+            yield Label("Posts waiting for a moderator. Approving posts them unchanged; the "
+                        "first moderator to act decides.", classes="hint")
+            yield Select([(label, i) for i, label, _ in self.items], prompt="Choose a post",
+                         id="which")
+            yield Static("", id="preview", classes="details", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                yield Button("Reject", variant="error", id="reject")
+                yield Button("Approve", variant="primary", id="approve")
+
+    @on(Select.Changed, "#which")
+    def _show(self, event: Select.Changed) -> None:
+        text = next((p for i, _, p in self.items if i == event.value), "")
+        self.query_one("#preview", Static).update(text)
+
+    @on(Button.Pressed, "#approve")
+    @on(Button.Pressed, "#reject")
+    def _act(self, event: Button.Pressed) -> None:
+        which = self.query_one("#which", Select).value
+        if isinstance(which, str):
+            self.dismiss((event.button.id, which))
+
+
 class NamesDialog(Dialog):
     """Your names (UN-RFC 0019): those you hold, those you asked for, and a field to claim one."""
 
@@ -1652,7 +1685,9 @@ class UnseenetApp(App):
                 owner = crypto.key_from_text(key)
                 await self.session.send_private(personal_inbox_id(owner), subject, text, owner_key=owner)
             else:
-                await self.session.post(gid, subject, text)
+                msgid = await self.session.post(gid, subject, text)
+                if self.session.was_submitted(gid, msgid):
+                    self.notify("Sent to the moderators for approval", timeout=8)
                 await self.session.fetch_group(gid)
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
@@ -1973,11 +2008,15 @@ class UnseenetApp(App):
         subject, body = result
         self.set_status("Sending (computing postage) ...")
         try:
-            await self.session.post(g.group_id, subject, body, references)
+            msgid = await self.session.post(g.group_id, subject, body, references)
         except (SessionError, OSError, ConnectionError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             return
-        self.notify("Sent")
+        if self.session.was_submitted(g.group_id, msgid):
+            self.notify("Sent to the moderators. It appears in the group when one of them "
+                        "approves it.", timeout=10)
+        else:
+            self.notify("Sent")
         self.select_group(g.group_id)
 
     @work(group="dialog", exit_on_error=False)
@@ -2253,6 +2292,8 @@ class UnseenetApp(App):
              "you know", self.action_ignore),
             ("People you ignore", "See who you ignore, and show someone again",
              self.action_ignored),
+            ("Moderation queue", "Moderators: posts waiting for approval in groups you "
+             "moderate", self.action_moderation),
             ("Make moderator", "Owner: let someone approve and withdraw posts in this group",
              lambda: self.action_add_role("moderators")),
             ("Make poster", "Owner of a channel: let someone post in it",
@@ -2384,6 +2425,46 @@ class UnseenetApp(App):
         self.current_message = None
         self.notify(f"{who} is banned from {s.group_label(gid)}")
         self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_moderation(self) -> None:
+        """Approve or reject submissions (UN-RFC 0009 section 3)."""
+        s = self.session
+        try:
+            await s.fetch_group(s.my_inbox)
+        except (SessionError, OSError, ConnectionError):
+            pass                                  # show what we have
+        queue = s.submissions()
+        if not queue:
+            self.notify("Nothing waiting for approval")
+            return
+        items = []
+        for m, art in queue:
+            who = s.identity_label(art["Author-Key"], art.get("From", ""))
+            items.append((m.message_id, f"{s.group_label(art.group)}: {art.get('Subject', '')} - {who}",
+                          f"From: {who}\nGroup: {s.group_label(art.group)}\n"
+                          f"Subject: {art.get('Subject', '')}\n\n{art.body}"))
+        result = await self.push_screen_wait(ModerationDialog(items))
+        if not result:
+            return
+        action, which = result
+        msg, art = next((m, a) for m, a in queue if m.message_id == which)
+        try:
+            if action == "approve":
+                await s.approve_submission(msg, art)
+                self.notify("Approved and posted")
+            else:
+                if not await self.push_screen_wait(ConfirmDialog(
+                        "Reject this post?", "It is not posted, and the queue forgets it. "
+                        "The author is not told unless you write to them.", "Reject")):
+                    return
+                await s.reject_submission(msg)
+                self.notify("Rejected")
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not done: {exc}", severity="error", timeout=8)
+            return
+        if self.current_group == art.group:
+            self.select_group(art.group)
 
     def _owned_group(self, kind: str | None = None) -> str | None:
         s, gid = self.session, self.current_group

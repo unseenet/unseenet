@@ -1018,3 +1018,32 @@ async def test_tui_make_and_remove_moderator(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: not app.session.manifest_data(gid).get("moderators"), 300)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_moderation_queue(tmp_path, monkeypatch):
+    """UN-RFC 0009 section 3 in the client: a submission waits in the queue and
+    Approve posts it."""
+    import unseenet.client.session as sess
+    from unseenet.client.tui import ModerationDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        s = app.session
+        gid = await s.create_group("dk.mod", "moderated", min_pow=10)
+        user = Session(Vault.open(tmp_path / "u.vault", "pw", **KDF), status=lambda *_: None)
+        user.new_identity("u", "U"); user.add_node(addr); user.subscribe(gid)
+        await user.fetch_group(gid)
+        msgid = await user.post(gid, "Hej", "Må jeg?\n")
+        app.action_moderation()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ModerationDialog), 300)
+        await pilot.pause(0.3)
+        app.screen.query_one("#which").value = app.screen.items[0][0]
+        app.screen.query_one("#approve").press()
+        await user.close()
+        assert await wait_for(pilot, lambda: s.data.get("moderation_done"), 300)
+        msgs = await s.fetch_group(gid)
+        assert [m.message_id for m in msgs] == [msgid]
+        assert sess.SUBMISSION_TYPE == "message/unseenet"
+        await pilot.press("q")
+    server.close()
