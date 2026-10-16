@@ -89,6 +89,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   docs/node/docker.md and deploy/docker-compose.yml. (#22)
 - Issue forms for the bootable stick and the Docker image.
 
+### Changed
+- UN-RFC 0004 section 7 (cancel) says what a client must do: check a
+  cancel itself before acting on it, drop the target from its cache,
+  remember cancels for posts it has not seen, and tell its user that
+  withdrawing is best effort. Control articles (manifests, key updates,
+  cancels) cannot be cancelled, and the node now refuses that. Also: how
+  long pending cancels are kept, and what a cancel shows in a closed
+  group. (#35)
+
 ### Fixed
 - In *Your names* (`@`) the claim field no longer sits against the line
   with your key. (#61)
