@@ -12,6 +12,7 @@ import unseenet.client.session as sess
 import unseenet.names as nm
 from unseenet.client.session import Session
 from unseenet.core import crypto
+from unseenet.core.groups import manifest_article
 from unseenet.core.store import Store
 from unseenet.core.vault import Vault
 from unseenet.node.server import Node, NodeConfig
@@ -50,6 +51,13 @@ async def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(owner_mod, "POW_BITS", 8)
     monkeypatch.setattr(owner_mod, "PROJECT_KEY", project.key_text)
     monkeypatch.setattr(owner_mod, "post_everywhere", post_local)
+
+    async def fetch_local(group_ids, addresses=None):
+        c = await Client.connect(addr)
+        got = await owner_mod.read_manifests(c, group_ids)
+        await c.quit()
+        return got
+
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "pw")
     names_group = f"unseenet.names@{project.fingerprint}"
     monkeypatch.setattr(nm, "NAMES_GROUP", names_group)
@@ -61,6 +69,8 @@ async def setup(tmp_path, monkeypatch):
         monkeypatch.setattr(mod, "open_owner_session",
                             lambda: owner_mod.open_owner_session(vault_path, project.key_text))
         monkeypatch.setattr(mod, "post_everywhere", post_local)
+        if hasattr(mod, "fetch_manifests"):
+            monkeypatch.setattr(mod, "fetch_manifests", fetch_local)
         if hasattr(mod, "NAMES_GROUP"):
             monkeypatch.setattr(mod, "NAMES_GROUP", names_group)
         monkeypatch.setattr(sys, "argv", [name, *argv])
@@ -93,31 +103,55 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
                 if e.get("owner")}) == 8
 
+    async def as_published_before(gid, change):
+        """Put a newer manifest on the node, as an older script would have made it."""
+        v = Vault.open(setup["vault"], "pw")
+        data = dict(v.data["groups"][gid]["manifest"])
+        change(data)
+        data["serial"] += 1
+        c = await Client.connect(addr)
+        code, text = await c.post(manifest_article(setup["project"], gid, data, pow_bits=8).to_bytes())
+        await c.quit()
+        assert code == 240, text
+        v.data["groups"][gid]["manifest"] = data
+        v.save()
+
     # a data group made before views existed gets a new manifest; others are left alone
-    v = Vault.open(setup["vault"], "pw")
-    del v.data["groups"][nodes]["manifest"]["view"]
-    v.save()
+    await as_published_before(nodes, lambda d: d.pop("view"))
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     assert v.data["groups"][nodes]["manifest"]["view"] == "data"
-    assert v.data["groups"][nodes]["manifest"]["serial"] == 2
+    assert v.data["groups"][nodes]["manifest"]["serial"] == 3
     assert v.data["groups"][talk]["manifest"]["serial"] == 1
 
     # a group made before the list had rules gets them; posters and the rest are kept
-    old = v.data["groups"][talk]["manifest"]
-    for k in ("title", "description", "rules"):
-        old.pop(k, None)
     kept = [crypto.Identity.generate().key_text]
-    old["min_pow"], old["posters"] = 0, kept
-    v.save()
+
+    def without_rules(d):
+        for k in ("title", "description", "rules"):
+            d.pop(k, None)
+        d["min_pow"], d["posters"] = 0, kept
+    await as_published_before(talk, without_rules)
     await run("create_groups")
     new = Vault.open(setup["vault"], "pw").data["groups"][talk]["manifest"]
-    assert new["serial"] == 2 and new["rules"].startswith("The place to talk")
+    assert new["serial"] == 3 and new["rules"].startswith("The place to talk")
     assert new["min_pow"] == 20 and new["posters"] == kept and "view" not in new
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
-    assert v.data["groups"][talk]["manifest"]["serial"] == 2
-    assert v.data["groups"][nodes]["manifest"]["serial"] == 2
+    assert v.data["groups"][talk]["manifest"]["serial"] == 3
+    assert v.data["groups"][nodes]["manifest"]["serial"] == 3
+
+    # the nodes, not the vault, say what a group's manifest is now
+    test = f"unseenet.test@{setup['project'].fingerprint}"
+    del v.data["groups"][test]["manifest"]                    # never kept by the vault
+    stale = dict(v.data["groups"][talk]["manifest"], serial=1)
+    stale.pop("rules")
+    v.data["groups"][talk]["manifest"] = stale
+    v.save()                                                   # an out-of-date vault
+    await run("create_groups")
+    v = Vault.open(setup["vault"], "pw")
+    assert v.data["groups"][test]["manifest"]["serial"] == 1  # read from the node, now kept
+    assert v.data["groups"][talk]["manifest"]["serial"] == 3  # the node's, not a new one
 
     # 2. wire up the registrar: claim inbox and manifest with `claims`
     await run("setup_registrar")
