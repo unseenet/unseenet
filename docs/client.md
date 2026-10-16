@@ -217,6 +217,67 @@ If you have lost the identity that owns a group, the group cannot be removed
 from the network. A node operator can still
 [drop it from their own node](node/operations.md#dropping-a-group).
 
+## Banning someone from your group
+
+If you own a group, select a post by the person and choose **Ban from
+group** in the command palette, with a short reason. Nodes then refuse
+their new posts in the group, and clients hide their old ones
+([UN-RFC 0004](spec/un-rfc-0004.md) section 5.1). **Banned from group**
+lists the bans and lifts one.
+
+A ban is part of the group's signed settings, so it is **public**: anyone
+can see in the group's settings (++question-mark++) that someone is banned
+and why. It stops an identity, not a person - keys are free, so someone
+determined can come back with a new one. Raise the group's postage to make
+that slower, and withdraw posts you do not want (see below).
+
+## Blocked in a hierarchy
+
+A hierarchy can have a **maintainer** - for example an organisation that
+runs `dk.*` ([concepts](concepts.md#hierarchies)). A maintainer can block
+someone in its whole hierarchy, with a public reason - say a person who
+posts threats in group after group. A maintainer it has given a part of
+the hierarchy to, such as `dk.snak.*`, can block within that part.
+
+Your client hides posts by blocked people and says so in the group's
+title line ("2 hidden: blocked in dk.*: threats against members"). You
+decide: **Show posts blocked by maintainers** in the command palette
+shows them again. Node operators decide for their nodes, too
+([`honour_blocks`](node/configuration.md#honour_blocks-maintainers-blocks)).
+
+If you are a maintainer, select a post and choose **Block in hierarchy**,
+with a reason. Your client adds the block to your hierarchy list and
+posts it ([UN-RFC 0018](spec/un-rfc-0018.md) section 5.4). A block does
+not delete anything and gives you no power over the groups themselves;
+for real crimes, contact the police.
+
+## Reporting a post
+
+If a post breaks the group's rules or the law - threats, plans for
+violence, abuse - select it and choose **Report post** in the command
+palette. Tick who should get it: the group's owner, its moderators, the
+maintainer of its hierarchy and the operator of the node you read it
+from, and add a note. They get the post and your note as a private
+message, and can withdraw the post, ban or block its author. A report can
+be anonymous; then they cannot answer you.
+
+If you receive a report, select it and choose **Open reported post** to
+go to the post it is about.
+
+In an emergency, contact the police. Nobody on Unseenet - not the node
+operators, not the project - can see who anyone is.
+
+## Ignoring someone
+
+Select a post by the person and choose **Ignore this person** in the
+command palette (++ctrl+p++). Their posts and private messages are hidden
+from you in every group, like a killfile in the old newsreaders. Replies
+to them by others stay, so a discussion does not lose its middle.
+
+Only you know: the list is kept in your vault and never sent anywhere,
+and the person is not told. **People you ignore** in the command palette
+shows the list, and shows someone again.
+
 ## Withdrawing a post
 
 Select a post and choose **Withdraw post** in the command palette
@@ -345,6 +406,34 @@ per group, so others can check it; posts in closed groups and private
 messages never do. A name links everything its identity posts, so do not
 claim one for an identity you keep apart.
 
+### Names under a name
+
+If you hold a name such as `@lorensen`, you can give names under it:
+`andreas@lorensen` for yourself, `sonia@lorensen` for your daughter -
+like e-mail addresses in a family or an organisation. No registrar is
+involved; your key signs it.
+
+- **Give a name under yours** (command palette): the name, whose key
+  (filled in from the selected post) and for how many years (1 to 5).
+  Your client renews it when it is about to run out.
+- **Ask for a name under someone's name**: type e.g. `sonia@lorensen`;
+  its holder gets your request under **Name requests** and gives it or
+  refuses. The name arrives in your private messages and shows on your
+  posts from then on.
+- **Names you gave** lists them and takes one back. Taking back is
+  public: it goes in your list of revoked names.
+- **Name your posts show**: with several names (your own `@jaxie`,
+  `sonia@lorensen`, ...), choose the one readers see.
+
+A name under yours counts only while `@lorensen` is yours: if you give it
+up or it runs out, the names under it stop counting too.
+
+A domain can name people in DNS, as for e-mail: with the record
+`andlo._unseenet.lorensen.dk TXT "unseenet-key=ed25519:..."` you claim
+`andlo@lorensen.dk` under `@` like any name, and the registrar checks the
+record every month. An organisation can name its people this way without
+running Unseenet itself.
+
 Under `@` you can also give a name up or hand it on. Type the name, then:
 
 - **Transfer** gives it to another key - your new identity's when you
@@ -418,6 +507,38 @@ Closed groups are end-to-end encrypted, so you need to be invited:
 
 A minute or so later, when the invitation has reached your node, the
 posts become readable.
+
+## Running your group: moderators, posters and members
+
+As a group's owner you choose who else has a role, in the command palette
+(++ctrl+p++). Select a post by the person first, and their key is filled in.
+
+- **Make moderator**: moderators post directly in a moderated group,
+  approve others' posts, and can withdraw any post in the group.
+- **Make poster** (channels): posters may post in your channel.
+- **Moderators and posters** lists them and removes one.
+- **Members of closed group** lists the people you invited from this
+  client, and **removes** one. The group then gets a new key, sent to
+  everyone else; the removed member cannot read or post anything new,
+  but keeps what they have already read. Posts others wrote with the old
+  key in the same moment may be refused; the client says so, and you can
+  send them again. Members you invited from another device
+  (or before version 0.3.0) are not on the list and do not get the new
+  key either - invite them again.
+
+*About group* (++question-mark++) shows everyone the moderators and posters.
+
+### Moderated groups
+
+In a **moderated** group, a post by someone who is not a moderator is
+not posted straight away. The client sends it, sealed, to the owner and
+every moderator ([UN-RFC 0009](spec/un-rfc-0009.md) section 3), and tells
+you it is waiting for approval.
+
+Moderators open **Moderation queue** in the command palette. *Approve*
+posts it unchanged - the author's signature and Message-ID stay - and
+*Reject* drops it. The first moderator to act decides; the others' queues
+forget it.
 
 ## Sending takes a moment
 

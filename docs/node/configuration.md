@@ -34,9 +34,26 @@ groups = "*"
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
+| `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
 | `pull_interval` | `3600` | Seconds between [catch-up pulls](peering.md#catching-up) from each peer. |
+| `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
 | `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
+
+### `honour_blocks`: maintainers' blocks
+
+A hierarchy's maintainer (for example whoever runs `dk.*`) can block an
+identity in its whole hierarchy, with a public reason
+([UN-RFC 0018](../spec/un-rfc-0018.md) section 5.4) - say someone who
+posts threats in group after group. With `honour_blocks = true` your node
+refuses new posts by blocked identities in the groups under that
+hierarchy. Readers' clients hide those posts anyway (they can choose to
+see them); this setting decides whether your node carries them at all.
+
+It is off by default: whose blocks you follow is your decision as an
+operator. The node reads the blocks from the lists it carries (the
+project's root list and the maintainers' lists) and says in its node
+information whether it honours them.
 
 ### `new_groups`: which groups the node carries
 
@@ -48,6 +65,24 @@ groups = "*"
 
 This only affects **new** groups. Groups the node already carries keep
 working, and posts in them are checked against the group's own rules.
+
+### `excludes`: groups you leave out
+
+```toml
+[node]
+excludes = "alt.binaries.*,!alt.binaries.test*"
+```
+
+Posts and new groups matching `excludes` are refused, from clients and
+peers alike. The node tells clients what it leaves out (users see it
+under **About this node**), together with every group you have
+[dropped](operations.md#dropping-a-group).
+
+A listed node must carry what most listed nodes carry, *except* what it
+excludes ([UN-RFC 0021](../spec/un-rfc-0021.md)). `excludes` is how you
+stay listed and still leave out something you will not or may not carry
+where your node runs. The project's own groups (`unseenet*`) cannot be
+excluded by a listed node.
 
 ## `[operator]`
 
@@ -79,6 +114,7 @@ One section per peer. See [Peering](peering.md).
 | `key` | yes, for new peerings | The peer's node key, `ed25519:...` ([UN-RFC 0016](../spec/un-rfc-0016.md)). Used to accept the peer logging in to you, and to check that you reached the right node. |
 | `groups` | no, `"*"` | Which groups to **send** to this peer, as a wildmat (see below). `""` sends nothing. |
 | `pull` | no, `"*"` | Which groups to [catch up on](peering.md#catching-up) from this peer. `""` pulls nothing. |
+| `accept` | no, `"*"` | Which groups to **take** from this peer, pushed or pulled. Posts in other groups are refused. See [Choosing what to share](peering.md#choosing-what-to-share). |
 | `password` | no | Old shared-secret login, ignored when `key` is set. See [Peering](peering.md#passwords-old-way). |
 
 ### Wildmats

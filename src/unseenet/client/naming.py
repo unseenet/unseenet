@@ -30,7 +30,9 @@ MAX_SEEN_PER_KEY = 8
 
 def _store(s: "Session") -> dict:
     st = s.data.setdefault("naming", {})
-    for key, empty in (("lists", {}), ("names", {}), ("seen", {}), ("sent", {}), ("pending", [])):
+    for key, empty in (("lists", {}), ("names", {}), ("seen", {}), ("sent", {}), ("pending", []),
+                       ("issued", []), ("my_revoked", []), ("issuer_revoked", {}),
+                       ("requests_done", [])):
         st.setdefault(key, empty)
     return st
 
@@ -96,7 +98,40 @@ async def refresh(s: "Session") -> bool:
         best = _newest(posts, lambda body, n=h.name: hz.parse_hierarchy_list(body, n))
         if best:
             st["lists"][h.name] = best[1]
+    # delegated sub-hierarchies above the groups we know: their endorsements and
+    # blocks count too (sections 5.3, 5.4); at most the depth section 5.3 allows
+    for _ in range(hz.MAX_DEPTH):
+        lists = hierarchy_lists(s)
+        wanted = {sub.name: sub for gid in _known(s)
+                  for sub in hz.sub_lists_needed(gid.rpartition("@")[0] or gid, root, lists)}
+        wanted = {n: h for n, h in wanted.items() if n not in st.setdefault("tried", [])}
+        if not wanted:
+            break
+        for name, sub in sorted(wanted.items()):
+            st["tried"].append(name)
+            try:
+                posts = await _read(s, sub.list, sub.maintainer)
+            except Exception:  # noqa: BLE001
+                continue
+            best = _newest(posts, lambda body, n=name: hz.parse_hierarchy_list(body, n))
+            if best:
+                st["lists"][name] = best[1]
+    st.pop("tried", None)
     await _read_names(s, st)
+    take_certificates(s)
+    issuers = sorted({c.issuer for c in _all_certs(s) if c.kind == "sub"})[:20]
+    for issuer in issuers:                     # their revocation lists (section 6.6)
+        try:
+            posts = await _read(s, nm.revocation_group(issuer), issuer)
+        except Exception:  # noqa: BLE001
+            continue
+        best = _newest(posts, nm.parse_revocations)
+        if best:
+            st["issuer_revoked"][issuer] = sorted([n, v] for n, v in best[2])
+    try:
+        await renew_given(s)
+    except Exception:  # noqa: BLE001  renewal is retried at the next refresh
+        pass
     changed = repr(st) != before
     if changed:
         s.save()
@@ -146,6 +181,62 @@ def root_list(s: "Session") -> dict[str, hz.Hierarchy]:
         except ValueError:
             pass
     return hz.builtin_root_list()[1]
+
+
+def governing(s: "Session", group_id: str) -> list[hz.Hierarchy]:
+    """The governed hierarchies from the top down to the one deciding the group."""
+    name = group_id.rpartition("@")[0] or group_id
+    root, lists = root_list(s), hierarchy_lists(s)
+    out = []
+    h = hz.policy_of(name.split(".")[0], root)
+    for _ in range(hz.MAX_DEPTH + 1):
+        if h.policy != "governed":
+            break
+        out.append(h)
+        lst = lists.get(h.name)
+        deeper = [x for x in (lst.sub.values() if lst else []) if hz._within(name, x.name)]
+        if not deeper:
+            break
+        h = max(deeper, key=lambda x: len(x.name))
+    return out
+
+
+async def block(s: "Session", group_id: str, key_text: str, reason: str,
+                hierarchy: str | None = None) -> str:
+    """As a maintainer: add a block to your hierarchy list and post it (section 5.4).
+    Returns the hierarchy blocked in."""
+    import json
+    from datetime import datetime, timezone
+    from .session import SessionError
+    crypto.key_from_text(key_text)
+    if not 1 <= len(reason.strip()) <= hz.MAX_BLOCK_REASON:
+        raise SessionError(f"a block needs a reason of 1 to {hz.MAX_BLOCK_REASON} characters")
+    me = s.identity().key_text
+    mine = [h for h in governing(s, group_id) if h.maintainer == me]
+    if hierarchy:
+        mine = [h for h in mine if h.name == hierarchy]
+    if not mine:
+        raise SessionError("you are not the maintainer of a hierarchy above this group")
+    h = mine[0]                                   # the widest one you maintain
+    text = _store(s)["lists"].get(h.name)
+    data = json.loads(text) if text else {"v": 1, "hierarchy": h.name, "groups": []}
+    data["blocked"] = [b for b in data.get("blocked", []) if b.get("key") != key_text] + [
+        {"key": key_text, "reason": reason.strip(),
+         "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}]
+    data["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    body = json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    hz.parse_hierarchy_list(body, h.name)          # never post a list with mistakes
+    await s.fetch_group(h.list)
+    await s.post(h.list, f"Groups of {h.name}, {data['updated']} (block)", body)
+    _store(s)["lists"][h.name] = body
+    s.save()
+    return h.name
+
+
+def blocks(s: "Session", group_id: str) -> dict[str, tuple[str, str]]:
+    """{key: (hierarchy, reason)} blocked by maintainers for this group (section 5.4)."""
+    name = group_id.rpartition("@")[0] or group_id
+    return hz.blocks_for(name, root_list(s), hierarchy_lists(s))
 
 
 def hierarchy_lists(s: "Session") -> dict[str, hz.HierarchyList]:
@@ -216,18 +307,90 @@ def _all_certs(s: "Session") -> list[nm.Certificate]:
     return out
 
 
-def names_of(s: "Session", key_text: str, now: datetime | None = None) -> list[nm.Certificate]:
-    """The names that belong to a key now: accepted certificates that count (5.3)."""
-    now = now or datetime.now(timezone.utc)
+def _registrar_names(s: "Session", certs: list[nm.Certificate], key_text: str,
+                     now: datetime) -> list[nm.Certificate]:
     registrars, revoked = _registrars(s), _revoked(s)
-    accepted = [c for c in _all_certs(s) if c.registrar in registrars and c.valid_at(now)
-                and (c.name, c.serial) not in revoked]
+    accepted = [c for c in certs if c.kind != "sub" and c.registrar in registrars
+                and c.valid_at(now) and (c.name, c.serial) not in revoked]
     out = []
     for name in sorted({c.name for c in accepted if c.key == key_text}):
         cur, disputed = nm.current([c for c in accepted if c.name == name])
         if cur is not None and not disputed and cur.key == key_text:
             out.append(cur)
-    return sorted(out, key=lambda c: (c.kind != "domain", c.name))     # domain names first
+    return out
+
+
+def _holder(s: "Session", certs: list[nm.Certificate], name: str, now: datetime) -> str | None:
+    """Who holds a registered or domain name now, per the registrar's certificates."""
+    registrars, revoked = _registrars(s), _revoked(s)
+    accepted = [c for c in certs if c.kind != "sub" and c.name == name
+                and c.registrar in registrars and c.valid_at(now)
+                and (c.name, c.serial) not in revoked]
+    cur, disputed = nm.current(accepted)
+    return cur.key if cur is not None and not disputed else None
+
+
+def _sub_names(s: "Session", certs: list[nm.Certificate], key_text: str,
+               now: datetime) -> list[nm.Certificate]:
+    """Accepted names under a name (section 5.4): signed by whoever holds the parent
+    now, valid now, not revoked by that issuer, and not overruled by DNS (6.4)."""
+    out = []
+    issuer_revoked = _store(s)["issuer_revoked"]
+    for name in sorted({c.name for c in certs if c.kind == "sub" and c.key == key_text}):
+        local, parent = nm.split_sub(name)
+        holder = _holder(s, certs, parent, now)
+        if holder is None:
+            continue
+        valid = [c for c in certs if c.kind == "sub" and c.name == name and c.issuer == holder
+                 and c.valid_at(now)
+                 and [c.name, c.serial] not in issuer_revoked.get(holder, [])]
+        if not valid:
+            continue
+        best = max(valid, key=lambda c: c.serial)          # the issuer's newest decision
+        dns = _holder(s, certs, name, now) if "." in parent else None
+        if best.key == key_text and dns in (None, key_text):
+            out.append(best)
+    return out
+
+
+def _rank(c: nm.Certificate) -> tuple:
+    """Section 8.1: domain names (also person@domain from DNS), names under a
+    name, registered names."""
+    return ({"domain": 0, "sub": 1}.get(c.kind, 2), c.name)
+
+
+def names_of(s: "Session", key_text: str, now: datetime | None = None) -> list[nm.Certificate]:
+    """The names that belong to a key now: accepted certificates that count (5.3, 5.4)."""
+    now = now or datetime.now(timezone.utc)
+    certs = _all_certs(s)
+    out = _registrar_names(s, certs, key_text, now) + _sub_names(s, certs, key_text, now)
+    return sorted(out, key=_rank)
+
+
+def name_text(name: str) -> str:
+    """``@lorensen``, ``@lorensen.dk``, but ``sonia@lorensen`` and ``andlo@lorensen.dk``."""
+    return name if "@" in name else "@" + name
+
+
+def preferred(s: "Session", key_text: str, names: list[nm.Certificate]) -> nm.Certificate:
+    """The name an identity shows: your own choice for yourself; for others the one
+    they sent most recently (they choose), else the first by section 8.1."""
+    if not names:
+        raise ValueError("no names")
+    by_name = {c.name: c for c in names}
+    if key_text == s.identity().key_text:
+        chosen = _store(s).get("primary")
+        if chosen in by_name:
+            return by_name[chosen]
+        return names[0]
+    for text in reversed(_store(s)["seen"].get(key_text, [])):
+        try:
+            name = nm.parse_certificate(text).name
+        except nm.NameProblem:
+            continue
+        if name in by_name:
+            return by_name[name]
+    return names[0]
 
 
 def identity_label(s: "Session", key_text: str, from_name: str = "") -> str:
@@ -237,7 +400,7 @@ def identity_label(s: "Session", key_text: str, from_name: str = "") -> str:
         return f"{petname} √"
     names = names_of(s, key_text)
     if names:
-        return "@" + names[0].name
+        return name_text(preferred(s, key_text, names).name)
     try:
         fp = crypto.fingerprint(crypto.key_from_text(key_text))[:4]
     except crypto.CryptoError:
@@ -262,9 +425,10 @@ def note_certificate(s: "Session", author_key: str, header_value: str | None) ->
         return
     seen = _store(s)["seen"].setdefault(author_key, [])
     text = cert.to_json()
-    if text not in seen:
-        seen.append(text)
-        del seen[:-MAX_SEEN_PER_KEY]
+    if text in seen:                  # the most recent one last: it is the name they show now
+        seen.remove(text)
+    seen.append(text)
+    del seen[:-MAX_SEEN_PER_KEY]
 
 
 # --- your own names ---------------------------------------------------------------------------
@@ -298,7 +462,174 @@ def header_for(s: "Session", group_id: str, now: datetime | None = None) -> tupl
     last = _store(s)["sent"].get(group_id)
     if last and now - nm.parse_rfc3339(last) < RESEND:
         return None
-    return nm.HEADER, names[0].header_value()
+    return nm.HEADER, preferred(s, s.identity().key_text, names).header_value()
+
+
+def set_primary(s: "Session", name: str) -> None:
+    """Choose which of your names your posts show (they carry its certificate)."""
+    if name not in {c.name for c in my_names(s)}:
+        from .session import SessionError
+        raise SessionError(f"{name} is not one of your names")
+    _store(s)["primary"] = name
+    _store(s)["sent"] = {}                   # send the new one with the next post everywhere
+    s.save()
+
+
+# --- names under your name (section 5.4) -----------------------------------------------
+
+REQUEST_TYPE = "application/x-unseenet-name-request"
+CERT_TYPE = "application/x-unseenet-name-certificate"
+RENEW_BEFORE = timedelta(days=30)
+
+
+def parents_i_hold(s: "Session") -> list[str]:
+    """Your registered and domain names: you can give names under these."""
+    return [c.name for c in my_names(s) if c.kind != "sub" and "@" not in c.name]
+
+
+def holder_of(s: "Session", name: str) -> str | None:
+    return _holder(s, _all_certs(s), name, datetime.now(timezone.utc))
+
+
+async def request_subname(s: "Session", name: str) -> str:
+    """Ask the holder of the parent for ``local@parent`` (section 5.4)."""
+    from .session import SessionError
+    from ..core.groups import personal_inbox_id
+    body = nm.make_subname_request(name, s.identity().key_text)
+    parent = nm.split_sub(name)[1]
+    holder = holder_of(s, parent)
+    if holder is None:
+        raise SessionError(f"nobody holds @{parent} as far as this client knows")
+    await s.ensure_inbox()
+    msgid = await s.send_private(personal_inbox_id(crypto.key_from_text(holder)),
+                                 f"May I be {name}?", body,
+                                 owner_key=crypto.key_from_text(holder), content_type=REQUEST_TYPE)
+    st = _store(s)
+    st["pending"] = [p for p in st["pending"] if p[0] != name][-20:] + [
+        [name, "ask", nm.rfc3339(datetime.now(timezone.utc))]]
+    s.save()
+    return msgid
+
+
+def name_requests(s: "Session") -> list[tuple["Message", dict]]:
+    """Requests in your inbox for names under the names you hold."""
+    done = set(_store(s)["requests_done"])
+    mine = set(parents_i_hold(s))
+    out = []
+    for m in s.private_messages():
+        if not m.content_type.startswith(REQUEST_TYPE) or m.message_id in done:
+            continue
+        try:
+            data = nm.parse_subname_request(m.body)
+        except nm.NameProblem:
+            continue
+        if nm.split_sub(data["name"])[1] in mine:
+            out.append((m, data))
+    return out
+
+
+async def give_subname(s: "Session", name: str, key_text: str,
+                       lifetime: timedelta = nm.SUB_LIFETIME_DEFAULT) -> nm.Certificate:
+    """As the holder of the parent: issue ``name`` to a key and send it to them."""
+    from .session import SessionError
+    from ..core.groups import personal_inbox_id
+    parent = nm.split_sub(name)[1]
+    if parent not in parents_i_hold(s):
+        raise SessionError(f"you do not hold @{parent}")
+    st = _store(s)
+    serial = 1 + max((nm.parse_certificate(t).serial for t in st["issued"]
+                      if nm.parse_certificate(t).name == name), default=0)
+    cert = nm.make_subname(s.identity(), name, key_text, serial, lifetime)
+    if key_text == s.identity().key_text:
+        note_certificate(s, key_text, cert.header_value())
+    else:
+        try:
+            await s.send_private(personal_inbox_id(crypto.key_from_text(key_text)),
+                                 f"You are {name}", cert.to_json() + "\n",
+                                 owner_key=crypto.key_from_text(key_text),
+                                 content_type=CERT_TYPE, remember=False)
+        except SessionError:
+            pass                    # they get it with the next renewal; the certificate stands
+    st["issued"].append(cert.to_json())         # after sending: then it is on its way
+    s.save()
+    return cert
+
+
+async def answer_request(s: "Session", msg: "Message", data: dict, approve: bool,
+                         lifetime: timedelta = nm.SUB_LIFETIME_DEFAULT) -> None:
+    if approve:
+        await give_subname(s, data["name"], data["key"], lifetime)
+    _store(s)["requests_done"].append(msg.message_id)
+    del _store(s)["requests_done"][:-500]
+    s.save()
+
+
+def names_given(s: "Session") -> list[nm.Certificate]:
+    """The newest certificate for each name you gave, not revoked."""
+    st = _store(s)
+    newest: dict[str, nm.Certificate] = {}
+    for text in st["issued"]:
+        try:
+            c = nm.parse_certificate(text)
+        except nm.NameProblem:
+            continue
+        if c.name not in newest or c.serial > newest[c.name].serial:
+            newest[c.name] = c
+    return [c for n, c in sorted(newest.items()) if [c.name, c.serial] not in st["my_revoked"]]
+
+
+async def revoke_subname(s: "Session", name: str) -> None:
+    """Take back a name you gave: publish it in your revocation list (section 6.6)."""
+    import json
+    st = _store(s)
+    for c in names_given(s):
+        if c.name == name:
+            st["my_revoked"].append([c.name, c.serial])
+    gid = nm.revocation_group(s.identity().key_text)
+    if gid not in s.data["groups"]:
+        try:
+            created = await s.create_group("names", "channel", view="data",
+                                           title="Revoked names")
+        except Exception:  # noqa: BLE001  it may exist on the node already
+            created = gid
+        if created != gid:
+            from .session import SessionError
+            raise SessionError("could not make your revocation group")
+    revoked = {(n, v) for n, v in st["my_revoked"]}
+    await s.post(gid, nm.REVOKED_SUBJECT, nm.make_revocations(revoked))
+    s.save()
+
+
+def take_certificates(s: "Session") -> bool:
+    """Keep the name certificates others sent you (section 5.4). True if any is new."""
+    me = s.identity().key_text
+    seen = _store(s)["seen"].setdefault(me, [])
+    new = False
+    for m in s.private_messages():
+        if not m.content_type.startswith(CERT_TYPE):
+            continue
+        try:
+            cert = nm.parse_certificate(m.body.strip())
+        except nm.NameProblem:
+            continue
+        if cert.key == me and cert.to_json() not in seen:
+            seen.append(cert.to_json())
+            new = True
+    del seen[:-MAX_SEEN_PER_KEY * 4]
+    return new
+
+
+async def renew_given(s: "Session") -> int:
+    """Give a fresh certificate for names you gave that run out within 30 days,
+    while the parent is still yours. Returns how many."""
+    now = datetime.now(timezone.utc)
+    mine = set(parents_i_hold(s))
+    n = 0
+    for c in names_given(s):
+        if c.expires - now < RENEW_BEFORE and nm.split_sub(c.name)[1] in mine:
+            await give_subname(s, c.name, c.key, c.expires - c.issued)
+            n += 1
+    return n
 
 
 def sent_header(s: "Session", group_id: str, now: datetime | None = None) -> None:

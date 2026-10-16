@@ -80,8 +80,9 @@ any time while Unseenet is pre-alpha.
 Ideas, criticism and code are welcome. Protocol changes go through the
 UN-RFC process; code changes through ordinary pull requests. See
 [Development](https://unseenet.org/development/) for architecture and
-design decisions, and the [issues](https://github.com/unseenet/unseenet/issues)
-for what is planned.
+design decisions, the [milestones](https://github.com/unseenet/unseenet/milestones)
+for what comes in the next releases, and the
+[issues](https://github.com/unseenet/unseenet/issues) for everything else.
 
 ## License
 

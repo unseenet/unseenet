@@ -80,6 +80,7 @@ A manifest is an article (UN-RFC 0002) with:
 | `min_pow`        | integer         | no   | Minimum postage bits (UN-RFC 0006), default 0 |
 | `retention_days` | integer         | no   | Suggested retention, default 90           |
 | `sealed`         | b64 string      | no   | Closed groups: encrypted private info (6.6) |
+| `banned`         | array of objects | no  | Keys that may not post (section 5.1)      |
 
 Unknown fields MUST be preserved (they are inside the signed body) and
 ignored.
@@ -127,10 +128,47 @@ satisfy the rule for the group's type under the current manifest:
     angle brackets, as ASCII).
 
   Because `Approved-By` and `Approval` are outside the canonical form,
-  approving an article does not change its Message-ID. How an
-  unapproved article reaches a moderator is not specified in this
-  version (reserved: UN-RFC 0009); clients MAY hand it over out of band.
+  approving an article does not change its Message-ID. An unapproved
+  article reaches the moderators as a submission (UN-RFC 0009 section
+  3).
 - **closed:** see section 6.5.
+
+## 5.1 Banned Keys
+
+The owner can ban identities from a group by listing them in the
+manifest's `banned` field. Each entry is an object:
+
+| Field    | Type       | Req. | Meaning                                       |
+|----------|------------|------|-----------------------------------------------|
+| `key`    | key string | yes  | The banned identity key                       |
+| `reason` | string     | no   | A short public reason (max 200 characters)    |
+| `since`  | string     | no   | When the ban was made (RFC 3339)              |
+
+A manifest with a `banned` entry that has no valid `key`, or a `reason`
+longer than 200 characters, is invalid. Unknown fields in an entry MUST
+be ignored.
+
+- A node MUST reject an ordinary article whose `Author-Key` is banned
+  under the current manifest, whatever the group's type, before the rule
+  for the type is applied. Control articles by a banned key are judged
+  as before, so a banned author can still withdraw their own posts.
+- A node MAY delete articles it already holds from a key when it is
+  banned; the owner can also withdraw them (section 7).
+- A client SHOULD NOT show articles from keys banned under the current
+  manifest, and SHOULD let the reader see the ban and its reason.
+- Bans do not apply to inbox groups, whose articles carry one-time keys
+  (UN-RFC 0009); an inbox owner ignores senders instead.
+
+A ban is made and lifted with a new manifest (section 3.2), so it is
+signed, public and versioned. Only the owner can ban; moderators withdraw
+posts. Nodes that do not know this field ignore it (section 3.1) and keep
+accepting the banned key's posts until they are updated.
+
+Keys are free to make, so a ban stops a person who keeps their identity,
+not someone who makes new keys. Against that the owner raises postage
+(`min_pow`, UN-RFC 0006). A manifest must fit in one article (UN-RFC
+0002); a longer list of banned keys may be specified later as a separate
+signed list.
 
 # 6. Closed Groups
 
@@ -167,6 +205,16 @@ link a member across groups.
 
 The owner MUST include an envelope for themself. A new epoch MUST be
 started whenever a member is removed.
+
+A key update MAY carry `"closes_previous": true`. The owner MUST set it
+when the new epoch starts because a member was removed. It ends the
+earlier epochs at once: from the moment a node has accepted such a key
+update, it MUST reject articles of any earlier epoch in that group
+(section 6.5), even the one just before, so that a removed member, who
+still holds the previous member key, cannot go on posting. Articles
+written just before the rotation that have not reached a node yet are
+lost there; that is the price of removing someone, and clients SHOULD
+send again what was refused.
 
 ## 6.3 Adding Members Without Rotation
 
@@ -205,9 +253,14 @@ an empty line, and the inner body.
 
 A node MUST reject the article unless `Member-Signature` verifies with
 the member key of epoch *e*, and *e* is the current epoch or the one
-before it (to tolerate replication delay). Thus only holders of the
-group secret can post, and nodes enforce this without being able to
-read anything.
+before it (to tolerate replication delay), and no key update the node
+has accepted with `closes_previous` (section 6.2) is for an epoch later
+than *e*. Thus only holders of the group secret can post, and nodes
+enforce this without being able to read anything.
+
+A client SHOULD NOT show an article of an earlier epoch that comes after
+a key update with `closes_previous` in the group's order on its node:
+it was accepted by a node that had not yet seen the key update.
 
 ## 6.6 Sealed Manifest Information
 
@@ -300,6 +353,8 @@ readable by the nodes.
   SHOULD keep an offline backup of the owner key.
 - Nodes enforce posting rules, but a malicious node can still drop
   articles. Clients SHOULD read from more than one node.
+- **Bans** (section 5.1) are public: anyone can read whom a group bans
+  and why. They stop identities, not people, since keys are free.
 - **Cancels** are best effort (section 7.4) and cannot be forged, but a
   node can ignore them, or keep serving a withdrawn article. Clients
   check cancels themselves (section 7.3).

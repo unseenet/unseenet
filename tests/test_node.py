@@ -167,3 +167,68 @@ async def test_over_xover_and_hdr_for_newsreaders():
     assert "Hemmeligt" not in " ".join(subjects) and "(encrypted)" in subjects
     await c.quit()
     server.close()
+
+
+def test_peer_accept_pattern():
+    """#86: a peer's `accept` limits what is taken from it; clients and other peers are not limited."""
+    peer = PeerConfig(name="aarhus", address="x:1", accept="dk.*")
+    node = make_node(peers=[peer, PeerConfig(name="bob", address="y:1")])
+    owner, user = crypto.Identity.generate(), crypto.Identity.generate()
+    dk = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    comp = make_manifest(owner, "comp.misc", "open", pow_bits=BITS)
+
+    node.accept(dk.to_bytes(), source="aarhus", from_peer=True)
+    with pytest.raises(ArticleError) as e:
+        node.accept(comp.to_bytes(), source="aarhus", from_peer=True)
+    assert e.value.reason == "group" and "aarhus" in e.value.detail
+
+    node.accept(comp.to_bytes(), source="bob", from_peer=True)
+    art = new_article(comp.group, "hej", "x", from_name="u").finalize(user, BITS)
+    with pytest.raises(ArticleError):
+        node.accept(art.to_bytes(), source="aarhus", from_peer=True)
+    assert not node.store.seen(art.message_id)
+    node.accept(art.to_bytes())                          # a client may post there
+    ok = new_article(dk.group, "hej", "x", from_name="u").finalize(user, BITS)
+    node.accept(ok.to_bytes(), source="aarhus", from_peer=True)
+
+
+def test_excludes():
+    """UN-RFC 0021 section 3: excluded groups are refused and published, with dropped groups."""
+    node = make_node(excludes="alt.*")
+    owner = crypto.Identity.generate()
+    alt = make_manifest(owner, "alt.test", "open", pow_bits=BITS)
+    dk = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
+    with pytest.raises(ArticleError) as e:
+        node.accept(alt.to_bytes())
+    assert e.value.reason == "group" and "excluded" in e.value.detail
+    node.accept(dk.to_bytes())
+    assert node.node_info()["policy"]["excludes"] == "alt.*"
+    node.drop_group(dk.group)
+    assert node.node_info()["policy"]["excludes"] == f"alt.*,{dk.group}"
+    assert "excludes" not in make_node().node_info()["policy"]
+
+
+def test_closing_key_update_ends_the_previous_epoch():
+    """UN-RFC 0004 sections 6.2 and 6.5 (#84): after a key update with
+    closes_previous, the previous epoch's member key no longer posts."""
+    from unseenet.core.groups import encrypted_article, make_key_update
+    node = make_node()
+    owner, removed = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = make_manifest(owner, "dk.lukket", "closed", pow_bits=BITS)
+    gid = manifest.group
+    node.accept(manifest.to_bytes())
+    k1, k2, k3 = (crypto.GroupKeys.generate() for _ in range(3))
+    node.accept(make_key_update(owner, gid, 1, k1, [removed.public_key], pow_bits=BITS).to_bytes())
+
+    def post(keys, epoch, subject):
+        return encrypted_article(gid, epoch, keys, removed, from_name="R", subject=subject,
+                                 body="x\n", pow_bits=BITS).to_bytes()
+
+    node.accept(make_key_update(owner, gid, 2, k2, [], pow_bits=BITS).to_bytes())
+    node.accept(post(k1, 1, "tolerated: replication delay"))        # ordinary rotation
+    node.accept(make_key_update(owner, gid, 3, k3, [], closes_previous=True,
+                                pow_bits=BITS).to_bytes())
+    with pytest.raises(ArticleError) as e:
+        node.accept(post(k2, 2, "after removal"))
+    assert "closed" in str(e.value)
+    assert node.store.closed_before(gid) == 3

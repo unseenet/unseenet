@@ -149,3 +149,33 @@ def test_claim_and_claimed_go_together():
     raw["sig"] = reg.sign_text(nm.PURPOSE_NAME_CERT, canonical_json(raw).encode())
     with pytest.raises(nm.NameProblem, match="together"):
         nm.parse_certificate(canonical_json(raw))
+
+
+# --- names under a name (section 5.4) ----------------------------------------------
+
+def test_sub_name_syntax_and_dns():
+    assert nm.kind_of("sonia@lorensen") == "sub"
+    assert nm.kind_of("andlo@lorensen.dk") == "domain"       # through DNS (section 6.4)
+    assert nm.dns_record_name("andlo@lorensen.dk") == "andlo._unseenet.lorensen.dk"
+    for bad in ("-x@lorensen", "a--b@lorensen", "x@sonia@lorensen", "Sonia@lorensen", "x@ab"):
+        with pytest.raises(nm.NameProblem):
+            nm.check_name(bad)
+    nm.check_name("jo@lorensen")
+
+
+def test_sub_name_certificates():
+    holder, sonia = crypto.Identity.generate(), crypto.Identity.generate()
+    c = nm.make_subname(holder, "sonia@lorensen", sonia.key_text, 1, timedelta(days=5 * 365))
+    again = nm.parse_certificate(c.to_json())
+    assert (again.kind, again.parent, again.issuer, again.key) == (
+        "sub", "lorensen", holder.key_text, sonia.key_text)
+    data = dict(c.raw, name="mallory@lorensen")
+    with pytest.raises(nm.NameProblem):
+        nm.parse_certificate(canonical_json(data))                # signature broken
+    with pytest.raises(nm.NameProblem):
+        nm.make_subname(holder, "sonia@lorensen", sonia.key_text, 1, timedelta(days=6 * 365))
+    with pytest.raises(nm.NameProblem):
+        nm.make_subname(holder, "lorensen", sonia.key_text, 1)
+    assert nm.revocation_group(holder.key_text) == f"names@{holder.fingerprint}"
+    req = nm.parse_subname_request(nm.make_subname_request("sonia@lorensen", sonia.key_text))
+    assert req == {"v": 1, "name": "sonia@lorensen", "key": sonia.key_text}

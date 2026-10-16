@@ -86,7 +86,7 @@ def hierarchy_list(hierarchy, groups, sub=()):
 
 def test_project_checkgroups_endorse_the_project_groups():
     lst = hz.builtin_checkgroups()
-    assert lst.hierarchy == "unseenet" and len(lst.groups) == 8
+    assert lst.hierarchy == "unseenet" and len(lst.groups) == 9
     assert all(g.endswith("@ph5fc5hop5232qsz") for g in lst.groups.values())
     assert lst.groups["unseenet.announce"] == "unseenet.announce@ph5fc5hop5232qsz"
 
@@ -164,3 +164,46 @@ def test_client_group_labels(tmp_path):
     from unseenet.client import naming
     assert "does not vouch" in naming.group_warning(s, fake)
     assert naming.group_warning(s, "dk.snak@abcdefghijklmnop") is None
+
+
+def _list(hierarchy, *, sub=(), blocked=()):
+    return json.dumps({"v": 1, "hierarchy": hierarchy, "groups": [], "sub": list(sub),
+                       "blocked": list(blocked)})
+
+
+def test_blocks_follow_delegation():
+    """Section 5.4: blocks of every maintainer on the way down count; a delegated
+    maintainer blocks only in its own part; free sub-hierarchies keep the parent's."""
+    a, b = crypto.Identity.generate(), crypto.Identity.generate()
+    x, y = crypto.Identity.generate().key_text, crypto.Identity.generate().key_text
+    root = {"dk": hz.Hierarchy("dk", "governed", a.key_text, f"dk.liste@{a.fingerprint}")}
+    dk = hz.parse_hierarchy_list(_list("dk", sub=[
+        {"name": "dk.snak", "policy": "governed", "maintainer": b.key_text,
+         "list": f"dk.snak.liste@{b.fingerprint}"},
+        {"name": "dk.fri", "policy": "free"}],
+        blocked=[{"key": x, "reason": "trusler i flere grupper"}]), "dk")
+    snak = hz.parse_hierarchy_list(_list("dk.snak", blocked=[{"key": y, "reason": "spam"}]), "dk.snak")
+    lists = {"dk": dk, "dk.snak": snak}
+    assert hz.blocks_for("dk.snak.biler", root, lists) == {x: ("dk", "trusler i flere grupper"),
+                                                          y: ("dk.snak", "spam")}
+    assert hz.blocks_for("dk.snak", root, lists).keys() == {x, y}
+    assert hz.blocks_for("dk.politik", root, lists).keys() == {x}
+    assert hz.blocks_for("dk.fri.noget", root, lists).keys() == {x}      # free: parent still counts
+    assert hz.blocks_for("se.snak", root, lists) == {}
+    assert [s.name for s in hz.sub_lists_needed("dk.snak.biler", root, {"dk": dk})] == ["dk.snak"]
+
+
+def test_block_entries_are_checked():
+    k = crypto.Identity.generate().key_text
+    k2 = crypto.Identity.generate().key_text
+    lst = hz.parse_hierarchy_list(_list("dk", blocked=[
+        {"key": k, "reason": ""},                                  # no reason: ignored
+        {"key": "nonsense", "reason": "x"},                        # no key: ignored
+        {"key": k2, "reason": "a", "until": "2000-01-01T00:00:00+00:00"},
+        "not an object"]), "dk")
+    assert [b.key for b in lst.blocked] == [k2]
+    root = {"dk": hz.Hierarchy("dk", "governed", k, "dk.l@x")}
+    assert hz.blocks_for("dk.snak", root, {"dk": lst}) == {}         # expired
+    twice = hz.parse_hierarchy_list(_list("dk", blocked=[{"key": k, "reason": "a"},
+                                                         {"key": k, "reason": "b"}]), "dk")
+    assert twice.blocked == ()
