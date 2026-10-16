@@ -17,8 +17,10 @@ shown as its self-chosen name with a short fingerprint
 (`@lorensen`), issued first come, first served by a **registrar** as a
 signed **name certificate**, or a **domain name** (`@lorensen.dk`),
 issued only after the registrar has checked that the identity controls
-the domain. Above all of these, every user's own **petnames** decide
-what they see. Names are optional; an identity without one loses
+the domain. The holder of such a name MAY give **names under it** to
+other identities (`sonia@lorensen`), and a domain MAY name people in DNS
+(`andlo@lorensen.dk`), much as e-mail addresses work. Above all of these,
+every user's own **petnames** decide what they see. Names are optional; an identity without one loses
 nothing.
 
 # 1. Motivation
@@ -91,6 +93,26 @@ A name with a dot is a domain name; a name without one is a registered
 name. The two can never be confused, and neither can be confused with a
 group name, because names of identities are always written with `@`.
 
+## 4.4 Names Under a Name
+
+```
+sub-name = local "@" parent
+local    = ( ALPHA / DIGIT ) *( ALPHA / DIGIT / "-" )   ; lowercase only
+```
+
+- `local` is 1 to 32 characters, `a-z`, `0-9` and `-`, does not start
+  or end with `-` and contains no `--`;
+- `parent` is a registered name (`sonia@lorensen`) or a domain name
+  (`andlo@lorensen.dk`);
+- there is one level only: `x@sonia@lorensen` is not a name.
+
+A sub-name under a registered name is given by the holder of the parent
+(section 5.4). One under a domain name is given either by the holder of
+the domain name (section 5.4) or by the domain itself in DNS, checked by
+the registrar (section 6.4). Sub-names are written without a leading
+`@`, like e-mail addresses: `sonia@lorensen`, while other names keep it:
+`@lorensen`.
+
 # 5. Name Certificates
 
 ## 5.1 Format
@@ -162,6 +184,53 @@ A client MAY require a decision to be signed by at least two registrar
 keys of the group before it shows a name, so that one stolen key alone
 cannot give a name away.
 
+## 5.4 Sub-name Certificates
+
+The holder of a registered or domain name issues a sub-name under it
+with a **sub-name certificate**, signed by its own identity key; no
+registrar is involved. It has the fields of section 5.1, except:
+
+| Field       | Type       | Req. | Meaning                                            |
+|-------------|------------|------|----------------------------------------------------|
+| `kind`      | string     | yes  | `sub`                                              |
+| `parent`    | string     | yes  | The name it is under; MUST be the part after `@`   |
+| `registrar` | key string | yes  | The issuer: the holder of `parent` when it was issued |
+| `sig`       | signature  | yes  | By the issuer, purpose `UNSEENET-SUBNAME-CERT-1`   |
+
+`claim` and `claimed` are not used. A sub-name certificate lasts at most
+five years; the issuer chooses (RECOMMENDED: one year). It is carried in
+`Name-Certificate` like any certificate (section 5.2).
+
+A client accepts a sub-name certificate for the author of an article if
+
+1. it parses, has `v` 1 and `kind` `sub`, and its `sig` verifies with
+   the issuer's key;
+2. `key` equals the article's `Author-Key`, and the current time is
+   between `issued` and `expires`;
+3. the issuer holds `parent` **now**: the client has accepted a
+   certificate for `parent` (section 5.3) whose `key` is the issuer;
+4. the issuer has not revoked it (section 6.6);
+5. for a name under a domain: no accepted certificate from the registrar
+   names a different key for the same sub-name (DNS wins, section 6.4).
+
+Of several accepted sub-name certificates for one name, the one with the
+highest `serial` from the current issuer counts. When the parent changes
+hands or expires, every sub-name under it stops counting until the new
+holder issues its own.
+
+**Asking for one.** An identity asks for a sub-name by sending a private
+message (UN-RFC 0009) to the parent's holder with `Content-Type:
+application/x-unseenet-name-request` and the canonical JSON
+`{"key":...,"name":...,"v":1}`. The holder answers by sending the
+certificate as a private message with `Content-Type:
+application/x-unseenet-name-certificate`, or not at all. A holder MAY
+also issue a sub-name without being asked, including to its own key.
+
+An identity MAY hold several names - its own registered name and
+sub-names under several other names. It chooses which certificate its
+articles carry, and readers SHOULD show the one an identity sent most
+recently (section 8.1).
+
 # 6. Registration
 
 The formats in this section (claims, the DNS record, the revocation
@@ -228,6 +297,24 @@ out within 35 days.
 There is no limit on the number of domain names per key, and no extra
 postage: owning the domain is the proof.
 
+A domain can also name **people under it**, the way it names their
+e-mail addresses. To claim `andlo@lorensen.dk`, the identity publishes,
+or has the domain's owner publish,
+
+```
+andlo._unseenet.lorensen.dk.  TXT  "unseenet-key=ed25519:..."
+```
+
+and sends a `claim` for `andlo@lorensen.dk`. The registrar checks it like
+a domain name and issues a certificate of kind `domain`, renewed monthly
+while the record is there. An organisation can thus give its people
+names without running Unseenet itself. Where such a certificate and a
+holder's sub-name certificate (section 5.4) disagree, the registrar's
+counts.
+
+A registrar MUST refuse a claim for a sub-name under a registered name
+(`sonia@lorensen`): only the holder of the parent gives those.
+
 ## 6.5 Transfer and Release
 
 The holder can send `transfer` naming a new key, which the registrar
@@ -247,6 +334,13 @@ certificate they name has expired, so the list stays short.
 Each registrar key of a group publishes its own list. A client takes the
 newest list by each trusted key, and an entry in any of them revokes
 every certificate for that name and serial, whichever key signed it.
+
+An **issuer of sub-names** publishes its revocation list in the same
+format in a data group (UN-RFC 0008 section 3.1.1) of type `channel`
+that it owns, named `names` - so its Group ID is
+`names@<fingerprint of the issuer>`, and a client can find it from the
+certificate alone. A client SHOULD read it for the issuers of the
+sub-names it shows.
 
 ## 6.7 Disputes
 
@@ -349,12 +443,14 @@ client, not part of the protocol.
 To show an identity, a client uses the first of these that applies:
 
 1. **Petname:** the name the user gave the key;
-2. **Domain name** from an accepted certificate: `@lorensen.dk`;
-3. **Registered name** from an accepted certificate: `@lorensen`;
-4. **Short form** of the display name: `Andreas~7f3a`.
+2. **A certified name:** of the accepted names of section 5, the one
+   whose certificate the identity sent most recently; otherwise, in this
+   order, a domain name (`@lorensen.dk`, also `andlo@lorensen.dk` from
+   DNS), a sub-name (`sonia@lorensen`), a registered name (`@lorensen`);
+3. **Short form** of the display name: `Andreas~7f3a`.
 
-If an identity has several accepted names, the client MAY let the user
-choose. It MUST let the user see the full key, and SHOULD show names
+So an identity with several names chooses which one it shows, by the
+certificate its articles carry. It MUST let the user see the full key, and SHOULD show names
 from certificates so that they cannot be mistaken for petnames or
 display names (e.g. with a mark).
 
@@ -396,6 +492,7 @@ UN-RFC 0003 section 3 is extended with:
 | Purpose label           | Signs                          | Defined in |
 |-------------------------|--------------------------------|------------|
 | `UNSEENET-NAME-CERT-1`  | a name certificate (section 5) | 0019       |
+| `UNSEENET-SUBNAME-CERT-1` | a sub-name certificate (section 5.4) | 0019 |
 
 # 11. Rationale
 
@@ -417,6 +514,13 @@ UN-RFC 0003 section 3 is extended with:
   later; it could not easily be taken away.
 - **Why do domains expire after 35 days?** Domains change hands. A name
   that outlived its domain would mislead.
+- **Why may sub-names last five years?** The holder of a name may be away
+  from the network for a long time - an organisation's admin, say - and
+  its people should not lose their names meanwhile. A sub-name still
+  counts only while its issuer holds the parent, and the issuer can
+  revoke it at any time, so a long life does not outlast the parent.
+- **Why one level?** `x@sonia@lorensen` would be hard to read and harder
+  to reason about. One level covers families and organisations.
 
 # 12. Security and Privacy Considerations
 
@@ -446,6 +550,10 @@ UN-RFC 0003 section 3 is extended with:
   manifest.
 - **Stolen identity key.** The thief holds the name too, until the
   registrar acts on a complaint or the certificate expires.
+- **Sub-names.** The holder of a name can give names under it to anyone;
+  readers see `sonia@lorensen` as "given by whoever holds `@lorensen`",
+  no more. A stolen holder key can issue sub-names until the parent is
+  transferred or revoked; then they all stop counting (section 5.4).
 - **Lookalikes.** Names are ASCII only, so Unicode lookalikes are
   impossible; section 8.2 covers near matches.
 

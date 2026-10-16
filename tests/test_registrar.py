@@ -265,3 +265,19 @@ async def test_client_claims_a_name_and_others_see_it(world, monkeypatch):
     assert bob.identity_label(alice_key) == "Søster √"     # your own name for her comes first
     for s in (alice, bob):
         await s.close()
+
+
+async def test_person_at_domain_through_dns_and_no_sub_names(world):
+    """UN-RFC 0019 section 6.4: andlo@lorensen.dk needs andlo._unseenet.lorensen.dk;
+    a name under a registered name is the holder's to give, not the registrar's."""
+    alice = await world.user("alice")
+    r1 = world.registrar(0)
+    world.dns["andlo._unseenet.lorensen.dk"] = [nm.dns_record_value(alice.identity().key_text)]
+    await world.claim(alice, "claim", "andlo@lorensen.dk")
+    await world.claim(alice, "claim", "sonia@lorensen")
+    await world.process(r1)
+    (cert,) = world.certs_for(r1, "andlo@lorensen.dk")
+    assert cert.kind == "domain" and cert.key == alice.identity().key_text
+    refused = {s: b for s, b in await replies(alice)}
+    assert "holder" in refused["name sonia@lorensen: refused"]
+    await alice.close(), await r1.s.close()
