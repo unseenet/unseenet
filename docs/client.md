@@ -406,6 +406,34 @@ per group, so others can check it; posts in closed groups and private
 messages never do. A name links everything its identity posts, so do not
 claim one for an identity you keep apart.
 
+### Names under a name
+
+If you hold a name such as `@lorensen`, you can give names under it:
+`andreas@lorensen` for yourself, `sonia@lorensen` for your daughter -
+like e-mail addresses in a family or an organisation. No registrar is
+involved; your key signs it.
+
+- **Give a name under yours** (command palette): the name, whose key
+  (filled in from the selected post) and for how many years (1 to 5).
+  Your client renews it when it is about to run out.
+- **Ask for a name under someone's name**: type e.g. `sonia@lorensen`;
+  its holder gets your request under **Name requests** and gives it or
+  refuses. The name arrives in your private messages and shows on your
+  posts from then on.
+- **Names you gave** lists them and takes one back. Taking back is
+  public: it goes in your list of revoked names.
+- **Name your posts show**: with several names (your own `@jaxie`,
+  `sonia@lorensen`, ...), choose the one readers see.
+
+A name under yours counts only while `@lorensen` is yours: if you give it
+up or it runs out, the names under it stop counting too.
+
+A domain can name people in DNS, as for e-mail: with the record
+`andlo._unseenet.lorensen.dk TXT "unseenet-key=ed25519:..."` you claim
+`andlo@lorensen.dk` under `@` like any name, and the registrar checks the
+record every month. An organisation can name its people this way without
+running Unseenet itself.
+
 Under `@` you can also give a name up or hand it on. Type the name, then:
 
 - **Transfer** gives it to another key - your new identity's when you

@@ -724,3 +724,116 @@ def test_client_hides_old_epoch_posts_after_a_closing_key_update(tmp_path):
             shown.append(msg.subject)
     assert shown == ["Før"]
     assert entry["closed"] == {"2": 3}
+
+
+def _registrar_store(s, registrar, certs):
+    st = s.data.setdefault("naming", {})
+    st.setdefault("names", {})
+    st["names"].update({"registrars": [registrar.key_text], "certs": [c.to_json() for c in certs],
+                        "revoked": []})
+
+
+def test_names_under_a_name_in_the_client(tmp_path):
+    """UN-RFC 0019 section 5.4: sonia@lorensen counts while its issuer holds
+    @lorensen, until revoked; DNS wins for person@domain; the author chooses."""
+    from datetime import timedelta
+    from unseenet import names as nm
+    from unseenet.client import naming
+    from unseenet.core import crypto
+    reg = crypto.Identity.generate()
+    andreas = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    a = andreas.new_identity("a", "Andreas")
+    reader = Session(Vault.open(tmp_path / "r.vault", "pw", **KDF), status=lambda *_: None)
+    reader.new_identity("r", "R")
+    sonia, other = crypto.Identity.generate(), crypto.Identity.generate()
+    lorensen = nm.make_certificate(reg, "lorensen", a.key_text, 1)
+    jaxie = nm.make_certificate(reg, "jaxie", sonia.key_text, 1)
+    for s in (andreas, reader):
+        _registrar_store(s, reg, [lorensen, jaxie])
+
+    assert naming.parents_i_hold(andreas) == ["lorensen"]
+    sub = nm.make_subname(a, "sonia@lorensen", sonia.key_text, 1)
+    naming.note_certificate(reader, sonia.key_text, sub.header_value())
+    assert naming.identity_label(reader, sonia.key_text) == "sonia@lorensen"   # most recent
+    naming.note_certificate(reader, sonia.key_text, jaxie.header_value())
+    assert naming.identity_label(reader, sonia.key_text) == "@jaxie"           # she chose
+    assert [c.name for c in naming.names_of(reader, sonia.key_text)] == ["sonia@lorensen", "jaxie"]
+
+    # someone who does not hold @lorensen cannot give names under it
+    fake = nm.make_subname(other, "eve@lorensen", other.key_text, 1)
+    naming.note_certificate(reader, other.key_text, fake.header_value())
+    assert naming.names_of(reader, other.key_text) == []
+
+    # revoked by the issuer
+    naming._store(reader)["issuer_revoked"][a.key_text] = [["sonia@lorensen", 1]]
+    assert [c.name for c in naming.names_of(reader, sonia.key_text)] == ["jaxie"]
+    naming._store(reader)["issuer_revoked"] = {}
+
+    # @lorensen changes hands: its sub-names stop counting
+    moved = nm.make_certificate(reg, "lorensen", other.key_text, 2)
+    _registrar_store(reader, reg, [lorensen, moved, jaxie])
+    assert [c.name for c in naming.names_of(reader, sonia.key_text)] == ["jaxie"]
+
+    # person@domain: a DNS certificate from the registrar wins over a holder's sub-name
+    dk = nm.make_certificate(reg, "lorensen.dk", a.key_text, 1)
+    dns = nm.make_certificate(reg, "andlo@lorensen.dk", other.key_text, 1)
+    given = nm.make_subname(a, "andlo@lorensen.dk", sonia.key_text, 1)
+    _registrar_store(reader, reg, [dk, dns])
+    naming.note_certificate(reader, sonia.key_text, given.header_value())
+    assert "andlo@lorensen.dk" not in [c.name for c in naming.names_of(reader, sonia.key_text)]
+    assert [c.name for c in naming.names_of(reader, other.key_text)] == ["andlo@lorensen.dk"]
+
+
+async def test_ask_for_give_and_revoke_a_name_under_a_name(tmp_path, monkeypatch):
+    """The whole round: Sonia asks for sonia@lorensen, Andreas approves, her client
+    takes the certificate and shows it; Andreas revokes it and readers see that."""
+    from unseenet import names as nm
+    from unseenet.client import naming
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    reg = crypto.Identity.generate()
+    andreas, sonia, reader = person("andreas"), person("sonia"), person("reader")
+    lorensen = nm.make_certificate(reg, "lorensen", andreas.identity().key_text, 1)
+    for p in (andreas, sonia, reader):
+        _registrar_store(p, reg, [lorensen])
+        await p.ensure_inbox()
+
+    await naming.request_subname(sonia, "sonia@lorensen")
+    await andreas.fetch_group(andreas.my_inbox)
+    reqs = naming.name_requests(andreas)
+    assert [d["name"] for _, d in reqs] == ["sonia@lorensen"]
+    await naming.answer_request(andreas, *reqs[0], approve=True)
+    assert naming.name_requests(andreas) == []
+
+    await sonia.fetch_group(sonia.my_inbox)
+    assert naming.take_certificates(sonia)
+    assert [c.name for c in naming.my_names(sonia)] == ["sonia@lorensen"]
+    hdr = naming.header_for(sonia, "dk.x@abc")
+    naming.note_certificate(reader, sonia.identity().key_text, hdr[1])
+    assert naming.identity_label(reader, sonia.identity().key_text) == "sonia@lorensen"
+
+    # andreas names himself too, and chooses what his posts show
+    await naming.give_subname(andreas, "andreas@lorensen", andreas.identity().key_text)
+    naming.set_primary(andreas, "andreas@lorensen")
+    assert naming.identity_label(andreas, andreas.identity().key_text) == "andreas@lorensen"
+
+    await naming.revoke_subname(andreas, "sonia@lorensen")
+    gid = nm.revocation_group(andreas.identity().key_text)
+    assert andreas.manifest_data(gid).get("view") == "data"
+    posts = await naming._read(reader, gid, andreas.identity().key_text)
+    best = naming._newest(posts, nm.parse_revocations)
+    naming._store(reader)["issuer_revoked"][andreas.identity().key_text] = sorted(
+        [n, v] for n, v in best[2])
+    assert naming.names_of(reader, sonia.identity().key_text) == []
+    for p in (andreas, sonia, reader):
+        await p.close()
+    server.close()

@@ -1085,3 +1085,48 @@ async def test_tui_report_post(tmp_path, monkeypatch):
         await pilot.press("q")
     await owner.close()
     server.close()
+
+
+async def test_tui_give_a_name_and_answer_a_request(tmp_path, monkeypatch):
+    """UN-RFC 0019 section 5.4 in the client: give a name under yours, and answer a request."""
+    from unseenet import names as nm
+    from unseenet.client import naming
+    from unseenet.client.tui import InputDialog, ModerationDialog
+    from unseenet.core import crypto
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    reg = crypto.Identity.generate()
+    sonia = Session(Vault.open(tmp_path / "s.vault", "pw", **KDF), status=lambda *_: None)
+    sonia.new_identity("s", "Sonia"); sonia.add_node(addr)
+    await sonia.ensure_inbox()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        s = app.session
+        cert = nm.make_certificate(reg, "lorensen", s.identity().key_text, 1)
+        for p in (s, sonia):
+            st = p.data.setdefault("naming", {}).setdefault("names", {})
+            st.update({"registrars": [reg.key_text], "certs": [cert.to_json()], "revoked": []})
+
+        app.action_give_subname()
+        for value in ("andreas@lorensen", s.identity().key_text, "2"):
+            assert await wait_for(pilot, lambda: isinstance(app.screen, InputDialog), 200)
+            await pilot.pause(0.2)
+            app.screen.query_one("#value").value = value
+            app.screen.query_one("#ok").press()
+            await pilot.pause(0.2)
+        assert await wait_for(pilot, lambda: [c.name for c in naming.names_given(s)] == ["andreas@lorensen"], 300)
+        assert s.identity_label(s.identity().key_text) == "andreas@lorensen"
+
+        await naming.request_subname(sonia, "sonia@lorensen")
+        app.action_name_requests()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ModerationDialog), 300)
+        await pilot.pause(0.3)
+        app.screen.query_one("#which").value = app.screen.items[0][0]
+        app.screen.query_one("#approve").press()
+        assert await wait_for(pilot, lambda: "sonia@lorensen" in [c.name for c in naming.names_given(s)], 300)
+        await pilot.press("q")
+    await sonia.fetch_group(sonia.my_inbox)
+    naming.take_certificates(sonia)
+    assert [c.name for c in naming.my_names(sonia)] == ["sonia@lorensen"]
+    await sonia.close()
+    server.close()

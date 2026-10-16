@@ -16,6 +16,9 @@ from .core.groups import canonical_json, parse_canonical_json
 
 NAMES_GROUP = "unseenet.names@ph5fc5hop5232qsz"      # the project's registrar (section 7.2)
 PURPOSE_NAME_CERT = "UNSEENET-NAME-CERT-1"            # section 10
+PURPOSE_SUBNAME_CERT = "UNSEENET-SUBNAME-CERT-1"      # section 5.4
+SUB_LIFETIME_MAX = timedelta(days=5 * 365 + 1)        # section 5.4
+SUB_LIFETIME_DEFAULT = timedelta(days=365)
 HEADER = "Name-Certificate"                           # section 5.2
 KINDS = ("registered", "domain")
 LIFETIME = {"registered": timedelta(days=365), "domain": timedelta(days=35)}   # section 5.1
@@ -34,6 +37,7 @@ RESERVED = frozenset({
 
 _REGISTERED = re.compile(r"^[a-z][a-z0-9-]{1,30}[a-z0-9]$")
 _LABEL = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+_LOCAL = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")       # section 4.4
 
 
 class NameProblem(ValueError):
@@ -43,8 +47,23 @@ class NameProblem(ValueError):
 # --- syntax (section 4) -------------------------------------------------------
 
 def kind_of(name: str) -> str:
-    """'domain' if the name has a dot, else 'registered' (section 4.3)."""
+    """Section 4.3: 'domain' if the name has a dot (also ``local@domain``, given
+    through DNS), 'sub' for ``local@registered``, else 'registered'."""
+    if "@" in name:
+        return "domain" if "." in name.split("@", 1)[1] else "sub"
     return "domain" if "." in name else "registered"
+
+
+def split_sub(name: str) -> tuple[str, str]:
+    """``sonia@lorensen`` -> ("sonia", "lorensen")."""
+    local, _, parent = name.partition("@")
+    return local, parent
+
+
+def check_local(local: str) -> None:
+    if not _LOCAL.match(local) or "--" in local:
+        raise NameProblem("the part before @ is 1 to 32 of a-z, 0-9 and -, "
+                          "does not start or end with - and has no --")
 
 
 def check_registered(name: str) -> None:
@@ -63,11 +82,21 @@ def check_domain(name: str) -> None:
 def check_name(name: str) -> str:
     """Raise NameProblem unless the name is valid for its kind; return the kind."""
     kind = kind_of(name)
+    if "@" in name:
+        local, parent = split_sub(name)
+        check_local(local)
+        (check_domain if "." in parent else check_registered)(parent)
+        return kind
     (check_domain if kind == "domain" else check_registered)(name)
     return kind
 
 
 def dns_record_name(domain: str) -> str:
+    """``_unseenet.lorensen.dk``; for a person under a domain (section 6.4),
+    ``andlo._unseenet.lorensen.dk``."""
+    if "@" in domain:
+        local, parent = split_sub(domain)
+        return f"{local}.{DNS_PREFIX}.{parent}"
     return f"{DNS_PREFIX}.{domain}"
 
 
@@ -115,6 +144,16 @@ class Certificate:
     def valid_at(self, when: datetime) -> bool:
         return self.issued <= when < self.expires
 
+    @property
+    def parent(self) -> str:
+        """For a sub-name certificate: the name it is under."""
+        return self.raw.get("parent", "")
+
+    @property
+    def issuer(self) -> str:
+        """Who signed it: the registrar, or for a sub-name the parent's holder."""
+        return self.registrar
+
 
 def make_certificate(registrar: crypto.Identity, name: str, key_text: str, serial: int,
                      now: datetime | None = None, *, claim: str | None = None,
@@ -145,6 +184,8 @@ def parse_certificate(text: str) -> Certificate:
         data = parse_canonical_json(text if text.endswith("\n") else text + "\n")
     except ValueError as exc:
         raise NameProblem("certificate is not canonical JSON") from exc
+    if data.get("kind") == "sub":
+        return _parse_sub(data)
     try:
         if data.get("v") != 1 or data["kind"] not in KINDS:
             raise NameProblem("not a version 1 certificate")
@@ -169,6 +210,79 @@ def parse_certificate(text: str) -> Certificate:
     if cert.expires - cert.issued > LIFETIME[cert.kind] or cert.serial < 1:
         raise NameProblem("certificate lifetime or serial out of range")
     return cert
+
+
+# --- names under a name (section 5.4) ------------------------------------------------
+
+def make_subname(issuer: crypto.Identity, name: str, key_text: str, serial: int,
+                 lifetime: timedelta = SUB_LIFETIME_DEFAULT,
+                 now: datetime | None = None) -> Certificate:
+    """A sub-name certificate, ``sonia@lorensen``, signed by the holder of ``lorensen``."""
+    if "@" not in name:
+        raise NameProblem("a name under a name looks like sonia@lorensen")
+    check_name(name)
+    crypto.key_from_text(key_text)
+    if not timedelta(days=1) <= lifetime <= SUB_LIFETIME_MAX:
+        raise NameProblem("a name under a name lasts from a day to five years")
+    issued = (now or datetime.now(timezone.utc)).replace(microsecond=0)
+    data = {"v": 1, "name": name, "kind": "sub", "parent": split_sub(name)[1], "key": key_text,
+            "issued": rfc3339(issued), "expires": rfc3339(issued + lifetime), "serial": serial,
+            "registrar": issuer.key_text}
+    data["sig"] = issuer.sign_text(PURPOSE_SUBNAME_CERT, canonical_json(data).encode())
+    return parse_certificate(canonical_json(data))
+
+
+def _parse_sub(data: dict) -> Certificate:
+    try:
+        if data.get("v") != 1 or "@" not in data["name"]:
+            raise NameProblem("not a version 1 sub-name certificate")
+        check_name(data["name"])
+        if split_sub(data["name"])[1] != data["parent"]:
+            raise NameProblem("the name is not under its parent")
+        unsigned = {k: v for k, v in data.items() if k != "sig"}
+        issuer = crypto.key_from_text(data["registrar"])
+        crypto.key_from_text(data["key"])
+        if not crypto.verify(issuer, PURPOSE_SUBNAME_CERT, canonical_json(unsigned).encode(),
+                             crypto.sig_from_text(data["sig"])):
+            raise NameProblem("the issuer's signature does not verify")
+        cert = Certificate(data["name"], "sub", data["key"], parse_rfc3339(data["issued"]),
+                           parse_rfc3339(data["expires"]), int(data["serial"]), data["registrar"],
+                           None, None, data)
+    except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
+        if isinstance(exc, NameProblem):
+            raise
+        raise NameProblem(f"bad sub-name certificate: {exc}") from exc
+    if cert.expires - cert.issued > SUB_LIFETIME_MAX or cert.serial < 1:
+        raise NameProblem("sub-name lifetime or serial out of range")
+    return cert
+
+
+def revocation_group(issuer_key: str) -> str:
+    """Where an issuer of sub-names publishes its revocation list (section 6.6)."""
+    return f"names@{crypto.fingerprint(crypto.key_from_text(issuer_key))}"
+
+
+def make_subname_request(name: str, key_text: str) -> str:
+    check_name(name)
+    if "@" not in name:
+        raise NameProblem("ask for a name under a name, like sonia@lorensen")
+    crypto.key_from_text(key_text)
+    return canonical_json({"v": 1, "name": name, "key": key_text}) + "\n"
+
+
+def parse_subname_request(body: str) -> dict:
+    try:
+        data = parse_canonical_json(body if body.endswith("\n") else body + "\n")
+    except ValueError as exc:
+        raise NameProblem("the request is not canonical JSON") from exc
+    if data.get("v") != 1 or not isinstance(data.get("name"), str) or "@" not in data["name"]:
+        raise NameProblem("not a version 1 name request")
+    check_name(data["name"])
+    try:
+        crypto.key_from_text(data.get("key", ""))
+    except crypto.CryptoError as exc:
+        raise NameProblem("the request names no valid key") from exc
+    return data
 
 
 def certificate_from_header(value: str) -> Certificate:
