@@ -55,6 +55,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started:
+      - Portable (USB, Windows, macOS): portable.md
       - Using the client: client.md
       - Concepts: concepts.md
   - Running a node:

@@ -175,6 +175,10 @@ def pyinstaller(plat: str, work: Path) -> Path:
         except ImportError:
             log("Pillow not installed: building without an icon")
     cmd.append(str(entry))
+    try:
+        import textual  # noqa: F401
+    except ImportError:
+        sys.exit('the terminal client needs Textual: pip install ".[tui]" pyinstaller')
     log("running PyInstaller")
     subprocess.run(cmd, check=True, cwd=work)
     return work / "dist" / "unseenet"

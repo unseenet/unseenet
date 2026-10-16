@@ -6,7 +6,12 @@ subscriptions, what you have read - in one encrypted file, the **vault**.
 
 ## Install
 
-You need Python 3.11 or newer, `git` and the `tor` program.
+The easiest way, on **Windows, macOS and Linux**, is a
+[portable build](portable.md): one folder with the client and Tor inside,
+nothing to install, and it runs from a USB stick.
+
+To install it with Python instead, you need Python 3.11 or newer, `git`
+and the `tor` program.
 
 === "Fedora"
 

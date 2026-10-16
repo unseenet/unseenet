@@ -203,14 +203,13 @@ Working:
 
 Missing / rough:
 
-- Pull catch-up (NEWNEWS is served, not yet used by peers or the client).
 - Feeds are not pipelined; one CHECK at a time.
 - The command-line client (`cli.py`) predates `client/session.py` and
   should be moved onto it.
 - Argon2id "moderate" needs ~256 MiB RAM while unlocking; fine on a PC,
   worth tuning for small nodes.
-- No packaging for USB yet (plan: PyInstaller or Nuitka per OS with the
-  Tor Expert Bundle).
+- Portable builds are not code-signed (Windows SmartScreen, macOS
+  Gatekeeper warn on first start).
 
 ## Versioning
 

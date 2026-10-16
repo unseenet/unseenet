@@ -20,6 +20,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- Portable builds for Windows, macOS (Apple silicon and Intel) and Linux
+  with Tor inside, and an all-in-one USB zip; built, unpacked and
+  self-tested by GitHub Actions. Tor comes from the Tor Project's Expert
+  Bundle and is only used if its signature checks out. See
+  docs/portable.md.
+- Portable mode: vault and Tor state in `data/` beside the programs.
+- Tor bridges (obfs4, Snowflake, or your own) for networks that block Tor:
+  "Tor bridges" in the TUI, `unseenet bridges` on the command line.
+- `unseenet --self-test`: checks a build and connects to the Tor network.
+- Tests run on Windows and macOS as well as Linux.
 - Catching up by pull (UN-RFC 0017): nodes pull from each peer at start
   and every hour (`pull`, `pull_interval`), so new nodes get the history
   and nodes that were down get what they missed. Works from any node, so

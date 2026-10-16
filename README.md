@@ -107,9 +107,17 @@ Want to change the protocol or build something compatible? Read
 
 ## Trying it
 
-Requires Python 3.11+ and the `tor` binary (`dnf install tor` / `apt install tor`).
+### Portable: Windows, macOS, Linux, USB stick
 
-### The client
+Download a zip from the [releases](https://github.com/andlo/unseenet/releases),
+unzip it, and double-click **Start Unseenet** - the client and Tor are
+inside, nothing to install. The `-usb.zip` has all three systems in one
+folder for a stick that works anywhere. See the
+[portable guide](https://andlo.github.io/unseenet/portable/).
+
+### The client with Python
+
+Requires Python 3.11+ and the `tor` binary (`dnf install tor` / `apt install tor`).
 
 ```bash
 pipx install "unseenet[tui]"
@@ -127,7 +135,7 @@ the node to connect to (its `.onion` address). Then:
 | `n` / `r` | new post / reply (Ctrl+S sends) |
 | `c` | create a group (open, moderated, channel or closed) |
 | `m` | send a private message - only the recipient can read it |
-| `o` | about this node, and write to its operator |
+| `o` | your nodes: add, remove, details, write to an operator |
 | `k` | show your key, so others can write to you or invite you |
 | `i` | invite someone to a closed group you own |
 | `j` | join a group by ID or `unseenet:join` link |
@@ -190,9 +198,10 @@ The test nodes may be reset at any time while Unseenet is pre-alpha.
 - [x] TUI client (first version): groups, threads, posting, closed groups, invites
 - [x] Node install script and systemd service
 - [x] Encrypted offline cache; documentation site; releases on PyPI
-- [ ] Pull catch-up between nodes (NEWNEWS)
-- [ ] Chat view in the TUI
-- [ ] Portable builds with bundled Tor for USB (Linux, Windows, macOS)
+- [x] Pull catch-up between nodes (UN-RFC 0017)
+- [x] Portable builds with bundled Tor for USB (Linux, Windows, macOS), Tor bridges
+- [x] Several nodes in one client; peering with node keys (UN-RFC 0016)
+- [ ] Transferring group ownership (UN-RFC 0015, specified)
 - [x] Chat view, push and fast-delivery chat groups (UN-RFC 0008)
 - [x] Group rules / charters (UN-RFC 0014)
 - [x] Inbox groups: private messages and operator contact (UN-RFC 0009)
