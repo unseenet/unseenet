@@ -196,15 +196,24 @@ async def post_canary(address: str, socks_port: int, key: crypto.Identity, node_
 
 
 async def request_check(new, listed, socks_port: int, key: crypto.Identity, today: date,
-                        timeout: float = 3600.0, every: float = 300.0) -> list[str]:
+                        timeout: float = 3600.0, every: float = 300.0) -> list[str] | None:
     """At request time: a canary each way between the new node and the listed network.
 
     ``new`` and each of ``listed`` have .name, .address and .node_key. Posts one
     canary to the new node and one to the first listed node that takes it, then
     waits until the new node has the listed node's canary and at least one of
-    up to three listed nodes has the new node's. Returns the problems.
+    up to three listed nodes has the new node's. Returns the problems, or None
+    when the listed nodes do not carry the canary group yet (nothing to check).
     """
     problems = []
+    for n in listed[:3]:
+        try:
+            if CANARY_GROUP not in (await read_node(n.address, socks_port, key.public_key,
+                                                    today)).groups:
+                return None
+            break
+        except (OSError, ConnectionError, asyncio.TimeoutError, ValueError):
+            continue
     try:
         refused = await post_canary(new.address, socks_port, key, new.name, new.node_key, today)
     except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as exc:

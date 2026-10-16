@@ -156,7 +156,7 @@ def _fake_network(monkeypatch, delivers_out: bool, delivers_in: bool):
         return None
 
     async def read(address, port, poster, day):
-        return cn.Reading(seen=set(have[address]))
+        return cn.Reading(seen=set(have[address]), groups={CANARY_GROUP})
 
     monkeypatch.setattr(cn, "post_canary", post)
     monkeypatch.setattr(cn, "read_node", read)
@@ -175,3 +175,15 @@ def test_request_check(monkeypatch):
     new, listed = _fake_network(monkeypatch, True, False)
     problems = asyncio.run(cn.request_check(new, listed, 0, key, DAY, timeout=0, every=0))
     assert "**na** did not reach this node" in problems[0]
+
+
+def test_request_check_waits_for_the_canary_group(monkeypatch):
+    import asyncio
+    new, listed = _fake_network(monkeypatch, True, True)
+
+    async def read(address, port, poster, day):
+        return cn.Reading()
+
+    monkeypatch.setattr(cn, "read_node", read)
+    key = crypto.Identity.generate()
+    assert asyncio.run(cn.request_check(new, listed, 0, key, DAY, timeout=0, every=0)) is None
