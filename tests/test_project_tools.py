@@ -103,6 +103,22 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert v.data["groups"][nodes]["manifest"]["serial"] == 2
     assert v.data["groups"][talk]["manifest"]["serial"] == 1
 
+    # a group made before the list had rules gets them; posters and the rest are kept
+    old = v.data["groups"][talk]["manifest"]
+    for k in ("title", "description", "rules"):
+        old.pop(k, None)
+    kept = [crypto.Identity.generate().key_text]
+    old["min_pow"], old["posters"] = 0, kept
+    v.save()
+    await run("create_groups")
+    new = Vault.open(setup["vault"], "pw").data["groups"][talk]["manifest"]
+    assert new["serial"] == 2 and new["rules"].startswith("The place to talk")
+    assert new["min_pow"] == 20 and new["posters"] == kept and "view" not in new
+    await run("create_groups")
+    v = Vault.open(setup["vault"], "pw")
+    assert v.data["groups"][talk]["manifest"]["serial"] == 2
+    assert v.data["groups"][nodes]["manifest"]["serial"] == 2
+
     # 2. wire up the registrar: claim inbox and manifest with `claims`
     await run("setup_registrar")
     v = Vault.open(setup["vault"], "pw")

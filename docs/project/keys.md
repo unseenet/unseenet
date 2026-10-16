@@ -43,7 +43,7 @@ the command line.
 | Script | Does |
 |--------|------|
 | `change_passphrase.py` | Encrypts the owner vault again under a new passphrase, checks that it opens, and keeps the old file until you delete it. |
-| `create_groups.py` | Lists every group the project owns, with its type, posters and rules, and creates those that do not exist yet. |
+| `create_groups.py` | Lists every group the project owns, with its type, posters, view and rules. Creates those that do not exist yet, and gives existing ones a new manifest when their view, title, description, rules or `min_pow` differ from the list. |
 | `setup_registrar.py` | Creates the registrar's inbox key and claim inbox, and sets which replicas' keys may issue names (`--add`, `--remove`). |
 
 `create_groups.py` and `setup_registrar.py` take `--dry-run`, which signs
