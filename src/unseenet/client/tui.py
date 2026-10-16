@@ -299,7 +299,9 @@ class BridgesDialog(Dialog):
                         classes="hint", markup=False)
             yield Select(self.CHOICES, value=self.setting.get("mode", "off"), allow_blank=False,
                          id="mode")
-            yield TextArea("\n".join(self.setting.get("custom", [])), id="lines", soft_wrap=True)
+            lines = TextArea("\n".join(self.setting.get("custom", [])), id="lines", soft_wrap=True)
+            lines.display = self.setting.get("mode") == "custom"     # before the first paint
+            yield lines
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Save", variant="primary", id="ok")

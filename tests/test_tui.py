@@ -504,6 +504,7 @@ async def test_tui_bridges_dialog(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app._inbox_ready, 300)
         app.action_bridges()
         assert await wait_for(pilot, lambda: isinstance(app.screen, BridgesDialog))
+        await pilot.pause(0.2)
         assert not app.screen.query_one("#lines").display          # only for own bridges
         app.screen.query_one("#mode", Select).value = "custom"
         await pilot.pause(0.2)
