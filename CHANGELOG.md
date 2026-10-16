@@ -8,6 +8,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ## [Unreleased]
 
 ### Added
+- Per-peer `accept` in `[[peer]]`: which groups the node takes from that
+  peer, pushed or pulled. `groups` only ever limited what is sent, so a
+  peering "for dk.* only" can now be held on both sides. (#86)
 - Names under a name (UN-RFC 0019 sections 4.4, 5.4, 6.4, 6.6): the holder
   of `@lorensen` gives `andreas@lorensen` and `sonia@lorensen` with
   certificates signed by its own key, for 1 to 5 years, renewed

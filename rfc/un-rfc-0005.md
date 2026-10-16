@@ -110,6 +110,10 @@ Peering is configured by node operators, per peer, with:
 - the peer's onion address;
 - the set of groups to send (a list of RFC 3977 wildmats over Group IDs,
   default `*`);
+- optionally the set of groups to take from the peer (wildmats, default
+  `*`); articles in other groups pushed or pulled from that peer are
+  refused like articles in a group the node does not carry (`439`/`437`,
+  reason `group`) and are not remembered as seen;
 - optionally a shared secret for `AUTHINFO USER`/`AUTHINFO PASS`
   (RFC 4643). Over Tor, sending the password in plain text is acceptable.
   UN-RFC 0016 replaces the shared secret with node keys.

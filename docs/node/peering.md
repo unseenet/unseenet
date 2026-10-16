@@ -126,22 +126,35 @@ your node also links them.
 
 ## Choosing what to share
 
-`groups` decides what **you send** to a peer:
+Three patterns per peer decide what moves, each an RFC 3977 wildmat
+over Group IDs (`dk.*`, `dk.*,!dk.test*`, `""` for nothing):
+
+| Key | Decides | Default |
+|---|---|---|
+| `groups` | what you **send** to the peer | `"*"` |
+| `pull` | what you [catch up on](#catching-up) from the peer | `"*"` |
+| `accept` | what you **take** from the peer, pushed or pulled | `"*"` |
 
 ```toml
 [[peer]]
-name = "bob"
-address = "bbbb...bbbb.onion:119"
+name = "aarhus"
+address = "dddd...dddd.onion:119"
 key = "ed25519:..."
-groups = "dk.*,unseenet*"     # only Danish groups and the project groups
+groups = "dk.*,unseenet*"     # we send Danish groups and the project groups
+pull = "dk.*,unseenet*"       # we catch up on the same
+accept = "dk.*,unseenet*"     # and take nothing else from aarhus
 ```
 
-It does not limit what the peer sends you. Your node takes any post a
-peer pushes, in any group it carries or that
+`groups` on your side does not limit what the peer sends you: that is
+its own `groups`. If you have agreed to exchange only some groups, set
+`accept` too, so it holds whatever the other side configures. Posts
+outside `accept` are refused (counted as *group* under Rejected in the
+[monitor](monitor.md)) and not remembered, so another peer can still
+deliver them. Clients and other peers are not affected.
+
+Your node still only takes groups it carries or that
 [`new_groups`](configuration.md#new_groups-which-groups-the-node-carries)
-lets in. If you agree to exchange only some groups, both of you set
-`groups` accordingly. (A per-peer limit on what you accept is planned,
-[#86](https://github.com/unseenet/unseenet/issues/86).)
+lets in; `accept` can only narrow that.
 
 ## Ending a peering, or a lost key
 

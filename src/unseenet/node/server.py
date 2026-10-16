@@ -32,6 +32,7 @@ class PeerConfig:
     groups: str = "*"           # RFC 3977 wildmat over Group IDs
     key: str | None = None      # the peer's node key, "ed25519:..." (UN-RFC 0016)
     pull: str = "*"             # wildmat of groups to catch up on from this peer (UN-RFC 0017)
+    accept: str = "*"           # wildmat of groups to take from this peer, pushed or pulled
     password: str | None = None  # legacy shared secret for AUTHINFO
 
     def public_key(self) -> bytes | None:
@@ -97,6 +98,12 @@ class Node:
                 except asyncio.QueueFull:
                     pass                      # a slow watcher catches up by polling
 
+    def peer_config(self, name: str) -> PeerConfig | None:
+        for peer in self.config.peers:
+            if peer.name == name:
+                return peer
+        return None
+
     def subscribe(self) -> asyncio.Event:
         """An event that is set whenever a new article is queued for peers."""
         event = asyncio.Event()
@@ -129,6 +136,10 @@ class Node:
         validate_structure(art, raw_size=len(raw), max_size=self.config.max_size, now=now)
         if self.store.seen(art.message_id):
             raise ArticleError("duplicate")
+        if from_peer and source is not None:
+            peer = self.peer_config(source)
+            if peer is not None and not wildmat(peer.accept, art.group):
+                raise ArticleError("group", f"not accepted from peer {source}")
         now = now or datetime.now(timezone.utc)
         ctl = art.control
         is_manifest = ctl == ["manifest"]
