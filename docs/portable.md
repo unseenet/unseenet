@@ -41,7 +41,7 @@ Check the download against `SHA256SUMS.txt` from the same release:
 
 Unzip, and copy the `Unseenet` folder to the stick. Any stick formatted
 for Windows (FAT32 or exFAT) works on all three systems. You need about
-100 MB per system, 400 MB for the all-in-one folder.
+120 MB per system, 500 MB for the all-in-one folder.
 
 ```text
 Unseenet/

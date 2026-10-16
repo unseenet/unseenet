@@ -166,7 +166,12 @@ def pyinstaller(plat: str, work: Path) -> Path:
            "--collect-all", "textual", "--collect-submodules", "rich",
            "--collect-submodules", "unseenet",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
-           "--collect-all", "nacl", "--hidden-import", "_cffi_backend"]
+           "--collect-all", "nacl", "--hidden-import", "_cffi_backend",
+           # Pillow is only here to convert the icon; none of these are used at run time
+           "--exclude-module", "PIL", "--exclude-module", "tkinter",
+           "--exclude-module", "unittest", "--exclude-module", "pydoc_data"]
+    if not plat.startswith("windows"):
+        cmd.append("--strip")                       # debug symbols: a lot of megabytes
     icon = ROOT / "assets" / "icon-512.png"        # PyInstaller converts it (needs Pillow)
     if icon.exists() and not plat.startswith("linux"):
         try:
