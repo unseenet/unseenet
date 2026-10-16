@@ -1004,7 +1004,7 @@ class BrowseDialog(Dialog):
                 for g in items:
                     parent.add_leaf(self._label(g), data=g)
             if not self.groups:
-                tree.root.add_leaf(Text("No groups yet - press c in the main view to create one."))
+                tree.root.add_leaf(Text("No groups yet - use Ctrl+P, Create group, to create one."))
             yield tree
             yield Static("Move to a group to see what it is.", id="group-details",
                          classes="details", markup=False)
@@ -1154,21 +1154,19 @@ class UnseenetApp(App):
         Binding("n", "new_post", "New post"),
         Binding("r", "reply", "Reply"),
         Binding("g", "browse", "Groups"),
-        Binding("c", "create_group", "Create"),
-        Binding("i", "invite", "Invite"),
         Binding("j", "join", "Join", show=False),
         Binding("m", "message", "Message"),
-        Binding("o", "node_info", "Nodes"),
-        Binding("k", "show_key", "My key"),
-        Binding("at", "names", "Names"),
+        Binding("o", "node_info", "Nodes", show=False),
+        Binding("k", "show_key", "My key", show=False),
+        Binding("at", "names", "Names", show=False),
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
-        Binding("question_mark", "group_info", "About group", show=False),
+        Binding("question_mark", "group_info", "About group"),
         Binding("v", "toggle_view", "Chat/threads"),
         Binding("f", "read", "Full screen", show=False),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
-        Binding("f1", "about", "About"),
+        Binding("f1", "about", "About", show=False),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -1370,7 +1368,7 @@ class UnseenetApp(App):
             self.select_group(next(iter(groups)))
         if not groups:
             self.query_one("#threads-title", Static).update(
-                "No groups yet - press g to browse the node's groups, or c to create one")
+                "No groups yet - press g to browse the node's groups, or Ctrl+P to create one")
         where = f"{len(s.nodes)} nodes" if len(s.nodes) > 1 else "node"
         down = f" - not reachable: {', '.join(node_label(n) for n in s.unreachable)}" if s.unreachable else ""
         self.set_status(f"{len(available)} groups on {where}, {len(groups)} subscribed{down}")
@@ -2155,9 +2153,9 @@ class UnseenetApp(App):
             ("Private message", "Write privately to someone by their key  [m]", self.action_message),
             ("Browse groups", "See all groups on the node, subscribe or unsubscribe  [g]",
              self.action_browse),
-            ("Create group", "Create an open, moderated, channel, closed or inbox group  [c]",
+            ("Create group", "Create an open, moderated, channel, closed or inbox group",
              self.action_create_group),
-            ("Invite to closed group", "Give someone access to a closed group you own  [i]",
+            ("Invite to closed group", "Give someone access to a closed group you own",
              self.action_invite),
             ("Join group", "Subscribe by group ID or unseenet:join link  [j]", self.action_join),
             ("Nodes", "Your nodes: add, remove, default, who runs them, write to an operator  [o]",

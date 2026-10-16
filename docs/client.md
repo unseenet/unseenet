@@ -86,12 +86,10 @@ After that the connection is reused.
 | ++n++ | New post in the current group |
 | ++r++ | Reply to the selected post |
 | ++ctrl+s++ | Send (in the compose window) |
-| ++c++ | Create a group |
 | ++m++ | Send a private message (pre-filled with the selected post's author) |
 | ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
 | `@` | Your names: claim a name such as `@lorensen`, see the ones you hold |
-| ++i++ | Invite someone to a closed group you own |
 | ++j++ | Join a group by ID or `unseenet:join` link |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
@@ -100,7 +98,7 @@ After that the connection is reused.
 | ++v++ | Switch between chat and threads for the current group |
 | ++question-mark++ | About this group: its rules, type, owner and node |
 | ++f1++ | About Unseenet, with links to the source and these pages |
-| ++ctrl+p++ | Command palette: everything above, by name, plus a few more |
+| ++ctrl+p++ | Command palette: everything above, by name, plus what is used less often, like creating a group or inviting someone to a closed group |
 
 Groups are shown by **hierarchy**, the part of the name before the first
 dot, as in the old newsreaders: `dk.snak` and `dk.teknik` sit under `dk.*`,
@@ -334,7 +332,7 @@ carried, or just say thanks.
 Closed groups are end-to-end encrypted, so you need to be invited:
 
 1. Press ++k++ and send your key to the group's owner (any way you like).
-2. The owner presses ++i++ in the group and pastes your key.
+2. The owner selects the group, opens the command palette (++ctrl+p++), chooses **Invite to closed group** and pastes your key.
 3. The owner sends you the `unseenet:join?...` link it shows.
 4. You press ++j++ and paste the link.
 
