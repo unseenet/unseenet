@@ -88,3 +88,31 @@ async def test_session_bridge_setting(tmp_path):
         await s.set_bridges("custom", [])
     with pytest.raises(SessionError):
         await s.set_bridges("teleport")
+
+
+async def test_onion_refusals_become_connection_errors(monkeypatch):
+    """Tor's SOCKS refusals are retried, then reported as ConnectionError (which
+    the client handles) with a readable reason - not a crash."""
+    from python_socks import ProxyError
+    calls = []
+
+    class FakeProxy:
+        async def connect(self, dest_host, dest_port):
+            calls.append(dest_host)
+            raise ProxyError("Host unreachable", error_code=0x04)
+
+    monkeypatch.setattr(tormod.Proxy, "from_url", staticmethod(lambda *a, **k: FakeProxy()))
+    monkeypatch.setattr(tormod, "ONION_RETRY_PAUSES", (0.0, 0.0))
+    with pytest.raises(ConnectionError, match="node may be down"):
+        await tormod.open_connection("abc.onion:119", 9050)
+    assert len(calls) == 3
+    calls.clear()
+
+    class BadAddress(FakeProxy):
+        async def connect(self, dest_host, dest_port):
+            calls.append(dest_host)
+            raise ProxyError("bad", error_code=0xF6)
+    monkeypatch.setattr(tormod.Proxy, "from_url", staticmethod(lambda *a, **k: BadAddress()))
+    with pytest.raises(ConnectionError, match="typos"):
+        await tormod.open_connection("abc.onion:119", 9050)
+    assert len(calls) == 1                         # a wrong address is not retried

@@ -24,8 +24,8 @@ from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.markup import escape
 from textual.screen import ModalScreen, Screen
-from textual.widgets import (Button, DataTable, Footer, Header, Input, Label, RichLog, Select,
-                             Static, TextArea, Tree)
+from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input, Label, RichLog,
+                             Select, Static, TextArea, Tree)
 
 from .. import __version__
 from ..core.vault import Vault, VaultError
@@ -161,6 +161,9 @@ class UnlockDialog(Dialog):
         self.dismiss(pw)
 
 
+OTHER_NODE = "__other__"
+
+
 class SetupDialog(Dialog):
     """First run: identity and node."""
 
@@ -176,11 +179,25 @@ class SetupDialog(Dialog):
                             classes="hint")
                 yield Input(placeholder="Display name, e.g. Andreas", id="display")
             if self.need_node:
-                yield Label("Which node do you want to connect to?", classes="hint")
-                yield Input(placeholder="xyz...abc.onion  (or host:port for testing)", id="node")
+                from ..known_nodes import KNOWN_NODES
+                yield Label("Which node do you want to connect to? Pick one of the known nodes, "
+                            "or enter the address of another you were given.", classes="hint")
+                choices = [(f"{n.name} - {n.description}", n.address) for n in KNOWN_NODES]
+                choices.append(("Another node - enter its address", OTHER_NODE))
+                yield Select(choices, value=choices[0][1], allow_blank=False, id="known")
+                other = Input(placeholder="xyz...abc.onion  (or host:port for testing)", id="node")
+                other.display = False
+                yield other
+                yield Checkbox("Also use the other known nodes as backups", value=True, id="backups")
             with Horizontal(classes="buttons"):
                 yield Button("Quit", id="cancel")
                 yield Button("Continue", variant="primary", id="ok")
+
+    @on(Select.Changed, "#known")
+    def _known_changed(self, event: Select.Changed) -> None:
+        self.query_one("#node").display = event.value == OTHER_NODE
+        if event.value == OTHER_NODE:
+            self.query_one("#node").focus()
 
     @on(Input.Submitted)
     @on(Button.Pressed, "#ok")
@@ -192,10 +209,15 @@ class SetupDialog(Dialog):
                 self.app.notify("Please choose a display name", severity="error")
                 return
         if self.need_node:
-            result["node"] = self.query_one("#node", Input).value.strip()
-            if not result["node"]:
+            from ..known_nodes import KNOWN_NODES
+            known = self.query_one("#known", Select).value
+            node = self.query_one("#node", Input).value.strip() if known == OTHER_NODE else known
+            if not node:
                 self.app.notify("Please enter a node address", severity="error")
                 return
+            result["node"] = node
+            if self.query_one("#backups", Checkbox).value:
+                result["backups"] = [n.address for n in KNOWN_NODES if n.address != node]
         self.dismiss(result)
 
 
@@ -828,6 +850,8 @@ class UnseenetApp(App):
                 s.new_identity(name, result["display"])
             if "node" in result:
                 s.add_node(result["node"])
+                for backup in result.get("backups", []):    # read from if the first is down
+                    s.add_node(backup)
         self._update_subtitle()
         await self.show_offline()
         self.refresh_groups()

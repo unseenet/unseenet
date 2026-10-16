@@ -515,3 +515,26 @@ async def test_tui_bridges_dialog(tmp_path, monkeypatch):
         assert app.session.bridge_setting()["custom"] == ["obfs4 192.0.2.1:443 ABCD cert=x iat-mode=0"]
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_first_start_offers_known_nodes(tmp_path, monkeypatch):
+    from textual.widgets import Input, Select
+    import unseenet.client.session as sess
+    from unseenet.client.tui import SetupDialog
+    from unseenet.known_nodes import KNOWN_NODES
+
+    async def offline(self, address=None, quiet=False):     # no Tor in tests
+        raise ConnectionError("offline in tests")
+    monkeypatch.setattr(sess.Session, "_connect", offline)
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "new.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: isinstance(app.screen, SetupDialog), 300)
+        await pilot.pause(0.2)
+        assert app.screen.query_one("#known", Select).value == KNOWN_NODES[0].address
+        assert not app.screen.query_one("#node").display          # only for another node
+        app.screen.query_one("#display", Input).value = "Andreas"
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: app.session.nodes == [n.address for n in KNOWN_NODES])
+        await pilot.press("q")

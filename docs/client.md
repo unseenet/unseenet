@@ -59,10 +59,13 @@ Unseenet runs its own Tor process with its own settings and ignores
    current directory). There is no way to recover it if you forget it.
 2. **Choose a display name.** This is just a label. Your real identity is a
    key pair that is created for you.
-3. **Enter a node address**, e.g. the test node
-   `f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion`.
+3. **Choose a node.** The client knows the project's nodes and suggests
+   the first; with *Also use the other known nodes as backups* (on by
+   default) it adds the others too, and reads from them if the first is
+   down. Choose *Another node* to enter an address you were given.
 
-The first connection takes 10-30 seconds while Tor builds its circuits.
+The first connection takes 10-30 seconds while Tor builds its circuits, and
+can take a few tries right after Tor starts; the client retries by itself.
 After that the connection is reused.
 
 !!! tip "Several vaults"

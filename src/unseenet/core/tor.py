@@ -18,6 +18,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from python_socks import ProxyError
 from python_socks.async_.asyncio import Proxy
 
 
@@ -275,6 +276,24 @@ class TorProcess:
             await self.process.wait()
 
 
+# Tor's extended SOCKS5 replies for onion services (tor's doc/socks-extensions)
+ONION_ERRORS = {
+    0x01: "general failure in Tor (it may still be building circuits)",
+    0x04: "host unreachable (the node may be down)",
+    0x06: "timed out (the node may be down, or Tor is still starting)",
+    0xF0: "the node's onion service was not found (down, or a wrong address)",
+    0xF1: "the onion service descriptor is invalid",
+    0xF2: "the onion service's introduction failed",
+    0xF3: "the onion service's rendezvous failed",
+    0xF4: "the onion service needs client authorization",
+    0xF5: "wrong client authorization",
+    0xF6: "this is not a valid onion address - check it for typos",
+    0xF7: "the onion service introduction timed out",
+}
+PERMANENT_ONION_ERRORS = {0xF4, 0xF5, 0xF6}
+ONION_RETRY_PAUSES = (3.0, 10.0)
+
+
 async def open_connection(address: str, socks_port: int | None):
     """Open a stream to ``host:port``; .onion hosts go through Tor's SOCKS port.
 
@@ -287,8 +306,18 @@ async def open_connection(address: str, socks_port: int | None):
         if not socks_port:
             raise TorError(f"Tor is required to reach {host}")
         proxy = Proxy.from_url(f"socks5://127.0.0.1:{socks_port}", rdns=True)
-        sock = await proxy.connect(dest_host=host, dest_port=int(port))
-        return await asyncio.open_connection(sock=sock)
+        for attempt, pause in enumerate(ONION_RETRY_PAUSES + (None,)):
+            try:
+                sock = await proxy.connect(dest_host=host, dest_port=int(port))
+                return await asyncio.open_connection(sock=sock)
+            except ProxyError as exc:
+                # A SOCKS refusal from Tor. Right after start Tor often has not
+                # fetched the service's descriptor yet; a moment later it has.
+                code = getattr(exc, "error_code", None)
+                if pause is None or code in PERMANENT_ONION_ERRORS:
+                    raise ConnectionError(f"Tor could not reach {host}: "
+                                          f"{ONION_ERRORS.get(code, exc)}") from exc
+                await asyncio.sleep(pause)
     return await asyncio.open_connection(host, int(port))
 
 

@@ -16,10 +16,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and history).
 
 ### Fixed
+- Tor's SOCKS refusals when reaching an onion service (common right after
+  Tor starts) are retried and reported with a readable reason, instead of
+  failing with a "proxy" error.
 - Key updates of closed groups no longer expire with the group's
   retention; after they did, a new node rejected every post in the group.
 
 ### Added
+- First start offers the known nodes (the project's test nodes) to choose
+  from, and adds the others as backups; "Another node" for any address.
 - Portable builds for Windows, macOS (Apple silicon and Intel) and Linux
   with Tor inside, and an all-in-one USB zip; built, unpacked and
   self-tested by GitHub Actions. Tor comes from the Tor Project's Expert
