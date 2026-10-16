@@ -1,0 +1,19 @@
+[Unit]
+Description=Unseenet registrar replica (UN-RFC 0019)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=unseenet
+WorkingDirectory=/home/unseenet
+# The vault passphrase, readable only by root: systemd hands it to the service.
+LoadCredential=passphrase:/etc/unseenet-registrar.passphrase
+ExecStart=/bin/sh -c 'exec /home/unseenet/unseenet/.venv/bin/unseenet-registrar run /home/unseenet/registrar.vault --passphrase-file "$CREDENTIALS_DIRECTORY/passphrase"'
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

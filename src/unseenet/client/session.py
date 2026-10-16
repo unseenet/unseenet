@@ -762,7 +762,7 @@ class Session:
 
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
-                           anonymous: bool = False) -> str:
+                           anonymous: bool = False, content_type: str | None = None) -> str:
         """Send a message to an inbox. Only its owner can read it."""
         if not self.manifest_data(group_id):
             owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
@@ -773,7 +773,7 @@ class Session:
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
-            references=references, pow_bits=bits))
+            references=references, content_type=content_type, pow_bits=bits))
         msgid = art.message_id
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,

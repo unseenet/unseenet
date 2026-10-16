@@ -1,0 +1,151 @@
+"""tools/project: the owner's scripts set up groups and the registrar, end to end."""
+
+import getpass
+import importlib
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+import unseenet.client.session as sess
+import unseenet.names as nm
+from unseenet.client.session import Session
+from unseenet.core import crypto
+from unseenet.core.store import Store
+from unseenet.core.vault import Vault
+from unseenet.node.server import Node, NodeConfig
+from unseenet.nntp import Client
+from unseenet.registrar import Registrar
+
+TOOLS = Path(__file__).resolve().parent.parent / "tools" / "project"
+KDF = {"ops": 1, "mem": 8192 * 1024}
+
+
+@pytest.fixture
+async def setup(tmp_path, monkeypatch):
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    monkeypatch.syspath_prepend(str(TOOLS))
+    owner_mod = importlib.import_module("_owner")
+    project, poster = crypto.Identity.generate(), crypto.Identity.generate()
+    vault_path = tmp_path / "owner.vault"
+    v = Vault.open(vault_path, "pw", **KDF)
+    v.data["identities"]["project"] = {"seed": project.seed.hex(), "display": "Unseenet project"}
+    v.data["github_poster"] = {"seed": poster.seed.hex(), "key": poster.key_text}
+    v.save()
+
+    async def post_local(raws, addresses=None):
+        c = await Client.connect(addr)
+        for raw in raws:
+            code, text = await c.post(raw)
+            assert code == 240, text
+        await c.quit()
+        return 1
+
+    monkeypatch.setattr(owner_mod, "VAULT", vault_path)
+    monkeypatch.setattr(owner_mod, "POW_BITS", 8)
+    monkeypatch.setattr(owner_mod, "PROJECT_KEY", project.key_text)
+    monkeypatch.setattr(owner_mod, "post_everywhere", post_local)
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": "pw")
+    names_group = f"unseenet.names@{project.fingerprint}"
+    monkeypatch.setattr(nm, "NAMES_GROUP", names_group)
+    monkeypatch.setattr(nm, "CLAIM_POW", 12)             # 24 bits take a minute of CPU
+
+    def run_tool(name, *argv):
+        sys.modules.pop(name, None)
+        mod = importlib.import_module(name)
+        monkeypatch.setattr(mod, "open_owner_session",
+                            lambda: owner_mod.open_owner_session(vault_path, project.key_text))
+        monkeypatch.setattr(mod, "post_everywhere", post_local)
+        if hasattr(mod, "NAMES_GROUP"):
+            monkeypatch.setattr(mod, "NAMES_GROUP", names_group)
+        monkeypatch.setattr(sys, "argv", [name, *argv])
+        return mod.main()
+
+    yield {"addr": addr, "project": project, "vault": vault_path, "run": run_tool,
+           "names_group": names_group}
+    server.close()
+
+
+async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
+    run, addr = setup["run"], setup["addr"]
+    replica_key = crypto.Identity.generate()
+
+    # 1. the project's groups; a second run creates nothing
+    with pytest.raises(SystemExit, match="registrar_poster"):
+        await run("create_groups")                         # names needs a registrar key first
+    v = Vault.open(setup["vault"], "pw")
+    v.data["registrar_poster"] = {"seed": replica_key.seed.hex(), "key": replica_key.key_text}
+    v.save()
+    await run("create_groups")
+    v = Vault.open(setup["vault"], "pw")
+    owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
+    assert setup["names_group"] in owned and len(owned) == 8
+    await run("create_groups")
+    assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
+                if e.get("owner")}) == 8
+
+    # 2. wire up the registrar: claim inbox and manifest with `claims`
+    await run("setup_registrar")
+    v = Vault.open(setup["vault"], "pw")
+    inbox = crypto.Identity.from_seed(bytes.fromhex(v.data["registrar_inbox"]["seed"]))
+    manifest = v.data["groups"][setup["names_group"]]["manifest"]
+    assert manifest["serial"] == 2 and manifest["claims"] == f"inbox@{inbox.fingerprint}"
+    assert manifest["posters"] == [replica_key.key_text]
+
+    # 3. a replica with those keys handles a claim
+    rv = Vault.open(tmp_path / "replica.vault", "pw", **KDF)
+    rv.data["identities"] = {"registrar": {"seed": replica_key.seed.hex(), "display": "r"},
+                             "inbox": {"seed": inbox.seed.hex(), "display": "r"}}
+    rv.data["default_identity"] = "registrar"
+    rs = Session(rv, status=lambda *_: None)
+    rs.add_node(addr)
+    clock = [datetime.now(timezone.utc)]
+    reg = Registrar(rs, setup["names_group"], tlds=lambda: {"com"}, dns_txt=lambda n: [],
+                    now=lambda: clock[0])
+    await reg.run_once()
+    assert reg.claims_group == manifest["claims"]
+
+    alice = Session(Vault.open(tmp_path / "alice.vault", "pw", **KDF), status=lambda *_: None)
+    alice.new_identity("alice", "Alice")
+    alice.add_node(addr)
+    await alice.ensure_inbox()
+    await alice.send_private(manifest["claims"], "claim", nm.make_claim("claim", "lorensen"),
+                             owner_key=inbox.public_key, content_type="application/json")
+    clock[0] += timedelta(minutes=15)
+    await reg.run_once()
+    clock[0] += timedelta(hours=1)
+    await reg.run_once()
+    (cert,) = [c for c in reg.certs if c.name == "lorensen"]
+    assert cert.key == alice.identity().key_text and cert.registrar == replica_key.key_text
+
+    # 4. adding a second replica and removing the first
+    second = crypto.Identity.generate()
+    await run("setup_registrar", "--add", second.key_text, "--remove", replica_key.key_text)
+    manifest = Vault.open(setup["vault"], "pw").data["groups"][setup["names_group"]]["manifest"]
+    assert manifest["serial"] == 3 and manifest["posters"] == [second.key_text]
+    await alice.close(), await rs.close()
+
+
+async def test_claim_inbox_demands_postage(setup):
+    """The nodes enforce the postage on claims through the inbox's min_pow."""
+    run = setup["run"]
+    v = Vault.open(setup["vault"], "pw")
+    k = crypto.Identity.generate()
+    v.data["registrar_poster"] = {"seed": k.seed.hex(), "key": k.key_text}
+    v.save()
+    await run("create_groups")
+    await run("setup_registrar")
+    v = Vault.open(setup["vault"], "pw")
+    inbox = crypto.Identity.from_seed(bytes.fromhex(v.data["registrar_inbox"]["seed"]))
+    from unseenet.core.groups import inbox_article
+    cheap = inbox_article(f"inbox@{inbox.fingerprint}", inbox.public_key, from_name="x",
+                          subject="claim", body=nm.make_claim("claim", "cheap"), pow_bits=8)
+    c = await Client.connect(setup["addr"])
+    code, text = await c.post(cheap.to_bytes())
+    await c.quit()
+    assert code != 240 and "12" in text

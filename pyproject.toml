@@ -40,6 +40,7 @@ unseenet = "unseenet.cli:client_main"
 unseenet-node = "unseenet.cli:node_main"
 unseenet-tui = "unseenet.client.tui:main"
 unseenet-monitor = "unseenet.monitor:main"
+unseenet-registrar = "unseenet.registrar:main"
 
 [project.urls]
 Homepage = "https://github.com/unseenet/unseenet"
