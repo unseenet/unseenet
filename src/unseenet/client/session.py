@@ -1026,6 +1026,37 @@ class Session:
         payload = json.dumps({"v": 2, "groups": groups}).encode()
         self.vault.write_sidecar(CACHE_SIDECAR, payload)
 
+    @staticmethod
+    def _take_manifest(art: Article, group_id: str, entry: dict) -> bool:
+        """Keep a manifest from a node only if it is valid (UN-RFC 0004, section 4):
+        signed by the owner whose fingerprint is in the group ID, for this group,
+        and of the same type as before. A client does not trust its node for this:
+        a hostile node could otherwise serve a manifest signed by its own key, e.g.
+        adding itself to the posters of unseenet.nodes or unseenet.names (#41).
+        Of the valid ones the newest wins (section 3.2). True if it was taken."""
+        from ..core.groups import Manifest
+        try:
+            m = Manifest.from_article(art)
+        except (ArticleError, ValueError, TypeError):
+            return False
+        if m.group_id != group_id:
+            return False
+        old = entry.get("manifest") or {}
+        if old:
+            if old.get("type") != m.type or old.get("owner") != m.raw.get("owner") \
+                    or bool(old.get("local")) != m.local:
+                return False                # type, owner and locality never change
+            # Newer serial wins; on a tie the lower Message-ID (as Manifest.supersedes)
+            if (m.serial, entry.get("manifest_id", "")) <= (int(old.get("serial", 0)), m.message_id):
+                return False
+        entry["manifest"] = dict(m.raw)
+        entry["manifest_id"] = m.message_id
+        entry["type"] = m.type
+        entry["owner_key"] = m.raw.get("owner")
+        if m.title:
+            entry["title"] = m.title
+        return True
+
     def _parse(self, n: int, raw: bytes, group_id: str, entry: dict, me) -> Message | None:
         try:
             art = Article.from_bytes(raw)
@@ -1035,13 +1066,7 @@ class Session:
                            readable=False, error=str(err))
         ctl = art.control
         if ctl and ctl[0] == "manifest":
-            data = json.loads(art.body)
-            if int(data.get("serial", 0)) >= int(entry.get("manifest", {}).get("serial", 0)):
-                entry["manifest"] = data            # the newest one wins (UN-RFC 0004, 3.2)
-                entry["type"] = data.get("type")
-                entry["owner_key"] = data.get("owner")
-                if data.get("title"):
-                    entry["title"] = data["title"]
+            self._take_manifest(art, group_id, entry)
             return None
         if ctl and ctl[0] in ("key-update", "key-grant"):
             opened = open_envelope(art, me)
