@@ -368,7 +368,9 @@ def _write_link(zf: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path) -> None:
     """A symbolic link (the macOS builds have some): made as a link where the file
     system has them, else (FAT) a copy of what it points to, as the image does."""
     target = zf.read(info).decode()
-    if not (dest.is_dir() and not dest.is_symlink()):
+    # Windows: links need privileges and a POSIX-style relative target makes a link
+    # Windows cannot open, so there the copy is used, as on FAT
+    if os.name != "nt" and not (dest.is_dir() and not dest.is_symlink()):
         tmp = dest.with_name(dest.name + ".new")
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
