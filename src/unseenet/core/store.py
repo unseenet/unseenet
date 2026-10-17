@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pu
     since      INTEGER NOT NULL                 -- the peer's clock, unix seconds
 );
 
+CREATE TABLE IF NOT EXISTS refused (           -- pulled from a peer and refused (#132)
+    message_id TEXT NOT NULL,
+    peer       TEXT NOT NULL,
+    reason     TEXT NOT NULL,
+    at         INTEGER NOT NULL,
+    PRIMARY KEY (message_id, peer)
+);
+
 CREATE TABLE IF NOT EXISTS peer_queue (
     peer       TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -115,6 +123,17 @@ class Store:
     def seen(self, message_id: str) -> bool:
         return self.db.execute("SELECT 1 FROM history WHERE message_id=?",
                                (message_id,)).fetchone() is not None
+
+    def refuse(self, message_id: str, peer: str, reason: str) -> None:
+        """Note that an article pulled from ``peer`` was refused, so it is not fetched
+        from that peer again. Unlike history, this never refuses the article itself:
+        it may still be posted by a client, or arrive once our policy allows it."""
+        self.db.execute("INSERT OR REPLACE INTO refused VALUES (?, ?, ?, ?)",
+                        (message_id, peer, reason, int(time.time())))
+
+    def refused_from(self, message_id: str, peer: str) -> bool:
+        return self.db.execute("SELECT 1 FROM refused WHERE message_id=? AND peer=?",
+                               (message_id, peer)).fetchone() is not None
 
     def remember(self, message_id: str) -> None:
         self.db.execute("INSERT OR IGNORE INTO history VALUES (?, ?)",
@@ -183,6 +202,7 @@ class Store:
                 (group_id, now - days * 86400, group_id, group_id))
             deleted += cur.rowcount
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))
+        self.db.execute("DELETE FROM refused WHERE at < ?", (now - (default_days + 2) * 86400,))
         self.db.commit()
         return deleted
 
