@@ -545,7 +545,7 @@ first proposed.
 | `irc`      | IRC channels                                   | not yet written  |
 | `xmpp`     | XMPP group chats (MUC)                         | not yet written  |
 | `fedi`     | The fediverse (ActivityPub: Lemmy, Mastodon …) | not yet written  |
-| `nostr`    | Nostr (NIP-29 relay-based groups)              | UN-RFC 0025      |
+| `nostr`    | Nostr (NIP-29 relay-based groups)              | UN-RFC 0026      |
 | `bsky`     | Bluesky and the AT Protocol                    | not yet written  |
 | `discord`  | Discord                                        | not yet written  |
 | `telegram` | Telegram                                       | not yet written  |
