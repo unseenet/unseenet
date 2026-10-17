@@ -9,14 +9,19 @@ async def fake_tor(delay: float = 0.05):
     """A control port that answers each GETINFO slowly, echoing the key back."""
 
     async def handle(reader, writer):
-        while line := await reader.readline():
-            key = line.decode().split()[-1]
-            await asyncio.sleep(delay)
-            writer.write(f"250-{key}=a\r\n".encode())
-            await writer.drain()
-            await asyncio.sleep(delay)
-            writer.write(b"250 OK\r\n")
-            await writer.drain()
+        try:
+            while line := await reader.readline():
+                key = line.decode().split()[-1]
+                await asyncio.sleep(delay)
+                writer.write(f"250-{key}=a\r\n".encode())
+                await writer.drain()
+                await asyncio.sleep(delay)
+                writer.write(b"250 OK\r\n")
+                await writer.drain()
+        except ConnectionError:
+            pass
+        finally:
+            writer.close()  # Server.wait_closed() waits for every connection (3.12+)
 
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
     return server, server.sockets[0].getsockname()[1]
