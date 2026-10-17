@@ -187,3 +187,25 @@ def test_request_check_waits_for_the_canary_group(monkeypatch):
     monkeypatch.setattr(cn, "read_node", read)
     key = crypto.Identity.generate()
     assert asyncio.run(cn.request_check(new, listed, 0, key, DAY, timeout=0, every=0)) is None
+
+
+async def test_read_node_through_a_real_node(monkeypatch):
+    """Canaries read back over NNTP as a reader carry Xref and the like, which are
+    not signed: read_node must strip them before checking the signature."""
+    from unseenet.core.groups import make_manifest
+    from unseenet.core.store import Store
+    from unseenet.node.server import Node, NodeConfig
+
+    owner, poster = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = make_manifest(owner, "unseenet.canary", "open", pow_bits=4)
+    monkeypatch.setattr(cn, "CANARY_GROUP", manifest.group)
+    node = Node(Store(), NodeConfig(name="n", min_pow=4, forward_delay=(0, 0)))
+    node.accept(manifest.to_bytes())
+    node.accept(cn.canary_article(poster, "node1", "ed25519:abc", DAY, bits=4))
+    server = await node.serve("127.0.0.1", 0)
+    try:
+        address = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+        r = await cn.read_node(address, None, poster.public_key, DAY)
+        assert r.seen == {"ed25519:abc"}
+    finally:
+        server.close()

@@ -186,6 +186,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and it is accepted once the node's policy or the group's manifest allows
   it. Before, a local group (such as an operator inbox) refused from a peer
   could never be created on the node afterwards. (#132)
+- The daily health check could not read any canary back: it checked the
+  signature of articles as served to a reader, with Xref and the like
+  added. It now strips them first. Without this, the first day canaries
+  were read would have reported every listed node as disconnected. (#95)
 - The node no longer crashes the monitor's stats request with
   `readuntil() called while another coroutine is already waiting`: commands
   on the Tor control connection now run one at a time, and a timed-out
