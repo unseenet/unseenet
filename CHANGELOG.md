@@ -180,6 +180,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   group. (#35)
 
 ### Fixed
+- The node no longer crashes the monitor's stats request with
+  `readuntil() called while another coroutine is already waiting`: commands
+  on the Tor control connection now run one at a time, and a timed-out
+  status request still reads its whole reply, so the next command does not
+  get it. Seen when the monitor asked while Tor was still starting. (#127)
 - A member removed from a closed group could go on posting with the
   previous epoch's key, which nodes accept to tolerate replication delay.
   A key update made because a member was removed now carries
