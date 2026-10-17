@@ -21,8 +21,10 @@ cannot be rebuilt: start it on a new machine and it catches up by itself.
 
 ## Setting one up
 
-1. Install Unseenet as for a node (see [Installation](../node/install.md)),
-   as the user `unseenet`.
+1. Install Unseenet without a node, as the user `unseenet`:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-registrar.sh | sudo bash
+   ```
 2. Make the replica's vault. Press Enter at the first question to make a
    new registrar key here; at the second, type the inbox key's seed, which
    the group's owner gets with `tools/project/setup_registrar.py
@@ -57,6 +59,33 @@ taking one machine down does not stop the registrar. A small virtual
 machine, a Raspberry Pi at home or a machine run by someone the project
 trusts will do; each runs with its own key, and the group's owner can
 remove any one of them without affecting the names the others signed.
+
+## Moving a replica
+
+A replica's vault holds its registrar key, so moving the vault moves the
+replica: its key stays the same, and the group's owner changes nothing.
+
+1. Install the new machine (step 1 above), but do not start the service.
+2. **Stop the old replica first**, so the same key never runs in two
+   places: `sudo systemctl disable --now unseenet-registrar`.
+3. Copy `/home/unseenet/registrar.vault*` (owner `unseenet`, mode `600`)
+   and `/etc/unseenet-registrar.passphrase` (owner root, mode `600`) to
+   the new machine, for example as a tar stream over ssh, and check that
+   the vault's `sha256sum` matches.
+4. Start it: `sudo systemctl enable --now unseenet-registrar`. The journal
+   prints the same `registrar ed25519:...` key as before.
+
+The Tor data does not need to move; the replica starts a new one.
+
+## The project's replicas
+
+| Replica | Where |
+|---------|-------|
+| registrar1 | the maintainer's Proxmox, Denmark |
+| registrar2 | Oracle Cloud Always Free (VM.Standard.E2.1.Micro) |
+
+They run on different infrastructure, so one machine, power cut or
+network going down leaves the other giving out names.
 
 ## If a key is stolen
 
