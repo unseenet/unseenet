@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "updated": "2026-10-16",
+  "updated": "2026-10-17",
   "hierarchies": [
     {
       "name": "unseenet",
@@ -12,6 +12,9 @@
     },
     {"name": "alt", "policy": "free", "title": "Anything goes", "description": "Anybody may create anything here, as on Usenet."},
     {"name": "test", "policy": "free", "title": "Testing", "description": "For trying things out. Nodes keep it only briefly."},
+    {"name": "usenet", "policy": "reserved", "title": "Usenet, through gateways", "description": "Groups gatewayed from Usenet (UN-RFC 0023, 0024), e.g. usenet.comp.misc. Governed once the first gateway is endorsed."},
+    {"name": "fido", "policy": "reserved", "title": "FidoNet, through gateways", "description": "Held for echo areas gatewayed from FidoNet (UN-RFC 0023)."},
+    {"name": "matrix", "policy": "reserved", "title": "Matrix, through gateways", "description": "Held for public rooms gatewayed from Matrix (UN-RFC 0023)."},
     {"name": "comp", "policy": "reserved", "title": "Computers", "description": "Usenet Big 8, held for a community that wants to revive it."},
     {"name": "humanities", "policy": "reserved", "title": "Humanities", "description": "Usenet Big 8, held for a community that wants to revive it."},
     {"name": "misc", "policy": "reserved", "title": "Miscellaneous", "description": "Usenet Big 8, held for a community that wants to revive it."},
