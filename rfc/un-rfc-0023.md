@@ -5,85 +5,97 @@ Category: Standards Track
 Status: Draft
 Updates: 0018
 
-                     Gateways to Usenet
+                    Gateways to Other Networks
 ```
 
 # Abstract
 
-This document defines a **gateway** between Unseenet and Usenet. A
-gateway imports articles from chosen Usenet text groups into Unseenet,
-and MAY send articles written in Unseenet back to Usenet. Gatewayed
-groups live in a new top-level hierarchy, `usenet`, as moderated groups
-whose moderator is the gateway. Import reuses ordinary posting; export
-reuses the submission queue of moderated groups (UN-RFC 0009 section 3),
-so nodes and clients need no new protocol to carry gatewayed groups.
-The document also says what a gateway operator takes responsibility for,
-because to Usenet the gateway is the injecting server for everything it
-exports.
+This document defines **gateways** between Unseenet and other discussion
+networks, such as Usenet, FidoNet or Matrix. A gateway imports messages
+from chosen groups, rooms or areas of another network into Unseenet, and
+MAY send messages written in Unseenet back. Groups from another network
+live under a top-level hierarchy named after it (`usenet.*`, `fido.*`,
+`matrix.*`), as moderated groups whose moderator is the gateway. Import
+reuses ordinary posting and export reuses the submission queue of
+moderated groups (UN-RFC 0009 section 3), so nodes and clients need no new
+protocol to carry gatewayed groups. Every imported article carries the
+same `Origin-*` headers whatever network it came from.
+
+What is specific to one network (how names map, how messages convert,
+what the other side expects of the gateway) is left to a **network
+profile** in a UN-RFC of its own. UN-RFC 0024 is the profile for Usenet.
 
 # 1. Motivation
 
-Unseenet borrows Usenet's model, and Usenet still has living text
-groups. Letting Unseenet users read them, and in some groups take part,
-gives the network content from day one and gives Usenet readers a way
-in. But the two networks differ in ways a gateway must bridge
-deliberately rather than by copying bytes:
+Unseenet borrows Usenet's model, and older and newer discussion networks
+are still alive: Usenet's text groups, FidoNet's echomail, the public
+rooms of Matrix. Letting Unseenet users follow them, and in some places
+take part, gives the network content from day one and gives people on
+those networks a way in.
 
-- Usenet articles are unsigned, carry a `Path`, may be crossposted, may
-  be binary, and may be forged or cancelled by anyone. Unseenet articles
-  are signed, content-addressed, single-group, text, and carry no `Path`
-  (UN-RFC 0002).
-- Group names collide: Usenet has `alt.*`, `dk.*` and the Big 8, and so
-  does Unseenet (UN-RFC 0018).
-- Usenet holds the injecting server responsible for what it injects.
-  Unseenet has no injecting server, only signing keys.
+But every network differs from Unseenet in ways a gateway must bridge
+deliberately rather than by copying bytes. Messages elsewhere are
+usually unsigned and can be edited, retracted or forged; they may carry
+routing information (Usenet's `Path`, FidoNet's SEEN-BY) that Unseenet
+deliberately leaves out; they may carry files, images or reactions; and
+names collide with Unseenet's own (`alt.*`, `dk.*`). Above all, other
+networks expect someone to be responsible for what enters them, while
+Unseenet knows only signing keys, never people.
 
-The design goal is that a gatewayed group is an ordinary Unseenet group
-to every node and client that does not know this document, and that
-nothing about a gateway weakens the anonymity of nodes or users who
-never touch it.
+The design goals are:
+
+1. A gatewayed group is an ordinary Unseenet group to every node and
+   client that does not know this document.
+2. Nothing about a gateway weakens the anonymity of nodes or users who
+   never touch it, and a gateway never learns who an Unseenet author is.
+3. The rules are the same for every network, so that a client that knows
+   this document can show gatewayed articles from networks it has never
+   heard of.
 
 # 2. Terms
 
-- **Gateway:** software, with its operator, that moves articles between
-  one or more Usenet servers and an Unseenet node.
-- **Usenet side:** the Usenet server(s) the gateway exchanges news with,
-  by peering or as a reader.
-- **Gatewayed group:** an Unseenet group that mirrors one Usenet group.
-- **Import:** taking a Usenet article into a gatewayed group.
-- **Export:** sending an Unseenet article to Usenet.
+- **Other network:** a discussion network that is not Unseenet.
+- **Gateway:** software, with its operator, that moves messages between
+  an other network and an Unseenet node.
+- **Network profile:** the UN-RFC that specifies gateways to one other
+  network (section 9).
+- **Source:** the group, room or area in the other network that a
+  gatewayed group mirrors.
+- **Gatewayed group:** an Unseenet group that mirrors one source.
+- **Import:** taking a message from the other network into a gatewayed
+  group. **Export:** sending an Unseenet article to the other network.
 - **Group key:** the identity that owns a gatewayed group.
 - **Gateway key:** the identity the gateway posts and approves with.
-- **Gateway host:** the machine the gateway runs on. It has a public
-  network presence on the Usenet side.
+- **Gateway host:** the machine the gateway runs on. It has a presence on
+  the other network.
+- **Other side:** whoever runs the part of the other network the gateway
+  connects to: Usenet peer administrators, a FidoNet hub, the moderators
+  of a Matrix room.
 
 # 3. Gatewayed Groups
 
-## 3.1 Names
+## 3.1 One Hierarchy per Network
 
-The gatewayed group for the Usenet group `N` is named `usenet.` followed
-by `N` in lower case. `dk.politik` becomes `usenet.dk.politik`;
-`comp.lang.python` becomes `usenet.comp.lang.python`.
+Groups from an other network live under a top-level hierarchy named
+after that network. Unseenet's own groups never carry a prefix: Unseenet
+is the home network and its groups get the short names (`dk.snak`, not
+`unseenet.dk.snak`); groups from elsewhere are guests, and their prefix
+says where they come from.
 
-If the result is not a valid name (UN-RFC 0004 section 1: characters,
-or more than 128 octets), the Usenet group MUST NOT be gatewayed. Two
-Usenet groups that differ only in case map to the same name; a gateway
-MUST gateway at most one of them.
+| Network | Hierarchy | Example                                   | Profile   |
+|---------|-----------|-------------------------------------------|-----------|
+| Usenet  | `usenet`  | `dk.politik` → `usenet.dk.politik`         | UN-RFC 0024 |
+| FidoNet | `fido`    | an echo area such as `LINUX` → `fido.linux` | not yet |
+| Matrix  | `matrix`  | a public room → a name under `matrix.*`    | not yet |
 
-The `usenet` prefix keeps imported groups apart from Unseenet's own
-`alt.*`, `dk.*` and reserved Big 8 hierarchies, and makes the origin of
-every gatewayed group visible in its name.
+The network profile defines how a source's name maps to a valid group
+name (UN-RFC 0004 section 1). A source whose name cannot be mapped MUST
+NOT be gatewayed. When two sources map to the same name, a gateway MUST
+gateway at most one of them.
 
-## 3.1.1 Other Networks
-
-This is the general rule for gateways: groups carried from another
-network live under a top-level hierarchy named after that network, and
-Unseenet's own groups never carry a prefix. A gateway to FidoNet
-echomail, for example, would use `fido.*`. Each such network is
-specified in its own UN-RFC, which defines the name mapping and the
-value of `network` in the manifest (section 3.2), which is also the
-value of `Origin-Network` (section 4.2.1). This document reserves `fido`
-for that purpose (section 10).
+On test nodes a gateway MAY put `test.` in front of the hierarchy
+(`test.usenet.comp.misc`), so that the groups expire with the `test`
+hierarchy (UN-RFC 0018 section 9).
 
 ## 3.2 Manifest
 
@@ -102,13 +114,13 @@ The `gateway` field:
 
 | Field       | Type       | Req. | Meaning                                              |
 |-------------|------------|------|------------------------------------------------------|
-| `network`   | string     | yes  | `usenet`                                             |
-| `group`     | string     | yes  | The Usenet group name, exactly as on Usenet          |
+| `network`   | string     | yes  | The network's name: the hierarchy name of section 3.1 (`usenet`) |
+| `source`    | string     | yes  | The source, exactly as the other network names it   |
 | `direction` | string     | yes  | `import` or `both`                                   |
-| `host`      | string     | yes  | The gateway's Usenet path identity (RFC 5536 section 3.1.5) |
+| `host`      | string     | yes  | The gateway's own identity in the other network, as the profile defines it (a Usenet path identity, a FidoNet address, a Matrix server name) |
 | `operator`  | key string | yes  | The operator's identity key                          |
 | `contact`   | Group ID   | yes  | The operator's contact inbox (UN-RFC 0011 section 5) |
-| `abuse`     | string     | if `both` | An abuse address reachable from Usenet (e-mail) |
+| `abuse`     | string     | if `both` | Where people on the other network can complain, as the profile defines it |
 | `policy`    | string     | no   | Free text, at most 2048 characters: what is filtered, kept and logged |
 
 Nodes that do not know this field preserve and ignore it (UN-RFC 0004
@@ -116,85 +128,96 @@ section 3.1), so they carry gatewayed groups like any moderated group.
 
 ## 3.3 Endorsement
 
-`usenet` is a governed hierarchy (section 10). Its maintainer endorses
-at most one gatewayed group per Usenet group (UN-RFC 0018 section 5).
-Anybody may still run their own gateway for the same Usenet group; their
-group will have the same name with a different fingerprint and be shown
-as unendorsed (UN-RFC 0018 section 8.1).
+Each network's hierarchy is governed (UN-RFC 0018). Its maintainer
+endorses at most one gatewayed group per source (UN-RFC 0018 section 5).
+Anybody may still run their own gateway for the same source; their group
+has the same name with a different fingerprint and is shown as
+unendorsed (UN-RFC 0018 section 8.1).
 
 A maintainer SHOULD endorse a gateway only when its operator has agreed
-to the duties in section 6 and, for `both`, has shown that the Usenet
-side accepts its exports.
+to the duties in section 6 and the other side has agreed to the gateway
+(section 6.1).
+
+## 3.4 Names Already in Use
+
+The hierarchies of section 3.1 are in the root list from the start
+(section 11), before any group exists in them, so that nobody builds a
+community under a name a gateway will later need.
+
+Nothing in this document removes a group (UN-RFC 0018 section 3). If
+groups exist under a network's hierarchy before it is governed, for
+example created while the name was unclaimed, they stay where they are.
+Once the hierarchy is governed they are unendorsed, and clients show
+their fingerprint and warn on subscribing as for any unendorsed group.
+
+A name, or a `gateway` field in a manifest, does not make a group a
+gateway: anybody can create `usenet.comp.misc@<their key>` and write a
+`gateway` field into its manifest. A client MUST NOT present a group as
+gatewayed (section 8) unless it is endorsed by the maintainer of the
+network's hierarchy. A group that carries a `gateway` field but is not
+endorsed SHOULD be shown with a warning that it claims to be a gateway
+and is not recognised as one.
+
+When a new network is added and the name that would naturally be its
+hierarchy is already in active use by an Unseenet community, the project
+SHOULD choose another name for the network rather than take the
+community's (UN-RFC 0018 section 7.2).
 
 # 4. Import
 
-## 4.1 What Is Imported
+## 4.1 What Is Never Imported
 
-A gateway imports only articles that are, after the conversion in 4.2,
-plain text within Unseenet's size limit. It MUST NOT import:
+Whatever the network, a gateway MUST NOT import:
 
-1. control messages (`Control` header, or a `Subject` starting with
-   `cmsg `), including `newgroup`, `rmgroup`, `checkgroups` and `cancel`;
-2. articles whose Message-ID ends in `@unseenet>` (section 5.3: these
-   came from Unseenet and are already there);
-3. articles containing binary data: yEnc, uuencode, or MIME parts other
-   than `text/plain` that are not a signature or a short alternative;
-4. articles larger than 64 KiB after conversion (UN-RFC 0002 section 1),
+1. messages that control the other network (group creation, removal,
+   cancels, administrative messages); the profile names them;
+2. messages that came from Unseenet through the same or another gateway
+   (the profile says how they are recognised), so there are no loops;
+3. files, images and other non-text content. The profile says whether a
+   short text placeholder (such as "[image omitted]") is written instead;
+   a placeholder MUST NOT be a link;
+4. messages larger than 64 KiB after conversion (UN-RFC 0002 section 1),
    or larger than the receiving node accepts;
-5. articles the gateway's spam filter rejects. A gateway SHOULD filter
-   at least as strictly as a well-run Usenet text server (for example
-   with Cleanfeed or an equivalent).
+5. messages the gateway's spam filter rejects;
+6. messages from encrypted rooms or areas of the other network. Only
+   sources that are public there can be gatewayed, just as only open
+   Unseenet groups can be exported (section 5.4).
 
-A gateway imports only the Usenet groups it has gatewayed groups for.
-It MAY import only articles newer than the time the gatewayed group was
+A gateway imports only from sources it has gatewayed groups for. It MAY
+import only messages newer than the time the gatewayed group was
 created.
 
 ## 4.2 Conversion
 
-The gateway builds a new Unseenet article (UN-RFC 0002) for each
-imported Usenet article:
+For each imported message the gateway builds a new Unseenet article
+(UN-RFC 0002):
 
-| Unseenet header       | Value                                                          |
-|-----------------------|----------------------------------------------------------------|
-| `Newsgroups`          | The gatewayed group's Group ID                                 |
-| `Date`                | Time of import, rounded down to 10 minutes (UN-RFC 0002 section 2.5) |
-| `From`                | The display name of the Usenet `From`, or its local part if there is none, at most 128 characters |
-| `Subject`             | The Usenet `Subject`, at most 256 characters                   |
-| `Author-Key`          | The gateway key                                                |
-| `References`          | Section 4.3                                                    |
-| `Content-Type`        | `text/plain; charset=utf-8`                                    |
-| `Origin-Network`      | `usenet`                                                       |
-| `Origin-ID`           | The Usenet Message-ID, unchanged                               |
-| `Origin-Date`         | The Usenet `Date`, unchanged                                   |
-| `Origin-From`         | The Usenet `From`, unchanged                                   |
-| `Usenet-Newsgroups`   | The Usenet `Newsgroups`, if it names more than one group       |
-| `Usenet-References`   | The Usenet `References`, if any reference could not be mapped  |
-| `Usenet-Followup-To`  | The Usenet `Followup-To`, if present                           |
+| Unseenet header  | Value                                                          |
+|------------------|----------------------------------------------------------------|
+| `Newsgroups`     | The gatewayed group's Group ID                                 |
+| `Date`           | Time of import, rounded down to 10 minutes (UN-RFC 0002 section 2.5) |
+| `From`           | The author's display name in the other network, at most 128 characters |
+| `Subject`        | The subject, if the other network has one, at most 256 characters; otherwise as the profile defines |
+| `Author-Key`     | The gateway key                                                |
+| `References`     | Section 4.4                                                    |
+| `Content-Type`   | `text/plain; charset=utf-8`                                    |
+| `Origin-*`       | Section 4.3                                                    |
 
-Headers that are folded on Usenet are unfolded. Header values that still
-break UN-RFC 0002 section 1 (control characters, over-long values) are
-truncated or the article is not imported. All other Usenet headers,
-including `Path`, `Xref`, `NNTP-Posting-Host`, `Injection-Info` and
-`Organization`, are dropped.
-
-The body is decoded from its transfer encoding and charset to UTF-8. If
-it cannot be decoded, the article is not imported. Of a MIME multipart
-article only the first `text/plain` part is kept.
+Header values are unfolded and stripped of control characters. The body
+is converted to UTF-8 plain text; if it cannot be, the message is not
+imported. The profile adds network-specific headers and rules.
 
 The gateway signs the article with the gateway key and pays its postage
 (UN-RFC 0006). Because the gateway key is the group's moderator, the
 article is accepted without `Approved-By` (UN-RFC 0004 section 5).
 
-The original `Date` is kept in `Origin-Date` rather than `Date`, because
-Usenet dates are unchecked and often outside the window nodes accept.
-Clients SHOULD show `Origin-Date` and `Origin-From` for gatewayed
-articles (section 8).
+The time of import is used for `Date` because dates in other networks are
+unchecked and often outside the window nodes accept. The original date is
+kept in `Origin-Date`.
 
-## 4.2.1 Origin Headers
+## 4.3 Origin Headers
 
-`Origin-Network`, `Origin-ID`, `Origin-Date` and `Origin-From` are
-common to all gateways, not only to Usenet. Every gateway to another
-network (section 3.1.1) MUST set them on imported articles:
+Every imported article MUST carry:
 
 | Header           | Value                                                          |
 |------------------|----------------------------------------------------------------|
@@ -203,51 +226,47 @@ network (section 3.1.1) MUST set them on imported articles:
 | `Origin-Date`    | The message's date as that network gives it, as text           |
 | `Origin-From`    | The author as that network names them, as text                 |
 
-Values are copied as the other network gives them and are not checked;
-they are information for the reader, not facts the gateway vouches for.
-Headers that only make sense for one network keep that network's prefix,
-as `Usenet-Newsgroups`, `Usenet-References` and `Usenet-Followup-To` do
-here, and are defined in that network's UN-RFC.
+`Origin-Date` and `Origin-From` MAY be left out when the other network
+gives no such value. Values are copied as the other network gives them
+and are not checked; they are information for the reader, not facts the
+gateway vouches for.
+
+Headers that only make sense for one network carry that network's name
+as a prefix (`Usenet-Newsgroups`) and are defined in its profile.
 
 A client that knows the origin headers can show any gatewayed article,
-from any network, without knowing the UN-RFC for that network.
+from any network, without knowing the profile for that network.
 
-## 4.3 References and Threads
+## 4.4 Threads
 
-The gateway keeps a table from Usenet Message-IDs it has imported to the
+The gateway keeps a table from identifiers of imported messages to the
 Unseenet Message-IDs it created, and from Unseenet Message-IDs it has
-exported to their Usenet Message-IDs (section 5.2).
+exported to their identifiers in the other network.
 
-For each Usenet `References` entry, the gateway puts the mapped Unseenet
-Message-ID into `References`, in the same order. An entry of the form
-`<id@unseenet>` maps to `<id@unseenet>` itself. Entries that cannot be
-mapped are left out, and the original header is then kept in
-`Usenet-References` so that a later import can still thread correctly.
+When an imported message replies to or refers to others, the gateway
+puts the mapped Unseenet Message-IDs into `References`, oldest first.
+References that cannot be mapped are left out; the profile MAY keep the
+original in a network-specific header, so that later imports can still
+thread correctly.
 
-## 4.4 Crossposts
+## 4.5 Changes, Retractions and Removal
 
-Unseenet does not allow crossposting (UN-RFC 0002 section 2.1). A Usenet
-article posted to several groups is imported **once**, into the
-gatewayed group of the first group in its `Newsgroups` that this gateway
-gateways, and the full list is kept in `Usenet-Newsgroups`.
+Many networks let authors edit or retract messages; Unseenet articles
+are signed and cannot change. A gateway therefore:
 
-## 4.5 Cancels, Supersedes and No-Archive
-
-Usenet cancels are not authenticated. A gateway MAY act on a Usenet
-`cancel` or `Supersedes` according to its stated policy, for example
-only for cancels issued by the server named in the target's
-`Injection-Info`. When it does, it posts an Unseenet cancel (UN-RFC 0004
-section 7) for the imported article, as moderator; for `Supersedes` it
-then imports the new article.
-
-An article with `X-No-Archive: yes` or `Archive: no` MUST either not be
-imported or be given `Expires` at most 7 days after import. Archive
-nodes (UN-RFC 0012) MUST NOT keep a gatewayed article past its
-`Expires`.
-
-A gateway SHOULD act on requests by the author of an imported article to
-remove it, by posting a cancel. Such requests reach the operator's
-`contact` inbox or `abuse` address.
+- imports an edit as a new article that refers to the old one in
+  `References`, or not at all, as the profile says;
+- MAY act on a retraction or cancel according to its stated policy, by
+  posting an Unseenet cancel (UN-RFC 0004 section 7) for the imported
+  article as moderator, but only when the other network authenticates
+  the retraction or the profile gives another reason to trust it;
+- MUST honour a request in the other network not to archive a message
+  (the profile names it) by not importing it or by giving it `Expires`
+  at most 7 days after import. Archive nodes (UN-RFC 0012) MUST NOT keep
+  a gatewayed article past its `Expires`;
+- SHOULD act on requests by the author of an imported message to remove
+  it, by posting a cancel. Such requests reach the operator's `contact`
+  inbox or `abuse` address.
 
 # 5. Export
 
@@ -264,8 +283,9 @@ and signature.
 Before submitting to a gatewayed group, a client that knows this
 document MUST tell the user, once per group, that:
 
-- the article will be published on Usenet, outside Tor, to servers that
-  keep articles for years and that the user cannot ask to delete;
+- the article will be published on the other network, outside Tor, where
+  it may be kept for years and copied to servers the user cannot ask to
+  delete it from;
 - it will carry the display name, the key fingerprint and the text;
 - the gateway operator, not the user, decides whether it is sent.
 
@@ -278,50 +298,31 @@ For each submission the gateway:
 2. applies its export policy (section 6.2); a refused submission is
    dropped, and the gateway MAY reply to the submitter's `Reply-Inbox`
    with a short reason;
-3. converts the article (section 5.3) and offers it to the Usenet side;
-4. only after the Usenet side has accepted it (NNTP `240` or `235`),
-   approves the original article and posts it to the gatewayed group
-   (UN-RFC 0004 section 5). Its Message-ID is unchanged.
+3. converts the article as the profile says, and sends it to the other
+   network;
+4. only after the other network has accepted it, approves the original
+   article and posts it to the gatewayed group (UN-RFC 0004 section 5).
+   Its Message-ID is unchanged.
 
-If the Usenet side refuses the article, the gateway MUST NOT approve it,
-so that an article never appears in a gatewayed group without also
-being on Usenet. A gateway SHOULD wait a random time before step 3
-(RECOMMENDED: uniformly 0 to 10 minutes), so that the time of injection
-says little about when the author submitted.
+If the other network refuses the article, the gateway MUST NOT approve
+it, so that an article never appears in a gatewayed group without also
+being on the other network. A gateway SHOULD wait a random time before
+step 3 (RECOMMENDED: uniformly 0 to 10 minutes), so that the time of
+sending says little about when the author submitted.
 
-## 5.3 Conversion
+The exported message SHOULD carry the author's display name and the
+first characters of the key fingerprint, so that readers on the other
+network can tell Unseenet authors apart, and SHOULD carry the full key
+where the other network has room for it. It MUST NOT carry anything else
+about the author.
 
-The gateway builds a Usenet article (RFC 5536) from the Unseenet article:
+## 5.3 No Timing Signals
 
-| Usenet header     | Value                                                            |
-|-------------------|------------------------------------------------------------------|
-| `Path`            | `<host>!not-for-mail`, where `<host>` is the manifest's `host`   |
-| `Message-ID`      | The Unseenet Message-ID, unchanged: `<id@unseenet>`              |
-| `Newsgroups`      | The manifest's `group`. Never more than one group.               |
-| `Date`            | The Unseenet `Date`                                              |
-| `From`            | `"<From> (<fp4>)" <<fingerprint>@unseenet.invalid>`, where `<fp4>` is the first 4 characters of the author's fingerprint |
-| `Subject`         | The Unseenet `Subject`                                           |
-| `References`      | Each entry mapped back: an imported article's `Origin-ID`, otherwise the Unseenet Message-ID unchanged |
-| `Injection-Info`  | `<host>; posting-account="<fingerprint>"; mail-complaints-to="<abuse>"` (RFC 5536 section 3.2.8) |
-| `Content-Type`    | `text/plain; charset=utf-8`                                      |
-| `Unseenet-Author-Key` | The author's `Author-Key`                                    |
-
-No other Unseenet header is exported. In particular `Signature`,
-`Proof-Of-Work`, `Approved-By` and `Approval` are dropped: Usenet readers
-cannot verify Unseenet signatures, and `Unseenet-Author-Key` is
-informational only.
-
-Keeping the Message-ID means:
-
-- replies on Usenet reference `<id@unseenet>`, which import maps to the
-  original without a table (section 4.3);
-- the copy that comes back through the Usenet feed is not imported
-  (section 4.1 item 2), so there are no loops;
-- two gateways that export the same submission produce the same
-  Message-ID, and Usenet's own history drops the second.
-
-A `.invalid` address (RFC 2606) cannot receive mail. Replies by e-mail
-are impossible; replies on Usenet reach the author through import.
+Some networks show when a user is typing, has read a message, or is
+online. A gateway MUST NOT generate such signals for Unseenet authors, or
+anything else that changes with an author's activity apart from the
+exported message itself. They would reveal when an author is active and
+undo the random delays of UN-RFC 0005 section 5.5 and section 5.2 above.
 
 ## 5.4 What Is Never Exported
 
@@ -332,52 +333,58 @@ A gateway MUST NOT export:
 - articles from closed groups, inbox groups or local groups, or any
   encrypted article;
 - control articles, including cancels: a cancel in Unseenet does not
-  reach Usenet (but see section 6.2 for the operator's own cancels);
-- articles whose body is not plain text, or that exceed the Usenet
-  side's size limit.
+  reach the other network (but see section 6.2 for the operator's own
+  retractions);
+- articles whose body is not plain text, or that exceed the other
+  network's size limit.
 
 # 6. Duties of a Gateway Operator
 
-## 6.1 Both Directions
+## 6.1 Consent of the Other Side
+
+A gateway connects to the other network with the agreement of whoever
+runs the part it connects to:
+
+| Network | Who agrees                                                    |
+|---------|---------------------------------------------------------------|
+| Usenet  | the administrators of the peer servers                        |
+| FidoNet | the hub or net coordinator the gateway's system is linked to   |
+| Matrix  | the moderators of each room, by inviting the gateway           |
 
 An operator:
 
-- MUST keep the `contact` inbox read, and act on removal requests
+- MUST NOT import from or export to the other network against its
+  terms or the other side's wishes, and MUST stop when asked;
+- SHOULD tell the other side plainly that the gateway leads to Unseenet,
+  and point them to this document and the profile;
+- MUST keep the `contact` inbox read and act on removal requests
   (section 4.5);
-- MUST state in `policy` what is filtered and what is logged;
-- MUST NOT import from or export to a Usenet server against that
-  server's terms. Reading a server as an ordinary user and re-publishing
-  its groups may itself be against its terms; peering by agreement is
-  RECOMMENDED;
-- SHOULD tell the Usenet side's administrators that the peer or account
-  is a gateway to Unseenet, and point them to this document.
+- MUST state in `policy` what is filtered and what is logged.
 
 ## 6.2 Export
 
-To Usenet, the gateway is the injecting server for every exported
-article, and Usenet holds injecting servers responsible: servers that
-inject spam or abuse lose their peers. Unseenet gives the gateway no IP
-address or account to act on, only the author's key. An operator that
-exports therefore:
+To the other network, the gateway is responsible for everything it
+exports, much as an injecting server is on Usenet. Unseenet gives the
+gateway no address or account to act on, only the author's key. An
+operator that exports therefore:
 
-- MUST publish a working `abuse` address and answer complaints;
+- MUST publish a working `abuse` contact and answer complaints;
 - MUST be able to stop an author: by banning the key in the group's
   manifest (UN-RFC 0004 section 5.1), which is public and stops all
   gateways using that manifest, or by refusing the key's submissions
   locally;
-- MUST keep, for as long as the exported articles are likely to be
-  retained on Usenet, which key wrote each exported Message-ID. This
-  record is pseudonymous: it says which key wrote an article, never who
-  holds the key or where the article came from. It is public anyway
-  through `Unseenet-Author-Key`;
+- MUST keep, for as long as exported messages are likely to be kept on
+  the other network, which key wrote each exported message. This record
+  is pseudonymous: it says which key wrote a message, never who holds
+  the key or where the article came from;
 - MUST NOT try to learn more about authors than their key, for example
   by asking for contact details or by logging anything about the node
   or circuit a submission arrived through. A gateway that did would
   undo the anonymity Unseenet exists to give;
-- MUST make this plain to the Usenet side before exporting: the gateway
+- MUST make this plain to the other side before exporting: the gateway
   can stop a key, but cannot identify or trace a person;
-- MAY cancel on Usenet an article it exported, as its injecting server,
-  for example after a complaint or at the author's request;
+- MAY retract on the other network a message it exported, for example
+  after a complaint or at the author's request;
 - MUST limit the rate of exports per key, and SHOULD limit it per group;
 - SHOULD require more postage on submissions than the group's `min_pow`
   (RECOMMENDED: at least 24 bits), and MAY refuse keys it has not seen
@@ -386,9 +393,9 @@ exports therefore:
 
 ## 6.3 The Gateway Host
 
-The gateway host is reachable on the Usenet side, normally on the open
-Internet, often with a static address and a DNS name in `host`. It is
-not hidden, and nothing in this document tries to hide it.
+The gateway host has a presence on the other network, normally on the
+open Internet and often under a stable name in `host`. It is not hidden,
+and nothing in this document tries to hide it.
 
 - A gateway host MUST NOT also run an Unseenet node whose location is
   meant to be hidden. Exchanging traffic between the two on one machine,
@@ -403,21 +410,19 @@ not hidden, and nothing in this document tries to hide it.
 
 # 7. Nodes
 
-A node carries a gatewayed group like any moderated group. It needs no
-support for this document. A node operator MAY decide not to carry the
-`usenet` hierarchy at all, for example because the operator does not
+A node carries a gatewayed group like any moderated group and needs no
+support for this document. A node operator MAY decide not to carry some
+or all networks' hierarchies, for example because the operator does not
 want to store content from outside the network; this is the ordinary
 choice of what to carry (UN-RFC 0004 section 3.3).
 
-A node that knows this document MAY show gatewayed groups separately in
-`LIST` output intended for its own users.
-
 # 8. Clients
 
-A client that knows this document SHOULD:
+For an endorsed gatewayed group (section 3.4), a client that knows this
+document SHOULD:
 
-- mark gatewayed groups as such, with the Usenet group name and the
-  gateway's `host`;
+- mark it as gatewayed, with the network, the source and the gateway's
+  `host`;
 - show `Origin-From` and `Origin-Date` for imported articles, and make
   clear that their author has no Unseenet identity and that the gateway
   key, not the author, signed them;
@@ -431,119 +436,130 @@ is misleading but not wrong, which is why the gateway key's profile
 (UN-RFC 0022) SHOULD make the situation plain, for example by naming
 itself "Usenet gateway".
 
-# 9. Headers Defined Here
+# 9. Network Profiles
 
-| Header                | In       | Defined in  |
-|-----------------------|----------|-------------|
-| `Origin-Network`      | Unseenet | section 4.2.1 |
-| `Origin-ID`           | Unseenet | section 4.2.1 |
-| `Origin-Date`         | Unseenet | section 4.2.1 |
-| `Origin-From`         | Unseenet | section 4.2.1 |
-| `Usenet-Newsgroups`   | Unseenet | section 4.2 |
-| `Usenet-References`   | Unseenet | section 4.2 |
-| `Usenet-Followup-To`  | Unseenet | section 4.2 |
-| `Unseenet-Author-Key` | Usenet   | section 5.3 |
+Each other network is specified in a profile, a Standards Track UN-RFC
+that updates this one. A profile MUST specify:
 
-The Unseenet headers are ordinary optional headers (UN-RFC 0002 section
-2.3) and are covered by the gateway's signature. Nodes preserve them
-without knowing this document.
+1. the network's name and hierarchy (section 3.1), and the meaning of
+   `source`, `host` and `abuse` in the manifest;
+2. how a source's name maps to a group name;
+3. what `Origin-ID`, `Origin-Date` and `Origin-From` contain;
+4. how messages convert in both directions, including subjects, replies
+   and threads, edits and retractions, and any network-specific headers;
+5. what is never imported or exported beyond section 4.1 and 5.4, and how
+   messages that came from Unseenet are recognised (section 4.1 item 2);
+6. how the gateway reaches the other network and who the other side is
+   (section 6.1);
+7. the network's own timing signals and any other way it could reveal
+   when an author is active (section 5.3).
 
-# 10. Changes to Other Documents
+| Network | Profile                     |
+|---------|-----------------------------|
+| Usenet  | UN-RFC 0024                 |
+| FidoNet | reserved, not yet written   |
+| Matrix  | reserved, not yet written   |
+
+# 10. Headers Defined Here
+
+| Header           | Defined in  |
+|------------------|-------------|
+| `Origin-Network` | section 4.3 |
+| `Origin-ID`      | section 4.3 |
+| `Origin-Date`    | section 4.3 |
+| `Origin-From`    | section 4.3 |
+
+They are ordinary optional headers (UN-RFC 0002 section 2.3), covered by
+the gateway's signature. Nodes preserve them without knowing this
+document.
+
+# 11. Changes to Other Documents
 
 - UN-RFC 0018 section 9: the initial root list gains `usenet`,
-  `governed`, maintainer the project key, title "Gateways to Usenet".
-  The project MAY later delegate it. It also gains `fido`, `reserved`,
-  for a future gateway to FidoNet (section 3.1.1).
+  `governed`, maintainer the project key, title "Usenet, through
+  gateways"; and `fido` and `matrix`, `reserved`, for gateways to
+  FidoNet and Matrix. The project MAY later delegate them.
 - UN-RFC 0004 section 3.1: manifests of gatewayed groups carry the
   `gateway` field of section 3.2. No change is needed in nodes, which
   already preserve unknown fields.
 - UN-RFC 0012: archive nodes honour `Expires` on gatewayed articles
   (section 4.5).
 
-# 11. Rationale
+# 12. Rationale
 
-- **Why a separate hierarchy instead of importing `dk.politik` as
-  `dk.politik`?** Unseenet's `dk.*` is free and already in use, and the
-  Big 8 names are reserved for communities that want to revive them in
-  Unseenet (UN-RFC 0018 section 9). Mixing imported and native groups
-  under one name would give readers two groups called `dk.politik` with
-  different rules, authors and lifetimes. `usenet.*` says where a group
-  comes from.
-- **Why a prefix for foreign groups and not for Unseenet's own?**
-  Unseenet is the home network, so its groups get the short names
-  (`dk.snak`, not `unseenet.dk.snak`). Groups from elsewhere are guests,
-  and their prefix says where they come from. One prefix per network
-  keeps the rule the same for every gateway to come.
-- **Why `Origin-*` headers instead of `Usenet-*` for everything?** The
-  author, date and identifier in the other network are what a reader
-  needs for every gateway, whether to Usenet, FidoNet or Matrix. With
-  shared names a client learns them once and can show articles from
-  networks it has never heard of. Only what is peculiar to one network,
-  such as Usenet's crossposts and `Followup-To`, keeps a network prefix.
+- **Why one hierarchy per network instead of mixing groups in?**
+  Mixing imported and native groups under one name would give readers two
+  groups called `dk.politik` with different rules, authors and lifetimes.
+  The prefix says where a group comes from, and one prefix per network
+  keeps the rule the same for every gateway.
+- **Why reserve names now?** It costs nothing while nobody uses them, and
+  later it would mean taking a name from a community (section 3.4).
+- **Why `Origin-*` headers instead of one set per network?** The author,
+  date and identifier in the other network are what a reader needs for
+  every gateway. With shared names a client learns them once and can show
+  articles from networks it has never heard of.
+- **Why does a `gateway` field not make a group a gateway?** Anybody can
+  write one. Endorsement by the hierarchy's maintainer is the only thing
+  that says "this group really mirrors that source".
 - **Why moderated groups with the gateway as moderator?** It is the only
   existing group type in which one key can post on behalf of others
-  while users can still submit. Export then needs no new mechanism: the
-  submission queue and approvals already exist, and an exported article
-  keeps its author's signature inside Unseenet.
-- **Why approve only after Usenet accepted?** A gatewayed group should
-  show the same conversation as the Usenet group. An article that only
-  exists on one side splits the thread.
+  while users can still submit. Export then needs no new mechanism, and
+  an exported article keeps its author's signature inside Unseenet.
+- **Why approve only after the other network accepted?** A gatewayed
+  group should show the same conversation as its source. An article
+  that exists on only one side splits the thread.
 - **Why not sign imported articles with per-author keys?** The gateway
   would hold keys for people who never chose to be in Unseenet, and the
   signatures would claim more than the gateway knows. One gateway key
-  says exactly what is true: "this gateway saw this on Usenet."
-- **Why keep `<id@unseenet>` as the Usenet Message-ID?** It makes loop
-  prevention and threading stateless, and lets several gateways export
-  the same article without duplicates.
-- **Why can't a gateway keep a "log of who posted what"?** Usenet
-  servers are trusted to know their users' accounts or addresses so that
-  abuse can be traced. A gateway does not know them and must not: a
-  submission reaches it through Tor and an inbox, signed by a key that
-  costs nothing to make. What it can offer instead is control: it can
-  refuse a key, ban it in public, raise the postage and limit the rate.
-  This is the same bargain the anonymous mail-to-news gateways offered
-  Usenet, and Usenet servers have been free to accept or filter them.
-- **Why `.invalid` addresses?** Unseenet identities have no mail
-  address, and inventing a deliverable one would invite spam to a
-  domain that cannot handle it. RFC 2606 reserves `.invalid` for
-  exactly this, and many Usenet servers already accept it.
+  says exactly what is true: "this gateway saw this there."
+- **Why can't a gateway keep a "log of who posted what"?** Other networks
+  trust their servers to know their users so that abuse can be traced. A
+  gateway does not know who its authors are and must not: a submission
+  reaches it through Tor and an inbox, signed by a key that costs nothing
+  to make. What it can offer instead is control: it can refuse a key,
+  ban it in public, raise the postage and limit the rate. This is the
+  bargain the anonymous mail-to-news gateways offered Usenet, and the
+  other side is free to accept or refuse it.
 
-# 12. Security and Privacy Considerations
+# 13. Security and Privacy Considerations
 
-- **Exported articles leave Tor.** They are copied to Usenet servers
-  that keep them for years, index them, and do not honour Unseenet
-  cancels. The author's fingerprint and display name go with them, which
-  links the author's Usenet posts to everything else the same key has
-  posted in open Unseenet groups. Authors who care SHOULD use a separate
-  identity for gatewayed groups (UN-RFC 0003 section 2). Clients MUST
-  warn (section 5.1).
-- **Timing.** The gateway injects an article some time after the author
+- **Exported articles leave Tor.** They are copied to servers that may
+  keep and index them for years and do not honour Unseenet cancels. The
+  author's fingerprint and display name go with them, which links the
+  author's posts there to everything else the same key has posted in
+  open Unseenet groups. Authors who care SHOULD use a separate identity
+  for gatewayed groups (UN-RFC 0003 section 2). Clients MUST warn
+  (section 5.1).
+- **Timing.** The gateway sends an article some time after the author
   submitted it. The submission travels through Tor to an inbox, and the
-  gateway adds a random delay (section 5.2), so the injection time says
+  gateway adds a random delay (section 5.2), so the time of sending says
   little about where or when the author was online. It is still a public
-  timestamp, close to the time of writing.
+  timestamp close to the time of writing. Networks with presence, typing
+  or read signals are a further risk, which section 5.3 rules out.
 - **The gateway sees every submission in plain text.** Submissions are
   sealed to the gateway key, as to any moderator. The gateway, and anyone
   who seizes the gateway host, can read submissions that were refused.
   Operators SHOULD delete refused submissions.
 - **The gateway can lie.** It signs imported articles, so it can alter,
-  invent or drop them, and readers can only check them against Usenet.
-  Endorsement (section 3.3) is the defence: readers trust the endorsed
-  gateway, and anybody may run a second gateway to compare.
-- **Imported content is not filtered by Unseenet postage.** A gateway
-  pays postage for everything it imports, so a Usenet flood becomes CPU
-  load on the gateway, not on nodes, but it still fills nodes. Gateways
+  invent or drop them, and readers can only check them against the
+  source. Endorsement (section 3.3) is the defence: readers trust the
+  endorsed gateway, and anybody may run a second gateway to compare.
+- **Groups pretending to be gateways.** A group can copy a gateway's name
+  and `gateway` field. Section 3.4 makes clients rely on endorsement, not
+  on either.
+- **Imported content is not limited by Unseenet postage.** A gateway pays
+  postage for everything it imports, so a flood on the other network
+  becomes CPU load on the gateway, but it still fills nodes. Gateways
   MUST filter (section 4.1) and SHOULD cap imports per group per day.
 - **Legal exposure.** The gateway operator republishes third-party
-  content into Unseenet and, for export, injects anonymous content into
-  Usenet under their own host name. Gateways are therefore best run by
-  people or organisations willing to be publicly responsible, much like
-  the operators of public mail-to-news gateways in the past. Personal
-  data in imported articles (names, addresses, signatures) is subject to
-  the operator's local law; section 4.5 provides removal.
-- **Binary content** is excluded in both directions (sections 4.1 and
-  5.4). Gatewaying binary groups would turn Unseenet into a file
-  distribution network, which UN-RFC 0002 section 8 rules out.
+  content into Unseenet and, for export, publishes anonymous content on
+  the other network under their own name. Gateways are therefore best run
+  by people or organisations willing to be publicly responsible. Personal
+  data in imported messages is subject to the operator's local law;
+  section 4.5 provides removal.
+- **Files and media** are excluded in both directions (sections 4.1 and
+  5.4). Gatewaying them would turn Unseenet into a file distribution
+  network, which UN-RFC 0002 section 8 rules out.
 
 # Copyright Notice
 

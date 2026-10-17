@@ -122,7 +122,8 @@ The protocol is designed to be extended without breaking old software:
 | 0020 | Keeping Lists from Inside the Network         | Standards Track |
 | 0021 | Listed Nodes Must Be Connected                | Standards Track |
 | 0022 | Profiles for Identities                       | Standards Track |
-| 0023 | Gateways to Usenet                            | Standards Track |
+| 0023 | Gateways to Other Networks                    | Standards Track |
+| 0024 | Usenet Gateways                               | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
