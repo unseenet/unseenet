@@ -81,8 +81,9 @@ network live under a top-level hierarchy named after that network, and
 Unseenet's own groups never carry a prefix. A gateway to FidoNet
 echomail, for example, would use `fido.*`. Each such network is
 specified in its own UN-RFC, which defines the name mapping and the
-value of `network` in the manifest (section 3.2). This document reserves
-`fido` for that purpose (section 10).
+value of `network` in the manifest (section 3.2), which is also the
+value of `Origin-Network` (section 4.2.1). This document reserves `fido`
+for that purpose (section 10).
 
 ## 3.2 Manifest
 
@@ -162,9 +163,10 @@ imported Usenet article:
 | `Author-Key`          | The gateway key                                                |
 | `References`          | Section 4.3                                                    |
 | `Content-Type`        | `text/plain; charset=utf-8`                                    |
-| `Usenet-Message-ID`   | The Usenet Message-ID, unchanged                               |
-| `Usenet-Date`         | The Usenet `Date`, unchanged                                   |
-| `Usenet-From`         | The Usenet `From`, unchanged                                   |
+| `Origin-Network`      | `usenet`                                                       |
+| `Origin-ID`           | The Usenet Message-ID, unchanged                               |
+| `Origin-Date`         | The Usenet `Date`, unchanged                                   |
+| `Origin-From`         | The Usenet `From`, unchanged                                   |
 | `Usenet-Newsgroups`   | The Usenet `Newsgroups`, if it names more than one group       |
 | `Usenet-References`   | The Usenet `References`, if any reference could not be mapped  |
 | `Usenet-Followup-To`  | The Usenet `Followup-To`, if present                           |
@@ -183,10 +185,32 @@ The gateway signs the article with the gateway key and pays its postage
 (UN-RFC 0006). Because the gateway key is the group's moderator, the
 article is accepted without `Approved-By` (UN-RFC 0004 section 5).
 
-The original `Date` is kept in `Usenet-Date` rather than `Date`, because
+The original `Date` is kept in `Origin-Date` rather than `Date`, because
 Usenet dates are unchecked and often outside the window nodes accept.
-Clients that know this document SHOULD show `Usenet-Date` and
-`Usenet-From` for gatewayed articles.
+Clients SHOULD show `Origin-Date` and `Origin-From` for gatewayed
+articles (section 8).
+
+## 4.2.1 Origin Headers
+
+`Origin-Network`, `Origin-ID`, `Origin-Date` and `Origin-From` are
+common to all gateways, not only to Usenet. Every gateway to another
+network (section 3.1.1) MUST set them on imported articles:
+
+| Header           | Value                                                          |
+|------------------|----------------------------------------------------------------|
+| `Origin-Network` | The network's name, the same as `network` in the manifest      |
+| `Origin-ID`      | The message's identifier in that network, as text              |
+| `Origin-Date`    | The message's date as that network gives it, as text           |
+| `Origin-From`    | The author as that network names them, as text                 |
+
+Values are copied as the other network gives them and are not checked;
+they are information for the reader, not facts the gateway vouches for.
+Headers that only make sense for one network keep that network's prefix,
+as `Usenet-Newsgroups`, `Usenet-References` and `Usenet-Followup-To` do
+here, and are defined in that network's UN-RFC.
+
+A client that knows the origin headers can show any gatewayed article,
+from any network, without knowing the UN-RFC for that network.
 
 ## 4.3 References and Threads
 
@@ -277,7 +301,7 @@ The gateway builds a Usenet article (RFC 5536) from the Unseenet article:
 | `Date`            | The Unseenet `Date`                                              |
 | `From`            | `"<From> (<fp4>)" <<fingerprint>@unseenet.invalid>`, where `<fp4>` is the first 4 characters of the author's fingerprint |
 | `Subject`         | The Unseenet `Subject`                                           |
-| `References`      | Each entry mapped back: an imported article's `Usenet-Message-ID`, otherwise the Unseenet Message-ID unchanged |
+| `References`      | Each entry mapped back: an imported article's `Origin-ID`, otherwise the Unseenet Message-ID unchanged |
 | `Injection-Info`  | `<host>; posting-account="<fingerprint>"; mail-complaints-to="<abuse>"` (RFC 5536 section 3.2.8) |
 | `Content-Type`    | `text/plain; charset=utf-8`                                      |
 | `Unseenet-Author-Key` | The author's `Author-Key`                                    |
@@ -394,7 +418,7 @@ A client that knows this document SHOULD:
 
 - mark gatewayed groups as such, with the Usenet group name and the
   gateway's `host`;
-- show `Usenet-From` and `Usenet-Date` for imported articles, and make
+- show `Origin-From` and `Origin-Date` for imported articles, and make
   clear that their author has no Unseenet identity and that the gateway
   key, not the author, signed them;
 - for `"direction": "import"`, not offer to post;
@@ -411,9 +435,10 @@ itself "Usenet gateway".
 
 | Header                | In       | Defined in  |
 |-----------------------|----------|-------------|
-| `Usenet-Message-ID`   | Unseenet | section 4.2 |
-| `Usenet-Date`         | Unseenet | section 4.2 |
-| `Usenet-From`         | Unseenet | section 4.2 |
+| `Origin-Network`      | Unseenet | section 4.2.1 |
+| `Origin-ID`           | Unseenet | section 4.2.1 |
+| `Origin-Date`         | Unseenet | section 4.2.1 |
+| `Origin-From`         | Unseenet | section 4.2.1 |
 | `Usenet-Newsgroups`   | Unseenet | section 4.2 |
 | `Usenet-References`   | Unseenet | section 4.2 |
 | `Usenet-Followup-To`  | Unseenet | section 4.2 |
@@ -449,6 +474,12 @@ without knowing this document.
   (`dk.snak`, not `unseenet.dk.snak`). Groups from elsewhere are guests,
   and their prefix says where they come from. One prefix per network
   keeps the rule the same for every gateway to come.
+- **Why `Origin-*` headers instead of `Usenet-*` for everything?** The
+  author, date and identifier in the other network are what a reader
+  needs for every gateway, whether to Usenet, FidoNet or Matrix. With
+  shared names a client learns them once and can show articles from
+  networks it has never heard of. Only what is peculiar to one network,
+  such as Usenet's crossposts and `Followup-To`, keeps a network prefix.
 - **Why moderated groups with the gateway as moderator?** It is the only
   existing group type in which one key can post on behalf of others
   while users can still submit. Export then needs no new mechanism: the
