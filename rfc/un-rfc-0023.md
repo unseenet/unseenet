@@ -74,6 +74,16 @@ The `usenet` prefix keeps imported groups apart from Unseenet's own
 `alt.*`, `dk.*` and reserved Big 8 hierarchies, and makes the origin of
 every gatewayed group visible in its name.
 
+## 3.1.1 Other Networks
+
+This is the general rule for gateways: groups carried from another
+network live under a top-level hierarchy named after that network, and
+Unseenet's own groups never carry a prefix. A gateway to FidoNet
+echomail, for example, would use `fido.*`. Each such network is
+specified in its own UN-RFC, which defines the name mapping and the
+value of `network` in the manifest (section 3.2). This document reserves
+`fido` for that purpose (section 10).
+
 ## 3.2 Manifest
 
 A gatewayed group:
@@ -417,7 +427,8 @@ without knowing this document.
 
 - UN-RFC 0018 section 9: the initial root list gains `usenet`,
   `governed`, maintainer the project key, title "Gateways to Usenet".
-  The project MAY later delegate it.
+  The project MAY later delegate it. It also gains `fido`, `reserved`,
+  for a future gateway to FidoNet (section 3.1.1).
 - UN-RFC 0004 section 3.1: manifests of gatewayed groups carry the
   `gateway` field of section 3.2. No change is needed in nodes, which
   already preserve unknown fields.
@@ -433,6 +444,11 @@ without knowing this document.
   under one name would give readers two groups called `dk.politik` with
   different rules, authors and lifetimes. `usenet.*` says where a group
   comes from.
+- **Why a prefix for foreign groups and not for Unseenet's own?**
+  Unseenet is the home network, so its groups get the short names
+  (`dk.snak`, not `unseenet.dk.snak`). Groups from elsewhere are guests,
+  and their prefix says where they come from. One prefix per network
+  keeps the rule the same for every gateway to come.
 - **Why moderated groups with the gateway as moderator?** It is the only
   existing group type in which one key can post on behalf of others
   while users can still submit. Export then needs no new mechanism: the
