@@ -21,14 +21,14 @@
       "address": "ics4bgvbghmag7aw7qp6ap44zjh5tyn2d5ilfo7p7cb4ov6ap5hus4ad.onion",
       "node_key": "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya",
       "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
-      "description": "Project node 3, Oracle Cloud - pre-alpha"
+      "description": "Project node 3, Oracle Cloud - stable, kept running and not reset (software pre-alpha)"
     },
     {
       "name": "unseenet-node4",
       "address": "mwmkpsteb4utkbvy26utmjl6l4hhd3lj3p5wfa64evszfutbp3yrqxyd.onion",
       "node_key": "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq",
       "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
-      "description": "Project node 4, Oracle Cloud - pre-alpha"
+      "description": "Project node 4, Oracle Cloud - stable, kept running and not reset (software pre-alpha)"
     }
   ]
 }
