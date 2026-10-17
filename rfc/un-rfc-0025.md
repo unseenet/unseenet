@@ -169,7 +169,7 @@ level the article does not meet, just as for postage.
 
 With the RECOMMENDED defaults of UN-RFC 0006 (node 18, open groups 20)
 a brand-new key pays 26 bits in an open group, about a minute in
-CPython, while a key ripened for two weeks pays 18 bits.
+CPython, while a key at level 4 pays 18 bits.
 
 # 6. Local Standing
 
