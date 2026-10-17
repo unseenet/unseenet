@@ -7,6 +7,44 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+Names, moderation and updates. People and groups get names you can
+remember and trust - registered names, domain names and names under a
+name like `sonia@lorensen` - from a registrar that keeps working when one
+machine is gone. Group owners, moderators and hierarchy maintainers get
+tools against abuse: moderation queues, bans, hierarchy blocks, reports,
+withdrawing posts. Portable and Bootable update themselves. The project
+now runs four nodes, two of them stable. Also: newsreader support
+(`OVER`), Bootable (USB, SSD etc.), a Docker image and a node monitor.
+Pre-alpha: expect breaking changes.
+
+**Support:** 0.3.x gets security and bug fixes until 0.4.0 is released;
+after that, upgrade. There is no compatibility guarantee before 1.0
+(see [SECURITY.md](SECURITY.md#supported-versions)).
+
+### Protocol
+- Draft UN-RFC 0018 (hierarchies and authority over group names), with
+  hierarchy blocks (section 5.4), and UN-RFC 0019 (names for identities),
+  with registrar replicas, reserved names and names under a name.
+- Draft UN-RFC 0020 (keeping the project's lists from inside the
+  network) and UN-RFC 0021 (listed nodes must be connected).
+- UN-RFC 0004: banned keys (section 5.1), closing an epoch when a member
+  is removed (sections 6.2, 6.5), and what clients do with cancels
+  (section 7): check a cancel before acting on it, drop the target from
+  the cache, remember cancels for posts not yet seen, and say that
+  withdrawing is best effort. Control articles cannot be cancelled. (#35)
+- UN-RFC 0009 section 3: submissions reach every moderator.
+- UN-RFC 0008 section 3.1.1: data groups, for lists and certificates that
+  programs read.
+- UN-RFC 0011: `honours_blocks` and excluded groups in node information.
+- UN-RFC 0022 (profiles for identities).
+- Draft UN-RFC 0023 (gateways to other networks) and UN-RFC 0024 (Usenet
+  gateways). The root list reserves hierarchies for gateways: `usenet`,
+  `fido`, `matrix`, `irc`, `xmpp`, `fedi`, `nostr`, `bsky`, `discord`,
+  `telegram`, `slack`, `reddit`. The gateway software is a separate
+  project, https://github.com/unseenet/gateway.
+
 ### Added
 - Replies and mentions: posts answering yours are marked ◄, posts naming
   one of your certified names ♦, and **For you** at the top of the group
@@ -169,15 +207,6 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   get `:<version>` and `:latest`; signed with cosign. See
   docs/node/docker.md and deploy/docker-compose.yml. (#22)
 - Issue forms for the bootable stick and the Docker image.
-
-### Changed
-- UN-RFC 0004 section 7 (cancel) says what a client must do: check a
-  cancel itself before acting on it, drop the target from its cache,
-  remember cancels for posts it has not seen, and tell its user that
-  withdrawing is best effort. Control articles (manifests, key updates,
-  cancels) cannot be cancelled, and the node now refuses that. Also: how
-  long pending cancels are kept, and what a cancel shows in a closed
-  group. (#35)
 
 ### Fixed
 - A node no longer refuses an article for ever because it once refused it
@@ -394,6 +423,7 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/unseenet/unseenet/releases/tag/v0.1.0

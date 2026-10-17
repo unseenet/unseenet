@@ -301,6 +301,28 @@ one node at a time.
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.
 
+### Release branches and fixes
+
+`main` is where the next minor version is developed. A released minor
+version gets a branch only when it needs a fix:
+
+1. Fix it on `main` first, with its test, as usual.
+2. If `release/X.Y` does not exist yet, create it from the release tag:
+   `git switch -c release/X.Y vX.Y.0 && git push origin release/X.Y`.
+3. Carry the fix over with `git cherry-pick -x <commit>` on a branch off
+   `release/X.Y`, open a pull request against `release/X.Y`, and let the
+   tests run.
+4. On `release/X.Y`, move the fix's changelog line into a new
+   `## [X.Y.Z]` section, set `__version__`, and tag `vX.Y.Z` there. The
+   release workflow builds from the tag, whatever branch it is on.
+5. Add the same `## [X.Y.Z]` section to `CHANGELOG.md` on `main`, so the
+   history is complete there too.
+
+A release branch takes only fixes: no new features, no protocol changes.
+It is supported until the next minor release (see
+[SECURITY.md](../SECURITY.md#supported-versions)). Development builds are
+made from `main` only.
+
 ### Test releases and development builds
 
 An **alpha** (or beta, or release candidate) is a release for testing,
