@@ -128,8 +128,11 @@ section 3.1), so they carry gatewayed groups like any moderated group.
 
 ## 3.3 Endorsement
 
-Each network's hierarchy is governed (UN-RFC 0018). Its maintainer
-endorses at most one gatewayed group per source (UN-RFC 0018 section 5).
+Each network's hierarchy is `reserved` in the root list until the first
+gateway for that network is endorsed, and then becomes `governed`
+(UN-RFC 0018), with the project or a delegate as maintainer. The
+maintainer endorses at most one gatewayed group per source (UN-RFC 0018
+section 5).
 Anybody may still run their own gateway for the same source; their group
 has the same name with a different fingerprint and is shown as
 unendorsed (UN-RFC 0018 section 8.1).
@@ -475,10 +478,12 @@ document.
 
 # 11. Changes to Other Documents
 
-- UN-RFC 0018 section 9: the initial root list gains `usenet`,
-  `governed`, maintainer the project key, title "Usenet, through
-  gateways"; and `fido` and `matrix`, `reserved`, for gateways to
-  FidoNet and Matrix. The project MAY later delegate them.
+- UN-RFC 0018 section 9: the root list gains `usenet`, `fido` and
+  `matrix`, all `reserved`, for gateways to Usenet, FidoNet and Matrix.
+  Each becomes `governed`, with the project key as maintainer, when the
+  first gateway for that network is endorsed (section 3.3); the project
+  MAY later delegate it. Names for further networks are added to the
+  root list when they are first proposed.
 - UN-RFC 0004 section 3.1: manifests of gatewayed groups carry the
   `gateway` field of section 3.2. No change is needed in nodes, which
   already preserve unknown fields.
