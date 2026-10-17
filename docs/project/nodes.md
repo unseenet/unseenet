@@ -9,7 +9,8 @@ and to every other listed node ([UN-RFC 0021](../spec/un-rfc-0021.md)).
 |------|-------|--------|
 | `unseenet-node1` | the maintainer's Proxmox, Denmark | test node, may be reset |
 | `unseenet-node2` | the maintainer's Proxmox, Denmark | test node, may be reset |
-| Oracle Cloud nodes | Oracle Cloud Always Free | planned |
+| `unseenet-node3` | Oracle Cloud Always Free (Ampere A1) | project node |
+| `unseenet-node4` | Oracle Cloud Always Free (Ampere A1) | project node |
 
 ## Every project node peers with every other
 

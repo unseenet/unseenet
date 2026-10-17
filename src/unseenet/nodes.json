@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "updated": "2026-10-16",
+  "updated": "2026-10-17",
   "nodes": [
     {
       "name": "unseenet-node1",
@@ -15,6 +15,20 @@
       "node_key": "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
       "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
       "description": "Project test node 2, Denmark - pre-alpha, may be reset"
+    },
+    {
+      "name": "unseenet-node3",
+      "address": "ics4bgvbghmag7aw7qp6ap44zjh5tyn2d5ilfo7p7cb4ov6ap5hus4ad.onion",
+      "node_key": "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "Project node 3, Oracle Cloud - pre-alpha"
+    },
+    {
+      "name": "unseenet-node4",
+      "address": "mwmkpsteb4utkbvy26utmjl6l4hhd3lj3p5wfa64evszfutbp3yrqxyd.onion",
+      "node_key": "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "Project node 4, Oracle Cloud - pre-alpha"
     }
   ]
 }
