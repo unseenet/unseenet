@@ -109,19 +109,22 @@ computation for as long as the key is in use; `t` only grows.
 
 # 4. Levels
 
-| Level | Iterations *t* at least | Fast desktop¹ | Older laptop² | Surcharge *s* |
-|-------|-------------------------|---------------|---------------|---------------|
-| -     | below 2^26              | -             | -             | not accepted³ |
-| 0     | 2^26                    | ~7 minutes    | ~15 minutes   | +6 bits       |
-| 1     | 2^29                    | ~55 minutes   | ~2 hours      | +4 bits       |
-| 2     | 2^32                    | ~7 hours      | ~15 hours     | +2 bits       |
-| 3     | 2^35                    | ~2.5 days     | ~5 days       | 0             |
-| 4     | 2^37                    | ~10 days      | ~3 weeks      | -2 bits       |
+| Level | Iterations *t* at least | Fast desktop¹ | ARM server² | Surcharge *s* |
+|-------|-------------------------|---------------|-------------|---------------|
+| -     | below 2^26              | -             | -           | not accepted³ |
+| 0     | 2^26                    | ~7 minutes    | ~11 minutes | +6 bits       |
+| 1     | 2^29                    | ~55 minutes   | ~1.5 hours  | +4 bits       |
+| 2     | 2^32                    | ~7 hours      | ~12 hours   | +2 bits       |
+| 3     | 2^35                    | ~2.5 days     | ~4 days     | 0             |
+| 4     | 2^37                    | ~10 days      | ~15 days    | -2 bits       |
 
 ¹ Measured: about 165,000 iterations per second with `chiavdf.prove` on
 one core of an AMD Ryzen 9 5950X (section 4.1).
 
-² Estimated at half that rate. To be replaced by measurements (section 10).
+² Measured: about 103,000 iterations per second on one Ampere
+Neoverse-N1 core (Oracle Cloud Always Free), which is close to what an
+older laptop is expected to manage. Laptops, phones and Raspberry Pis
+are still to be measured (section 10).
 
 ³ Unless the group or node allows level `-` (section 5).
 
@@ -130,15 +133,19 @@ A key's level is the highest row whose threshold its proof meets.
 ## 4.1 Measurements
 
 `scripts/bench-ripening.py` in the reference implementation measures
-proving and verification on one core. First results, AMD Ryzen 9 5950X,
-1024-bit discriminant:
+proving and verification on one core. First results, 1024-bit
+discriminant:
 
-| What                                   | Result               |
-|----------------------------------------|----------------------|
-| `chiavdf.prove` (squaring and proof)   | ~165,000 it/s        |
-| `vdf_bench square_asm` (squaring only, hand-optimized assembly, as used by Chia timelords) | ~200,000 it/s |
-| `chiavdf.verify_wesolowski`            | ~3.7 ms, any *t*     |
-| `y` plus `pi`                          | 200 octets           |
+| What                                   | Ryzen 9 5950X | Neoverse-N1 (ARM) |
+|----------------------------------------|---------------|-------------------|
+| `chiavdf.prove` (squaring and proof)   | ~165,000 it/s | ~103,000 it/s     |
+| `vdf_bench square_asm` (squaring only, hand-optimized assembly, as used by Chia timelords) | ~200,000 it/s | not measured |
+| `chiavdf.verify_wesolowski`, any *t*   | ~3.7 ms       | ~6.8 ms           |
+| `y` plus `pi`                          | 200 octets    | 200 octets        |
+
+A one-core ARM node can thus verify about 150 ripening proofs per
+second before caching, which is far more than the article rate of a
+small network.
 
 A spammer with the best available software therefore gains only about
 a factor 1.3 over the reference client on the same processor. The gap
@@ -252,7 +259,7 @@ advertise, to explain to users and to change by a later document.
 
 - Measure older laptops, a Raspberry Pi, Apple Silicon and an Android
   phone with `scripts/bench-ripening.py` and adjust the thresholds in
-  section 4, which so far rest on one fast desktop.
+  section 4, which so far rest on a fast desktop and an ARM server.
 - Write out the discriminant derivation and form encoding normatively,
   so implementations do not depend on `chiavdf`.
 - `chiavdf` publishes wheels for Linux x86-64 and ARM64, Windows and

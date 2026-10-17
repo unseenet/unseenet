@@ -17,7 +17,7 @@ import chiavdf
 
 DISC_BITS = 1024
 GENERATOR = bytes([0x08]) + bytes(99)   # compressed form (2, 1, c), as in chiavdf
-LEVELS = [(0, 27), (1, 30), (2, 33), (3, 36), (4, 38)]   # level, log2(t) - UN-RFC 0025 section 4
+LEVELS = [(0, 26), (1, 29), (2, 32), (3, 35), (4, 37)]   # level, log2(t) - UN-RFC 0025 section 4
 
 
 def human(seconds):
@@ -28,6 +28,13 @@ def human(seconds):
 
 
 def cpu_name():
+    try:
+        import subprocess
+        for line in subprocess.run(["lscpu"], capture_output=True, text=True).stdout.splitlines():
+            if line.startswith("Model name:"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
     try:
         with open("/proc/cpuinfo") as f:
             for line in f:
