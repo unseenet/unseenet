@@ -93,9 +93,15 @@ to the required headers of UN-RFC 0002 section 2). It lies outside the
 canonical form, like `Proof-Of-Work`, so it does not change the
 signature or the Message-ID, and a node forwards it unchanged.
 
+`y` and `pi` are compressed forms of 100 octets each, so the header is
+about 290 characters.
+
 A node verifies the header by checking `pi` for `x`, `y` and `t`. One
-verification costs a few milliseconds. Nodes SHOULD cache the result per
-`(pk, t, y)`.
+verification costs about 4 ms on a current desktop core (section 4.1),
+independent of `t`. A node MUST check postage (UN-RFC 0006) before the
+ripening proof, so that a flood of articles with bogus proofs costs the
+sender postage before it costs the node a verification. Nodes SHOULD
+cache the result per `(pk, t, y)`.
 
 A client keeps the VDF state for each of its keys and SHOULD publish a
 new proof at least at every level boundary. The client MAY continue the
@@ -103,22 +109,41 @@ computation for as long as the key is in use; `t` only grows.
 
 # 4. Levels
 
-| Level | Iterations *t* at least | ~ ordinary laptop core¹ | Surcharge *s* |
-|-------|-------------------------|-------------------------|---------------|
-| -     | below 2^27              | -                       | not accepted² |
-| 0     | 2^27                    | ~10 minutes             | +6 bits       |
-| 1     | 2^30                    | ~1 hour                 | +4 bits       |
-| 2     | 2^33                    | ~10 hours               | +2 bits       |
-| 3     | 2^36                    | ~3 days                 | 0             |
-| 4     | 2^38                    | ~2 weeks                | -2 bits       |
+| Level | Iterations *t* at least | Fast desktop¹ | Older laptop² | Surcharge *s* |
+|-------|-------------------------|---------------|---------------|---------------|
+| -     | below 2^26              | -             | -             | not accepted³ |
+| 0     | 2^26                    | ~7 minutes    | ~15 minutes   | +6 bits       |
+| 1     | 2^29                    | ~55 minutes   | ~2 hours      | +4 bits       |
+| 2     | 2^32                    | ~7 hours      | ~15 hours     | +2 bits       |
+| 3     | 2^35                    | ~2.5 days     | ~5 days       | 0             |
+| 4     | 2^37                    | ~10 days      | ~3 weeks      | -2 bits       |
 
-¹ Assuming about 250,000 iterations per second for 1024-bit
-discriminants. These figures MUST be measured on real hardware before
-this document becomes Proposed (section 10).
+¹ Measured: about 165,000 iterations per second with `chiavdf.prove` on
+one core of an AMD Ryzen 9 5950X (section 4.1).
 
-² Unless the group or node allows level `-` (section 5).
+² Estimated at half that rate. To be replaced by measurements (section 10).
+
+³ Unless the group or node allows level `-` (section 5).
 
 A key's level is the highest row whose threshold its proof meets.
+
+## 4.1 Measurements
+
+`scripts/bench-ripening.py` in the reference implementation measures
+proving and verification on one core. First results, AMD Ryzen 9 5950X,
+1024-bit discriminant:
+
+| What                                   | Result               |
+|----------------------------------------|----------------------|
+| `chiavdf.prove` (squaring and proof)   | ~165,000 it/s        |
+| `vdf_bench square_asm` (squaring only, hand-optimized assembly, as used by Chia timelords) | ~200,000 it/s |
+| `chiavdf.verify_wesolowski`            | ~3.7 ms, any *t*     |
+| `y` plus `pi`                          | 200 octets           |
+
+A spammer with the best available software therefore gains only about
+a factor 1.3 over the reference client on the same processor. The gap
+between machines is the gap in single-core speed, a small factor, not
+the orders of magnitude of SHA-256 on GPUs.
 
 # 5. Required Postage
 
@@ -208,8 +233,11 @@ advertise, to explain to users and to change by a later document.
 - **Botnets.** A botnet ripens many keys in parallel. Ripening does not
   make spam impossible; it makes every key cost real time, so that bans,
   blocks and spam reports cost the spammer something.
-- **VDF hardware.** Dedicated hardware may run the VDF faster, perhaps by
-  a factor of ten. This shortens ripening for that key; it does not make
+- **Faster software and hardware.** Hand-optimized code is about 1.3
+  times faster than the reference client on the same processor
+  (section 4.1); the fastest desktop cores are a small factor faster than
+  old laptops. Dedicated hardware might do more, perhaps a factor of
+  ten. All of this shortens ripening for one key; none of it makes
   thousands of keys cheap.
 - **Stolen keys.** A thief who takes a vault also takes the ripening of
   its keys. This is one more reason to protect the vault (UN-RFC 0007).
@@ -222,12 +250,14 @@ advertise, to explain to users and to change by a later document.
 
 # 10. Open Issues
 
-- Measure iterations per second on real hardware (old laptop, current
-  laptop, Raspberry Pi, phone) and set the thresholds in section 4.
+- Measure older laptops, a Raspberry Pi, Apple Silicon and an Android
+  phone with `scripts/bench-ripening.py` and adjust the thresholds in
+  section 4, which so far rest on one fast desktop.
 - Write out the discriminant derivation and form encoding normatively,
   so implementations do not depend on `chiavdf`.
-- Confirm a verifier usable from Python on all node platforms (x86-64 and
-  ARM), with or without `chiavdf`.
+- `chiavdf` publishes wheels for Linux x86-64 and ARM64, Windows and
+  macOS on Apple Silicon (an older version there). A client on Android
+  needs its own build or a verifier of its own.
 - Transition: during pre-alpha, should nodes accept articles without
   `Key-Ripening` at level `-` for a fixed period?
 - Whether proofs for long-lived keys should be refreshed periodically.
