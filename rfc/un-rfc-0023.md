@@ -457,11 +457,36 @@ that updates this one. A profile MUST specify:
 7. the network's own timing signals and any other way it could reveal
    when an author is active (section 5.3).
 
-| Network | Profile                     |
-|---------|-----------------------------|
-| Usenet  | UN-RFC 0024                 |
-| FidoNet | reserved, not yet written   |
-| Matrix  | reserved, not yet written   |
+The hierarchies below are reserved in the project's root list (UN-RFC
+0018) for gateways. A name for a further network is added when it is
+first proposed.
+
+| Hierarchy  | Network                                        | Profile          |
+|------------|------------------------------------------------|------------------|
+| `usenet`   | Usenet                                         | UN-RFC 0024      |
+| `fido`     | FidoNet echomail                               | not yet written  |
+| `matrix`   | Matrix rooms                                   | not yet written  |
+| `irc`      | IRC channels                                   | not yet written  |
+| `xmpp`     | XMPP group chats (MUC)                         | not yet written  |
+| `fedi`     | The fediverse (ActivityPub: Lemmy, Mastodon …) | not yet written  |
+| `nostr`    | Nostr                                          | not yet written  |
+| `bsky`     | Bluesky and the AT Protocol                    | not yet written  |
+| `discord`  | Discord                                        | not yet written  |
+| `telegram` | Telegram                                       | not yet written  |
+| `slack`    | Slack                                          | not yet written  |
+| `reddit`   | Reddit                                         | not yet written  |
+
+The first eight are open networks where a gateway is realistic. The last
+four are closed platforms whose terms often forbid bridges; their names
+are reserved mainly so that nobody can create groups under them that
+look like a bridge. Networks without discussion groups in text, such as
+video and image platforms, are not reserved.
+
+Reserving a name for a network takes it from Unseenet's own groups:
+groups about Discord belong under `alt.discord` or similar, not
+`discord.*`. Names are therefore reserved only for networks a gateway
+could plausibly be built for, and the root list's limit of 200 entries
+(UN-RFC 0018 section 4.1) is kept in mind.
 
 # 10. Headers Defined Here
 
@@ -478,8 +503,8 @@ document.
 
 # 11. Changes to Other Documents
 
-- UN-RFC 0018 section 9: the root list gains `usenet`, `fido` and
-  `matrix`, all `reserved`, for gateways to Usenet, FidoNet and Matrix.
+- UN-RFC 0018 section 9: the root list gains the hierarchies of section
+  9, all `reserved`, for gateways to those networks.
   Each becomes `governed`, with the project key as maintainer, when the
   first gateway for that network is endorsed (section 3.3); the project
   MAY later delegate it. Names for further networks are added to the
