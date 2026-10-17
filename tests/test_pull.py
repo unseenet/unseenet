@@ -107,7 +107,24 @@ async def test_only_chosen_groups_and_never_local_ones():
     # a rejected article is not fetched again
     res = await Puller(c, c.config.peers[0]).run_once()
     assert res["fetched"] == 0
+    # ...but the article itself is not refused: a local group is created on a node by
+    # posting its manifest there, which must still work after the pull refused it (#132)
+    c.accept(local.to_bytes())
+    assert c.store.manifest(local.group) is not None
     server_a.close()
+
+
+async def test_refused_while_its_group_was_unknown_arrives_later():
+    """A post pulled before its group's manifest is refused ("group not carried");
+    once the manifest is here, the same post must be accepted from another source (#132)."""
+    a = make_node("a")
+    owner, m_open, posts, *_ = fill(a)
+    b = make_node("b", peers=[PeerConfig(name="a", address="unused:1")])
+    b.store.refuse(posts[0].message_id, "a", "group")
+    assert not b.store.seen(posts[0].message_id)
+    b.accept(m_open.to_bytes())
+    b.accept(a.store.get(posts[0].message_id))
+    assert b.store.get(posts[0].message_id) is not None
 
 
 async def test_pulled_posts_are_passed_on_but_not_back():
