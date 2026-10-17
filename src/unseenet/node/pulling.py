@@ -58,7 +58,8 @@ class Puller:
                 since = datetime.fromtimestamp(last, timezone.utc) - OVERLAP
             ids = await client.multiline(
                 f"NEWNEWS {peer.pull} {since:%Y%m%d %H%M%S} GMT", 230)
-            wanted = [i.strip() for i in ids if i.strip() and not store.seen(i.strip())]
+            wanted = [i.strip() for i in ids if i.strip() and not store.seen(i.strip())
+                      and not store.refused_from(i.strip(), peer.name)]
             result["listed"] = len(ids)
             for msgid in wanted[:MAX_PER_RUN]:
                 raw = await client.article(msgid)
@@ -71,8 +72,12 @@ class Puller:
                     result["accepted"] += 1
                 except ArticleError as err:
                     result["rejected"][err.reason] += 1
-                    store.remember(msgid)  # do not fetch it again; our policy will not change
-                    store.db.commit()
+                    if err.reason != "duplicate":
+                        # Do not fetch it from this peer again, but do not refuse the
+                        # article itself: a client may post it here, our policy may
+                        # change, or its group's manifest may still be on its way (#132).
+                        store.refuse(msgid, peer.name, err.reason)
+                        store.db.commit()
             if len(wanted) <= MAX_PER_RUN:
                 store.set_pulled(peer.name, int(their_now.timestamp()))
         finally:

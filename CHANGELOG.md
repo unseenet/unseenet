@@ -180,6 +180,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   group. (#35)
 
 ### Fixed
+- A node no longer refuses an article for ever because it once refused it
+  when pulling it from a peer. Refusals are kept per peer, only so the
+  article is not fetched from that peer again; a client can still post it,
+  and it is accepted once the node's policy or the group's manifest allows
+  it. Before, a local group (such as an operator inbox) refused from a peer
+  could never be created on the node afterwards. (#132)
 - The node no longer crashes the monitor's stats request with
   `readuntil() called while another coroutine is already waiting`: commands
   on the Tor control connection now run one at a time, and a timed-out
