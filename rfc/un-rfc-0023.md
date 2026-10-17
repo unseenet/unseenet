@@ -166,6 +166,54 @@ hierarchy is already in active use by an Unseenet community, the project
 SHOULD choose another name for the network rather than take the
 community's (UN-RFC 0018 section 7.2).
 
+## 3.5 Portals: Unseenet Groups on Other Networks
+
+The sections above bring groups from other networks into Unseenet. A
+**portal** goes the other way: an Unseenet group, say `dk.snak`, gets a
+counterpart on another network, where its users can read and write
+without Unseenet software. The Unseenet group is the source; the
+counterpart is created for the purpose, normally by the gateway on a
+server or relay it may create groups on.
+
+A portal publishes what Unseenet authors wrote, outside Tor, where it may
+be kept and indexed for years. That is a different promise from the one
+the group's authors chose. Therefore:
+
+1. **Only the group's owner can open a portal.** The group's manifest
+   lists it in a `portals` field (below). A gateway MUST NOT run a portal
+   for a group whose current manifest does not list it, and MUST stop
+   when it is removed.
+2. **Authors are told.** A client that knows this document MUST show
+   that a group has portals, and before the first post in such a group
+   MUST tell the user that the post will also be published on the named
+   networks, outside Tor (as in section 5.1). A client that does not know
+   this document cannot warn; owners SHOULD say it in the group's
+   description too.
+3. **Only open groups**, and moderated groups whose moderators include
+   the gateway key. Closed groups, inbox groups and local groups never
+   have portals, and encrypted articles are never published.
+4. **The rest is ordinary gatewaying in reverse.** Articles posted in the
+   Unseenet group are exported to the counterpart as in section 5.2,
+   with the same timing rules (section 5.3) and the same things never
+   exported (section 5.4), but without a submission queue: the owner's
+   consent and the warning to authors take its place. Messages written
+   on the counterpart are imported into the Unseenet group as in
+   section 4, signed by the gateway key and carrying `Origin-*` headers,
+   so readers always see where a post came from. In a moderated group
+   they go through the moderators as submissions unless the gateway is a
+   moderator.
+
+The `portals` field is a list of objects:
+
+| Field     | Type     | Req. | Meaning                                                  |
+|-----------|----------|------|----------------------------------------------------------|
+| `network` | string   | yes  | The other network, as in section 3.2                     |
+| `source`  | string   | yes  | The counterpart, as the network's profile names it       |
+| `gateway` | key list | yes  | The gateway key or keys allowed to run it                |
+
+The portal's counterpart SHOULD say in its own description that it is a
+portal to the named Unseenet group, and link to it.
+
 # 4. Import
 
 ## 4.1 What Is Never Imported
@@ -240,6 +288,27 @@ as a prefix (`Usenet-Newsgroups`) and are defined in its profile.
 A client that knows the origin headers can show any gatewayed article,
 from any network, without knowing the profile for that network.
 
+### 4.3.1 Origin-Proof
+
+Some networks sign every message with its author's key (Nostr, for
+example). For those, the imported article SHOULD also carry:
+
+| Header         | Value                                                            |
+|----------------|------------------------------------------------------------------|
+| `Origin-Proof` | The original signed message, as the profile serializes it on one line |
+
+With it, a reader can check that the text came from that author on the
+other network, unchanged, without trusting the gateway (section 13). A
+client that knows the network's profile and supports its signature
+scheme SHOULD verify the proof, and SHOULD show an imported article whose
+proof does not verify, or whose proof does not match the article's body,
+as possibly altered. A client that does not support the scheme ignores
+the header.
+
+The profile defines the serialization and what "matches" means. The
+proof makes the article larger, so a gateway MAY leave it out of
+messages whose proof would push the article over the size limit.
+
 ## 4.4 Threads
 
 The gateway keeps a table from identifiers of imported messages to the
@@ -263,6 +332,13 @@ are signed and cannot change. A gateway therefore:
   posting an Unseenet cancel (UN-RFC 0004 section 7) for the imported
   article as moderator, but only when the other network authenticates
   the retraction or the profile gives another reason to trust it;
+- where the profile says the source is authoritative for its own
+  content (a server or relay that alone decides what the group holds),
+  MAY treat a message the source no longer serves as removed there: when
+  the source has not served it for at least two consecutive passes while
+  still serving other messages of the same group, the gateway cancels
+  the imported article. A source that is down, or serves nothing, never
+  causes a cancel. The profile names how long after import this applies;
 - MUST honour a request in the other network not to archive a message
   (the profile names it) by not importing it or by giving it `Expires`
   at most 7 days after import. Archive nodes (UN-RFC 0012) MUST NOT keep
@@ -469,7 +545,7 @@ first proposed.
 | `irc`      | IRC channels                                   | not yet written  |
 | `xmpp`     | XMPP group chats (MUC)                         | not yet written  |
 | `fedi`     | The fediverse (ActivityPub: Lemmy, Mastodon …) | not yet written  |
-| `nostr`    | Nostr                                          | not yet written  |
+| `nostr`    | Nostr (NIP-29 relay-based groups)              | UN-RFC 0025      |
 | `bsky`     | Bluesky and the AT Protocol                    | not yet written  |
 | `discord`  | Discord                                        | not yet written  |
 | `telegram` | Telegram                                       | not yet written  |
@@ -496,6 +572,7 @@ could plausibly be built for, and the root list's limit of 200 entries
 | `Origin-ID`      | section 4.3 |
 | `Origin-Date`    | section 4.3 |
 | `Origin-From`    | section 4.3 |
+| `Origin-Proof`   | section 4.3.1 |
 
 They are ordinary optional headers (UN-RFC 0002 section 2.3), covered by
 the gateway's signature. Nodes preserve them without knowing this
@@ -510,7 +587,8 @@ document.
   MAY later delegate it. Names for further networks are added to the
   root list when they are first proposed.
 - UN-RFC 0004 section 3.1: manifests of gatewayed groups carry the
-  `gateway` field of section 3.2. No change is needed in nodes, which
+  `gateway` field of section 3.2, and manifests of groups with portals
+  the `portals` field of section 3.5. No change is needed in nodes, which
   already preserve unknown fields.
 - UN-RFC 0012: archive nodes honour `Expires` on gatewayed articles
   (section 4.5).
@@ -574,6 +652,13 @@ document.
   invent or drop them, and readers can only check them against the
   source. Endorsement (section 3.3) is the defence: readers trust the
   endorsed gateway, and anybody may run a second gateway to compare.
+  For networks that sign their messages, `Origin-Proof` (section 4.3.1)
+  removes the need to trust the gateway about content; it can still drop
+  messages or invent ones from its own key.
+- **Portals publish Unseenet authors outside Tor.** Section 3.5 makes
+  them the owner's decision and requires clients to warn; an author who
+  does not want to appear on the other network should not post in a
+  group with portals, or should use a separate identity there.
 - **Groups pretending to be gateways.** A group can copy a gateway's name
   and `gateway` field. Section 3.4 makes clients rely on endorsement, not
   on either.
