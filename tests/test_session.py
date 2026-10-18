@@ -939,6 +939,7 @@ async def test_mention_notices(tmp_path, monkeypatch):
     assert other.mentioned("Marsvin", text) == [("@lorensen", me.identity().key_text)]
     assert other.mentioned("", "@ukendt og @lorensen.dk") == []            # not resolvable
     assert me.mentioned("", "@lorensen") == []                             # not yourself
+    assert other.mentioned("Re: x", "Sonia wrote:\n> Spørg @lorensen\n\nJa.\n") == []   # a quote
     assert not other.may_notify(secret) and other.may_notify(gid)
 
     post = await other.post(gid, "Marsvin", text)

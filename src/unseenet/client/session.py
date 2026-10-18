@@ -1300,6 +1300,8 @@ class Session:
         mine = {self.identity(n).key_text for n in self.data["identities"]}
         out: list[tuple[str, str]] = []
         text = split_signature(f"{subject}\n{body}")[0]
+        # quoted lines are someone else's words: quoting a mention tells nobody again
+        text = "\n".join(ln for ln in text.split("\n") if not ln.lstrip().startswith(">"))
         for m in NAME_MENTION_RE.finditer(text):
             local, parent = m.group(1), m.group(2).lower()
             name = f"{local.lower()}@{parent}" if local else parent
