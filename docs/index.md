@@ -80,7 +80,7 @@ protect anyone yet.
 <div class="un-how" markdown>
 
 <figure class="un-diagram" aria-labelledby="un-diagram-cap">
-<svg viewBox="0 0 560 300" role="img" aria-labelledby="un-diagram-title">
+<svg viewBox="12 44 540 218" role="img" aria-labelledby="un-diagram-title">
   <title id="un-diagram-title">Your client talks to one node over Tor; the nodes pass posts between themselves, also over Tor.</title>
   <g class="d-tor">
     <path d="M150 150 C 205 150, 215 150, 268 150"/>
