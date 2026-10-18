@@ -9,7 +9,8 @@ and to every other listed node ([UN-RFC 0021](../spec/un-rfc-0021.md)).
 |------|-------|--------|
 | `unseenet-node1` | the maintainer's Proxmox, Denmark | test node, may be reset |
 | `unseenet-node2` | the maintainer's Proxmox, Denmark | test node, may be reset |
-| Oracle Cloud nodes | Oracle Cloud Always Free | planned |
+| `unseenet-node3` | Oracle Cloud Always Free (Ampere A1) | stable: kept running, not reset |
+| `unseenet-node4` | Oracle Cloud Always Free (Ampere A1) | stable: kept running, not reset |
 
 ## Every project node peers with every other
 
@@ -29,6 +30,17 @@ them all. Without `--check` it prints every section the node needs.
 
 1. Install it as any node ([Installation](../node/install.md)) and note
    its onion address and node key.
+   In its `node.toml`, set `require_peer_auth = true` under `[node]` and
+   add an `[operator]` section like the other project nodes: the project
+   key, the project's contact inbox and a description saying whether the
+   node is stable or a test node ([Configuration](../node/configuration.md#operator)).
+   The contact inbox is **local** (UN-RFC 0011 section 5): it never travels
+   between nodes, so it must be created on the new node too, or messages to
+   the operator sent through it are refused. Post the inbox's signed
+   manifest there as a client: `unseenet --vault operator.vault node-add
+   <new-node>.onion` and `unseenet --vault operator.vault group-create
+   operator --type inbox --local` on the new node, or re-post the existing
+   manifest article from another project node.
 2. Add it to `src/unseenet/nodes.json` with the project key as `operator`
    (by pull request, or the *Add my node* form). Until a project node is on
    the list, the tool does not know it.

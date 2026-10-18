@@ -35,6 +35,7 @@ from unseenet.core import crypto  # noqa: E402
 from unseenet.core.article import Article, ArticleError, new_article  # noqa: E402
 from unseenet.core.encoding import b64  # noqa: E402
 from unseenet.known_nodes import CANARY_GROUP  # noqa: E402
+from unseenet.nntp import strip_reader_headers  # noqa: E402
 from unseenet.node.server import wildmat  # noqa: E402
 
 PROJECT_GROUPS = "unseenet*@ph5fc5hop5232qsz"    # what no listed node may exclude
@@ -175,7 +176,8 @@ async def read_node(address: str, socks_port: int, poster: bytes, day: date) -> 
             since = datetime.combine(day - timedelta(days=1), time(), timezone.utc)
             for msgid in await client.newnews(CANARY_GROUP, since.strftime("%Y%m%d %H%M%S")):
                 raw = await client.article(msgid)
-                node = read_canary(raw, poster, day) if raw else None
+                # as a reader we get Xref and the like added: they are not signed
+                node = read_canary(strip_reader_headers(raw), poster, day) if raw else None
                 if node:
                     r.seen.add(node)
         return r

@@ -173,8 +173,10 @@ class Stats:
         if not tor.alive() or tor.control is None:
             return {"state": "down"}
         try:
-            line = (await asyncio.wait_for(
-                tor.control.command("GETINFO status/bootstrap-phase"), 5))[0]
+            # shield: on timeout the command still reads its whole reply, so the
+            # control connection stays in step for the node's own commands (#127)
+            line = (await asyncio.wait_for(asyncio.shield(
+                tor.control.command("GETINFO status/bootstrap-phase")), 5))[0]
         except (OSError, ConnectionError, asyncio.TimeoutError, IndexError):
             return {"state": "down"}
         fields = dict(part.split("=", 1) for part in line.split() if "=" in part)

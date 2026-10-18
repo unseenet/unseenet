@@ -125,6 +125,7 @@ The protocol is designed to be extended without breaking old software:
 | 0023 | Gateways to Other Networks                    | Standards Track |
 | 0024 | Usenet Gateways                               | Standards Track |
 | 0025 | Key Ripening and Standing                     | Standards Track |
+| 0026 | Nostr Gateways                                | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

@@ -1,9 +1,11 @@
 {
   "canaries": {
-    "date": "2026-10-17",
+    "date": "2026-10-18",
     "posted": [
       "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
-      "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka"
+      "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
+      "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya",
+      "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq"
     ]
   },
   "nodes": {}

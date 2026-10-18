@@ -106,12 +106,25 @@ class TorControl:
 
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self.reader, self.writer = reader, writer
+        # One command at a time: replies carry no id, so two commands in flight
+        # on the one connection would read each other's replies (issue #127).
+        self._lock = asyncio.Lock()
 
     @classmethod
     async def connect(cls, host: str, port: int) -> "TorControl":
         return cls(*await asyncio.open_connection(host, port))
 
     async def command(self, line: str) -> list[str]:
+        """Send one command and read its whole reply.
+
+        Callers that put a timeout on this should wrap it in ``asyncio.shield``:
+        cancelling it halfway leaves the rest of the reply unread on the
+        connection, where the next command would read it as its own.
+        """
+        async with self._lock:
+            return await self._command(line)
+
+    async def _command(self, line: str) -> list[str]:
         self.writer.write(line.encode() + b"\r\n")
         await self.writer.drain()
         lines: list[str] = []
