@@ -70,7 +70,11 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PRE=""; case "$GITHUB_REF_NAME" in v0.*|*a*|*b*|*rc*) PRE="--prerelease";; esac
+          # Test releases (a, b, rc) are pre-releases. A stable release, also before 1.0,
+          # is the "latest" release: the stable update channel of Portable and
+          # Bootable fetches releases/latest, which never points at a pre-release.
+          PRE="--prerelease=false --latest"
+          case "$GITHUB_REF_NAME" in *a[0-9]*|*b[0-9]*|*rc[0-9]*) PRE="--prerelease --latest=false";; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             # the portable workflow got there first (as a draft): fill it in and publish
             gh release upload "$GITHUB_REF_NAME" dist/* --clobber
