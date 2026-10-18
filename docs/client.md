@@ -159,8 +159,8 @@ anything. All this is worked out in your client; nothing is sent anywhere.
 ## Pointing to another group
 
 Write `#` and a group's name to point someone to it: *you'll probably get
-better answers in #dk.snak.marsvin*. Press `#` on a post (or in the
-full-screen view) to go there: a group you follow opens, and for one you
+better answers in #dk.snak.marsvin*. References are shown underlined; click
+one, or press `#` on a post (or in the full-screen view), to go there: a group you follow opens, and for one you
 do not follow, the client shows what it is and asks before subscribing. If
 a post names several groups, you choose one; if several groups have the same
 name (with different owners), you choose by fingerprint, and you can write

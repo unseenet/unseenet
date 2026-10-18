@@ -2463,11 +2463,12 @@ class UnseenetApp(App):
         self.refresh_groups()
 
     @work(group="dialog", exit_on_error=False)
-    async def action_group_ref(self) -> None:
-        """Open a group the current post names with #, or offer to subscribe (#172).
-        Never subscribes without asking."""
+    async def action_group_ref(self, text: str = "") -> None:
+        """Open a group the current post names with # - or the reference that was
+        clicked (text) - or offer to subscribe (#172). Never subscribes without asking."""
         s, m = self.session, self.current_message
-        refs = group_refs(f"{m.subject}\n{m.body}") if m is not None and m.readable else []
+        refs = (group_refs(text) if text
+                else group_refs(f"{m.subject}\n{m.body}") if m is not None and m.readable else [])
         if not refs:
             self.notify("This post names no group. Write e.g. #dk.snak to name one.",
                         severity="warning")

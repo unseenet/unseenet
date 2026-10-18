@@ -65,8 +65,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - `#group` references: write `#dk.snak.marsvin` to point to a group, and
   press `#` on a post to go there - a group you follow opens, one you do
   not is shown and you are asked before subscribing. The core has
-  `group_refs()` and `Session.find_group_ref()` for other clients;
-  showing them as links comes with markdown. (#172)
+  `group_refs()` and `Session.find_group_ref()` for other clients.
+  References are underlined and can be clicked. (#172)
 
 ### Changed
 
