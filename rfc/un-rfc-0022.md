@@ -79,9 +79,11 @@ A profile is a JSON object in canonical JSON (UN-RFC 0004 section 3):
 | `about` | string           | no   | Free text, at most 2048 characters (4.1)        |
 | `links` | array of objects | no   | At most 16 links (4.2)                          |
 | `lang`  | array of strings | no   | Languages the identity writes, as BCP 47 tags (`da`, `en`), at most 8 |
+| `bot`   | boolean          | no   | `true`: the identity posts automatically (UN-RFC 0030 section 6) |
 
 Unknown fields MUST be preserved and ignored. A profile with neither
-`about` nor `links` is empty; clients show it as no profile.
+`about` nor `links` is empty; clients show it as no profile, except
+for the bot mark if `bot` is `true`.
 
 The display name is not part of the profile: it is the `From` of the
 identity's articles (UN-RFC 0002), and its names are its certificates.
@@ -548,7 +550,8 @@ inner article.
 
 - UN-RFC 0004 section 3.1: the manifest fields `profile` (object, only
   in profile groups), `avatar` (object, only in avatar groups) and
-  `expires` (UN-RFC 0029) are added.
+  `expires` (UN-RFC 0029) are added, and the channel fields `comments`
+  and `comment_days` (UN-RFC 0030), which also adds `bot` here.
 - UN-RFC 0008 section 3.1.1: profile and avatar groups are data groups.
 - UN-RFC 0011 section 4: the policy fields `profiles` and `avatars`
   (section 10).

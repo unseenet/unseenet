@@ -118,6 +118,7 @@ nav:
       - "0027 Attachments": spec/un-rfc-0027.md
       - "0028 Chats and posts": spec/un-rfc-0028.md
       - "0029 Key-bound groups": spec/un-rfc-0029.md
+      - "0030 Comments in channels": spec/un-rfc-0030.md
   - The project:
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md
