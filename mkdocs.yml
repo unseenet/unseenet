@@ -123,6 +123,7 @@ nav:
       - "0031 Markdown and emoji": spec/un-rfc-0031.md
       - "0032 Mention notices": spec/un-rfc-0032.md
   - The project:
+      - People: project/people.md
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md
       - The project's nodes: project/nodes.md
