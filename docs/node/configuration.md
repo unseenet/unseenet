@@ -38,7 +38,29 @@ groups = "*"
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
 | `pull_interval` | `3600` | Seconds between [catch-up pulls](peering.md#catching-up) from each peer. |
 | `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
+| `profiles` | `"accept"` | Carry identities' public profiles (`profile@...`), see [below](#profiles-and-pictures). `"refuse"` to leave them out. |
+| `avatars` | `"refuse"` | Carry identities' pictures (`avatar@...`). Off until you turn it on. |
 | `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
+
+### Profiles and pictures
+
+An identity can publish a short public profile - a few lines about
+itself, the languages it writes, links to other accounts - and a small
+picture ([UN-RFC 0022](../spec/un-rfc-0022.md)). Each lives in a tiny
+group of its own that follows from the identity's key: `profile@<fp>`
+and `avatar@<fp>`. They hold one signed manifest each and no posts.
+
+- **Profiles** are text, at most 8 KiB. Nodes carry them by default,
+  also when `new_groups` is `trusted` or `manual`, since they are not
+  groups anybody joins. Set `profiles = "refuse"` to leave them out.
+- **Pictures** are images (at most 8 KiB, 128 × 128 pixels). No node
+  should carry images it has not chosen to, so `avatars` is `"refuse"`
+  until you set it to `"accept"`.
+
+Both expire two years after their owner's client last renewed them, and
+the node then removes them by itself
+([UN-RFC 0029](../spec/un-rfc-0029.md)). Your node information says
+what you chose.
 
 ### `honour_blocks`: maintainers' blocks
 

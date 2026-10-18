@@ -464,6 +464,29 @@ directions, in order. ++n++ there writes them a post instead.
   encrypted file next to your vault (`unseenet.vault.sent`).
 - Rename or remove contacts from the command palette (++ctrl+p++).
 
+## Your profile
+
+You can publish a short public profile: a few lines about yourself, the
+languages you write and links to your other accounts. Ctrl+P → **Your
+profile** writes, changes or removes it; links go one per line, as
+`kind address`, for example `github andlo` or
+`mastodon @andlo@fosstodon.org`.
+
+Think before you do: anybody who sees your posts can read it, a link
+ties this identity to that account, and copies others have kept cannot
+be taken back. The client says so before your first profile. If you want
+to stay unknown, keep a separate identity without a profile.
+
+Ctrl+P → **Profile of this author** shows the profile of whoever wrote
+the selected post, with their *identicon* - a small pattern made from
+their key, the same in every client - and lets you hide a profile.
+Links are shown exactly as written and never opened for you; they are
+what the identity says, not something anybody checked.
+
+Your profile is renewed along with your inbox, so it stays as long as
+you use the identity ([UN-RFC 0022](spec/un-rfc-0022.md),
+[0029](spec/un-rfc-0029.md)).
+
 ## Names
 
 Group names and people's names are shown as short as is safe

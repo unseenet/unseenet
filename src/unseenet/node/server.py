@@ -14,7 +14,8 @@ from datetime import datetime, timedelta, timezone
 
 from .. import __version__
 from ..core.groups import canonical_json, parse_canonical_json
-from ..core import crypto
+from ..core import crypto, profiles
+from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, parse_key_update,
                            split_group_id)
@@ -53,6 +54,8 @@ class NodeConfig:
     excludes: str = ""                   # wildmat of groups not carried by choice (UN-RFC 0021)
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
+    profiles: str = "accept"             # UN-RFC 0022 section 10: carry profile@ groups
+    avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
 
@@ -196,6 +199,7 @@ class Node:
             raise ArticleError("group", "group was removed by its owner" if removed == "owner"
                                else "group was dropped by this node")
 
+        self._check_profile_group(art.group)
         manifest = self.store.manifest(art.group)
         if ctl == ["rmgroup"]:
             return self._accept_rmgroup(art, manifest, raw, source, from_peer)
@@ -264,14 +268,50 @@ class Node:
         if current is not None:
             if m.type != current.type or m.owner != current.owner or m.local != current.local:
                 raise ArticleError("permission", "manifest may not change type, owner or locality")
-        elif not self.store.known_group(art.group) and not self._allow_new_group(m):
+        elif (not self.store.known_group(art.group) and not self._is_profile_group(art.group)
+              and not self._allow_new_group(m)):
+            # profile and avatar groups are accepted whatever new_groups says (UN-RFC 0022, 10)
             # an expired key-bound group is not new: its renewal is accepted (UN-RFC 0029)
             raise ArticleError("group", "node does not accept this new group")
         if m.expired():
             raise ArticleError("group", "key-bound group has expired")
+        self._check_profile_content(m)
         self.store.add(art, raw)
         if m.supersedes(current):
             self.store.set_manifest(m)
+
+    @staticmethod
+    def _group_name(group_id: str) -> str:
+        try:
+            return split_group_id(group_id)[0]
+        except ValueError:
+            return ""
+
+    def _is_profile_group(self, group_id: str) -> bool:
+        return self._group_name(group_id) in (profiles.PROFILE_NAME, profiles.AVATAR_NAME)
+
+    def _check_profile_group(self, group_id: str) -> None:
+        """UN-RFC 0022 section 10: the operator decides whether profiles and pictures
+        are carried; pictures only when turned on."""
+        name = self._group_name(group_id)
+        if name == profiles.PROFILE_NAME and self.config.profiles != "accept":
+            raise ArticleError("group", "this node does not carry profiles")
+        if name == profiles.AVATAR_NAME and self.config.avatars != "accept":
+            raise ArticleError("group", "this node does not carry pictures")
+
+    def _check_profile_content(self, m: Manifest) -> None:
+        """A profile or picture manifest must hold a valid one (sections 4, 8.1)."""
+        own = {profiles.PROFILE_NAME: "profile", profiles.AVATAR_NAME: "avatar"}.get(m.name)
+        try:
+            for field_ in ("profile", "avatar"):
+                if field_ in m.raw and field_ != own:
+                    raise profiles.ProfileError(f"{field_} belongs in a {field_}@ group")
+            if own == "profile" and "profile" in m.raw:
+                profiles.check_profile(m.raw["profile"])
+            if own == "avatar" and "avatar" in m.raw:
+                profiles.check_picture(m.raw["avatar"])
+        except profiles.ProfileError as exc:
+            raise ArticleError("syntax", str(exc)) from exc
 
     def _allow_new_group(self, m: Manifest) -> bool:
         if self.config.new_groups == "accept":
@@ -420,6 +460,7 @@ class Node:
                 "policy": {"new_groups": cfg.new_groups, "min_pow": cfg.min_pow,
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,
                            "archive": False, "honours_blocks": cfg.honour_blocks,
+                           "profiles": cfg.profiles, "avatars": cfg.avatars,
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
         excludes = self.excludes()
         if excludes:

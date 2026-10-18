@@ -25,6 +25,7 @@ from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_R
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
 from ..core.groups import _comments  # UN-RFC 0030 field check
 from ..core.groups import RENEW_WHEN_LEFT, RENEW_WINDOW, is_key_bound, stored_expires
+from ..core import profiles as prof
 from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -1066,6 +1067,130 @@ class Session:
         if any(d is None for d in dates):
             return datetime.fromtimestamp(0, timezone.utc)   # from before UN-RFC 0029
         return min(dates)
+
+    # ------------------------------------------------------------------
+    # profiles and pictures (UN-RFC 0022)
+    # ------------------------------------------------------------------
+    PROFILE_CACHE_SECONDS = 24 * 3600
+
+    async def fetch_manifest(self, group_id: str, node: str | None = None):
+        """The newest valid, unexpired manifest of a small group of manifests only
+        (profile@, avatar@), read with HDR Control. None if the node has none."""
+        from ..core.groups import Manifest
+
+        async def run(c: Client):
+            try:
+                _, low, high = await c.group(group_id)
+            except NNTPError:
+                return None
+            if high < low:
+                return None
+            best = None
+            for line in await c.multiline(f"HDR Control {low}-{high}", 225):
+                number, _, value = line.partition(" ")
+                if value.strip().lower() != "manifest":
+                    continue
+                raw = await c.article(number)
+                try:
+                    m = Manifest.from_article(Article.from_bytes(raw))
+                except (ArticleError, ValueError, TypeError):
+                    continue
+                if m.group_id == group_id and not m.expired() and m.supersedes(best):
+                    best = m
+            return best
+
+        return await self._call(run, node or self.node_for(group_id))
+
+    def _profile_cache(self) -> dict:
+        return self.data.setdefault("profiles", {})
+
+    async def profile_of(self, key_text: str, refresh: bool = False) -> "prof.Profile | None":
+        """The public profile of a key (UN-RFC 0022 section 5.2), cached for a day.
+        None when there is none: that is not an error (5.2)."""
+        pk = crypto.key_from_text(key_text)
+        if pk == self.identity().public_key:
+            mine = self.my_profile()
+            return prof.Profile.from_object(pk, mine) if mine else None
+        cache = self._profile_cache()
+        hit = cache.get(key_text)
+        now = datetime.now(timezone.utc).timestamp()
+        if hit is None or refresh or now - hit.get("fetched", 0) > self.PROFILE_CACHE_SECONDS:
+            m = await self.fetch_manifest(prof.profile_id(pk))
+            p = prof.profile_from_manifest(m) if m else None
+            hit = {"fetched": now, "profile": p.raw if p else None, "serial": p.serial if p else 0}
+            cache[key_text] = hit
+            self.save()
+        obj = hit.get("profile")
+        if not obj:
+            return None
+        try:
+            return prof.Profile.from_object(pk, prof.check_profile(obj), hit.get("serial", 0))
+        except prof.ProfileError:
+            return None
+
+    def my_profile(self) -> dict | None:
+        """This identity's published profile object, or None."""
+        gid = prof.profile_id(self.identity().public_key)
+        return self.manifest_data(gid).get("profile") or None
+
+    def has_published_profile(self) -> bool:
+        return bool(self.manifest_data(prof.profile_id(self.identity().public_key)))
+
+    async def _publish_key_bound(self, group_id: str, make) -> dict:
+        """Post a new manifest of one of our own key-bound groups, with a serial above
+        any we used (UN-RFC 0029 section 8), and keep it so it is renewed."""
+        entry = self.group_entry(group_id)
+        serial = int(self.manifest_data(group_id).get("serial", 0)) + 1
+        art = make(serial, await self.required_pow(None))
+        await self._post_article(art, self.node)
+        data = json.loads(art.body)
+        entry.update({"type": "channel", "owner": True, "manifest": data,
+                      "node": entry.get("node") or self.node})
+        self.save()
+        return data
+
+    async def publish_profile(self, profile: dict | None) -> dict:
+        """Publish (or with None, empty) this identity's public profile (5.1, 5.3)."""
+        ident = self.identity()
+        if profile is not None:
+            try:
+                prof.check_profile(profile)
+            except prof.ProfileError as exc:
+                raise SessionError(str(exc)) from exc
+        return await self._publish_key_bound(
+            prof.profile_id(ident.public_key),
+            lambda serial, bits: prof.profile_manifest(ident, profile, serial=serial,
+                                                       pow_bits=bits))
+
+    async def publish_picture(self, picture: dict | None) -> dict:
+        """Publish (or with None, remove) this identity's picture (section 8.2).
+        ``picture`` must already be re-encoded without metadata (8.1)."""
+        ident = self.identity()
+        if picture is not None:
+            try:
+                prof.check_picture(picture)
+            except prof.ProfileError as exc:
+                raise SessionError(str(exc)) from exc
+        return await self._publish_key_bound(
+            prof.avatar_id(ident.public_key),
+            lambda serial, bits: prof.avatar_manifest(ident, picture, serial=serial,
+                                                      pow_bits=bits))
+
+    async def picture_of(self, key_text: str) -> dict | None:
+        """The picture of a key, if its node carries avatar groups (section 8.2)."""
+        pk = crypto.key_from_text(key_text)
+        m = await self.fetch_manifest(prof.avatar_id(pk))
+        return prof.picture_from_manifest(m) if m else None
+
+    def hide_profile(self, key_text: str, hidden: bool = True) -> None:
+        """Section 9.2: the user may hide the profile of a key."""
+        hidden_set = set(self.data.setdefault("hidden_profiles", []))
+        (hidden_set.add if hidden else hidden_set.discard)(key_text)
+        self.data["hidden_profiles"] = sorted(hidden_set)
+        self.save()
+
+    def profile_hidden(self, key_text: str) -> bool:
+        return key_text in self.data.get("hidden_profiles", [])
 
     async def renew_key_bound(self, now: datetime | None = None,
                               rng: random.Random | None = None) -> list[str]:
