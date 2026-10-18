@@ -137,33 +137,47 @@ protect anyone yet.
 
 </div>
 
-## How is it different?
+## How is it different? { #how-is-it-different }
 
-Each of these does some things well. Unseenet is the one that does all of it
-in one place - and hides who you are while it does.
+<div class="un-cmp" markdown>
 
-<div class="un-compare-wrap" markdown>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="un-i-yes" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M7 12.5l3.2 3.2L17.2 8.6" fill="none" stroke="#10302a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="un-i-part" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"/></symbol>
+  <symbol id="un-i-no" viewBox="0 0 24 24"><path d="M8 12h8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+</svg>
 
-<table class="un-compare">
-  <thead>
-    <tr><th scope="col"></th><th scope="col">Unseenet</th><th scope="col">Discord</th><th scope="col">Matrix</th><th scope="col">Nostr</th><th scope="col">Reddit, forums</th><th scope="col">Old Usenet</th></tr>
-  </thead>
+<p class="un-cmp__kicker">Chat. Discussion. Private posts.</p>
+<p class="un-cmp__headline">Everything in one place - <span>and nobody can see you there.</span></p>
+<p class="un-cmp__lede">Other networks each do a few things well. Unseenet is the only one
+that does all of it, in one program, without an account, over Tor.</p>
+
+<div class="un-cmp__scroll">
+<table class="un-cmp__table">
+  <thead><tr><th scope="col" class="un-cmp__feat"><span class="un-sr">Feature</span></th><th scope="col" class="un-cmp__us"><span class="un-cmp__badge">Does it all</span><img src="img/icon.svg" alt="" width="34" height="34"><span class="un-cmp__name">Unseenet</span></th><th scope="col"><span class="un-cmp__mono" aria-hidden="true">D</span><span class="un-cmp__name">Discord</span></th><th scope="col"><span class="un-cmp__mono" aria-hidden="true">M</span><span class="un-cmp__name">Matrix</span></th><th scope="col"><span class="un-cmp__mono" aria-hidden="true">N</span><span class="un-cmp__name">Nostr</span></th><th scope="col"><span class="un-cmp__mono" aria-hidden="true">R</span><span class="un-cmp__name">Reddit &amp; forums</span></th><th scope="col"><span class="un-cmp__mono" aria-hidden="true">U</span><span class="un-cmp__name">Old Usenet</span></th></tr></thead>
   <tbody>
-    <tr><th scope="row">Chat</th><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td class="p">partly</td><td class="n">no</td></tr>
-    <tr><th scope="row">Threaded discussion with quoting</th><td class="y">yes</td><td class="p">partly</td><td class="p">partly</td><td class="p">partly</td><td class="y">yes</td><td class="y">yes</td></tr>
-    <tr><th scope="row">Private talk only the people in it can read</th><td class="y">yes</td><td class="n">no</td><td class="y">yes</td><td class="p">partly</td><td class="n">no</td><td class="n">no</td></tr>
-    <tr><th scope="row">No account, email or phone number</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="y">yes</td><td class="n">no</td><td class="p">partly</td></tr>
-    <tr><th scope="row">Nobody owns the network</th><td class="y">yes</td><td class="n">no</td><td class="y">yes</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
-    <tr><th scope="row">Servers cannot be located or taken down</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td></tr>
-    <tr><th scope="row">Always over Tor</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Chat</span><span class="un-cmp__sub">Quick talk in chat groups</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Threaded discussion</span><span class="un-cmp__sub">Threads you can follow, replies that quote</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Private talk nobody else can read</span><span class="un-cmp__sub">End-to-end encrypted chats and posts</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">No account, email or phone number</span><span class="un-cmp__sub">You are your key</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="p"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-part"/></svg><span class="un-sr">Partly</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Nobody owns the network</span><span class="un-cmp__sub">No company to close it or sell it</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Servers nobody can find</span><span class="un-cmp__sub">Nodes are onion services with no location</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td></tr>
+<tr><th scope="row"><span class="un-cmp__t">Always over Tor</span><span class="un-cmp__sub">Nobody sees who talks to whom</span></th><td class="y"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-yes"/></svg><span class="un-sr">Yes</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td><td class="n"><svg class="un-ic" width="20" height="20" aria-hidden="true"><use href="#un-i-no"/></svg><span class="un-sr">No</span></td></tr>
   </tbody>
+  <tfoot><tr><th scope="row"><span class="un-cmp__t">Score</span></th><td class="un-cmp__win"><strong>7</strong>/7</td><td class=""><strong>1</strong>/7</td><td class=""><strong>3</strong>/7</td><td class=""><strong>3</strong>/7</td><td class=""><strong>1</strong>/7</td><td class=""><strong>2</strong>/7</td></tr></tfoot>
 </table>
-
 </div>
 
-"Partly" means it is there in some form but not the way Unseenet does it -
-the details, and the price Unseenet pays for its choices, are in
-[Why Unseenet](why.md).
+<p class="un-cmp__legend"><span><svg class="un-ic y" width="16" height="16" aria-hidden="true"><use href="#un-i-yes"/></svg> Yes</span>
+<span><svg class="un-ic p" width="16" height="16" aria-hidden="true"><use href="#un-i-part"/></svg> Partly - there in some form, not the way Unseenet does it</span>
+<span><svg class="un-ic n" width="16" height="16" aria-hidden="true"><use href="#un-i-no"/></svg> No</span></p>
+
+<div class="un-cmp__cta">
+  <a class="un-button un-button--primary" href="portable/">Try it now</a>
+  <a class="un-button" href="why/">Why Unseenet - and what it costs</a>
+</div>
+
+</div>
 
 ## Where to start
 
