@@ -121,6 +121,7 @@ nav:
       - "0029 Key-bound groups": spec/un-rfc-0029.md
       - "0030 Comments in channels": spec/un-rfc-0030.md
       - "0031 Markdown and emoji": spec/un-rfc-0031.md
+      - "0032 Mention notices": spec/un-rfc-0032.md
   - The project:
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md
