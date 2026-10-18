@@ -246,37 +246,177 @@
 .md-typeset .un-points dd { margin: 0.15rem 0 0.9rem; }
 
 /* ---- How is it different? ------------------------------------------------------ */
+/* A dark box like the hero, framed in green; the Unseenet column is lit up.
+   Other networks get a plain initial, not their logos (those are theirs). */
 
-.un-compare-wrap { overflow-x: auto; margin: 0.8rem 0 0.6rem; }
-.md-typeset table.un-compare {
-  display: table;
-  border-collapse: collapse;
-  width: 100%;
-  min-width: 34rem;
+.un-cmp {
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(52, 211, 153, 0.16), transparent 60%),
+    var(--un-ink);
+  color: var(--un-paper);
+  border: 2px solid var(--un-green);
+  border-radius: 16px;
+  padding: 2rem 2.2rem 1.8rem;
+  margin: 1rem 0 2rem;
+  box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.08), 0 18px 40px -18px rgba(16, 48, 42, 0.55);
+}
+.md-typeset .un-cmp p { margin: 0; }
+.md-typeset .un-cmp .un-cmp__kicker {
+  font-family: var(--un-mono);
   font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--un-green);
+}
+.md-typeset .un-cmp .un-cmp__headline {
+  margin-top: 0.35rem;
+  font-size: 1.55rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.md-typeset .un-cmp .un-cmp__headline span { color: var(--un-green); }
+.md-typeset .un-cmp .un-cmp__lede {
+  margin-top: 0.7rem;
+  max-width: 40em;
+  color: var(--un-muted);
+  font-size: 0.82rem;
+}
+
+.un-cmp__scroll { overflow-x: auto; scrollbar-color: var(--un-green-deep) transparent; margin: 0.6rem -0.4rem 0; padding: 0.9rem 0.4rem 0.2rem; }
+.md-typeset table.un-cmp__table {
+  display: table;
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: separate;
+  border-spacing: 0;
   border: 0;
   box-shadow: none;
+  font-size: 0.74rem;
+  background: transparent;
 }
-.md-typeset .un-compare th,
-.md-typeset .un-compare td {
-  padding: 0.4rem 0.55rem;
-  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+.md-typeset .un-cmp__table th,
+.md-typeset .un-cmp__table td {
+  padding: 0.6rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid rgba(232, 243, 239, 0.1);
   text-align: center;
-  white-space: nowrap;
+  vertical-align: middle;
+  color: var(--un-paper);
+  background: transparent;
 }
-.md-typeset .un-compare th[scope="row"] { text-align: left; white-space: normal; font-weight: 600; }
-.md-typeset .un-compare thead th { font-weight: 700; vertical-align: bottom; }
-/* The Unseenet column stands out a little */
-.md-typeset .un-compare th:nth-child(2),
-.md-typeset .un-compare td:nth-child(2) {
-  background: color-mix(in srgb, var(--un-green) 12%, transparent);
+.md-typeset .un-cmp__table tbody tr:hover th,
+.md-typeset .un-cmp__table tbody tr:hover td { background: rgba(232, 243, 239, 0.04); }
+
+/* Feature names: first column, kept in view when the table scrolls sideways */
+.md-typeset .un-cmp__table th[scope="row"] {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--un-ink);
+  min-width: 11rem;
+}
+.un-cmp__t { display: block; font-weight: 700; }
+.un-cmp__sub { display: block; font-weight: 400; font-size: 0.66rem; color: var(--un-muted); margin-top: 0.1rem; }
+
+/* Column heads */
+.md-typeset .un-cmp__table thead th {
+  vertical-align: bottom;
+  font-weight: 600;
+  padding-top: 1.4rem;
+  border-bottom: 1px solid rgba(232, 243, 239, 0.25);
+}
+.un-cmp__name { display: block; margin-top: 0.4rem; font-size: 0.72rem; line-height: 1.2; }
+.un-cmp__mono {
+  display: inline-grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 10px;
+  background: rgba(232, 243, 239, 0.08);
+  border: 1px solid rgba(232, 243, 239, 0.18);
+  color: var(--un-muted);
   font-weight: 700;
+  font-size: 0.9rem;
 }
-/* Words, not only colour, carry the meaning */
-.md-typeset .un-compare td.y { color: var(--un-green-deep); }
-.md-typeset .un-compare td.p { color: var(--md-default-fg-color--light); }
-.md-typeset .un-compare td.n { color: var(--md-default-fg-color--lighter); }
-[data-md-color-scheme="slate"] .md-typeset .un-compare td.y { color: var(--un-green); }
+
+/* The Unseenet column */
+.md-typeset .un-cmp__table th.un-cmp__us,
+.md-typeset .un-cmp__table td:nth-child(2) {
+  background: rgba(52, 211, 153, 0.14);
+  border-left: 2px solid var(--un-green);
+  border-right: 2px solid var(--un-green);
+}
+.md-typeset .un-cmp__table th.un-cmp__us {
+  position: relative;
+  border-top: 2px solid var(--un-green);
+  border-radius: 12px 12px 0 0;
+  color: #fff;
+  font-weight: 800;
+  min-width: 6.5rem;
+}
+.md-typeset .un-cmp__table tfoot td:nth-child(2) {
+  border-bottom: 2px solid var(--un-green);
+  border-radius: 0 0 12px 12px;
+}
+.un-cmp__us img { display: inline-block; width: 2.1rem; height: 2.1rem; }
+.un-cmp__badge {
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--un-green);
+  color: var(--un-ink);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+
+/* Icons, with the word kept for screen readers. The symbols draw in currentColor. */
+.un-ic { width: 1.25rem; height: 1.25rem; vertical-align: middle; display: inline-block; }
+.un-cmp .y .un-ic { color: rgba(232, 243, 239, 0.62); }
+.un-cmp td:nth-child(2).y .un-ic, .un-ic.y { color: var(--un-green); }
+.un-cmp .p .un-ic, .un-ic.p { color: var(--un-muted); }
+.un-cmp .n .un-ic, .un-ic.n { color: rgba(232, 243, 239, 0.35); }
+.un-cmp td:nth-child(2) .un-ic { width: 1.5rem; height: 1.5rem; filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.6)); }
+.un-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Score */
+.md-typeset .un-cmp__table tfoot th,
+.md-typeset .un-cmp__table tfoot td { border-bottom: 0; color: var(--un-muted); font-size: 0.72rem; }
+.md-typeset .un-cmp__table tfoot strong { color: var(--un-paper); font-size: 0.95rem; }
+.md-typeset .un-cmp__table td.un-cmp__win strong { color: var(--un-green); font-size: 1.25rem; }
+
+.md-typeset .un-cmp .un-cmp__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  margin-top: 1rem;
+  font-size: 0.68rem;
+  color: var(--un-muted);
+}
+.un-cmp__legend .un-ic { width: 1rem; height: 1rem; margin-right: 0.2rem; }
+.un-cmp__cta { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.4rem; }
+
+@media (max-width: 36em) {
+  .un-cmp { padding: 1.5rem 1.1rem 1.3rem; border-radius: 12px; }
+  .md-typeset .un-cmp .un-cmp__headline { font-size: 1.25rem; }
+  .md-typeset table.un-cmp__table { min-width: 31rem; font-size: 0.68rem; }
+  .md-typeset .un-cmp__table th[scope="row"] { min-width: 0; width: 7.2rem; max-width: 7.2rem; padding-left: 0.2rem; }
+  .md-typeset .un-cmp__table th, .md-typeset .un-cmp__table td { padding: 0.5rem 0.3rem; }
+  .un-cmp__sub { display: none; }
+  .md-typeset .un-cmp__table th.un-cmp__us { min-width: 5rem; }
+  .un-cmp__mono { width: 1.7rem; height: 1.7rem; font-size: 0.75rem; }
+}
 
 /* ---- Small screens ----------------------------------------------------------- */
 
