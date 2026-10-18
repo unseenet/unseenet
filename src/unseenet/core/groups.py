@@ -484,10 +484,12 @@ def _sender_message(group_id: str, outer_key_text: str, inner_canonical: bytes) 
 def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: str, body: str,
                   sender: crypto.Identity | None = None, reply_inbox: str | None = None,
                   references: list[str] | None = None, content_type: str | None = None,
-                  kind: str = KIND_POST, pow_bits: int = 18) -> Article:
+                  kind: str = KIND_POST, pow_bits: int = 18,
+                  extra: list[tuple[str, str]] | None = None) -> Article:
     """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
 
-    ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box.
+    ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box, as do
+    ``extra`` inner headers (e.g. a mention notice's, UN-RFC 0032).
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
@@ -499,6 +501,7 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
                ("Message-Kind", kind)]
     if reply_inbox:
         headers.append(("Reply-Inbox", reply_inbox))
+    headers.extend(extra or [])
     if sender is not None:
         headers.append(("Sender-Key", sender.key_text))
     inner = Article(headers, body)

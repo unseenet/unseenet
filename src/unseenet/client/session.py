@@ -19,7 +19,7 @@ from pathlib import Path
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ..core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
-from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
+from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
@@ -76,6 +76,8 @@ class Message:
     to_key: str | None = None             # a private message you sent: its recipient
     content_type: str = ""                # private messages: the inner Content-Type
     kind: str = KIND_POST               # private messages: a chat or a post (UN-RFC 0028)
+    mention_group: str | None = None      # a mention notice: where the post is (UN-RFC 0032)
+    mention_of: str | None = None         # ... and its Message-ID
 
     @property
     def author_fp(self) -> str:
@@ -1106,7 +1108,8 @@ class Session:
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
-                           kind: str = KIND_POST, remember: bool = True) -> str:
+                           kind: str = KIND_POST, remember: bool = True,
+                           extra: list[tuple[str, str]] | None = None) -> str:
         """Send a message to an inbox. Only its owner can read it.
 
         ``kind`` is ``"post"`` (a subject, read on its own, answered with a quote)
@@ -1130,7 +1133,8 @@ class Session:
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
-            references=references, content_type=content_type, kind=kind, pow_bits=bits))
+            references=references, content_type=content_type, kind=kind, pow_bits=bits,
+            extra=extra))
         msgid = art.message_id
         if not remember:
             return msgid
@@ -1222,8 +1226,11 @@ class Session:
 
     def for_me(self, msg: "Message", mine: set[str] | None = None,
                patterns: list | None = None) -> str | None:
-        """'reply' if the post answers one of yours, 'mention' if it names you, else None."""
-        if msg.private or not msg.readable:
+        """'reply' if the post answers one of yours, 'mention' if it names you, else None.
+        A checked mention notice (UN-RFC 0032) is a 'mention' too."""
+        if msg.private:
+            return "mention" if self.notice_ok(msg) else None
+        if not msg.readable:
             return None
         keys = {self.identity(n).key_text for n in self.data["identities"]}
         if msg.author_key in keys:
@@ -1247,6 +1254,7 @@ class Session:
             for m in self.visible(list(self.cache.get(gid, {}).values())):
                 if (not unread_only or not self.is_read(m)) and self.for_me(m, mine, patterns):
                     out.append(m)
+        out += [m for m in self.notices() if not unread_only or not self.is_read(m)]
         return sorted(out, key=lambda m: m.date or datetime.min.replace(tzinfo=timezone.utc),
                       reverse=True)
 
@@ -1259,7 +1267,9 @@ class Session:
         mine, patterns = self.my_message_ids(), self._mention_patterns()
         gids = ([group_id] if group_id is not None
                 else [g for g in self.data["subscribed"] if g != self.my_inbox])
-        replies = mentions = 0
+        replies = 0
+        mentions = (sum(1 for m in self.notices() if not self.is_read(m))   # UN-RFC 0032
+                    if group_id is None else 0)
         for gid in gids:
             for m in self.visible(list(self.cache.get(gid, {}).values())):
                 if self.is_read(m):
@@ -1270,6 +1280,186 @@ class Session:
                 elif why == "mention":
                     mentions += 1
         return ForYouCount(replies, mentions)
+
+    # --- mention notices (UN-RFC 0032) ------------------------------------------------
+    def notice_settings(self) -> dict:
+        """Whether you send notices to people you mention, and accept them (both on)."""
+        return {"send": True, "receive": True, **self.data.get("mention_notices", {})}
+
+    def set_notice_settings(self, send: bool | None = None, receive: bool | None = None) -> None:
+        st = self.data.setdefault("mention_notices", {})
+        if send is not None:
+            st["send"] = bool(send)
+        if receive is not None:
+            st["receive"] = bool(receive)
+        self.save()
+
+    def mentioned(self, subject: str, body: str) -> list[tuple[str, str]]:
+        """(name as written, key) of the people a text names by a certified name that
+        this client can resolve, in order, without you, each key once (section 4.1)."""
+        mine = {self.identity(n).key_text for n in self.data["identities"]}
+        out: list[tuple[str, str]] = []
+        text = split_signature(f"{subject}\n{body}")[0]
+        # quoted lines are someone else's words: quoting a mention tells nobody again
+        text = "\n".join(ln for ln in text.split("\n") if not ln.lstrip().startswith(">"))
+        for m in NAME_MENTION_RE.finditer(text):
+            local, parent = m.group(1), m.group(2).lower()
+            name = f"{local.lower()}@{parent}" if local else parent
+            try:
+                names.check_name(name)
+            except names.NameProblem:
+                continue
+            key = naming.key_for_name(self, name)
+            if key and key not in mine and all(k != key for _, k in out):
+                out.append((naming.name_text(name), key))
+        return out
+
+    def may_notify(self, group_id: str) -> bool:
+        """Notices are for posts in open, moderated and channel groups (section 4.1)."""
+        try:
+            if group_id == self.my_inbox or split_group_id(group_id)[0] == INBOX_NAME:
+                return False
+        except ValueError:
+            return False
+        gtype = self.manifest_data(group_id).get("type") or self.group_entry(group_id).get("type")
+        return gtype not in ("closed", "inbox")
+
+    async def send_mention_notices(self, group_id: str, msgid: str, subject: str, kind: str,
+                                   keys: list[str], delay: float | None = None) -> int:
+        """Tell up to 5 people that a post of yours names them (section 4). Waits a
+        random time first unless ``delay`` is given. Returns how many were sent."""
+        if not self.may_notify(group_id) or not keys:
+            return 0
+        if delay is None:
+            delay = random.uniform(5, 120)
+        if delay:
+            await asyncio.sleep(delay)
+        sent_before = self.data.setdefault("notices_sent", [])
+        label = self.group_label(group_id)
+        try:
+            ref = "#" + (label if "@" in label else f"{label}@{split_group_id(group_id)[1][:4]}")
+        except ValueError:
+            ref = group_id
+        title = subject if kind != KIND_CHAT and subject else "Mention"
+        sent = 0
+        for key in keys[:MAX_MENTION_NOTICES]:
+            mark = f"{msgid} {key}"
+            if mark in sent_before:
+                continue
+            try:
+                owner = crypto.key_from_text(key)
+                await self.send_private(
+                    personal_inbox_id(owner), title,
+                    f"{self.display_name()} mentioned you in {ref}: {title}\n",
+                    owner_key=owner, content_type=MENTION_TYPE + "; charset=utf-8",
+                    remember=False, extra=[("Mention-Group", group_id), ("Mention-Of", msgid)])
+            except (SessionError, OSError, ConnectionError, crypto.CryptoError, ValueError):
+                continue
+            sent_before.append(mark)
+            del sent_before[:-500]
+            sent += 1
+        self.save()
+        return sent
+
+    @staticmethod
+    def is_notice(m: "Message") -> bool:
+        return bool(m.private and m.mention_of and m.mention_group)
+
+    def _notice_states(self) -> dict:
+        return self.data.setdefault("notices", {})
+
+    def notice_ok(self, m: "Message") -> bool:
+        """A notice to show: checked, wanted, and not already marked in a followed
+        group (section 5, rules 1-2)."""
+        if not self.is_notice(m) or not self.notice_settings()["receive"]:
+            return False
+        if self._notice_states().get(m.message_id, {}).get("state") != "ok":
+            return False
+        if m.mention_group in self.data["subscribed"] and any(
+                x.message_id == m.mention_of for x in self.cache.get(m.mention_group, {}).values()):
+            return False
+        return not self.is_ignored(m.sender_key or "")
+
+    def notices(self) -> list["Message"]:
+        """Checked mention notices in your inbox, for For you."""
+        return [m for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
+                if self.notice_ok(m)]
+
+    def notice_post(self, m: "Message") -> dict:
+        """What the check found about the mentioned post: group, id, subject, from."""
+        return dict(self._notice_states().get(m.message_id, {}))
+
+    async def check_notices(self) -> int:
+        """Check new mention notices against their posts (section 5, rule 3). Returns
+        how many were found good."""
+        states = self._notice_states()
+        if not self.notice_settings()["receive"] or not self.my_inbox:
+            return 0
+        patterns = self._mention_patterns()
+        good = 0
+        changed = False
+        for m in list(self.cache.get(self.my_inbox, {}).values()):
+            if not self.is_notice(m):
+                continue
+            st = states.get(m.message_id, {})
+            if st.get("state") in ("ok", "bad") or st.get("tries", 0) >= 5:
+                continue
+            if not m.sender_key or self.is_ignored(m.sender_key):
+                states[m.message_id] = {"state": "bad"}
+                changed = True
+                continue
+            try:
+                post = await self._fetch_by_id(m.mention_group, m.mention_of)
+            except (SessionError, OSError, ConnectionError, NNTPError,
+                    asyncio.IncompleteReadError):
+                post = None
+            if post is None:
+                states[m.message_id] = {"state": "pending", "tries": st.get("tries", 0) + 1}
+                changed = True
+                continue
+            text = f"{post.subject}\n{post.body}"
+            ok = (post.readable and post.author_key == m.sender_key
+                  and any(p.search(text) for p in patterns))
+            states[m.message_id] = ({"state": "ok", "group": m.mention_group, "id": m.mention_of,
+                                     "subject": post.subject, "from": post.from_name}
+                                    if ok else {"state": "bad"})
+            changed = True
+            good += ok
+        if changed:
+            if len(states) > 2000:
+                for k in list(states)[:-2000]:
+                    states.pop(k)
+            self.save()
+        return good
+
+    async def _fetch_by_id(self, group_id: str, message_id: str) -> "Message | None":
+        """One article by Message-ID from a node that carries the group, read but not
+        kept: the check of a mention notice must not make you follow anything."""
+        if not message_id.startswith("<"):
+            return None
+
+        async def run(c: Client):
+            return await c.article(message_id)
+
+        targets = [self.node_for(group_id)] + [n for n in self.nodes if n != self.node_for(group_id)]
+        for node in [n for n in targets if n]:
+            try:
+                raw = await self._call(run, node)
+            except (SessionError, NNTPError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                continue
+            if raw is None:
+                continue
+            raw = strip_reader_headers(raw)
+            try:
+                art = Article.from_bytes(raw)
+            except ArticleError:
+                return None
+            if (art.get("Newsgroups") or "").strip() != group_id or art.message_id != message_id:
+                return None
+            entry = {"type": None, "owner": False, "keys": {}}
+            msg = self._parse(0, raw, group_id, entry, self.identity())
+            return msg if msg is not None and not msg.encrypted else None
+        return None
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown)."""
@@ -1374,7 +1564,10 @@ class Session:
 
     def _in_private_posts(self, m: "Message") -> bool:
         """Private posts; chats live in a conversation per person (chat_partners). An
-        anonymous chat has no person to belong to, so it stays here."""
+        anonymous chat has no person to belong to, so it stays here. Mention notices
+        are shown in For you instead (UN-RFC 0032, section 5)."""
+        if self.is_notice(m):
+            return False
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
     def private_posts(self) -> list["Message"]:
@@ -1565,6 +1758,8 @@ class Session:
             self.save()
         if fetched or changed:
             self.save_offline()
+        if group_id == self.my_inbox:
+            await self.check_notices()             # UN-RFC 0032, section 5
         return sorted(cache.values(), key=lambda m: m.number)
 
     # ------------------------------------------------------------------
@@ -1790,6 +1985,9 @@ class Session:
         msg.content_type = inner.get("Content-Type", "")
         msg.kind = message_kind(inner)
         msg.reply_inbox = inner.get("Reply-Inbox")
+        if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
+            msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
+            msg.mention_of = (inner.get("Mention-Of") or "").strip() or None
         if sender is None:
             msg.from_name, msg.author_key = "anonymous", ""
         else:
@@ -1904,6 +2102,13 @@ class Session:
 
 SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
 REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74)
+MENTION_TYPE = "text/x-unseenet-mention"  # a mention notice (UN-RFC 0032)
+MAX_MENTION_NOTICES = 5                   # per post (UN-RFC 0032, section 4.1)
+# @name, @domain.tld, local@name, local@domain.tld (UN-RFC 0019, section 4); not part of
+# a word, an address or a #group@fp reference
+NAME_MENTION_RE = re.compile(
+    r"(?<![\w@#.+-])(?:([a-z0-9][a-z0-9-]*))?@([a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*)"
+    r"(?![\w@-]|\.\w)", re.IGNORECASE)
 
 
 def default_vault_path() -> Path:

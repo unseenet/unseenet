@@ -35,12 +35,13 @@ from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
 from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
-                           personal_inbox_id, short_group_id)
+                           personal_inbox_id, short_group_id, split_group_id)
 from . import session as _session_module
 from . import naming
 from . import richtext
 from ..core import markup
 from .. import names as nm
+from .session import MAX_MENTION_NOTICES
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
                       default_vault_path, split_signature)
 
@@ -361,12 +362,46 @@ class ComposeDialog(Dialog):
             text = self.quote + (("\n" if self.quote else "\n\n") + SIG_SEPARATOR + self.signature
                                  if self.signature else "")
             yield TextArea(text, id="body", soft_wrap=True)
+            if self._notices():
+                yield Checkbox("Tell the people you mention (a notice in their inbox)",
+                               value=self.app.session.notice_settings()["send"], id="notify")
+                yield Label("", id="notify-who", classes="hint", markup=False)
             yield Label(("This group has rules - press Esc and ? to read them.  " if self.has_rules
                          else "") + "Ctrl+S to send. Sending takes a moment: the post carries a "
                         "small proof-of-work.", classes="hint")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Send", variant="primary", id="ok")
+
+    def _notices(self) -> bool:
+        """Mention notices go with posts in groups, not with private posts or closed groups."""
+        s = getattr(self.app, "session", None)
+        return bool(s) and self.group.type != "inbox" and s.may_notify(self.group.group_id)
+
+    def _mentioned(self) -> list[tuple[str, str]]:
+        return self.app.session.mentioned(self.query_one("#subject", Input).value,
+                                          self.query_one("#body", TextArea).text)
+
+    @on(TextArea.Changed)
+    @on(Input.Changed, "#subject")
+    @on(Checkbox.Changed, "#notify")
+    def _show_notified(self) -> None:
+        if not self._notices():
+            return
+        found = self._mentioned()
+        who = self.query_one("#notify-who", Label)
+        on = self.query_one("#notify", Checkbox).value
+        if not found:
+            who.update("")
+        elif not on:
+            who.update("Nobody is told: " + ", ".join(n for n, _ in found) + " see it only if "
+                       "they follow this group.")
+        else:
+            told = found[:MAX_MENTION_NOTICES]
+            who.update("Told: " + ", ".join(n for n, _ in told)
+                       + (f"  (at most {MAX_MENTION_NOTICES}; not told: "
+                          + ", ".join(n for n, _ in found[MAX_MENTION_NOTICES:]) + ")"
+                          if len(found) > MAX_MENTION_NOTICES else ""))
 
     def on_mount(self) -> None:
         body = self.query_one("#body", TextArea)
@@ -384,7 +419,10 @@ class ComposeDialog(Dialog):
         if not subject or not split_signature(body)[0].strip():
             self.app.notify("Subject and text are required", severity="error")
             return
-        self.dismiss((subject, body))
+        keys: list[str] = []
+        if self._notices() and self.query_one("#notify", Checkbox).value:
+            keys = [k for _, k in self._mentioned()][:MAX_MENTION_NOTICES]
+        self.dismiss((subject, body, keys))
 
 
 class SignatureDialog(Dialog):
@@ -1801,7 +1839,8 @@ class UnseenetApp(App):
                 first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
                 title = "» " + first[:60] + ("…" if len(first) > 60 else "")
             subject = ("  " * (depth - 1) + "└ " if depth else "") + title
-            if m.private:
+            notice = s.is_notice(m)                      # UN-RFC 0032: names you elsewhere
+            if m.private and not notice:
                 subject = f"{ICONS['inbox']} " + subject
             elif m.encrypted and m.readable:
                 subject = f"{ICONS['closed']} " + subject
@@ -1809,7 +1848,8 @@ class UnseenetApp(App):
             if why:
                 subject = (REPLY_MARK if why == "reply" else MENTION_MARK) + " " + subject
             if gid == FOR_YOU:
-                subject += f"  ({s.group_label(m.group)})"
+                subject += (f"  ({s.group_label(m.mention_group)}, not followed)" if notice
+                            else f"  ({s.group_label(m.group)})")
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
@@ -1887,6 +1927,56 @@ class UnseenetApp(App):
         if changed:
             self._save_soon()
 
+    @work(group="notices", exit_on_error=False)
+    async def _send_notices(self, gid: str, msgid: str, subject: str, kind: str,
+                            keys: list[str]) -> None:
+        """Mention notices, after a random wait so they do not arrive with the post
+        (UN-RFC 0032, section 4.1). Quitting before then skips them."""
+        try:
+            await self.session.send_mention_notices(gid, msgid, subject, kind, keys)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Mention notices not sent: {exc}", severity="warning")
+
+    def action_toggle_notices_send(self) -> None:
+        on = not self.session.notice_settings()["send"]
+        self.session.set_notice_settings(send=on)
+        self.notify("People you mention by name are told in their inbox (you can say no per "
+                    "post)" if on else "People you mention are no longer told; they see it if "
+                    "they follow the group")
+
+    def action_toggle_notices_receive(self) -> None:
+        on = not self.session.notice_settings()["receive"]
+        self.session.set_notice_settings(receive=on)
+        self.notify("Mentions of you in groups you do not follow show in For you" if on
+                    else "Mention notices from others are no longer shown")
+        self.refresh_groups()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_open_mentioned(self) -> None:
+        """From a mention notice in For you: go to the post, or to its group first."""
+        s, m = self.session, self.current_message
+        if m is None or not s.is_notice(m):
+            self.notify("Select a mention notice in For you first", severity="warning")
+            return
+        gid, msgid = m.mention_group, m.mention_of
+        s.mark_read(m)
+        if gid not in self.groups:
+            try:
+                name, fp = split_group_id(gid)
+            except ValueError:
+                return
+            self.action_group_ref(f"#{name}@{fp}")
+            return
+        self.select_group(gid)
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if msgid in self.messages:
+                break
+        if msgid in self.messages:
+            self.current_message = self.messages[msgid]
+        else:
+            self.notify("The post is not there any more - perhaps it was withdrawn", timeout=8)
+
     def action_toggle_markdown(self) -> None:
         """Send what you write as Markdown (the default) or as plain text (UN-RFC 0031)."""
         on = self.session.text_type() != markup.MARKDOWN_TYPE
@@ -1929,6 +2019,12 @@ class UnseenetApp(App):
                 msgid = await self.session.post(gid, "", text, kind=KIND_CHAT)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
+                elif (self.session.notice_settings()["send"] and self.session.may_notify(gid)):
+                    found = self.session.mentioned("", text)[:MAX_MENTION_NOTICES]
+                    if found:
+                        self._send_notices(gid, msgid, "", KIND_CHAT, [k for _, k in found])
+                        self.notify("Told: " + ", ".join(n for n, _ in found)
+                                    + "  (turn off in Ctrl+P)", timeout=6)
                 await self.session.fetch_group(gid)
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
@@ -2042,6 +2138,9 @@ class UnseenetApp(App):
         if self.current_message is None:
             self.notify("Select a post first", severity="warning")
             return
+        if self.session.is_notice(self.current_message):     # go to the post it is about
+            self.action_open_mentioned()
+            return
         self.push_screen(ReadScreen(self.current_message))
 
     @on(DataTable.RowHighlighted, "#threads")
@@ -2154,7 +2253,7 @@ class UnseenetApp(App):
             signature=self.session.signature()))
         if not result:
             return
-        subject, body = result
+        subject, body, _ = result
         self.set_status("Sending (computing postage) ...")
         try:
             await self.session.send_private(target, subject, body, owner_key=owner_key,
@@ -2360,7 +2459,7 @@ class UnseenetApp(App):
             has_rules=bool(self.session.manifest_data(g.group_id).get("rules"))))
         if not result:
             return
-        subject, body = result
+        subject, body, notify = result
         self.set_status("Sending (computing postage) ...")
         try:
             msgid = await self.session.post(g.group_id, subject, body, references)
@@ -2371,7 +2470,11 @@ class UnseenetApp(App):
             self.notify("Sent to the moderators. It appears in the group when one of them "
                         "approves it.", timeout=10)
         else:
-            self.notify("Sent")
+            self.notify("Sent" + (f" - {len(notify)} "
+                                  + ("person is" if len(notify) == 1 else "people are")
+                                  + " told in a few minutes" if notify else ""))
+            if notify:
+                self._send_notices(g.group_id, msgid, subject, KIND_POST, notify)
         self.select_group(g.group_id)
 
     @work(group="dialog", exit_on_error=False)
@@ -2720,6 +2823,14 @@ class UnseenetApp(App):
              "What you write is sent as Markdown (*emphasis*, `code`, :tada:) or as plain text "
              "(UN-RFC 0031)", self.action_toggle_markdown),
             ("About this group", "Its rules, type, owner and settings  [?]", self.action_group_info),
+            ("Open the mentioned post", "From a mention notice in For you: the post that names "
+             "you, or its group first", self.action_open_mentioned),
+            ("Stop telling people you mention" if self.session.notice_settings()["send"]
+             else "Tell people you mention", "A short notice in their inbox, so they see it even "
+             "if they do not follow the group (UN-RFC 0032)", self.action_toggle_notices_send),
+            ("Stop showing mention notices" if self.session.notice_settings()["receive"]
+             else "Show mention notices", "Others' notices that a post in a group you do not "
+             "follow names you", self.action_toggle_notices_receive),
             ("Go to a #group in this post", "Open a group the selected post names, such as "
              "#dk.snak, or subscribe to it  [#]", self.action_group_ref),
             ("Switch chat / threads", "Show the current group as a chat or as threads  [v]",

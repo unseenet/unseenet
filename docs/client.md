@@ -156,6 +156,24 @@ naming you. When new ones arrive, the client tells you which kind.
 Display names do not count as mentions, since anyone can call themselves
 anything. All this is worked out in your client; nothing is sent anywhere.
 
+### Telling the people you mention
+
+If you name someone in a group they do not follow, they would never see
+it. So when your post names people by their certified names, the client
+also sends each of them a short **mention notice** to their inbox
+([UN-RFC 0032](spec/un-rfc-0032.md)): who wrote, in which group, and the
+subject - never the text. The compose window shows who will be told, and
+you can untick it for that post; *Stop telling people you mention* in the
+command palette turns it off altogether. At most 5 people are told per
+post, a few minutes after it is sent. Nobody is told about posts in
+closed groups or private posts.
+
+Notices you get show in **For you** with ♦ and the group's name; ++enter++
+takes you to the post, or shows the group and asks before subscribing.
+Your client first checks that the post exists, that the sender wrote it
+and that it really names you; notices from people you ignore are dropped,
+and *Stop showing mention notices* turns them off.
+
 ## Pointing to another group
 
 Write `#` and a group's name to point someone to it: *you'll probably get

@@ -492,6 +492,21 @@ def holder_of(s: "Session", name: str) -> str | None:
     return _holder(s, _all_certs(s), name, datetime.now(timezone.utc))
 
 
+def key_for_name(s: "Session", name: str) -> str | None:
+    """The key a name belongs to now, as this client knows (section 8.3): a registered
+    or domain name, a name given in DNS, or a name under a name. None if unknown."""
+    now = datetime.now(timezone.utc)
+    certs = _all_certs(s)
+    key = _holder(s, certs, name, now)
+    if key or "@" not in name:
+        return key
+    for c in certs:                       # a name under a name: _sub_names decides
+        if c.kind == "sub" and c.name == name and any(
+                x.name == name for x in _sub_names(s, certs, c.key, now)):
+            return c.key
+    return None
+
+
 async def request_subname(s: "Session", name: str) -> str:
     """Ask the holder of the parent for ``local@parent`` (section 5.4)."""
     from .session import SessionError
