@@ -53,6 +53,14 @@ def test_versions_order():
     assert sorted(order, key=update.version_key) == order
 
 
+def test_versions_order_pre_releases():
+    """A stick on an alpha or its development build updates to the release (PEP 440)."""
+    order = ["0.3.0.dev5", "0.3.0a1.dev2", "0.3.0a1", "0.3.0a2.dev10", "0.3.0a2",
+             "0.3.0b1", "0.3.0rc1.dev1", "0.3.0rc1", "0.3.0", "0.3.1.dev1", "v0.3.1"]
+    assert sorted(reversed(order), key=update.version_key) == order
+    assert update.version_key("0.3.0") > update.version_key("0.3.0a2.dev10")
+
+
 def test_stable_trusts_only_the_project_key(keys, tmp_path):
     project, release = keys
     sums = sums_for(update_zip(tmp_path, {"a": "1"}))
