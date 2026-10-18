@@ -125,6 +125,7 @@ nav:
       - "0030 Comments in channels": spec/un-rfc-0030.md
       - "0031 Markdown and emoji": spec/un-rfc-0031.md
       - "0032 Mention notices": spec/un-rfc-0032.md
+      - "0033 Pinned posts": spec/un-rfc-0033.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
