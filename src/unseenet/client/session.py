@@ -11,6 +11,7 @@ import random
 import re
 import base64
 import json
+import textwrap
 from dataclasses import dataclass, field
 from typing import NamedTuple
 from datetime import datetime, timedelta, timezone
@@ -79,6 +80,7 @@ class Message:
     kind: str = KIND_POST               # private messages: a chat or a post (UN-RFC 0028)
     mention_group: str | None = None      # a mention notice: where the post is (UN-RFC 0032)
     mention_of: str | None = None         # ... and its Message-ID
+    notices_for: str | None = None        # a bundle of notices for a submission (0032, 4.3)
 
     @property
     def author_fp(self) -> str:
@@ -153,7 +155,7 @@ class Session:
             for entry in d["groups"].values():
                 entry.setdefault("node", d["nodes"][0])
         self.sent: list[dict] = self._load_sent()
-        self._notice_tasks: dict[str, asyncio.Task] = {}   # notices on their way, by post
+        self._notice_tasks: dict[str, asyncio.Task] = {}   # approved notices being posted
 
     # ------------------------------------------------------------------
     # identities & settings
@@ -744,6 +746,7 @@ class Session:
         except SessionError as exc:
             if "duplicate" not in str(exc).lower():
                 raise                       # a duplicate: someone else approved it first
+        self._queue_notices(self.notice_bundle(art))     # UN-RFC 0032 section 4.3
         self._moderation_done(msg)
 
     async def reject_submission(self, msg: "Message", reason: str = "") -> None:
@@ -1455,29 +1458,20 @@ class Session:
         """Tell up to 5 people that a post of yours names them (section 4). Waits a
         random time first unless ``delay`` is given. Returns how many were sent.
 
-        A post sent to the moderators is not in the group yet: the notices wait
-        until it appears there (approved, same Message-ID), and go then."""
+        A post sent to the moderators is not in the group yet: the notices are built
+        now and go to the moderators with it, who post them when they approve it
+        (section 4.3) - so it does not matter when you are online again."""
         if not self.may_notify(group_id) or not keys:
             return 0
         if self.was_submitted(group_id, msgid) and not any(
                 m.message_id == msgid for m in self.cache.get(group_id, {}).values()):
-            waiting = self.data.setdefault("notices_waiting", {})
-            waiting[msgid] = {"group": group_id, "subject": subject, "kind": kind,
-                              "keys": keys[:MAX_MENTION_NOTICES],
-                              "since": datetime.now(timezone.utc).isoformat()}
-            self.save()
-            return 0
+            return await self._send_notice_bundle(group_id, msgid, subject, kind,
+                                                  keys[:MAX_MENTION_NOTICES])
         if delay is None:
             delay = random.uniform(5, 120)
         if delay:
             await asyncio.sleep(delay)
         sent_before = self.data.setdefault("notices_sent", [])
-        label = self.group_label(group_id)
-        try:
-            ref = "#" + (label if "@" in label else f"{label}@{split_group_id(group_id)[1][:4]}")
-        except ValueError:
-            ref = group_id
-        title = subject if kind != KIND_CHAT and subject else "Mention"
         sent = 0
         for key in keys[:MAX_MENTION_NOTICES]:
             mark = f"{msgid} {key}"
@@ -1485,11 +1479,10 @@ class Session:
                 continue
             try:
                 owner = crypto.key_from_text(key)
+                title, body, extra = self._notice_content(group_id, msgid, subject, kind)
                 await self.send_private(
-                    personal_inbox_id(owner), title,
-                    f"{self.display_name()} mentioned you in {ref}: {title}\n",
-                    owner_key=owner, content_type=MENTION_TYPE + "; charset=utf-8",
-                    remember=False, extra=[("Mention-Group", group_id), ("Mention-Of", msgid)])
+                    personal_inbox_id(owner), title, body, owner_key=owner,
+                    content_type=MENTION_TYPE + "; charset=utf-8", remember=False, extra=extra)
             except (SessionError, OSError, ConnectionError, crypto.CryptoError, ValueError):
                 continue
             sent_before.append(mark)
@@ -1497,6 +1490,130 @@ class Session:
             sent += 1
         self.save()
         return sent
+
+    def _notice_content(self, group_id: str, msgid: str, subject: str,
+                        kind: str) -> tuple[str, str, list[tuple[str, str]]]:
+        """Subject, one-line body and inner headers of a notice (section 3)."""
+        label = self.group_label(group_id)
+        try:
+            ref = "#" + (label if "@" in label else f"{label}@{split_group_id(group_id)[1][:4]}")
+        except ValueError:
+            ref = group_id
+        title = subject if kind != KIND_CHAT and subject else "Mention"
+        return (title, f"{self.display_name()} mentioned you in {ref}: {title}\n",
+                [("Mention-Group", group_id), ("Mention-Of", msgid)])
+
+    async def _send_notice_bundle(self, group_id: str, msgid: str, subject: str, kind: str,
+                                  keys: list[str]) -> int:
+        """Section 4.3: build the notices of a submitted post (sealed to each person,
+        signed, with postage) and send them to the moderators with the submission."""
+        title, body, extra = self._notice_content(group_id, msgid, subject, kind)
+        loop = asyncio.get_running_loop()
+        built = []
+        for key in keys:
+            try:
+                owner = crypto.key_from_text(key)
+                inbox = personal_inbox_id(owner)
+                if not self.manifest_data(inbox):
+                    await self.inbox_owner(inbox)               # learns its postage
+                bits = await self.required_pow(inbox)
+                art = await loop.run_in_executor(None, lambda: inbox_article(
+                    inbox, owner, from_name=self.display_name(), subject=title, body=body,
+                    sender=self.identity(), reply_inbox=self.my_inbox,
+                    content_type=MENTION_TYPE + "; charset=utf-8", kind=KIND_POST,
+                    pow_bits=bits, extra=extra))
+            except (SessionError, OSError, ConnectionError, crypto.CryptoError, ValueError):
+                continue
+            built.append(art)
+        if not built:
+            return 0
+        bundle = "\n".join("\n".join(textwrap.wrap(base64.b64encode(a.to_bytes()).decode(), 76))
+                           + "\n" for a in built)
+        delivered = 0
+        for inbox, owner_key in self.submission_targets(group_id):
+            try:
+                await self.send_private(inbox, f"Mention notices for {msgid}", bundle,
+                                        owner_key=owner_key, content_type=NOTICES_TYPE,
+                                        remember=False, extra=[("Notices-For", msgid)])
+                delivered += 1
+            except (SessionError, OSError, ConnectionError):
+                continue
+        if not delivered:
+            return 0
+        marks = self.data.setdefault("notices_sent", [])
+        marks.extend(f"{msgid} {k}" for k in keys)
+        del marks[:-500]
+        self.save()
+        return len(built)
+
+    # --- the moderator's side (section 4.3) ---------------------------------------
+    def notice_bundle(self, art: Article) -> list[Article]:
+        """The notices the author sent with a submission: inbox articles to personal
+        inboxes, from a bundle the author signed. At most 5."""
+        author = art.get("Author-Key", "")
+        for m in self.private_messages():
+            if not (m.content_type.startswith(NOTICES_TYPE) and m.notices_for == art.message_id
+                    and m.sender_key and m.sender_key == author):
+                continue
+            out = []
+            for block in re.split(r"\n\s*\n", m.body.strip()):
+                try:
+                    raw = base64.b64decode("".join(block.split()), validate=True)
+                    notice = Article.from_bytes(raw)
+                    validate_structure(notice, raw_size=len(raw))
+                except (ValueError, ArticleError):
+                    continue
+                if (notice.get("Encrypted", "").strip() == INBOX_SCHEME
+                        and split_group_id(notice.group)[0] == INBOX_NAME):
+                    out.append(notice)
+            return out[:MAX_MENTION_NOTICES]
+        return []
+
+    def _queue_notices(self, notices: list[Article]) -> None:
+        """Keep approved notices to post after a random wait (persisted: a moderator
+        who quits before then posts them next time)."""
+        if not notices:
+            return
+        due = datetime.now(timezone.utc) + timedelta(seconds=random.uniform(5, 120))
+        q = self.data.setdefault("notices_to_post", [])
+        q.extend({"raw": base64.b64encode(a.to_bytes()).decode(), "due": due.isoformat()}
+                 for a in notices)
+        del q[:-200]
+        self.save()
+        self._schedule_notice_posting()
+
+    def _schedule_notice_posting(self) -> None:
+        if self.data.get("notices_to_post") and not self._notice_tasks.get("post"):
+            self._notice_tasks["post"] = asyncio.get_running_loop().create_task(
+                self._post_queued_notices())
+
+    async def _post_queued_notices(self) -> None:
+        try:
+            while self.data.get("notices_to_post"):
+                q = self.data["notices_to_post"]
+                now = datetime.now(timezone.utc)
+                item = min(q, key=lambda x: x["due"])
+                wait = (datetime.fromisoformat(item["due"]) - now).total_seconds()
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                try:
+                    raw = base64.b64decode(item["raw"])
+                    await self._post_article(Article.from_bytes(raw))
+                except SessionError as exc:
+                    if "duplicate" not in str(exc).lower():
+                        item["tries"] = item.get("tries", 0) + 1
+                        if item["tries"] < 5:
+                            item["due"] = (now + timedelta(minutes=10)).isoformat()
+                            self.save()
+                            continue
+                except (OSError, ConnectionError, asyncio.IncompleteReadError):
+                    return                       # offline: try again on the next refresh
+                except (ValueError, ArticleError):
+                    pass
+                q.remove(item)
+                self.save()
+        finally:
+            self._notice_tasks.pop("post", None)
 
     @staticmethod
     def is_notice(m: "Message") -> bool:
@@ -1703,7 +1820,7 @@ class Session:
         """Private posts; chats live in a conversation per person (chat_partners). An
         anonymous chat has no person to belong to, so it stays here. Mention notices
         are shown in For you instead (UN-RFC 0032, section 5)."""
-        if self.is_notice(m):
+        if self.is_notice(m) or m.content_type.startswith(NOTICES_TYPE):
             return False
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
@@ -1897,39 +2014,9 @@ class Session:
             self.save_offline()
         if group_id == self.my_inbox:
             await self.check_notices()             # UN-RFC 0032, section 5
-        self._release_waiting_notices(group_id)
+        if group_id == self.my_inbox:
+            self._schedule_notice_posting()        # approved notices still to go (4.3)
         return sorted(cache.values(), key=lambda m: m.number)
-
-    def _release_waiting_notices(self, group_id: str) -> None:
-        """Send the notices of posts the moderators have now approved (they are in the
-        group); forget those of posts that never came (rejected) after 30 days."""
-        waiting = self.data.get("notices_waiting")
-        if not waiting:
-            return
-        here = {m.message_id for m in self.cache.get(group_id, {}).values()}
-        now = datetime.now(timezone.utc)
-        changed = False
-        for msgid, w in list(waiting.items()):
-            try:
-                old = now - datetime.fromisoformat(w["since"]) > timedelta(days=30)
-            except (KeyError, ValueError):
-                old = True
-            if old:
-                waiting.pop(msgid)
-                changed = True
-            elif w.get("group") == group_id and msgid in here and msgid not in self._notice_tasks:
-                self._notice_tasks[msgid] = asyncio.get_running_loop().create_task(
-                    self._send_waiting(msgid, w))
-        if changed:
-            self.save()
-
-    async def _send_waiting(self, msgid: str, w: dict) -> None:
-        try:
-            await self.send_mention_notices(w["group"], msgid, w["subject"], w["kind"], w["keys"])
-            self.data.get("notices_waiting", {}).pop(msgid, None)
-            self.save()
-        finally:
-            self._notice_tasks.pop(msgid, None)
 
     # ------------------------------------------------------------------
     # offline cache (UN-RFC 0007: encrypted with the vault key)
@@ -2157,6 +2244,8 @@ class Session:
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
             msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
             msg.mention_of = (inner.get("Mention-Of") or "").strip() or None
+        elif msg.content_type.startswith(NOTICES_TYPE):
+            msg.notices_for = (inner.get("Notices-For") or "").strip() or None
         if sender is None:
             msg.from_name, msg.author_key = "anonymous", ""
         else:
@@ -2272,6 +2361,7 @@ class Session:
 SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
 REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74)
 MENTION_TYPE = "text/x-unseenet-mention"  # a mention notice (UN-RFC 0032)
+NOTICES_TYPE = "application/x-unseenet-notices"   # notices sent with a submission (0032, 4.3)
 MAX_MENTION_NOTICES = 5                   # per post (UN-RFC 0032, section 4.1)
 # @name, @domain.tld, local@name, local@domain.tld (UN-RFC 0019, section 4); not part of
 # a word, an address or a #group@fp reference

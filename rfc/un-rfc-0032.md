@@ -95,6 +95,39 @@ Sending notices is **on by default**. The client SHOULD show, before a
 post is sent, who will get a notice, and MUST let the user turn
 notices off for that post and in general.
 
+## 4.3 Posts to Moderated Groups
+
+A post submitted to a moderated group (UN-RFC 0009 section 3) is not in
+the group until a moderator approves it, and its author may not be
+online then. So the notices travel with the submission:
+
+1. When submitting, the writer's client builds each notice of section 3
+   as a complete inbox article (sealed to the receiver, signed, with the
+   postage of the receiver's inbox), with `Mention-Of` set to the
+   submitted article's Message-ID, which approval does not change.
+2. It sends them, in one **notice bundle**, to the same inboxes as the
+   submission: an inbox article whose inner article has
+
+   | Header         | Value                                      |
+   |----------------|--------------------------------------------|
+   | `Content-Type` | `application/x-unseenet-notices`           |
+   | `Notices-For`  | Message-ID of the submitted article        |
+   | `Sender-Key`   | Required: the submitted article's author   |
+
+   and as body each notice in base64 (lines of at most 76 characters),
+   separated by an empty line. At most 5 notices.
+3. A moderator's client that approves the submission posts the notices
+   of a bundle whose `Sender-Key` is the submitted article's
+   `Author-Key`, after a random wait as in section 4.1. It MUST NOT post
+   anything from a bundle that is not an inbox article to a personal
+   inbox (UN-RFC 0009 section 2.2), and MUST NOT post a bundle's notices
+   if it rejects the submission. If several moderators approve, the node
+   refuses the second copies as duplicates.
+
+The moderator cannot read the notices, and cannot change them without
+breaking the author's signature. A bundle is not shown as a private
+post.
+
 # 5. Receiver's Client
 
 A client that receives a notice:
@@ -134,6 +167,8 @@ networks.
   the optional inner headers, with the content type of section 3.
 - UN-RFC 0019 section 8: a client MAY send and receive mention notices
   as described here.
+- UN-RFC 0009 section 3: a submission MAY be followed by a notice bundle
+  (section 4.3), which a moderator posts on approval.
 
 # 8. Security and Privacy Considerations
 
@@ -154,6 +189,9 @@ networks.
   written by someone else, or does not name the receiver is discarded
   after the check, so it cannot be used to draw people to arbitrary
   posts or groups.
+- **Moderators:** a notice bundle tells a moderator whose inboxes the
+  author will notify, which the post's text says anyway. A moderator can
+  hold back the notices only by holding back the post.
 - **Withdrawn posts:** if the mentioned post is withdrawn (UN-RFC 0004),
   the check fails and the notice is not shown, or is removed.
 

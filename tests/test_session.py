@@ -973,8 +973,9 @@ async def test_mention_notices(tmp_path, monkeypatch):
     server.close()
 
 
-async def test_mention_notices_wait_for_approval(tmp_path, monkeypatch):
-    """UN-RFC 0032 in a moderated group: the notices go when the post is approved."""
+async def test_mention_notices_go_with_approval(tmp_path, monkeypatch):
+    """UN-RFC 0032 section 4.3: the author builds the notices when submitting; the
+    moderator posts them on approval - the author need not be online."""
     from unseenet import names as nm
     from unseenet.core import crypto
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
@@ -992,8 +993,9 @@ async def test_mention_notices_wait_for_approval(tmp_path, monkeypatch):
     for p in (owner, user, sonia):
         await p.ensure_inbox()
     reg = crypto.Identity.generate()
-    _registrar_store(user, reg, [nm.make_certificate(reg, "sonia", sonia.identity().key_text, 1)])
-    _registrar_store(sonia, reg, [nm.make_certificate(reg, "sonia", sonia.identity().key_text, 1)])
+    cert = [nm.make_certificate(reg, "sonia", sonia.identity().key_text, 1)]
+    _registrar_store(user, reg, cert)
+    _registrar_store(sonia, reg, cert)
     gid = await owner.create_group("dk.mod", "moderated", min_pow=8)
     user.subscribe(gid)
     await user.fetch_group(gid)
@@ -1001,18 +1003,21 @@ async def test_mention_notices_wait_for_approval(tmp_path, monkeypatch):
     text = "Hvad siger du, @sonia?\n"
     msgid = await user.post(gid, "Spørgsmål", text)
     keys = [k for _, k in user.mentioned("Spørgsmål", text)]
-    assert await user.send_mention_notices(gid, msgid, "Spørgsmål", "post", keys) == 0
-    assert msgid in user.data["notices_waiting"]
+    assert await user.send_mention_notices(gid, msgid, "Spørgsmål", "post", keys) == 1
+    await user.close()                                             # the author goes away
     await sonia.fetch_group(sonia.my_inbox)
     assert sonia.for_you() == []                                   # nothing before approval
 
     await owner.fetch_group(owner.my_inbox)
-    await owner.approve_submission(*owner.submissions()[0])
-    await user.fetch_group(gid)                                    # the post is there now
-    await asyncio.gather(*user._notice_tasks.values())
-    assert user.data["notices_waiting"] == {}
+    (msg, art), = owner.submissions()
+    assert len(owner.notice_bundle(art)) == 1
+    assert not any(m.notices_for for m in owner.private_posts())   # not a post to read
+    await owner.approve_submission(msg, art)
+    await asyncio.gather(*owner._notice_tasks.values())
+    assert owner.data["notices_to_post"] == []
     await sonia.fetch_group(sonia.my_inbox)
     assert [m.mention_of for m in sonia.for_you()] == [msgid]
-    for p in (owner, user, sonia):
+    assert sonia.for_you()[0].sender_key == user.identity().key_text   # from the author
+    for p in (owner, sonia):
         await p.close()
     server.close()
