@@ -116,7 +116,7 @@ nav:
       - "0025 Key ripening": spec/un-rfc-0025.md
       - "0026 Nostr gateways": spec/un-rfc-0026.md
       - "0027 Attachments": spec/un-rfc-0027.md
-      - "0028 Chats and letters": spec/un-rfc-0028.md
+      - "0028 Chats and posts": spec/un-rfc-0028.md
   - The project:
       - The project's keys: project/keys.md
       - Running a registrar replica: project/registrar.md

@@ -80,7 +80,7 @@ After that the connection is reused.
 
 ![The client: your groups on the left, the posts in the selected group, and the selected post below](img/client-main.svg)
 
-On the left are your groups, by hierarchy, with your private letters and
+On the left are your groups, by hierarchy, with your private posts and
 contacts at the top. On the right are the posts in the selected group as
 threads, and below them the selected post. The authors show who is who:
 `Sonia √` is a contact you named yourself, `Mikkel~` followed by four
@@ -100,7 +100,8 @@ else is in the command palette, ++ctrl+p++:
 | ++n++ | New post in the current group |
 | ++r++ | Reply to the selected post |
 | ++ctrl+s++ | Send (in the compose window) |
-| ++m++ | Write a private letter (pre-filled with the selected post's author); to chat instead: ++ctrl+p++, *Chat with someone* |
+| ++m++ | Write a private post: type a contact's name or paste a key (pre-filled with the selected post's author); to chat instead: ++ctrl+p++, *Chat with someone* |
+| ++c++ | Your contacts: chat, write a private post, rename or remove |
 | ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
 | `@` | Your names: claim a name such as `@lorensen`, see the ones you hold |
@@ -356,9 +357,9 @@ Every identity has a personal **inbox**. The client creates it on the
 node the first time you connect. A private message is one of two kinds
 ([UN-RFC 0028](spec/un-rfc-0028.md)), and you choose which when you write:
 
-- a **letter** has a subject, is read on its own and answered with a
-  quote, like a post. Letters are at the top of the group list as
-  *@ Letters*, threaded, with the ones you sent among them (*You → name*).
+- a **post** has a subject, is read on its own and answered with a
+  quote, just like a post in a group. Private posts are at the top of the group list as
+  *@ Private posts*, threaded, with the ones you sent among them (*You → name*).
 - a **chat** is a line in a running conversation, without a subject.
   Chats are under *Chats* in the group list, one conversation per
   person: your contacts (`•`), and anyone else you have chatted with
@@ -369,10 +370,10 @@ Only the recipient can see which kind a message is: the kind is inside
 the sealed message. The copy on the node is sealed to the recipient, so
 the client keeps its own copy of what you sent, encrypted in your vault.
 
-- To write a letter, press ++m++ and paste their key (they find it with
+- To write a private post, press ++m++ and type a contact's name, or paste a key (they find it with
   ++k++). If you have a post by them selected, their key is filled in.
 - To chat, open the contact, or use ++ctrl+p++, *Chat with someone*.
-  In a chat, ++n++ writes a letter to them instead.
+  In a chat, ++n++ writes a post to them instead.
 - Only the recipient can read the message. The node cannot, and it does
   not even learn who sent it: the message is sealed to the recipient's key
   and signed with a key that is used only once.
@@ -392,7 +393,7 @@ an inbox, and you write to someone with ++m++ instead.
 Press ++a++ on a post or a private message to add its author as a
 **contact**, under a name you choose. Contacts appear in the group list
 under *Chats*; selecting one shows your chat with that person, both
-directions, in order. ++n++ there writes them a letter instead.
+directions, in order. ++n++ there writes them a post instead.
 
 - The name is yours alone and is tied to the person's key. Someone else
   can call themselves "Sonia", but only the real one shows as

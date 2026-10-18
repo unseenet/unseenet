@@ -34,7 +34,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import INBOX_NAME, KIND_CHAT, KIND_LETTER, personal_inbox_id
+from ..core.groups import INBOX_NAME, KIND_CHAT, KIND_POST, personal_inbox_id
 from . import session as _session_module
 from . import naming
 from .. import names as nm
@@ -452,9 +452,9 @@ DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": 
             "data": ("data", False)}
 # what a group takes (UN-RFC 0028, 4.1); "both" is the manifest's default
 KINDS_CHOICES = [("Takes posts and chat lines", "both"),
-                 ("Takes posts with a subject only (a discussion group)", "letter"),
+                 ("Takes posts with a subject only (a discussion group)", "post"),
                  ("Takes chat lines only (a chat group)", "chat")]
-KINDS = {"both": None, "letter": ["letter"], "chat": ["chat"]}
+KINDS = {"both": None, "post": ["post"], "chat": ["chat"]}
 
 
 GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
@@ -595,6 +595,42 @@ class KeyListDialog(Dialog):
             self.dismiss(who)
 
 
+class ContactsDialog(Dialog):
+    """Your address book (c): everyone you have named, and what to do with them -
+    chat, write a post, rename, remove (UN-RFC 0028: both kinds, one place)."""
+
+    BINDINGS = [Binding("escape", "cancel", "Close")]
+
+    def __init__(self, contacts: list[tuple[str, str]]):
+        super().__init__()
+        self.contacts = contacts
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Contacts", classes="title")
+            if not self.contacts:
+                yield Static("No contacts yet. Press a on a post or a message to add its author "
+                             "under a name of your own.", markup=False)
+            else:
+                yield Label(f"{len(self.contacts)} people, under the names you gave them. "
+                            "Pick one, then what to do.", classes="hint", markup=False)
+                yield Select([(name, key) for key, name in self.contacts], prompt="Choose",
+                             value=self.contacts[0][0], allow_blank=False, id="who")
+            with Horizontal(classes="buttons"):
+                yield Button("Close", id="cancel")
+                if self.contacts:
+                    yield Button("Remove", variant="error", id="remove")
+                    yield Button("Rename", id="rename")
+                    yield Button("Write a post", id="post")
+                    yield Button("Chat", variant="primary", id="chat")
+
+    @on(Button.Pressed, "#chat, #post, #rename, #remove")
+    def _act(self, event: Button.Pressed) -> None:
+        who = self.query_one("#who", Select).value
+        if isinstance(who, str):
+            self.dismiss((event.button.id, who))
+
+
 class ReportDialog(Dialog):
     """Report a post to the people who can act on it (#74)."""
 
@@ -722,7 +758,7 @@ class GroupInfoDialog(Dialog):
                  f"Shown as:  {d.get('view', 'threads')}"
                  + ("   fast delivery (less anonymity about who posts from where)"
                     if d.get("low_latency") else ""),
-                 "Takes:     " + {("letter",): "posts with a subject only (a discussion group)",
+                 "Takes:     " + {("post",): "posts with a subject only (a discussion group)",
                                   ("chat",): "chat lines only (a chat group)"}.get(
                      tuple(d.get("kinds") or ()), "posts and chat lines"),
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
@@ -1284,6 +1320,7 @@ class UnseenetApp(App):
         Binding("g", "browse", "Groups"),
         Binding("j", "join", "Join", show=False),
         Binding("m", "message", "Message"),
+        Binding("c", "contacts", "Contacts", show=False),
         Binding("o", "node_info", "Nodes", show=False),
         Binding("k", "show_key", "My key", show=False),
         Binding("at", "names", "Names", show=False),
@@ -1532,7 +1569,7 @@ class UnseenetApp(App):
         tree.clear()
 
         def label(g: GroupInfo) -> Text:
-            unread = (self.session.unread_letters() if g.group_id == self.session.my_inbox
+            unread = (self.session.unread_private_posts() if g.group_id == self.session.my_inbox
                       else self.session.unread_count(g.group_id))
             mine = self.session.for_you_count(g.group_id) if g.group_id != self.session.my_inbox else 0
             text = Text(self._group_label(g) + (f" ({unread})" if unread else "")
@@ -1555,7 +1592,7 @@ class UnseenetApp(App):
         nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
         self._for_you_seen = getattr(self, "_for_you_seen", for_you)
         # one chat per person: your contacts, and anyone else you have chatted with
-        # (UN-RFC 0028, 6.2); letters are in Letters
+        # (UN-RFC 0028, 6.2); posts are in Private posts
         partners = self.session.chat_partners()
         if partners:
             total = sum(self.session.unread_from(k, KIND_CHAT) for k in partners)
@@ -1602,7 +1639,7 @@ class UnseenetApp(App):
 
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
-            return f"{group_icons('inbox')} Letters"
+            return f"{group_icons('inbox')} Private posts"
         return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {self.session.group_label(g.group_id)}"
 
     @on(Tree.NodeSelected, "#groups")
@@ -1682,7 +1719,7 @@ class UnseenetApp(App):
         elif gid and gid.startswith(CONTACT):
             rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):], KIND_CHAT)]   # oldest first
         elif gid == s.my_inbox:
-            rows = self._threaded(s.visible(s.letters()))   # what you sent, too (UN-RFC 0028)
+            rows = self._threaded(s.visible(s.private_posts()))   # what you sent, too (UN-RFC 0028)
         else:
             msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
             rows = self._threaded(s.visible(msgs))      # replies to ignored people stay
@@ -1754,7 +1791,7 @@ class UnseenetApp(App):
             line.append(who, style="bold green" if own else "bold")
             if not own and self.session.contact_name(m.author_key):
                 line.append(" √", style="green")
-            if m.readable and m.kind != KIND_CHAT:      # a letter in a chat stands out (UN-RFC 0028)
+            if m.readable and m.kind != KIND_CHAT:      # a post in a chat stands out (UN-RFC 0028)
                 line.append(": ")
                 line.append(f"≡ {m.subject or '(no subject)'}", style="bold underline")
                 line.append("  (a post - r answers it with a quote)", style="dim")
@@ -1772,7 +1809,7 @@ class UnseenetApp(App):
     def action_toggle_view(self) -> None:
         gid = self.current_group
         if not gid or gid == self.session.my_inbox:
-            self.notify("Letters are always shown as a list; open a contact to chat",
+            self.notify("Private posts are always shown as a list; open a contact to chat",
                         severity="warning")
             return
         new = "threads" if self.view_of(gid) == "chat" else "chat"
@@ -1849,7 +1886,7 @@ class UnseenetApp(App):
             self.query_one("#threads-title", Static).update(
                 f"» chat with {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
                 f"{self.session.unread_from(key, KIND_CHAT)} unread  ·  only the two of you can read "
-                "them  ·  n: write a letter instead (letters are in Letters)")
+                "them  ·  n: write a post instead (posts are in Private posts)")
             return
         g = self.groups.get(gid)
         total = len(self.session.cache.get(gid, {}))
@@ -1968,7 +2005,7 @@ class UnseenetApp(App):
             self._write_to_contact(contact)
             return
         g = self._need_group()
-        if g and KIND_LETTER not in self.session.group_kinds(g.group_id):
+        if g and KIND_POST not in self.session.group_kinds(g.group_id):
             self.notify("This is a chat group: it takes chat lines only, no posts with a subject",
                         severity="warning")
             return
@@ -1982,7 +2019,7 @@ class UnseenetApp(App):
             if not m:
                 self._write_to_contact(contact)
                 return
-            # a letter in answer to a chat line starts without a subject; you give it one
+            # a post in answer to a chat line starts without a subject; you give it one
             subject = ("" if not m.subject else m.subject if m.subject.lower().startswith("re:")
                        else f"Re: {m.subject}")
             self._write_to_contact(contact, subject, references=[*m.references, m.message_id])
@@ -1994,7 +2031,7 @@ class UnseenetApp(App):
         subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
         text = split_signature(m.body)[0]          # never quote the signature
         quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in text.rstrip().split("\n")) + "\n"
-        if m.private and m.kind == KIND_CHAT:    # a chat among the letters: answer in the chat
+        if m.private and m.kind == KIND_CHAT:    # a chat among the posts: answer in the chat
             key = m.to_key or m.sender_key
             if key:
                 self.select_group(CONTACT + key)
@@ -2045,19 +2082,66 @@ class UnseenetApp(App):
         known = (m.sender_key or m.author_key) if m and m.readable else ""
         if m and m.private and not m.sender_key:
             known = ""
-        key = await self.push_screen_wait(InputDialog(
-            "Write a letter", "Paste the recipient's key (they find it with k). "
-            "Only they will be able to read the letter. To chat instead: Ctrl+P, Chat with someone.",
-            "ed25519:...", value=known))
-        if not key:
+        contacts = self.session.contacts()
+        names = ", ".join(n for _, n in contacts[:6]) + (", ..." if len(contacts) > 6 else "")
+        typed = await self.push_screen_wait(InputDialog(
+            "Write a private post",
+            ("Type a contact's name" + (f" ({names})" if names else "") + ", or paste their key "
+             "(they find it with k). Only they can read it. c: your contacts. "
+             "To chat instead: Ctrl+P, Chat with someone."),
+            "a name or ed25519:...", value=self.session.contact_name(known) or known))
+        key = self._recipient(typed)
+        if key:
+            self._write_to_contact(key)
+
+    def _recipient(self, typed: str | None) -> str | None:
+        """A key from what was typed: a key, or (the start of) a contact's name."""
+        typed = (typed or "").strip()
+        if not typed:
+            return None
+        if typed.startswith("ed25519:"):
+            try:
+                crypto.key_from_text(typed)
+                return typed
+            except crypto.CryptoError:
+                self.notify("That is not a valid key", severity="error")
+                return None
+        low = typed.lower()
+        contacts = self.session.contacts()
+        exact = [k for k, n in contacts if n.lower() == low]
+        found = exact or [k for k, n in contacts if n.lower().startswith(low)]
+        if len(found) == 1:
+            return found[0]
+        self.notify("No contact by that name" if not found else
+                    "Several contacts start like that: " +
+                    ", ".join(n for k, n in contacts if k in found), severity="warning")
+        return None
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_contacts(self) -> None:
+        """c: your address book - chat, write a post, rename or remove."""
+        result = await self.push_screen_wait(ContactsDialog(self.session.contacts()))
+        if not result:
             return
-        try:
-            owner = crypto.key_from_text(key)
-        except crypto.CryptoError:
-            self.notify("That is not a valid key", severity="error")
-            return
-        self.compose_private(personal_inbox_id(owner), f"Letter to {self._key_label(key)}",
-                             owner_key=owner)
+        what, key = result
+        if what == "chat":
+            self.select_group(CONTACT + key)
+        elif what == "post":
+            self._write_to_contact(key)
+        elif what == "rename":
+            name = await self.push_screen_wait(InputDialog(
+                "Rename contact", "", "Name", value=self.session.contact_name(key) or ""))
+            if name:
+                self.session.add_contact(key, name)
+                await self._render_groups()
+                self._render_title()
+        elif what == "remove":
+            name = self.session.contact_name(key) or key[:20]
+            if await self.push_screen_wait(ConfirmDialog(
+                    f"Remove {name}?", "The contact is forgotten. Your chat and posts stay.",
+                    "Remove", danger=True)):
+                self.session.remove_contact(key)
+                await self._render_groups()
 
     @work(group="dialog", exit_on_error=False)
     async def action_chat_with(self) -> None:
@@ -2455,8 +2539,10 @@ class UnseenetApp(App):
         commands = [
             ("New post", "Write a new post in the current group  [n]", self.action_new_post),
             ("Reply", "Reply to the selected post  [r]", self.action_reply),
-            ("Write a letter", "A private letter with a subject, to someone by their key  [m]",
-             self.action_message),
+            ("Write a private post", "A private post with a subject, to a contact by name or "
+             "to anyone by their key  [m]", self.action_message),
+            ("Contacts", "Your address book: chat, write a private post, rename, remove  [c]",
+             self.action_contacts),
             ("Chat with someone", "A private chat with someone by their key (the author of the "
              "selected post is filled in)", self.action_chat_with),
             ("Browse groups", "See all groups on the node, subscribe or unsubscribe  [g]",
@@ -2521,7 +2607,7 @@ class UnseenetApp(App):
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
             ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
-            ("Letters", "Open your private letters (chats are under each contact)", self.action_open_inbox),
+            ("Private posts", "Open your private posts (chats are under each contact)", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
              self.action_mark_all_read),
             ("Unsubscribe from group", "Stop following the current group and forget it locally",
