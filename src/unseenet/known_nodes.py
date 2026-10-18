@@ -41,7 +41,8 @@ DATA_GROUPS = frozenset({
 })
 
 # The project's groups a new client starts with, so there is something to read.
-STARTER_GROUPS = ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP,
+HELP_GROUP = "unseenet.help@ph5fc5hop5232qsz"
+STARTER_GROUPS = ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP, HELP_GROUP,
                   "unseenet.test@ph5fc5hop5232qsz")
 
 _ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
