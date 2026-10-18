@@ -34,6 +34,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and answers the sender "try again later" (`431` after `TAKETHIS`,
   `436` after `IHAVE`, `441 later` after `POST`). (#162)
   **Nodes must be updated** before channels open for comments.
+- A headless posting API for bots, gateways and scripts,
+  `unseenet.core.poster`: a key from a file, a vault or the environment
+  without prompting; its own Tor or a running one; postage, kinds and
+  "try later" handled; reading back to avoid double posts. See
+  *Writing a bot* in the docs. `tools/announce.py` now uses it. (#166)
 
 ## [0.3.1] - 2026-10-18
 

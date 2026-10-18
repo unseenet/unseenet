@@ -78,6 +78,7 @@ nav:
       - Tor and Tails: tor.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
+      - Writing a bot: bots.md
   - Running a node:
       - Installation: node/install.md
       - Configuration: node/configuration.md
