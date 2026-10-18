@@ -241,7 +241,8 @@ async def test_tui_contact_conversation(tmp_path, monkeypatch):
     b = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
     b.new_identity("sonia", "Sonia"); b.add_node(addr)
     await a.ensure_inbox(); await b.ensure_inbox()
-    await b.send_private(a.my_inbox, "", "Kan du hente mig?\n", kind="chat")   # a chat (UN-RFC 0028)
+    await b.send_private(a.my_inbox, "Hej far", "Et brev\n")                     # a letter: in Letters
+    await b.send_private(a.my_inbox, "", "Kan du hente mig?\n", kind="chat")   # a chat: under Chats
     a.save(); await a.close(); await b.close()
 
     monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")

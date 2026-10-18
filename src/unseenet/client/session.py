@@ -1211,19 +1211,35 @@ class Session:
                    if (kind is None or m.kind == kind) and not self.is_read(m))
 
     def _in_letters(self, m: "Message") -> bool:
-        """Letters, and chats with people who are not contacts (they have no
-        conversation of their own to show up in, so they must not vanish)."""
-        if m.kind != KIND_CHAT:
-            return True
-        return not self.contact_name(m.to_key or m.sender_key)
+        """Letters; chats live in a conversation per person (chat_partners). An
+        anonymous chat has no person to belong to, so it stays here."""
+        return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
     def letters(self) -> list["Message"]:
-        """What the "Letters" view shows (UN-RFC 0028 section 3), oldest first."""
+        """What the "Letters" view shows (UN-RFC 0028 section 6.2), oldest first."""
         return [m for m in self.private_messages() if self._in_letters(m)]
 
     def unread_letters(self) -> int:
         return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
                    if self._in_letters(m) and not self.is_read(m))
+
+    def chat_partners(self) -> list[str]:
+        """Everyone you have a chat with: your contacts, and anyone else you have
+        chatted with (so no chat ever goes missing, UN-RFC 0028 section 6.2).
+
+        Contacts first, by name; then the others, the most recent chat first."""
+        contacts = [k for k, _ in self.contacts()]
+        last: dict[str, int] = {}
+        for m in self.visible(list(self.cache.get(self.my_inbox, {}).values())):
+            if m.kind == KIND_CHAT and m.sender_key:
+                last[m.sender_key] = max(last.get(m.sender_key, -1), m.number)
+        for i, e in enumerate(self.sent):
+            if e.get("kind") == KIND_CHAT and e.get("to"):
+                last[e["to"]] = max(last.get(e["to"], -1), e.get("after", 0))
+        me = self.identity().key_text
+        others = sorted((k for k in last if k not in contacts and k != me),
+                        key=lambda k: last[k], reverse=True)
+        return contacts + others
 
     def _load_sent(self) -> list[dict]:
         try:

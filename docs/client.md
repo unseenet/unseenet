@@ -360,9 +360,10 @@ node the first time you connect. A private message is one of two kinds
   quote, like a post. Letters are at the top of the group list as
   *@ Letters*, threaded, with the ones you sent among them (*You → name*).
 - a **chat** is a line in a running conversation, without a subject.
-  Chats with a contact are under that contact (see below). A chat from
-  someone who is not a contact shows among the letters, marked `»`, so
-  it never goes missing; ++r++ on it opens the chat with them.
+  Chats are under *Chats* in the group list, one conversation per
+  person: your contacts (`•`), and anyone else you have chatted with
+  (`◦`, with the name they gave and their fingerprint), so a chat never
+  goes missing and both sides of it stay together.
 
 Only the recipient can see which kind a message is: the kind is inside
 the sealed message. The copy on the node is sealed to the recipient, so
@@ -390,8 +391,8 @@ an inbox, and you write to someone with ++m++ instead.
 
 Press ++a++ on a post or a private message to add its author as a
 **contact**, under a name you choose. Contacts appear in the group list
-under *Contacts*; selecting one shows your whole conversation with that
-person, both directions, in order. ++n++ or ++r++ there writes to them.
+under *Chats*; selecting one shows your chat with that person, both
+directions, in order. ++n++ there writes them a letter instead.
 
 - The name is yours alone and is tied to the person's key. Someone else
   can call themselves "Sonia", but only the real one shows as

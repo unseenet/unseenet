@@ -13,7 +13,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   is a chat line or a letter (a post with a subject), in groups and in
   private messages. Messages from older clients count as letters. (#152)
   - Private messages: the terminal client shows letters under *Letters*
-    (previously *Private messages*) and chats under each contact; `m`
+    (previously *Private messages*) and chats under *Chats* (previously
+    *Contacts*), one conversation per person, contact or not; `m`
     writes a letter, and the command palette has *Chat with someone*.
     The kind is sealed inside the message.
   - Groups: a chat line no longer gets its first line as a made-up

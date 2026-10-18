@@ -158,3 +158,31 @@ async def test_chat_lines_and_posts_in_groups(tmp_path, monkeypatch):
     assert m.encrypted and m.kind == KIND_CHAT and m.body == "hemmelig hej\n"
     await s.close()
     server.close()
+
+
+async def test_a_chat_with_a_stranger_is_one_conversation(tmp_path, monkeypatch):
+    """Chats are kept per person, contact or not; Letters holds letters only."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=BITS, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def session(name):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        s.new_identity(name, name.title())
+        s.add_node(addr)
+        return s
+
+    a, b = session("andreas"), session("mikkel")
+    await a.ensure_inbox(); await b.ensure_inbox()
+    b_key, b_pk = b.identity().key_text, b.identity().public_key
+    await b.send_private(a.my_inbox, "", "ohøj, hvordan går det?\n", kind=KIND_CHAT)
+    await a.fetch_group(a.my_inbox)
+    await a.send_private(personal_inbox_id(b_pk), "", "godt :)\n", owner_key=b_pk, kind=KIND_CHAT)
+    assert a.chat_partners() == [b_key]                      # not a contact, still a chat
+    assert [m.body for m in a.conversation(b_key, KIND_CHAT)] == ["ohøj, hvordan går det?\n", "godt :)\n"]
+    assert a.letters() == [] and a.unread_letters() == 0
+    a.add_contact(b_key, "Mikkel")
+    assert a.chat_partners() == [b_key]                      # once, now as a contact
+    await a.close(); await b.close()
+    server.close()

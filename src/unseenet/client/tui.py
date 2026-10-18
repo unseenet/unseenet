@@ -1554,17 +1554,28 @@ class UnseenetApp(App):
             text.stylize("bold")
         nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
         self._for_you_seen = getattr(self, "_for_you_seen", for_you)
-        contacts = self.session.contacts()
-        if contacts:
-            total = sum(self.session.unread_from(k, KIND_CHAT) for k, _ in contacts)
-            folder = Text("Contacts" + (f" ({total})" if total else ""))
+        # one chat per person: your contacts, and anyone else you have chatted with
+        # (UN-RFC 0028, 6.2); letters are in Letters
+        partners = self.session.chat_partners()
+        if partners:
+            total = sum(self.session.unread_from(k, KIND_CHAT) for k in partners)
+            folder = Text("Chats" + (f" ({total})" if total else ""))
             if total:
                 folder.stylize("bold")
-            cnode = tree.root.add(folder, expand="Contacts" in was_open or "Contacts" not in known)
-            nodes[("folder", "Contacts")] = cnode
-            for key, name in contacts:
+            cnode = tree.root.add(folder, expand="Chats" in was_open or "Chats" not in known)
+            nodes[("folder", "Chats")] = cnode
+            for key in partners:
+                name = self.session.contact_name(key) or ""
                 unread = self.session.unread_from(key, KIND_CHAT)
-                text = Text(f"• {name}" + (f" ({unread})" if unread else ""))
+                if not name:                 # what they call themselves, with their fingerprint
+                    said = next((m.from_name for m in reversed(self.session.conversation(key, KIND_CHAT))
+                                 if m.sender_key == key and m.from_name), "")
+                    name = self.session.identity_label(key, said) if said else self._key_label(key)
+                    name = "◦ " + name
+                else:
+                    name = "• " + name
+                text = Text(name
+                            + (f" ({unread})" if unread else ""))
                 if unread:
                     text.stylize("bold")
                 nodes[CONTACT + key] = cnode.add_leaf(text, data=CONTACT + key)
