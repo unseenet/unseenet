@@ -1,7 +1,8 @@
 # People
 
-Who is behind Unseenet, and who does what. Anyone who joins the project
-adds themselves here by pull request.
+Who is behind Unseenet: who created it, who develops and maintains it,
+the team, the contributors and the developers, and who does what. Anyone
+who joins the project adds themselves here by pull request.
 
 Two of the names below are not people: an AI assistant and GitHub's
 automation. They are listed because their work shows up everywhere -
