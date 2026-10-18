@@ -165,8 +165,9 @@ also sends each of them a short **mention notice** to their inbox
 subject - never the text. The compose window shows who will be told, and
 you can untick it for that post; *Stop telling people you mention* in the
 command palette turns it off altogether. At most 5 people are told per
-post, a few minutes after it is sent. Nobody is told about posts in
-closed groups or private posts.
+post, a few minutes after it is sent - or, in a moderated group, after a
+moderator approves it. Nobody is told about posts in closed groups or
+private posts.
 
 Notices you get show in **For you** with ♦ and the group's name; ++enter++
 takes you to the post, or shows the group and asks before subscribing.
