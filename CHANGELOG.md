@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-18
+
+Updates from an alpha to a release, and a stable release that sticks can
+find. The first release from the `release/0.3` branch: fixes only.
+
 ### Fixed
 - A stable release is now GitHub's "latest" release. Before 1.0 every
   release was marked as a pre-release, so `releases/latest` did not exist
@@ -434,7 +439,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/unseenet/unseenet/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/unseenet/unseenet/releases/tag/v0.1.0
