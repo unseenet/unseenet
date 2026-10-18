@@ -264,8 +264,11 @@ class Node:
         if current is not None:
             if m.type != current.type or m.owner != current.owner or m.local != current.local:
                 raise ArticleError("permission", "manifest may not change type, owner or locality")
-        elif not self._allow_new_group(m):
+        elif not self.store.known_group(art.group) and not self._allow_new_group(m):
+            # an expired key-bound group is not new: its renewal is accepted (UN-RFC 0029)
             raise ArticleError("group", "node does not accept this new group")
+        if m.expired():
+            raise ArticleError("group", "key-bound group has expired")
         self.store.add(art, raw)
         if m.supersedes(current):
             self.store.set_manifest(m)

@@ -6,11 +6,11 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from . import crypto
-from .article import Article, ArticleError, new_article, parse_date
+from .article import Article, ArticleError, format_date, new_article, parse_date
 from .encoding import DS, H, b32, b64, b64decode
 
 GROUP_TYPES = ("open", "moderated", "channel", "closed", "inbox")
@@ -102,6 +102,46 @@ def _comments(data: dict) -> tuple[str, int | None]:
     return comments, days
 
 
+# --- key-bound groups (UN-RFC 0029) --------------------------------------
+
+KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar")   # UN-RFC 0029 section 2
+MAX_LIFETIME = timedelta(days=730)       # expires at most this long after Date (section 3)
+RENEW_WHEN_LEFT = timedelta(days=545)    # renew once less than this remains (section 4)
+RENEW_WINDOW = timedelta(days=30)        # at a random moment within this (section 4)
+REMOVE_AFTER = timedelta(days=30)        # nodes remove expired groups within this (section 5)
+
+
+def is_key_bound(group_id: str) -> bool:
+    """A group whose Group ID follows from its owner's key alone (UN-RFC 0029, 2)."""
+    try:
+        name, _ = split_group_id(group_id)
+    except ValueError:
+        return False
+    return name in KEY_BOUND_NAMES
+
+
+def format_expires(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_expires(value) -> datetime:
+    """An RFC 3339 UTC date, as in ``expires`` (UN-RFC 0029 section 3)."""
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError("expires must be an RFC 3339 UTC date")
+    dt = datetime.fromisoformat(value[:-1] + "+00:00")
+    if dt.tzinfo is None:
+        raise ValueError("expires must be an RFC 3339 UTC date")
+    return dt
+
+
+def stored_expires(data: dict) -> datetime | None:
+    """``expires`` of a stored manifest's JSON, or None if absent or unreadable."""
+    try:
+        return parse_expires(data.get("expires"))
+    except (ValueError, TypeError):
+        return None
+
+
 # --- manifests (section 3) --------------------------------------------------
 
 @dataclass
@@ -126,12 +166,14 @@ class Manifest:
     banned: list[bytes] = field(default_factory=list)   # UN-RFC 0004, 5.1
     comments: str = COMMENTS_NONE        # UN-RFC 0030, channels only
     comment_days: int | None = None      # UN-RFC 0030
+    expires: datetime | None = None      # UN-RFC 0029, key-bound groups only
     message_id: str = ""
     raw: dict = field(default_factory=dict)
 
     @classmethod
-    def from_article(cls, art: Article) -> "Manifest":
-        """Validate a manifest article (section 4, steps 1-3)."""
+    def from_article(cls, art: Article, *, stored: bool = False) -> "Manifest":
+        """Validate a manifest article (section 4, steps 1-3). ``stored``: one a node
+        already carries, which may be from before UN-RFC 0029 and lack ``expires``."""
         if art.control != ["manifest"]:
             raise ArticleError("syntax", "not a manifest")
         data = parse_canonical_json(art.body)
@@ -155,13 +197,29 @@ class Manifest:
                 message_id=art.message_id, raw=data,
             )
             m.comments, m.comment_days = _comments(data)
+            if "expires" in data:
+                m.expires = parse_expires(data["expires"])
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
             raise ArticleError("syntax", f"bad manifest: {exc}") from exc
         if data.get("v") != 1 or m.name != name or m.type not in GROUP_TYPES or m.serial < 1:
             raise ArticleError("syntax", "bad manifest fields")
         if crypto.fingerprint(owner) != fp or owner != art.author_key:
             raise ArticleError("permission", "manifest not signed by group owner")
+        if is_key_bound(art.group):                         # UN-RFC 0029 section 3
+            if m.expires is None and not stored:
+                raise ArticleError("syntax", "a key-bound group's manifest needs expires")
+            if m.expires is not None and m.expires > parse_date(art["Date"]) + MAX_LIFETIME:
+                raise ArticleError("syntax", "expires is more than 730 days after Date")
         return m
+
+    def expired(self, now: datetime | None = None) -> bool:
+        """A key-bound group whose manifest has run out (UN-RFC 0029 section 5)."""
+        return self.expires is not None and (now or datetime.now(timezone.utc)) >= self.expires
+
+    def renewal_due(self, now: datetime | None = None) -> bool:
+        """Fewer than 545 days left: time for the owner to renew (UN-RFC 0029, 4)."""
+        return (self.expires is not None
+                and self.expires - (now or datetime.now(timezone.utc)) < RENEW_WHEN_LEFT)
 
     def supersedes(self, other: "Manifest | None") -> bool:
         if other is None:
@@ -230,15 +288,22 @@ MAX_RULES = 8192
 VIEWS = ("threads", "chat", "data")      # UN-RFC 0008 section 3.1
 
 
-def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18) -> Article:
-    """Sign a manifest from its JSON fields (used for new and updated manifests)."""
+def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18,
+                     now: datetime | None = None) -> Article:
+    """Sign a manifest from its JSON fields (used for new and updated manifests).
+
+    A key-bound group's manifest gets a fresh ``expires``, the longest UN-RFC 0029
+    allows, so every new manifest of such a group is also its renewal."""
     if len(data.get("rules", "")) > MAX_RULES:
         raise ValueError(f"rules are limited to {MAX_RULES} characters")
     if data.get("view", "threads") not in VIEWS:
         raise ValueError("view must be one of " + ", ".join(VIEWS))
     _kinds(data)                                           # UN-RFC 0028, 4.1
     _comments(data)                                        # UN-RFC 0030, 3
-    art = new_article(group_id, None, canonical_json(data),
+    now = now or datetime.now(timezone.utc)
+    if is_key_bound(group_id):
+        data["expires"] = format_expires(parse_date(format_date(now)) + MAX_LIFETIME)
+    art = new_article(group_id, None, canonical_json(data), now=now,
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
 

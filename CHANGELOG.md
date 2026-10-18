@@ -9,6 +9,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Key-bound groups expire unless renewed (UN-RFC 0029): personal
+  inboxes, sub-name revocation lists (`names@`) and, later, profiles and
+  pictures. Their manifests carry `expires`, at most two years ahead.
+  (#160)
+  - Clients renew them without asking, all of an identity's groups
+    together, at a random moment within 30 days once they are about
+    six months old (at once if expiry is near).
+  - Nodes stop listing, offering and accepting posts in an expired
+    group (`441 group`) and remove it 30 days later. A renewal brings
+    it back, also on nodes that take no new groups.
+  - Sending to an inbox that has expired says only that the receiver
+    has no inbox you can reach.
+  - **Nodes and clients must be updated together:** updated nodes
+    refuse new key-bound manifests without `expires`. Inboxes created
+    before this keep working, and the owner's updated client renews
+    them the first time it runs.
 - Markdown and emoji (UN-RFC 0031, draft): posts and private posts are
   Markdown by default (`Content-Type: text/markdown; ...; variant=unseenet`),
   a small safe subset; chat lines a lighter one. No raw HTML, nothing loaded

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import crypto
 from .article import Article, parse_date
-from .groups import Manifest
+from .groups import MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound, stored_expires
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -201,19 +201,61 @@ class Store:
                 " (SELECT MAX(epoch) - 1 FROM epoch_articles WHERE group_id=?))",
                 (group_id, now - days * 86400, group_id, group_id))
             deleted += cur.rowcount
+        self.remove_expired_key_bound(now)
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))
         self.db.execute("DELETE FROM refused WHERE at < ?", (now - (default_days + 2) * 86400,))
         self.db.commit()
         return deleted
 
+    # --- key-bound groups (UN-RFC 0029) ---
+    def _expires_at(self, group_id: str, manifest_json: str, manifest_id: str) -> int | None:
+        """When a key-bound group's state ends, as unix seconds; None for other groups.
+        A manifest stored before UN-RFC 0029 has no ``expires``: it lasts the longest
+        lifetime from its own Date, so nothing is lost while owners' clients renew it."""
+        if not is_key_bound(group_id):
+            return None
+        exp = stored_expires(json.loads(manifest_json or "{}"))
+        if exp is not None:
+            return int(exp.timestamp())
+        row = self.db.execute("SELECT date FROM articles WHERE message_id=?",
+                              (manifest_id,)).fetchone()
+        return int(row[0] + MAX_LIFETIME.total_seconds()) if row else 0
+
+    def expired(self, group_id: str, now: float | None = None) -> bool:
+        """A key-bound group whose manifest has run out: not carried any more (section 5)."""
+        row = self.db.execute("SELECT manifest, manifest_id FROM groups WHERE group_id=? "
+                              "AND serial > 0", (group_id,)).fetchone()
+        if not row:
+            return False
+        at = self._expires_at(group_id, row[0], row[1])
+        return at is not None and (now or time.time()) >= at
+
+    def known_group(self, group_id: str) -> bool:
+        """The node has a manifest for the group, current or expired."""
+        return self.db.execute("SELECT 1 FROM groups WHERE group_id=? AND serial > 0",
+                               (group_id,)).fetchone() is not None
+
+    def remove_expired_key_bound(self, now: float | None = None) -> list[str]:
+        """Remove key-bound groups expired more than REMOVE_AFTER ago (section 5)."""
+        now = now or time.time()
+        gone = []
+        for gid, manifest, mid in list(self.db.execute(
+                "SELECT group_id, manifest, manifest_id FROM groups WHERE serial > 0")):
+            at = self._expires_at(gid, manifest, mid)
+            if at is not None and now >= at + REMOVE_AFTER.total_seconds():
+                self.remove_group(gid)
+                gone.append(gid)
+        return gone
+
     # --- groups ---
     def manifest(self, group_id: str) -> Manifest | None:
+        """The current manifest; None if the group is not carried or has expired."""
         row = self.db.execute("SELECT manifest_id FROM groups WHERE group_id=? AND serial > 0",
                               (group_id,)).fetchone()
-        if not row:
+        if not row or self.expired(group_id):
             return None
         raw = self.get(row[0])
-        return Manifest.from_article(Article.from_bytes(raw)) if raw else None
+        return Manifest.from_article(Article.from_bytes(raw), stored=True) if raw else None
 
     def set_manifest(self, m: Manifest) -> None:
         self.db.execute("INSERT OR IGNORE INTO groups(group_id, manifest, manifest_id, serial)"
@@ -225,8 +267,10 @@ class Store:
     def groups(self) -> list[tuple[str, int, int, str]]:
         """(group_id, high, low, description) for carried groups."""
         out = []
-        for gid, high, manifest in self.db.execute(
-                "SELECT group_id, high, manifest FROM groups WHERE serial > 0 ORDER BY group_id"):
+        for gid, high, manifest in list(self.db.execute(
+                "SELECT group_id, high, manifest FROM groups WHERE serial > 0 ORDER BY group_id")):
+            if self.expired(gid):             # UN-RFC 0029 section 5: not offered
+                continue
             nums = self.numbers(gid)
             data = json.loads(manifest)
             out.append((gid, high, nums[0] if nums else high + 1,
@@ -246,6 +290,8 @@ class Store:
         """UN-RFC 0017: the articles a node needs before it can accept posts in a
         group - its current manifest and the key updates of the live epochs."""
         out = []
+        if self.expired(group_id):
+            return out
         row = self.db.execute("SELECT manifest_id FROM groups WHERE group_id=? AND serial > 0",
                               (group_id,)).fetchone()
         if row and row[0]:
