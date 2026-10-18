@@ -4,7 +4,7 @@ A portable folder, a USB stick and a bootable stick all update themselves to
 the newest release, over Tor, and **keep `data/`**: your vault, the offline
 cache, a node's data and your settings. Nothing needs to be copied off first.
 
-## Bootable (USB, SSD etc.)
+## Bootable (USB, SSD etc.) · Terminal
 
 Boot the stick and choose **Update** in the menu, then one of:
 
@@ -23,7 +23,7 @@ Unseenet from the stick as a [portable](portable.md#start-it) and update as
 below. A bootable stick always gets the bootable update, which includes the
 portable programs too.
 
-## Portable (Linux, macOS, Windows)
+## Portable (Linux, macOS, Windows) · Terminal
 
 In the client, open the command palette (**Ctrl+P**) and choose **Update
 Unseenet**. The client saves your work, the update runs in the terminal, and

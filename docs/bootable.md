@@ -1,4 +1,4 @@
-# Bootable (USB, SSD etc.)
+# Bootable (USB, SSD etc.) · Terminal
 
 One stick (or SD card, or disk) that you can **boot from** - Unseenet in a
 text console, running from memory, touching nothing on the computer - and

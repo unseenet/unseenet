@@ -67,8 +67,9 @@ change the protocol or build something compatible? Start with
 
 | | |
 |---|---|
-| **Portable (Linux, macOS, Windows)** | Download a zip from the [releases](https://github.com/unseenet/unseenet/releases), unzip, start. Tor is included. [Guide](https://unseenet.org/portable/) |
-| **Bootable (USB, SSD etc.)** | Unseenet in a text console, from memory. [Guide](https://unseenet.org/bootable/) |
+| **Portable (Linux, macOS, Windows) · Terminal** | Download a zip from the [releases](https://github.com/unseenet/unseenet/releases), unzip, start. Tor is included. [Guide](https://unseenet.org/portable/) |
+| **Bootable (USB, SSD etc.) · Terminal** | Unseenet in a text console, from memory. [Guide](https://unseenet.org/bootable/) |
+| **Graphical client** | Unseenet in a window, Portable or Bootable (preview, development builds). [Guide](https://unseenet.org/graphical/) |
 | **Python** | `pipx install "unseenet[tui]"`, then `unseenet-tui` (needs Python 3.11+ and `tor`). [Using the client](https://unseenet.org/client/) |
 | **Other newsreaders** | Read with tin, Thunderbird and friends. [Guide](https://unseenet.org/other-clients/) |
 | **A node** | `curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh \| sudo bash` on Debian or Ubuntu, or [Docker](https://unseenet.org/node/docker/). [Guide](https://unseenet.org/node/install/) |

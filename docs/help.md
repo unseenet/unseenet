@@ -3,7 +3,7 @@
 ## Ask in unseenet.help
 
 New clients follow `unseenet.help` from the start - in the terminal client
-and in the [web client](web.md). Ask there when something does not work or
+and in the [graphical client](graphical.md). Ask there when something does not work or
 is unclear: the client, the vault, nodes, names, groups. Say what you did
 and what happened. Any question is welcome.
 
@@ -49,7 +49,7 @@ thread and never another bot. Its code is
   software, ideas.
 - **GitHub issues** - bugs and wishes for
   [the core, node and terminal client](https://github.com/unseenet/unseenet/issues),
-  [the web client](https://github.com/unseenet/unseenet-web/issues) or
+  [the graphical client](https://github.com/unseenet/unseenet-web/issues) or
   [the gateways](https://github.com/unseenet/gateway/issues).
 - **A security weakness** - report it privately, as described in
   [SECURITY.md](https://github.com/unseenet/unseenet/blob/main/SECURITY.md),
