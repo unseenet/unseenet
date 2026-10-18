@@ -9,6 +9,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Profiles (UN-RFC 0022): an identity can publish a public profile -
+  about, languages, links, a bot mark - in its key-bound group
+  `profile@<fp>`, and a small picture in `avatar@<fp>`. Every key has an
+  identicon. (#155)
+  - Terminal client: Ctrl+P *Your profile* (with the warnings of section
+    9.1) and *Profile of this author* (identicon, about, languages,
+    links as stated; hide a profile).
+  - Core: `core.profiles` (profile and picture objects, identicons);
+    `Session.publish_profile`, `profile_of` (cached a day),
+    `publish_picture`, `picture_of`. Choosing and re-encoding a picture
+    comes with attachments (0.5.0).
+  - Nodes: `profiles` (default `accept`, also when `new_groups` is
+    closed) and `avatars` (default `refuse`) in `node.toml` and the node
+    information; invalid or misplaced profiles and pictures are refused.
 - Key-bound groups expire unless renewed (UN-RFC 0029): personal
   inboxes, sub-name revocation lists (`names@`) and, later, profiles and
   pictures. Their manifests carry `expires`, at most two years ahead.

@@ -40,6 +40,7 @@ from . import session as _session_module
 from . import naming
 from . import richtext
 from ..core import markup
+from ..core import profiles as prof
 from .. import names as nm
 from .session import MAX_MENTION_NOTICES
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
@@ -819,6 +820,125 @@ class NamesDialog(Dialog):
             self.dismiss((action, name))
         else:
             self.notify("Type the name first", severity="warning")
+
+
+PROFILE_WARNING = (
+    "Anybody who sees this identity's posts can read its profile.\n\n"
+    "A link ties this identity - everything it has posted and will post - to that "
+    "account.\n\n"
+    "A published profile cannot be fully taken back: others may already have kept a "
+    "copy.\n\n"
+    "If you only want certain people to know, keep a separate identity for that, or "
+    "leave the profile out.")
+
+
+def identicon_text(key_text: str):
+    """The key's identicon (UN-RFC 0022 section 8.4) as coloured block characters."""
+    from rich.text import Text
+    icon = prof.identicon(crypto.key_from_text(key_text))
+    text = Text()
+    for row in icon.cells:
+        for cell in row:
+            text.append("██" if cell else "  ", style=icon.hex() if cell else "")
+        text.append("\n")
+    return text
+
+
+class ProfileDialog(Dialog):
+    """Someone's profile (UN-RFC 0022 section 9.2): names, short form, about, lang, links."""
+
+    def __init__(self, key_text: str, label: str, profile, mine: bool = False,
+                 hidden: bool = False):
+        super().__init__()
+        self.key_text, self.label, self.profile = key_text, label, profile
+        self.mine, self.hidden = mine, hidden
+
+    def compose(self) -> ComposeResult:
+        p = self.profile
+        with Vertical(classes="dialog"):
+            title = self.label + ("   [bot]" if p is not None and p.bot else "")
+            yield Label(title, classes="title", markup=False)
+            yield Static(identicon_text(self.key_text))
+            yield Label(self.key_text, classes="hint", markup=False)
+            if p is None or prof.is_empty(p.raw or {}):
+                yield Static("No public profile." if not self.hidden else
+                             "You have hidden this profile.", markup=False)
+            else:
+                lines = []
+                if p.about:
+                    lines += [p.about, ""]
+                if p.lang:
+                    lines.append("Writes: " + ", ".join(p.lang))
+                if p.links:
+                    lines.append("Links, as stated by this identity (not checked):")
+                    for link in p.links:
+                        label = f"  ({link['label']})" if link.get("label") else ""
+                        lines.append(f"  {link['kind']}: {link['value']}{label}")
+                yield Static("\n".join(lines).strip(), id="profile-text", classes="details",
+                             markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Close", variant="primary", id="cancel")
+                if not self.mine:
+                    yield Button("Show" if self.hidden else "Hide", id="hide")
+
+    @on(Button.Pressed, "#hide")
+    def _hide(self) -> None:
+        self.dismiss("show" if self.hidden else "hide")
+
+
+class EditProfileDialog(Dialog):
+    """Your public profile (UN-RFC 0022): about, languages and links, one per line."""
+
+    def __init__(self, current: dict | None):
+        super().__init__()
+        self.current = current or {"v": 1}
+
+    def compose(self) -> ComposeResult:
+        c = self.current
+        links = "\n".join(f"{link['kind']} {link['value']}"
+                           + (f"  # {link['label']}" if link.get("label") else "")
+                           for link in c.get("links", []))
+        with Vertical(classes="dialog compose"):
+            yield Label("Your public profile - anybody can read it", classes="title")
+            yield Label("About you, as plain text:", classes="hint")
+            yield TextArea(c.get("about", ""), id="about", soft_wrap=True)
+            yield Input(value=", ".join(c.get("lang", [])), id="lang",
+                        placeholder="Languages you write, e.g. da, en")
+            yield Label("Links, one per line: kind value  (kinds: " + ", ".join(prof.LINK_KINDS)
+                        + ", or x-something)", classes="hint")
+            yield TextArea(links, id="links", soft_wrap=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Remove profile", variant="error", id="remove")
+                yield Button("Publish", variant="primary", id="ok")
+
+    @on(Button.Pressed, "#remove")
+    def _remove(self) -> None:
+        self.dismiss("remove")
+
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        links = []
+        for n, line in enumerate(self.query_one("#links", TextArea).text.splitlines(), 1):
+            line, _, label = line.partition("#")
+            parts = line.split(None, 1)
+            if not parts:
+                continue
+            if len(parts) < 2:
+                self.app.notify(f"Line {n}: kind, a space, then the address", severity="error")
+                return
+            link = {"kind": parts[0].lower(), "value": parts[1].strip()}
+            if label.strip():
+                link["label"] = label.strip()
+            links.append(link)
+        lang = [t.strip() for t in self.query_one("#lang", Input).value.split(",") if t.strip()]
+        try:
+            obj = prof.make_profile(self.query_one("#about", TextArea).text, links, lang,
+                                    bot=self.current.get("bot") is True)
+        except prof.ProfileError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
+        self.dismiss(obj)
 
 
 class GroupInfoDialog(Dialog):
@@ -2722,6 +2842,61 @@ class UnseenetApp(App):
         self.notify(f"Sent your {action} of @{name} to the registrar. It decides after about an "
                     f"hour; the answer comes to your private messages, and {done}.", timeout=12)
 
+    @work(group="dialog", exit_on_error=False)
+    async def action_show_profile(self) -> None:
+        m = self.current_message
+        key = m.author_key if m and m.readable and m.author_key else ""
+        if not key:
+            key = await self.push_screen_wait(InputDialog(
+                "Whose profile?", "Select a post first, or give a key.", "ed25519:..."))
+            if not key:
+                return
+        s = self.session
+        mine = key == s.identity().key_text
+        hidden = not mine and s.profile_hidden(key)
+        try:
+            p = None if hidden else await s.profile_of(key.strip())
+        except (SessionError, OSError, ConnectionError, NNTPError, crypto.CryptoError) as exc:
+            self.notify(f"Could not read the profile: {exc}", severity="error")
+            return
+        label = s.identity_label(key, m.from_name if m and m.author_key == key else "")
+        answer = await self.push_screen_wait(ProfileDialog(key, label, p, mine, hidden))
+        if answer in ("hide", "show"):
+            s.hide_profile(key, answer == "hide")
+            self.notify("Profile hidden" if answer == "hide" else "Profile shown")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_edit_profile(self) -> None:
+        s = self.session
+        if not s.has_published_profile() and not await self.push_screen_wait(ConfirmDialog(
+                "Before you publish a profile", PROFILE_WARNING, confirm="I understand")):
+            return
+        current = s.my_profile()
+        answer = await self.push_screen_wait(EditProfileDialog(current))
+        if answer is None:
+            return
+        if answer == "remove":
+            if not await self.push_screen_wait(ConfirmDialog(
+                    "Remove your profile?", "Nodes stop showing it. Copies others already "
+                    "kept cannot be taken back.", confirm="Remove", danger=True)):
+                return
+            answer = None
+        else:
+            old = {(l["kind"], l["value"]) for l in (current or {}).get("links", [])}
+            new = [l for l in answer.get("links", []) if (l["kind"], l["value"]) not in old
+                   and l["kind"] != "onion"]
+            if new and s.has_published_profile() and not await self.push_screen_wait(ConfirmDialog(
+                    "New links", "Each link ties this identity, and everything it posts, to "
+                    "that account:\n\n" + "\n".join(f"{l['kind']}: {l['value']}" for l in new),
+                    confirm="Publish")):
+                return
+        try:
+            await s.publish_profile(answer)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Not published: {exc}", severity="error")
+            return
+        self.notify("Profile published" if answer else "Profile removed")
+
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
                                     self.session.identity().key_text))
@@ -2815,6 +2990,10 @@ class UnseenetApp(App):
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",
              self.action_show_key),
+            ("Profile of this author", "Who wrote the selected post: names, about, links "
+             "(UN-RFC 0022)", self.action_show_profile),
+            ("Your profile", "Write, change or remove your public profile",
+             self.action_edit_profile),
             ("Names", "Claim a name such as @lorensen, see the names you hold  [@]",
              self.action_names),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
