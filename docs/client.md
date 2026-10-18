@@ -320,6 +320,33 @@ before the post it withdraws is remembered, so the post is not shown when
 it turns up later. In a closed group a cancel cannot carry a reason, since
 the nodes could read it.
 
+## Formatting: Markdown and emoji
+
+What you write is **Markdown** ([UN-RFC 0031](spec/un-rfc-0031.md)): the
+plain text Usenet always used, now also shown formatted. It reads fine
+unformatted too, so readers like tin see it as you wrote it.
+
+| You write | You get |
+|-----------|---------|
+| `*emphasis*`, `**strong**`, `~~struck~~` | *emphasis*, **strong**, ~~struck~~ |
+| `` `code` `` and three backticks around a block | code |
+| `# Heading`, `- list`, `1. list`, `> quote` | headings, lists and quotes (posts only, not chat) |
+| `[text](http://...onion/)` | a link that also shows where it goes |
+| `:tada:` `:+1:` or 🎉 👍 | emoji |
+
+- Chat lines take emphasis, code, links and emoji, but not headings,
+  lists or quotes, so chat stays chat.
+- **Nothing is ever loaded from outside**: no web images, no previews.
+  Images can only be attachments in the network itself; anything else
+  shows as its description.
+- Links show their real address; the web client warns before opening one
+  that is not a `.onion` address.
+- Shortcodes are GitHub's, Slack's and Discord's names (gemoji). On a
+  terminal without emoji glyphs (the bootable image's console) they show
+  as the shortcode.
+- Rather send plain text? ++ctrl+p++, *Write plain text*. Your posts are
+  then shown exactly as typed.
+
 ## Signature
 
 A new identity starts with the signature `{name}  ·  {key}`, so others

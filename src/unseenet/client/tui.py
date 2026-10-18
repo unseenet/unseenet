@@ -37,6 +37,8 @@ from ..core import crypto
 from ..core.groups import INBOX_NAME, KIND_CHAT, KIND_POST, personal_inbox_id
 from . import session as _session_module
 from . import naming
+from . import richtext
+from ..core import markup
 from .. import names as nm
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
                       default_vault_path, split_signature)
@@ -1809,6 +1811,20 @@ class UnseenetApp(App):
         self.query_one("#article").display = not chat
         self.query_one("#chat").display = chat
 
+    def _indented(self, m: Message, text: str, indent: int, first: bool = True) -> Text:
+        """A message's text in the chat log: Markdown or plain (UN-RFC 0031), each
+        line indented under the name."""
+        rendered = (richtext.blocks(markup.body(text, m.content_type, m.kind))
+                    if m.readable else Text(text))
+        out = Text()
+        for i, ln in enumerate(rendered.split("\n")):
+            if i:
+                out.append("\n")
+            if i or first:
+                out.append(" " * indent)
+            out.append(ln)
+        return out
+
     def _render_chat(self, msgs: list[Message]) -> None:
         log = self.query_one("#chat-log", RichLog)
         log.clear()
@@ -1828,16 +1844,24 @@ class UnseenetApp(App):
                 line.append(": ")
                 line.append(f"≡ {m.subject or '(no subject)'}", style="bold underline")
                 line.append("  (a post - r answers it with a quote)", style="dim")
-                text = "\n" + text
-                line.append(text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
+                line.append("\n")
+                line.append(self._indented(m, text, len(when) + len(who) + 3))
             else:
-                line.append(": " + text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
+                line.append(": ")
+                line.append(self._indented(m, text, len(when) + len(who) + 3, first=False))
             log.write(line)
             if not self.session.is_read(m):
                 self.session.mark_read(m, save=False)
                 changed = True
         if changed:
             self._save_soon()
+
+    def action_toggle_markdown(self) -> None:
+        """Send what you write as Markdown (the default) or as plain text (UN-RFC 0031)."""
+        on = self.session.text_type() != markup.MARKDOWN_TYPE
+        self.session.set_markdown(on)
+        self.notify("You write Markdown: *emphasis*, **strong**, `code`, lists, :tada:" if on
+                    else "You write plain text: it is sent and shown exactly as you type it")
 
     def action_toggle_view(self) -> None:
         gid = self.current_group
@@ -1956,8 +1980,11 @@ class UnseenetApp(App):
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
         if msg.readable:
             text, sig = split_signature(msg.body)
-            body = Text("\n" + text)
+            # Markdown or plain, as the message says (UN-RFC 0031); the signature never is
+            body = Text("\n")
+            body.append(richtext.blocks(markup.body(text, msg.content_type, msg.kind)))
             if sig is not None:
+                body.append("\n\n")
                 body.append(SIG_SEPARATOR + sig, style="dim")
         else:
             body = Text("\n" + (msg.error or msg.subject))
@@ -2593,6 +2620,9 @@ class UnseenetApp(App):
              self.action_names),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
              self.action_signature),
+            ("Write plain text" if self.session.text_type() == markup.MARKDOWN_TYPE else "Write Markdown",
+             "What you write is sent as Markdown (*emphasis*, `code`, :tada:) or as plain text "
+             "(UN-RFC 0031)", self.action_toggle_markdown),
             ("About this group", "Its rules, type, owner and settings  [?]", self.action_group_info),
             ("Switch chat / threads", "Show the current group as a chat or as threads  [v]",
              self.action_toggle_view),

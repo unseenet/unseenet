@@ -724,6 +724,15 @@ class Session:
         """The newest manifest seen for a group ({} if none yet)."""
         return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))
 
+    def text_type(self) -> str:
+        """The Content-Type your posts get: Markdown, unless you turned it off (UN-RFC 0031)."""
+        from ..core.markup import MARKDOWN_TYPE, PLAIN_TYPE
+        return PLAIN_TYPE if self.data.get("plain_text") else MARKDOWN_TYPE
+
+    def set_markdown(self, on: bool) -> None:
+        self.data["plain_text"] = not on
+        self.save()
+
     def group_kinds(self, group_id: str) -> tuple[str, ...]:
         """What a group takes: chat lines, posts with a subject, or both (UN-RFC 0028, 4.1)."""
         data = self.manifest_data(group_id)
@@ -997,6 +1006,7 @@ class Session:
         """
         if kind == KIND_CHAT:
             subject = ""
+        content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         if not self.manifest_data(group_id):
             owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
             owner_key = owner_key or owner_from_manifest
@@ -1630,6 +1640,7 @@ class Session:
         else:
             msg.subject, msg.from_name, msg.body = art.get("Subject", ""), art["From"], art.body
             msg.kind = message_kind(art)                     # UN-RFC 0028
+            msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
             naming.note_certificate(self, msg.author_key, art.get(names.HEADER))
         return msg
 
@@ -1666,6 +1677,7 @@ class Session:
         msg.readable = True
         msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
         msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
+        msg.content_type = inner.get("Content-Type", "")
 
     def _redecrypt(self, group_id: str) -> None:
         entry = self.group_entry(group_id)
@@ -1713,13 +1725,15 @@ class Session:
         return art.message_id
 
     async def post(self, group_id: str, subject: str, body: str,
-                   references: list[str] | None = None, kind: str = KIND_POST) -> str:
+                   references: list[str] | None = None, kind: str = KIND_POST,
+                   content_type: str | None = None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028)."""
         if kind not in self.group_kinds(group_id):
             raise SessionError("this group does not take " +
                                ("chat lines" if kind == KIND_CHAT else "posts with a subject"))
         if kind == KIND_POST and not subject.strip():
             raise SessionError("a post needs a subject")
+        content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         author = self.identity()
         entry = self.group_entry(group_id)
         cert = None
@@ -1732,7 +1746,8 @@ class Session:
             def build(bits):                       # postage is CPU work: runs in a thread
                 return encrypted_article(
                     group_id, epoch, keys, author, from_name=self.display_name(),
-                    subject=subject, body=body, references=references, kind=kind, pow_bits=bits)
+                    subject=subject, body=body, references=references, kind=kind,
+                    content_type=content_type, pow_bits=bits)
         else:
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
 
@@ -1740,7 +1755,8 @@ class Session:
                 # a chat line has an empty subject; the kind is a header (UN-RFC 0028, 3.2-3.3)
                 art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
                                   from_name=self.display_name(), references=references,
-                                  extra=[("Message-Kind", kind)] + ([cert] if cert else []))
+                                  extra=[("Content-Type", content_type), ("Message-Kind", kind)]
+                                  + ([cert] if cert else []))
                 return art.finalize(author, bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):

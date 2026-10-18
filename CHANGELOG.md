@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Markdown and emoji (UN-RFC 0031, draft): posts and private posts are
+  Markdown by default (`Content-Type: text/markdown; ...; variant=unseenet`),
+  a small safe subset; chat lines a lighter one. No raw HTML, nothing loaded
+  from outside, images only from attachments, links show their address.
+  Emoji as Unicode or as gemoji shortcodes (`:tada:`). The terminal client
+  renders it; Ctrl+P *Write plain text* turns it off. Core: `core.markup`,
+  shared by every client. New dependency: `markdown-it-py`. (#153)
 - Chats and posts (UN-RFC 0028, draft): every message says whether it
   is a chat line or a post (with a subject), in groups and in
   private messages. Messages from older clients count as posts. (#152)
