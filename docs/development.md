@@ -323,7 +323,7 @@ version gets a branch only when it needs a fix:
 
 A release branch takes only fixes: no new features, no protocol changes.
 It is supported until the next minor release (see
-[SECURITY.md](../SECURITY.md#supported-versions)). Development builds are
+[SECURITY.md](https://github.com/unseenet/unseenet/blob/main/SECURITY.md#supported-versions)). Development builds are
 made from `main` only.
 
 ### Test releases and development builds
