@@ -85,7 +85,7 @@ protect anyone yet.
     <strong>Bootable</strong> that starts full screen.</p>
     <p class="un-web__note">It is newer than the terminal client and only has
     development builds so far.</p>
-    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="https://github.com/unseenet/unseenet-web/releases/tag/dev">Development builds</a></p>
+    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/tag/dev">Development builds</a></p>
   </div>
   <div class="un-web__shots">
     <img class="un-web__main" src="img/web-threads.png" width="1280" height="800" loading="lazy"
