@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0022                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0004, 0008, 0011, 0017
+Updates: 0004, 0008, 0011
 
                     Unseenet: Profiles for Identities
 ```
@@ -205,31 +205,12 @@ MUST say so when a user publishes, changes or removes a public profile
 
 ## 5.4 Lifetime and Renewal
 
-A key that nobody uses any more should not leave a profile on every
-node for ever. A profile manifest therefore has a lifetime: its
-`expires` MUST be present and MUST NOT be more than 730 days after the
-manifest article's `Date` (UN-RFC 0002 section 2.5). A node MUST reject
-a profile manifest that breaks this, and a client MUST ignore one.
-
-The owner's client renews the profile by posting the same manifest
-with a higher `serial`, a new `Date` and a new `expires`. It SHOULD do
-so, without asking the user, once fewer than 545 days remain (the
-manifest is about six months old), at a random moment within the
-following 30 days that the client is running (section 13). A user who
-is away for a year or more therefore keeps the profile.
-
-After `expires`:
-
-- clients treat the profile as absent;
-- a node MUST NOT offer the manifest to peers, and MUST remove the
-  group, with everything in it, within 30 days, unless a valid newer
-  manifest arrives first.
-
-This is an exception to UN-RFC 0017 section 2, which keeps group state
-for ever: for profile and avatar groups, the state ends when its
-manifest expires. A key that is never used again thus disappears from
-the network within about two and a half years, with nothing for anybody
-to clean up.
+Profile groups and avatar groups (section 8.2) are key-bound groups
+(UN-RFC 0029). Their manifests carry `expires`, at most two years
+ahead; the owner's client renews them without asking, together with the
+identity's other key-bound groups, and nodes remove them when they
+expire. A key that is never used again thus loses its profile and
+picture by itself.
 
 # 6. Private Profiles
 
@@ -339,8 +320,7 @@ and, instead of `profile`, the field
 
 - `avatar`: the picture object of section 8.1.
 
-Its `expires` follows section 5.4, and the owner's client renews it
-together with the profile.
+Its `expires` and renewal follow section 5.4.
 
 It is read, changed and removed as a public profile is (sections 5.2
 and 5.3), and nothing published in it can be recalled either.
@@ -508,13 +488,9 @@ inner article.
   person would look different in the TUI, the web client and on
   Android. A fixed derivation costs a few lines and gives everybody a
   recognisable mark without uploading anything.
-- **Why do profiles expire?** Manifests are otherwise kept for ever
-  (UN-RFC 0017), and profiles are per identity, not per group: after
-  some decades almost all of them would belong to forgotten keys. Names
-  solved the same problem with renewal (UN-RFC 0019 section 6.3). Two
-  years is long enough that nobody loses a profile by being away, and
-  renewal is automatic, so the cost falls on keys that are no longer
-  used.
+- **Why do profiles expire?** They are per identity, and after some
+  decades almost all of them would belong to forgotten keys. UN-RFC
+  0029 gives all key-bound groups the same lifetime and renewal.
 - **Why an open list of kinds?** Services come and go. A fixed field per
   service would need a protocol change for each new one; `kind` and
   `value` need none, and `x-` kinds can be tried before they are added.
@@ -564,11 +540,7 @@ inner article.
 - **Copied pictures.** Anybody can use somebody else's picture.
   Clients show it only beside names and fingerprints and MAY warn about
   duplicates (section 8.5).
-- **Renewal shows activity.** A renewal tells nodes that the key's
-  holder ran a client at about that time. Renewing at a random moment
-  within a 30-day window (section 5.4), with the rounded `Date`, keeps
-  this to "was active some time this month", which is less than any
-  post tells.
+- **Renewal shows activity.** See UN-RFC 0029 section 11.
 - **Proof checks.** Fetching a page leaks to the service that somebody
   checked it over Tor, and when. That is why it is never automatic.
 
@@ -576,9 +548,7 @@ inner article.
 
 - UN-RFC 0004 section 3.1: the manifest fields `profile` (object, only
   in profile groups), `avatar` (object, only in avatar groups) and
-  `expires` (date, required in both) are added.
-- UN-RFC 0017 section 2: the state of profile and avatar groups ends
-  when their manifest expires (section 5.4).
+  `expires` (UN-RFC 0029) are added.
 - UN-RFC 0008 section 3.1.1: profile and avatar groups are data groups.
 - UN-RFC 0011 section 4: the policy fields `profiles` and `avatars`
   (section 10).
