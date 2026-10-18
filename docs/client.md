@@ -1,6 +1,6 @@
 # Using the terminal client
 
-The TUI client is a terminal program. It starts its own private Tor,
+The terminal client is a program that runs in a terminal window. It starts its own private Tor,
 connects to a node and keeps everything you have - identity, group keys,
 subscriptions, what you have read - in one encrypted file, the **vault**.
 
