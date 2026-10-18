@@ -66,6 +66,23 @@ SECTIONS: tuple[Section, ...] = (
         "country can forbid Unseenet, but there is nobody to order to turn it off and no single "
         "place to pull the plug.",
     )),
+    Section("Out of reach of the powerful", (
+        "No government, company or other powerful organisation can take control of Unseenet. "
+        "There is no owner to pressure, no list of names, emails or phone numbers to hand over, "
+        "and no record of who connected from where - because none of it exists.",
+        "Nor can they look up who wrote a post or where it was written from. The only one who "
+        "can give away who you are is you: by your name, by what you write, or by who you tell.",
+    )),
+    Section("A voice for those who must not be found", (
+        "This matters most to the people who need it most: whistleblowers who want to expose "
+        "wrongdoing without losing their job or their freedom, journalists and their sources, "
+        "people living where criticising those in power is punished, and anyone who has "
+        "something to say that they cannot say under their own name.",
+        "Tools such as Tor Browser and SecureDrop already protect people like them every day. "
+        "Unseenet wants to give them somewhere to talk together, not only a way to send a tip. "
+        "But until Unseenet has been independently reviewed, they should rely on the tools that "
+        "have been - see \"Where it stands\" below.",
+    )),
     Section("A post from you is from you", (
         "The first time you start Unseenet, your client makes a key for you. Think of it as a "
         "personal seal that only you hold, kept locked away in your vault.",
@@ -95,6 +112,20 @@ SECTIONS: tuple[Section, ...] = (
         "Each group has an owner who sets its rules and can ban people from it, and hierarchies "
         "such as dk.* have maintainers who can stop illegal content such as threats. But nobody "
         "rules the whole network.",
+    )),
+    Section("The other side of the coin", (
+        "The protection that shields a whistleblower also shields people with bad intentions. "
+        "Criminals and other shady people can use Unseenet too, and they are harder to find here "
+        "than on a platform that knows everyone's phone number.",
+        "Unseenet cannot check anyone's age or identity - having no accounts is the whole point. "
+        "So there is no age check, and in open groups you may meet things you did not ask for. "
+        "It is not a place for children without an adult who knows what it is.",
+        "What there is: group owners can ban people from their groups, hierarchy maintainers can "
+        "block illegal content such as threats across a whole hierarchy, and you decide which "
+        "groups you follow. The law still applies to what people say and do; Unseenet only "
+        "makes it harder to find out who did it.",
+        "We believe a free place to talk is worth that price, as Tor and encrypted messaging "
+        "are. But you should know that there is a price.",
     )),
     Section("Open, like in the old days", (
         "How Unseenet works is written down in open documents, the UN-RFCs, the way the "

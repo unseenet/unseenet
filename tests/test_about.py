@@ -15,6 +15,8 @@ def test_says_honestly_where_it_stands():
     status = " ".join(about.STATUS.paragraphs)
     assert "pre-alpha" in status and "security review" in status
     assert about.STATUS.title in about.as_text()           # never left out of a client
+    titles = [s.title for s in about.SECTIONS]
+    assert "The other side of the coin" in titles          # the price is said, not hidden
 
 
 def test_as_dict_is_json_and_complete():
