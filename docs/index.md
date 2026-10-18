@@ -75,6 +75,26 @@ protect anyone yet.
 
 </div>
 
+<section class="un-web" aria-labelledby="web-teaser">
+  <div class="un-web__text">
+    <p class="un-web__kicker">Preview</p>
+    <h2 id="web-teaser" class="un-web__title">Prefer a mouse? There's a graphical client too.</h2>
+    <p>The web client is Unseenet in a window: the same groups, keys and vault,
+    with threads you can click through and chat that looks like chat. It comes
+    as a <strong>Portable</strong> (Linux, macOS, Windows) and a
+    <strong>Bootable</strong> that starts full screen.</p>
+    <p class="un-web__note">It is newer than the terminal client and only has
+    development builds so far.</p>
+    <p class="un-web__links"><a href="web/">The web client</a> · <a href="https://github.com/unseenet/unseenet-web/releases/tag/dev">Development builds</a></p>
+  </div>
+  <div class="un-web__shots">
+    <img class="un-web__main" src="img/web-threads.png" width="1280" height="800" loading="lazy"
+         alt="The web client showing a discussion group: the thread as a tree, and the selected post below it with a quote and a Reply button">
+    <img class="un-web__inset" src="img/web-chat.png" width="1200" height="750" loading="lazy"
+         alt="The web client showing a chat group with chat bubbles and a message bar">
+  </div>
+</section>
+
 ## How it fits together
 
 <div class="un-how" markdown>
