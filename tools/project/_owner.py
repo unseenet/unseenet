@@ -53,8 +53,18 @@ async def read_manifests(c: Client, group_ids: list[str]) -> dict[str, dict]:
             _, low, high = await c.group(gid)
         except (NNTPError, OSError, ConnectionError, ValueError, asyncio.IncompleteReadError):
             continue
-        for n in range(low, high + 1) if high >= low else ():
-            raw = await c.article(str(n))
+        if high < low:
+            continue
+        # Ask which articles are manifests (one HDR) and fetch only those, instead
+        # of every post in the group, one round trip over Tor each (#170).
+        try:
+            lines = await c.multiline(f"HDR Control {low}-{high}", 225)
+            numbers = [ln.split(" ", 1)[0] for ln in lines
+                       if ln.partition(" ")[2].strip().lower().startswith("manifest")]
+        except (NNTPError, OSError, ConnectionError, ValueError, asyncio.IncompleteReadError):
+            numbers = [str(n) for n in range(low, high + 1)]   # a node without HDR
+        for n in numbers:
+            raw = await c.article(n)
             if not raw:
                 continue
             try:
