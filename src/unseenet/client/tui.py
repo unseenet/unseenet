@@ -51,6 +51,27 @@ FOR_YOU = "for-you:"          # replies to you and mentions, from all groups (#1
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
 
 
+def for_you_marks(c) -> str:
+    """' ◄1 ♦2' for a ForYouCount: replies and mentions apart (#170); '' when none."""
+    return ((f" {REPLY_MARK}{c.replies}" if c.replies else "")
+            + (f" {MENTION_MARK}{c.mentions}" if c.mentions else ""))
+
+
+def for_you_news(before, now) -> str | None:
+    """The notification for new replies/mentions since the last refresh, or None."""
+    replies, mentions = now.replies - before.replies, now.mentions - before.mentions
+    parts = []
+    if replies > 0:
+        parts.append(f"{REPLY_MARK} {replies} new {'reply' if replies == 1 else 'replies'} "
+                     "to your posts")
+    if mentions > 0:
+        parts.append(f"{MENTION_MARK} {mentions} new {'post' if mentions == 1 else 'posts'} "
+                     "naming you")
+    if not parts:
+        return None
+    return "  ·  ".join(parts) + ". See 'For you' at the top of your groups."
+
+
 def node_label(address: str) -> str:
     """A short name for a node address: the start of its onion name."""
     host = address.split(":")[0]
@@ -1573,11 +1594,11 @@ class UnseenetApp(App):
             except (SessionError, OSError, ConnectionError):
                 pass
         before = getattr(self, "_for_you_seen", None)
-        now = len(s.for_you())
+        now = s.for_you_counts()
         await self._render_groups()
-        if before is not None and now > before:
-            self.notify(f"{REPLY_MARK} {now - before} new for you - a reply to your post, or "
-                        "someone naming you. See 'For you' at the top of your groups.", timeout=8)
+        news = for_you_news(before, now) if before is not None else None
+        if news:
+            self.notify(news, timeout=8)
         self._for_you_seen = now
         if self.current_group in groups or self._current_contact() or self.current_group == FOR_YOU:
             self._render_threads()
@@ -1606,9 +1627,9 @@ class UnseenetApp(App):
         def label(g: GroupInfo) -> Text:
             unread = (self.session.unread_private_posts() if g.group_id == self.session.my_inbox
                       else self.session.unread_count(g.group_id))
-            mine = self.session.for_you_count(g.group_id) if g.group_id != self.session.my_inbox else 0
-            text = Text(self._group_label(g) + (f" ({unread})" if unread else "")
-                        + (f" {REPLY_MARK}{mine}" if mine else ""))
+            marks = (for_you_marks(self.session.for_you_counts(g.group_id))
+                     if g.group_id != self.session.my_inbox else "")
+            text = Text(self._group_label(g) + (f" ({unread})" if unread else "") + marks)
             if unread:
                 text.stylize("bold")
             return text
@@ -1620,12 +1641,12 @@ class UnseenetApp(App):
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
             nodes[g.group_id] = node
-        for_you = len(self.session.for_you())
-        text = Text(f"{REPLY_MARK} For you" + (f" ({for_you})" if for_you else ""))
-        if for_you:
+        for_you = self.session.for_you_counts()
+        text = Text(f"{REPLY_MARK} For you" + for_you_marks(for_you))
+        if for_you.total:
             text.stylize("bold")
         nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
-        self._for_you_seen = getattr(self, "_for_you_seen", for_you)
+        self._for_you_seen = getattr(self, "_for_you_seen", None) or for_you
         # one chat per person: your contacts, and anyone else you have chatted with
         # (UN-RFC 0028, 6.2); posts are in Private posts
         partners = self.session.chat_partners()
@@ -1932,10 +1953,10 @@ class UnseenetApp(App):
         if not gid:
             return
         if gid == FOR_YOU:
-            n = len(self.session.for_you())
+            c = self.session.for_you_counts()
             self.query_one("#threads-title", Static).update(
-                f"{REPLY_MARK} For you  ·  {REPLY_MARK} replies to your posts, {MENTION_MARK} posts "
-                f"that name you  ·  {n} unread  ·  from all your groups")
+                f"{REPLY_MARK} For you  ·  {REPLY_MARK} {c.replies} unread replies to your posts, "
+                f"{MENTION_MARK} {c.mentions} unread posts that name you  ·  from all your groups")
             return
         if gid.startswith(CONTACT):
             key = gid[len(CONTACT):]

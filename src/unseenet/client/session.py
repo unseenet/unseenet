@@ -11,6 +11,7 @@ import re
 import base64
 import json
 from dataclasses import dataclass, field
+from typing import NamedTuple
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +36,16 @@ MAX_SIG_LINES = 4               # the old netiquette limit
 DEFAULT_SIGNATURE = "{name}  ·  {key}"   # until you set your own; empty means none
 CACHE_SIDECAR = "cache"
 SENT_SIDECAR = "sent"           # copies of private messages you sent (they are sealed to others)
+
+
+class ForYouCount(NamedTuple):
+    """Unread posts for you: replies to your posts and posts naming you (#109, #170)."""
+    replies: int = 0
+    mentions: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.replies + self.mentions
 
 
 class SessionError(RuntimeError):
@@ -1137,9 +1148,25 @@ class Session:
                       reverse=True)
 
     def for_you_count(self, group_id: str) -> int:
+        return self.for_you_counts(group_id).total
+
+    def for_you_counts(self, group_id: str | None = None) -> "ForYouCount":
+        """Unread replies to you and unread mentions of you, counted apart (#170):
+        in one group, or in all the groups you follow when group_id is None."""
         mine, patterns = self.my_message_ids(), self._mention_patterns()
-        return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
-                   if not self.is_read(m) and self.for_me(m, mine, patterns))
+        gids = ([group_id] if group_id is not None
+                else [g for g in self.data["subscribed"] if g != self.my_inbox])
+        replies = mentions = 0
+        for gid in gids:
+            for m in self.visible(list(self.cache.get(gid, {}).values())):
+                if self.is_read(m):
+                    continue
+                why = self.for_me(m, mine, patterns)
+                if why == "reply":
+                    replies += 1
+                elif why == "mention":
+                    mentions += 1
+        return ForYouCount(replies, mentions)
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown)."""

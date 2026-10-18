@@ -150,7 +150,8 @@ A post that **replies to one of yours** is marked ◄, and one that **names
 you** - one of your certified names, such as `@lorensen` or
 `andreas@lorensen` - is marked ♦. **For you**, at the top of your groups,
 gathers them from all your groups, newest first, and a group shows how many
-it has, e.g. `dk.snak (5) ◄2`. When new ones arrive, the client tells you.
+it has of each, e.g. `dk.snak (5) ◄1 ♦2`: one reply to you and two posts
+naming you. When new ones arrive, the client tells you which kind.
 Display names do not count as mentions, since anyone can call themselves
 anything. All this is worked out in your client; nothing is sent anywhere.
 

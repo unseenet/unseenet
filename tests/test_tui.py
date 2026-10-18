@@ -1134,6 +1134,20 @@ async def test_tui_give_a_name_and_answer_a_request(tmp_path, monkeypatch):
     server.close()
 
 
+def test_for_you_marks_and_news():
+    """#170: replies and mentions are shown and announced apart."""
+    from unseenet.client.session import ForYouCount
+    from unseenet.client.tui import for_you_marks, for_you_news
+    assert for_you_marks(ForYouCount(0, 0)) == ""
+    assert for_you_marks(ForYouCount(1, 2)) == " ◄1 ♦2"
+    assert for_you_marks(ForYouCount(0, 3)) == " ♦3"
+    assert for_you_news(ForYouCount(1, 1), ForYouCount(1, 1)) is None
+    assert for_you_news(ForYouCount(2, 0), ForYouCount(1, 0)) is None   # read some
+    news = for_you_news(ForYouCount(0, 0), ForYouCount(1, 2))
+    assert "◄ 1 new reply" in news and "♦ 2 new posts naming you" in news
+    assert "reply" not in for_you_news(ForYouCount(0, 0), ForYouCount(0, 1))
+
+
 async def test_tui_for_you(tmp_path, monkeypatch):
     """#109: 'For you' at the top of the groups lists a reply to your post, marked."""
     from unseenet.client.tui import FOR_YOU, REPLY_MARK
@@ -1158,6 +1172,13 @@ async def test_tui_for_you(tmp_path, monkeypatch):
         table = app.query_one("#threads")
         assert str(table.get_row_at(0)[1]).startswith(REPLY_MARK)
         assert "For you" in str(app.query_one("#threads-title").render())
+        def walk(node):
+            for n in node.children:
+                yield str(n.label)
+                yield from walk(n)
+        labels = list(walk(app.query_one("#groups").root))
+        assert any("dk.snak" in l and l.endswith(" ◄1") for l in labels), labels
+        assert any(l.startswith("◄ For you") and l.endswith(" ◄1") for l in labels), labels
         await pilot.press("q")
     await other.close()
     server.close()
