@@ -40,6 +40,7 @@ from . import session as _session_module
 from . import naming
 from . import richtext
 from ..core import markup
+from ..core import about
 from ..core import profiles as prof
 from .. import names as nm
 from .session import MAX_MENTION_NOTICES
@@ -47,8 +48,7 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
                       default_vault_path, split_signature)
 
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
-REPO_URL = "https://github.com/unseenet/unseenet"
-DOCS_URL = "https://unseenet.org/"
+REPO_URL, DOCS_URL = about.REPO_URL, about.DOCS_URL
 CONTACT = "contact:"          # tree data prefix for a contact's conversation
 FOR_YOU = "for-you:"          # replies to you and mentions, from all groups (#109)
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
@@ -211,6 +211,8 @@ ModalScreen { align: center middle; }
 .dialog Label.title { text-style: bold; margin-bottom: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
 .dialog.compose { width: 96%; height: 94%; max-height: 100%; }
+.dialog.about { width: 90; max-width: 100%; height: 94%; overflow-y: hidden; }
+.dialog.about #about-text { height: 1fr; padding-right: 1; }
 .dialog.compose #body { height: 1fr; margin-bottom: 1; }
 .dialog .buttons { height: auto; align-horizontal: right; dock: bottom; }
 .dialog Button { margin-left: 1; min-width: 8; width: auto; }
@@ -1133,27 +1135,30 @@ class AboutDialog(Dialog):
     """F1: what this program is, and where the project lives."""
 
     def compose(self) -> ComposeResult:
-        text = (
-            f"Unseenet {__version__}\n"
-            "\n"
-            "Discussion groups the old Usenet way, carried over Tor. Nodes, run by\n"
-            "anyone, replicate groups to each other; this client talks to one of\n"
-            "them and keeps everything in a single encrypted vault, so it can live\n"
-            "on a USB stick and leave nothing behind.\n"
-            "\n"
-            "Every post is signed, paid for with a little proof of work instead of\n"
-            "an account, and closed groups and private messages are encrypted end\n"
-            "to end. No central server, no company, no ads.\n"
-            "\n"
-            "The protocol is written down as open UN-RFCs, so anyone can build a\n"
-            "compatible node or client. Free software, Apache License 2.0.\n"
-            "\n"
-            f"Source:         {REPO_URL}\n"
-            f"Documentation:  {DOCS_URL}"
-        )
-        with Vertical(classes="dialog"):
-            yield Label("About Unseenet", classes="title")
-            yield Static(text, markup=False)
+        # the text is the core's (core/about.py), so every client says the same
+        text = Text()
+
+        def para(p: str) -> None:
+            text.append(p + "\n\n")
+
+        for s in about.SECTIONS:
+            text.append(s.title + "\n\n", style="bold")
+            for p in s.paragraphs:
+                para(p)
+        text.append(about.COMPARISONS_TITLE + "\n\n", style="bold")
+        para(about.COMPARISONS_INTRO)
+        for c in about.COMPARISONS:
+            text.append(c.name + ": ", style="bold")
+            para(c.text)
+        text.append(about.STATUS.title + "\n\n", style="bold")
+        for p in about.STATUS.paragraphs:
+            para(p)
+        text.append(f"Source:         {REPO_URL}\nDocumentation:  {DOCS_URL}")
+        with Vertical(classes="dialog about"):
+            yield Label(f"About Unseenet {__version__} - {about.TAGLINE}", classes="title",
+                        markup=False)
+            with VerticalScroll(id="about-text"):
+                yield Static(text)
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
                 yield Button("GitHub", id="repo")
