@@ -2,7 +2,7 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "tools/docs_hooks.py", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "tools/docs_hooks.py", "src/unseenet/core/about.py", ".github/workflows/docs.yml"]
   # After a release or a new development build, so the front page shows its version
   workflow_run:
     workflows: [release, portable]

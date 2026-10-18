@@ -68,6 +68,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Why Unseenet: why.md
   - Getting started:
       - Portable (Linux, macOS, Windows): portable.md
       - Bootable (USB, SSD etc.): bootable.md

@@ -126,8 +126,41 @@ def header_lines() -> str:
     return "\n".join(out)
 
 
+ABOUT_MARKER = "<!-- unseenet:about -->"
+
+
+def _about_module(config):
+    """core/about.py, loaded by path: the docs build installs only mkdocs, not unseenet."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(config["config_file_path"]),
+                        "src", "unseenet", "core", "about.py")
+    spec = importlib.util.spec_from_file_location("unseenet_about_for_docs", path)
+    mod = importlib.util.module_from_spec(spec)
+    import sys
+    sys.modules[spec.name] = mod   # dataclasses look their module up here
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def about_markdown(config) -> str:
+    """The "About Unseenet" text every client shows, as the docs page "Why Unseenet"."""
+    d = _about_module(config).as_dict()
+    out = []
+    for s in d["sections"]:
+        out += [f"## {s['title']}", ""] + [line for p in s["paragraphs"] for line in (p, "")]
+    c = d["comparisons"]
+    out += [f"## {c['title']}", "", c["intro"], ""]
+    for item in c["items"]:
+        out += [f"### {item['name']}", "", item["text"], ""]
+    st = d["status"]
+    out += [f"## {st['title']}", ""] + [line for p in st["paragraphs"] for line in (p, "")]
+    return "\n".join(out)
+
+
 def on_page_markdown(markdown: str, page, config, files) -> str:
     global _lines
+    if ABOUT_MARKER in markdown:
+        markdown = markdown.replace(ABOUT_MARKER, about_markdown(config))
     if MARKER not in markdown:
         return markdown
     if _lines is None:

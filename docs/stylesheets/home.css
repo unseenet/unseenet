@@ -245,6 +245,39 @@
 .md-typeset .un-points dt { font-weight: 700; margin-top: 0; }
 .md-typeset .un-points dd { margin: 0.15rem 0 0.9rem; }
 
+/* ---- How is it different? ------------------------------------------------------ */
+
+.un-compare-wrap { overflow-x: auto; margin: 0.8rem 0 0.6rem; }
+.md-typeset table.un-compare {
+  display: table;
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 34rem;
+  font-size: 0.72rem;
+  border: 0;
+  box-shadow: none;
+}
+.md-typeset .un-compare th,
+.md-typeset .un-compare td {
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  text-align: center;
+  white-space: nowrap;
+}
+.md-typeset .un-compare th[scope="row"] { text-align: left; white-space: normal; font-weight: 600; }
+.md-typeset .un-compare thead th { font-weight: 700; vertical-align: bottom; }
+/* The Unseenet column stands out a little */
+.md-typeset .un-compare th:nth-child(2),
+.md-typeset .un-compare td:nth-child(2) {
+  background: color-mix(in srgb, var(--un-green) 12%, transparent);
+  font-weight: 700;
+}
+/* Words, not only colour, carry the meaning */
+.md-typeset .un-compare td.y { color: var(--un-green-deep); }
+.md-typeset .un-compare td.p { color: var(--md-default-fg-color--light); }
+.md-typeset .un-compare td.n { color: var(--md-default-fg-color--lighter); }
+[data-md-color-scheme="slate"] .md-typeset .un-compare td.y { color: var(--un-green); }
+
 /* ---- Small screens ----------------------------------------------------------- */
 
 @media (max-width: 52em) {
