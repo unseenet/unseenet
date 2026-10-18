@@ -397,6 +397,8 @@ async def c_group_create(app: App, args) -> None:
     art = make_manifest(owner, args.name, args.type, title=args.title or "",
                         description=args.description or "", min_pow=args.min_pow,
                         local=args.local, retention_days=30 if args.type == "inbox" else 90,
+                        comments=args.comments if args.type == "channel" else None,
+                        comment_days=args.comment_days if args.type == "channel" else None,
                         pow_bits=DEFAULT_POW)
     await app.post(art)
     group_id = art.group
@@ -534,6 +536,10 @@ def client_main(argv=None) -> None:
     s.add_argument("--title")
     s.add_argument("--description")
     s.add_argument("--min-pow", type=int, default=20)
+    s.add_argument("--comments", choices=["none", "open"], default="none",
+                   help="channels: whether readers may comment on posts (UN-RFC 0030)")
+    s.add_argument("--comment-days", type=int,
+                   help="channels: days after a post during which it takes comments")
     s = sub.add_parser("group-remove", help="remove groups you own from the whole network (final)")
     s.add_argument("group", nargs="+", help="full group ID, name@fingerprint")
     s.add_argument("--reason", help="short reason, shown to nodes and readers")

@@ -72,7 +72,8 @@ class Puller:
                     result["accepted"] += 1
                 except ArticleError as err:
                     result["rejected"][err.reason] += 1
-                    if err.reason != "duplicate":
+                    # "later": a comment before its thread (UN-RFC 0030, 4.1); fetch again
+                    if err.reason not in ("duplicate", "later"):
                         # Do not fetch it from this peer again, but do not refuse the
                         # article itself: a client may post it here, our policy may
                         # change, or its group's manifest may still be on its way (#132).

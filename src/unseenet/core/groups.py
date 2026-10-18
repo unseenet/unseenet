@@ -6,9 +6,11 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Callable
 
 from . import crypto
-from .article import Article, ArticleError, new_article
+from .article import Article, ArticleError, new_article, parse_date
 from .encoding import DS, H, b32, b64, b64decode
 
 GROUP_TYPES = ("open", "moderated", "channel", "closed", "inbox")
@@ -80,6 +82,26 @@ def _kinds(data: dict) -> tuple[str, ...]:
     return tuple(kinds)
 
 
+# --- comments in channels (UN-RFC 0030) ----------------------------------
+
+COMMENTS_NONE, COMMENTS_OPEN = "none", "open"
+
+
+def _comments(data: dict) -> tuple[str, int | None]:
+    """A manifest's ``comments`` and ``comment_days`` (UN-RFC 0030 section 3);
+    raises ValueError if invalid or given for a group that is not a channel."""
+    has = "comments" in data or "comment_days" in data
+    if has and data.get("type") != "channel":
+        raise ValueError("comments and comment_days are for channels only")
+    comments = data.get("comments", COMMENTS_NONE)
+    if comments not in (COMMENTS_NONE, COMMENTS_OPEN):
+        raise ValueError('comments must be "none" or "open"')
+    days = data.get("comment_days")
+    if days is not None and (type(days) is not int or days < 1):
+        raise ValueError("comment_days must be a positive integer")
+    return comments, days
+
+
 # --- manifests (section 3) --------------------------------------------------
 
 @dataclass
@@ -102,6 +124,8 @@ class Manifest:
     low_latency: bool = False            # UN-RFC 0008
     kinds: tuple[str, ...] = MESSAGE_KINDS   # UN-RFC 0028, 4.1
     banned: list[bytes] = field(default_factory=list)   # UN-RFC 0004, 5.1
+    comments: str = COMMENTS_NONE        # UN-RFC 0030, channels only
+    comment_days: int | None = None      # UN-RFC 0030
     message_id: str = ""
     raw: dict = field(default_factory=dict)
 
@@ -130,6 +154,7 @@ class Manifest:
                 banned=[_banned_key(b) for b in data.get("banned", [])],
                 message_id=art.message_id, raw=data,
             )
+            m.comments, m.comment_days = _comments(data)
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
             raise ArticleError("syntax", f"bad manifest: {exc}") from exc
         if data.get("v") != 1 or m.name != name or m.type not in GROUP_TYPES or m.serial < 1:
@@ -154,13 +179,19 @@ class Manifest:
             return pk in self.posters
         return False
 
+    def is_starter(self, pk: bytes) -> bool:
+        """May start a thread in a channel (UN-RFC 0030 section 2)."""
+        return self.type == "channel" and (pk == self.owner or pk in self.moderators
+                                           or pk in self.posters)
+
 
 def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int = 1,
                   title: str = "", description: str = "", moderators=(), posters=(),
                   min_pow: int = 0, retention_days: int = 90, sealed: str | None = None,
                   local: bool = False, submissions: str | None = None,
                   rules: str = "", view: str | None = None, low_latency: bool = False,
-                  kinds: list[str] | None = None, pow_bits: int = 18) -> Article:
+                  kinds: list[str] | None = None, comments: str | None = None,
+                  comment_days: int | None = None, pow_bits: int = 18) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -188,6 +219,10 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["low_latency"] = True
     if kinds is not None and tuple(kinds) != MESSAGE_KINDS and gtype != "inbox":
         data["kinds"] = list(kinds)          # both is the default, so it is left out
+    if comments and comments != COMMENTS_NONE:  # none is the default (UN-RFC 0030)
+        data["comments"] = comments
+    if comment_days is not None:
+        data["comment_days"] = comment_days
     return manifest_article(owner, group_id, data, pow_bits)
 
 
@@ -202,6 +237,7 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
     if data.get("view", "threads") not in VIEWS:
         raise ValueError("view must be one of " + ", ".join(VIEWS))
     _kinds(data)                                           # UN-RFC 0028, 4.1
+    _comments(data)                                        # UN-RFC 0030, 3
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
@@ -407,9 +443,18 @@ def _banned_key(entry) -> bytes:
     return crypto.key_from_text(entry["key"])
 
 
+ThreadRoot = Callable[[str], "Article | None"]
+
+
 def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes],
-                    closed_before: int = 0) -> None:
-    """Raise ArticleError('permission') unless the article may be posted."""
+                    closed_before: int = 0, thread_root: ThreadRoot | None = None) -> None:
+    """Raise ArticleError('permission') unless the article may be posted.
+
+    ``thread_root`` looks up an article this node holds by Message-ID (None if it
+    does not hold it yet); it is needed for comments in channels (UN-RFC 0030). An
+    article that may become acceptable once its thread arrives raises
+    ArticleError('later'), which a node answers as a temporary failure.
+    """
     pk = art.author_key
     if manifest.type != "inbox" and pk in manifest.banned:
         raise ArticleError("permission", "banned from this group")
@@ -441,4 +486,24 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         return
     if manifest.type == "moderated" and has_valid_approval(art, manifest):
         return
+    if manifest.type == "channel" and manifest.comments == COMMENTS_OPEN and art.control is None:
+        _check_comment(art, manifest, thread_root)
+        return
     raise ArticleError("permission", f"not allowed to post in {manifest.type} group")
+
+
+def _check_comment(art: Article, manifest: Manifest, thread_root: ThreadRoot | None) -> None:
+    """UN-RFC 0030 section 4: a reply to a thread a starter began."""
+    refs = art.get("References", "").split()
+    if not refs:
+        raise ArticleError("permission", "only the channel's posters start threads; "
+                                         "you may comment on one")
+    root = thread_root(refs[0]) if thread_root is not None else None
+    if root is None:
+        raise ArticleError("later", "the thread is not on this node yet")
+    if root.group != art.group or root.control is not None or root.get("References", "").strip():
+        raise ArticleError("permission", "not a comment on a thread in this channel")
+    if manifest.comment_days is not None:
+        limit = parse_date(root["Date"]) + timedelta(days=manifest.comment_days)
+        if parse_date(art["Date"]) > limit:
+            raise ArticleError("permission", "comments on this thread have closed")

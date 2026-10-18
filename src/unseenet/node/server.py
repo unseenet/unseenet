@@ -79,6 +79,9 @@ class Node:
         self._watchers: list[tuple[str, asyncio.Queue]] = []   # UN-RFC 0008 section 2
         self.stats = Stats()                  # for the operator's monitor (node/stats.py)
         self._blocks: dict[str, tuple[float, dict]] = {}   # group name -> (time, blocks)
+        # comments that came before their thread (UN-RFC 0030, 4.1):
+        # thread root Message-ID -> [(time held, raw, source, from_peer)]
+        self._held: dict[str, list[tuple[float, bytes, str | None, bool]]] = {}
 
     def watch(self, pattern: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -127,9 +130,51 @@ class Node:
             art = self._accept(raw, source, now, from_peer)
         except ArticleError as err:
             self.stats.rejected_one(err.reason)
+            if err.reason == "later":
+                self._hold(raw, source, from_peer)
             raise
         self.stats.accepted_one(how or ("peer" if from_peer else "client"))
+        self._release_held(art.message_id)
         return art
+
+    # --- comments before their thread (UN-RFC 0030 section 4.1) ---
+    HOLD_SECONDS = 3600.0
+    HOLD_MAX = 1000
+
+    def _hold(self, raw: bytes, source: str | None, from_peer: bool) -> None:
+        """Keep a comment aside until its thread arrives, at most an hour. The
+        sender is told to try again anyway, so dropping one here loses nothing."""
+        try:
+            root = Article.from_bytes(raw).get("References", "").split()[0]
+        except (ArticleError, ValueError, IndexError):
+            return
+        now = time.monotonic()
+        for key in [k for k, v in self._held.items()
+                    if all(now - t > self.HOLD_SECONDS for t, *_ in v)]:
+            del self._held[key]
+        if sum(len(v) for v in self._held.values()) >= self.HOLD_MAX:
+            return
+        waiting = self._held.setdefault(root, [])
+        if all(r != raw for _, r, _, _ in waiting):
+            waiting.append((now, raw, source, from_peer))
+
+    def _release_held(self, message_id: str) -> None:
+        now = time.monotonic()
+        for held_at, raw, source, from_peer in self._held.pop(message_id, []):
+            if now - held_at <= self.HOLD_SECONDS:
+                try:
+                    self.accept(raw, source=source, from_peer=from_peer)
+                except ArticleError as err:
+                    log.debug("held comment not accepted: %s", err)
+
+    def _thread_root(self, message_id: str) -> Article | None:
+        """An article this node holds, for comments in channels (UN-RFC 0030, 4)."""
+        raw = self.store.get(message_id)
+        if raw is not None:
+            return Article.from_bytes(raw)
+        if self.store.seen(message_id):      # was here, but expired or was cancelled
+            raise ArticleError("permission", "that thread is no longer on this node")
+        return None
 
     def _accept(self, raw: bytes, source: str | None, now: datetime | None,
                 from_peer: bool) -> Article:
@@ -176,7 +221,7 @@ class Node:
         else:
             self._check_cancelled(art, manifest)
             check_permitted(art, manifest, self.store.epochs(art.group),
-                            self.store.closed_before(art.group))
+                            self.store.closed_before(art.group), thread_root=self._thread_root)
             self._check_blocked(art)
             self.store.add(art, raw)
         self._enqueue(art, source)
@@ -864,7 +909,9 @@ class Session:
         self.send("335 send it")
         await self.writer.drain()
         raw = await read_block(self.reader, self.node.config.max_size + 1024)
-        self.send("235 transferred" if self._try_accept(raw, from_peer=True) is None else "437 rejected")
+        err = self._try_accept(raw, from_peer=True)
+        self.send("235 transferred" if err is None
+                  else "436 try again later" if err.reason == "later" else "437 rejected")
 
     async def cmd_check(self, args):
         if not args or not self._peer_allowed():
@@ -879,4 +926,6 @@ class Session:
         if self.node.config.require_peer_auth and not self.peer:
             self.send(f"439 {args[0]}")
             return
-        self.send(f"{239 if self._try_accept(raw, from_peer=True) is None else 439} {args[0]}")
+        err = self._try_accept(raw, from_peer=True)
+        # 431 after TAKETHIS: our peers retry it later (UN-RFC 0005 5.2, UN-RFC 0030 4.1)
+        self.send(f"{239 if err is None else 431 if err.reason == 'later' else 439} {args[0]}")

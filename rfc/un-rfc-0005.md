@@ -96,6 +96,7 @@ section 5). On rejection it answers `441` followed by a short reason:
 | `441 duplicate`    | Already have it                             |
 | `441 date`         | Date outside the accepted window            |
 | `441 size`         | Too large                                   |
+| `441 later`        | Not acceptable yet; post it again later (UN-RFC 0030) |
 
 Because Message-IDs are content-derived, a client already knows the
 Message-ID before posting and can retry safely: a repeated POST of the

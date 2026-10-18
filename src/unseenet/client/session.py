@@ -20,6 +20,7 @@ from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
+from ..core.groups import _comments  # UN-RFC 0030 field check
 from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -573,7 +574,8 @@ class Session:
                            min_pow: int = DEFAULT_POW, local: bool = False,
                            retention_days: int | None = None, rules: str = "",
                            view: str | None = None, low_latency: bool = False,
-                           kinds: list[str] | None = None, node: str | None = None) -> str:
+                           kinds: list[str] | None = None, node: str | None = None,
+                           comments: str | None = None, comment_days: int | None = None) -> str:
         owner = self.identity()
         node = node or self.node
         if retention_days is None:
@@ -581,6 +583,8 @@ class Session:
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
                             rules=rules, view=view, low_latency=low_latency, kinds=kinds,
+                            comments=comments if gtype == "channel" else None,
+                            comment_days=comment_days if gtype == "channel" else None,
                             pow_bits=await self.required_pow(None, node=node))
         await self._post_article(art, node)
         entry = {"type": gtype, "owner": True, "keys": {}, "manifest": json.loads(art.body),
@@ -610,6 +614,14 @@ class Session:
         if gtype == "closed":
             return bool(entry.get("keys"))    # a member: you have the group's key
         return True                          # open, moderated (goes to approval), inbox
+
+    def may_reply(self, group_id: str) -> bool:
+        """Whether a reply of yours would be accepted: as :meth:`may_post`, and in a
+        channel open for comments, a comment from anyone (UN-RFC 0030)."""
+        if self.may_post(group_id):
+            return True
+        data = self.manifest_data(group_id)
+        return data.get("type") == "channel" and data.get("comments") == "open"
 
     # --- moderation (UN-RFC 0004 section 5, UN-RFC 0009 section 3) ---
     def moderates(self, group_id: str) -> bool:
@@ -735,7 +747,12 @@ class Session:
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
         allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
-                   "retention_days", "banned", "moderators", "posters", "kinds"}
+                   "retention_days", "banned", "moderators", "posters", "kinds",
+                   "comments", "comment_days"}
+        if ("comments" in changes or "comment_days" in changes) and data.get("type") != "channel":
+            raise SessionError("only channels take comments")
+        if changes.get("comments") == "none":
+            changes["comments"] = None            # the default is left out (UN-RFC 0030)
         if "kinds" in changes and changes["kinds"] is not None:
             kinds = list(dict.fromkeys(changes["kinds"]))
             if not kinds or any(k not in (KIND_CHAT, KIND_POST) for k in kinds):
@@ -747,7 +764,8 @@ class Session:
                 raise SessionError(f"{key} cannot be changed")
             if value in (None, "", False, []) and key in ("title", "description", "rules",
                                                          "low_latency", "banned", "moderators",
-                                                         "posters", "kinds"):
+                                                         "posters", "kinds", "comments",
+                                                         "comment_days"):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -755,6 +773,10 @@ class Session:
             raise SessionError(f"rules are limited to {MAX_RULES} characters")
         if data.get("view", "threads") not in VIEWS:
             raise SessionError("view must be threads or chat")
+        try:
+            _comments(data)
+        except ValueError as exc:
+            raise SessionError(str(exc)) from exc
         data["serial"] = int(data.get("serial", 1)) + 1
         art = manifest_article(self.identity(), group_id, data, await self.required_pow(None))
         await self._post_article(art)
