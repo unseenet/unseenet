@@ -478,7 +478,7 @@ inner article.
 # 12. Rationale
 
 - **Why in the manifest and not in an article?** A manifest is group
-  state, which nodes never expire (UN-RFC 0017), and of several
+  state, which nodes keep until it expires (section 5.4), and of several
   manifests the newest wins on every node (UN-RFC 0004 section 3.2). An
   article would expire with the group's retention, so a person who is
   offline for a few months would lose their profile, and clients would
