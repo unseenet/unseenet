@@ -11,6 +11,14 @@ def test_every_section_has_text():
     assert {c.name for c in about.COMPARISONS} >= {"Discord", "Matrix", "Nostr", "The old Usenet"}
 
 
+def test_says_it_does_chat_discussion_and_private_posts():
+    # What sets Unseenet apart in everyday terms comes right after "What is Unseenet?"
+    second = about.SECTIONS[1]
+    text = " ".join(second.paragraphs)
+    assert "chat" in second.title.lower() and "discussion" in second.title.lower()
+    assert "private posts" in text and "quoting" in text
+
+
 def test_says_honestly_where_it_stands():
     status = " ".join(about.STATUS.paragraphs)
     assert "pre-alpha" in status and "security review" in status

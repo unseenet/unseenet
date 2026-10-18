@@ -18,10 +18,11 @@ hide:
 <h1 class="un-subject"><span class="un-subject__key">Subject:</span> Usenet, unseen.</h1>
 
 <p class="un-lede">
-A discussion network in the spirit of old Usenet and BBSes. Groups, threads
-and chats on nodes that anyone can run, passed between them over Tor onion
-services. You join with one program from a USB stick: no installation, no
-account, nothing left behind.
+Chat, real threaded discussion and private posts - in one network and one
+program, in the spirit of Usenet and the BBSes, but with nobody owning the
+network and nobody able to see who you are. The groups live on nodes that anyone can run, passed
+between them over Tor onion services. You join with one program from a USB
+stick: no installation, no account, nothing left behind.
 </p>
 
 <div class="un-actions">
@@ -114,6 +115,9 @@ protect anyone yet.
 </figure>
 
 <dl class="un-points">
+  <dt>Chat and discussion, side by side</dt>
+  <dd>Chat groups for quick talk, discussion groups with real threads and
+  quoting, and private chats and posts - all in the same program.</dd>
   <dt>Nobody owns the network</dt>
   <dd>You connect to a node. Nodes replicate groups to each other, the way
   Usenet servers did, and anyone can run one.</dd>
@@ -124,7 +128,7 @@ protect anyone yet.
   <dd>Every post is signed. Groups are owned by a key, and their settings
   are signed too.</dd>
   <dt>Nothing to read</dt>
-  <dd>Closed groups and private messages are end-to-end encrypted. The
+  <dd>Closed groups, private chats and private posts are end-to-end encrypted. The
   nodes that carry them only ever see ciphertext.</dd>
   <dt>Spam costs something</dt>
   <dd>Every post carries a small proof-of-work, so flooding a group is
@@ -132,6 +136,34 @@ protect anyone yet.
 </dl>
 
 </div>
+
+## How is it different?
+
+Each of these does some things well. Unseenet is the one that does all of it
+in one place - and hides who you are while it does.
+
+<div class="un-compare-wrap" markdown>
+
+<table class="un-compare">
+  <thead>
+    <tr><th scope="col"></th><th scope="col">Unseenet</th><th scope="col">Discord</th><th scope="col">Matrix</th><th scope="col">Nostr</th><th scope="col">Reddit, forums</th><th scope="col">Old Usenet</th></tr>
+  </thead>
+  <tbody>
+    <tr><th scope="row">Chat</th><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td><td class="p">partly</td><td class="n">no</td></tr>
+    <tr><th scope="row">Threaded discussion with quoting</th><td class="y">yes</td><td class="p">partly</td><td class="p">partly</td><td class="p">partly</td><td class="y">yes</td><td class="y">yes</td></tr>
+    <tr><th scope="row">Private talk only the people in it can read</th><td class="y">yes</td><td class="n">no</td><td class="y">yes</td><td class="p">partly</td><td class="n">no</td><td class="n">no</td></tr>
+    <tr><th scope="row">No account, email or phone number</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="y">yes</td><td class="n">no</td><td class="p">partly</td></tr>
+    <tr><th scope="row">Nobody owns the network</th><td class="y">yes</td><td class="n">no</td><td class="y">yes</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
+    <tr><th scope="row">Servers cannot be located or taken down</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td></tr>
+    <tr><th scope="row">Always over Tor</th><td class="y">yes</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="n">no</td></tr>
+  </tbody>
+</table>
+
+</div>
+
+"Partly" means it is there in some form but not the way Unseenet does it -
+the details, and the price Unseenet pays for its choices, are in
+[Why Unseenet](why.md).
 
 ## Where to start
 
@@ -145,7 +177,7 @@ Pick what you want to do. Each path lists the pages in the order to read them.
   <ol class="un-path__steps">
     <li><a href="portable/">Portable (Linux, macOS, Windows)</a> <span class="un-or">or</span> <a href="bootable/">Bootable (USB, SSD etc.)</a></li>
     <li><a href="client/#first-start">First start</a>: your vault, a name, a node</li>
-    <li><a href="client/">Using the client</a>: groups, chat, private messages</li>
+    <li><a href="client/">Using the client</a>: groups, chat, discussion, private posts</li>
     <li><a href="updating/">Updating</a></li>
   </ol>
   <p class="un-path__more">Also: <a href="other-clients/">other newsreaders</a> · <a href="tor/">Tor and Tails</a></p>

@@ -38,6 +38,18 @@ SECTIONS: tuple[Section, ...] = (
         "old laptop. The nodes copy the groups to each other, so every group exists in many "
         "places at once. The name says it: Usenet, unseen.",
     )),
+    Section("Chat, discussion and private posts - in one place", (
+        "Most places online now give you only one way to talk. Chat apps give you a stream of "
+        "quick lines that scroll away. Forums and the old Usenet give you threads, but no chat. "
+        "For anything private you need yet another app.",
+        "Unseenet has all three, in the same network and the same program. Chat groups for "
+        "quick talk. Discussion groups where every post has its place in a thread, you can "
+        "read one post at a time, and you reply by quoting what you answer - so a good "
+        "discussion is still easy to follow a week later. And private chats and private posts "
+        "for when it is just between you and someone else.",
+        "Each group's owner decides what the group is for, and your client always shows "
+        "clearly whether you are writing a chat line or a post.",
+    )),
     Section("Why it exists", (
         "Most conversations online now happen on platforms owned by a company. The company "
         "decides who may speak and what may be said, can read along, sells your attention, and "
@@ -141,8 +153,10 @@ COMPARISONS: tuple[Comparison, ...] = (
     Comparison("Discord",
                "Discord is a company. It owns the servers and everything written on them, can "
                "read it, can close a server or ban you everywhere at once, and wants your email "
-               "and often your phone number. On Unseenet nobody owns the network, you need no "
-               "account, and private conversations can only be read by the people in them."),
+               "and often your phone number. It is built for chat, so longer discussions get lost "
+               "in the scroll. On Unseenet nobody owns the network, you need no account, "
+               "discussion groups keep their threads, and private conversations can only be read "
+               "by the people in them."),
     Comparison("Matrix",
                "Matrix is decentralised and has good end-to-end encryption. But its servers "
                "stand at public addresses that can be found and taken down, your account "
@@ -155,6 +169,13 @@ COMPARISONS: tuple[Comparison, ...] = (
                "your IP address unless you set up Tor yourself, and it is built mostly around "
                "public feeds. Unseenet always goes over Tor and is built around groups and "
                "threaded discussion."),
+    Comparison("Reddit and web forums",
+               "Reddit and forums still have real threaded discussion. But each one is a single "
+               "website run by a company or a person, who holds your account, sees your IP "
+               "address and can delete a community overnight. Chat and private messages, where "
+               "there are any, are a side feature that the same owner can read. On Unseenet the "
+               "groups are copied across many nodes, and chat, discussion and private posts are "
+               "equals in one network - with the private ones encrypted end to end."),
     Comparison("The old Usenet",
                "Usenet is where the idea comes from. But anyone could forge who a post was from, "
                "nothing was encrypted, the servers stood at known addresses run by internet "
