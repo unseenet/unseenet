@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
-from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_LETTER, MAX_RULES, VIEWS, decrypt_article,
+from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
@@ -60,7 +60,7 @@ class Message:
     reply_inbox: str | None = None
     to_key: str | None = None             # a private message you sent: its recipient
     content_type: str = ""                # private messages: the inner Content-Type
-    kind: str = KIND_LETTER               # private messages: a chat or a letter (UN-RFC 0028)
+    kind: str = KIND_POST               # private messages: a chat or a post (UN-RFC 0028)
 
     @property
     def author_fp(self) -> str:
@@ -716,11 +716,11 @@ class Session:
         """What a group takes: chat lines, posts with a subject, or both (UN-RFC 0028, 4.1)."""
         data = self.manifest_data(group_id)
         if data.get("type") == "inbox" or group_id == self.my_inbox:
-            return (KIND_CHAT, KIND_LETTER)
+            return (KIND_CHAT, KIND_POST)
         kinds = data.get("kinds")
-        if isinstance(kinds, list) and kinds and all(k in (KIND_CHAT, KIND_LETTER) for k in kinds):
+        if isinstance(kinds, list) and kinds and all(k in (KIND_CHAT, KIND_POST) for k in kinds):
             return tuple(kinds)
-        return (KIND_CHAT, KIND_LETTER)
+        return (KIND_CHAT, KIND_POST)
 
     async def update_group(self, group_id: str, **changes) -> dict:
         """Publish a new manifest with a higher serial (owner only).
@@ -738,10 +738,10 @@ class Session:
                    "retention_days", "banned", "moderators", "posters", "kinds"}
         if "kinds" in changes and changes["kinds"] is not None:
             kinds = list(dict.fromkeys(changes["kinds"]))
-            if not kinds or any(k not in (KIND_CHAT, KIND_LETTER) for k in kinds):
-                raise SessionError('kinds must be "chat", "letter" or both')
+            if not kinds or any(k not in (KIND_CHAT, KIND_POST) for k in kinds):
+                raise SessionError('kinds must be "chat", "post" or both')
             # both is the default and is left out of the manifest (UN-RFC 0028, 4.1)
-            changes["kinds"] = None if set(kinds) == {KIND_CHAT, KIND_LETTER} else kinds
+            changes["kinds"] = None if set(kinds) == {KIND_CHAT, KIND_POST} else kinds
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
@@ -967,10 +967,10 @@ class Session:
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
-                           kind: str = KIND_LETTER, remember: bool = True) -> str:
+                           kind: str = KIND_POST, remember: bool = True) -> str:
         """Send a message to an inbox. Only its owner can read it.
 
-        ``kind`` is ``"letter"`` (a subject, read on its own, answered with a quote)
+        ``kind`` is ``"post"`` (a subject, read on its own, answered with a quote)
         or ``"chat"`` (a line in a running conversation, no subject) - UN-RFC 0028.
         """
         if kind == KIND_CHAT:
@@ -1166,7 +1166,7 @@ class Session:
                           from_name="You", author_key=mine, body=e["body"],
                           references=e.get("references", []), encrypted=True, private=True,
                           sender_key=mine, reply_inbox=e.get("group"), to_key=e.get("to"),
-                          kind=KIND_CHAT if e.get("kind") == KIND_CHAT else KIND_LETTER)
+                          kind=KIND_CHAT if e.get("kind") == KIND_CHAT else KIND_POST)
             try:
                 msg.date = datetime.fromisoformat(e["date"])
             except (KeyError, ValueError):
@@ -1187,7 +1187,7 @@ class Session:
     def conversation(self, key_text: str, kind: str | None = None) -> list["Message"]:
         """Private messages between you and a key, both directions, oldest first.
 
-        ``kind`` keeps only chats or only letters (UN-RFC 0028); None keeps both.
+        ``kind`` keeps only chats or only posts (UN-RFC 0028); None keeps both.
         """
         received = [m for m in self.cache.get(self.my_inbox, {}).values()
                     if m.sender_key == key_text and (kind is None or m.kind == kind)]
@@ -1210,20 +1210,36 @@ class Session:
         return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
                    if (kind is None or m.kind == kind) and not self.is_read(m))
 
-    def _in_letters(self, m: "Message") -> bool:
-        """Letters, and chats with people who are not contacts (they have no
-        conversation of their own to show up in, so they must not vanish)."""
-        if m.kind != KIND_CHAT:
-            return True
-        return not self.contact_name(m.to_key or m.sender_key)
+    def _in_private_posts(self, m: "Message") -> bool:
+        """Private posts; chats live in a conversation per person (chat_partners). An
+        anonymous chat has no person to belong to, so it stays here."""
+        return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
-    def letters(self) -> list["Message"]:
-        """What the "Letters" view shows (UN-RFC 0028 section 3), oldest first."""
-        return [m for m in self.private_messages() if self._in_letters(m)]
+    def private_posts(self) -> list["Message"]:
+        """What the "Private posts" view shows (UN-RFC 0028 section 6.2), oldest first."""
+        return [m for m in self.private_messages() if self._in_private_posts(m)]
 
-    def unread_letters(self) -> int:
+    def unread_private_posts(self) -> int:
         return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
-                   if self._in_letters(m) and not self.is_read(m))
+                   if self._in_private_posts(m) and not self.is_read(m))
+
+    def chat_partners(self) -> list[str]:
+        """Everyone you have a chat with: your contacts, and anyone else you have
+        chatted with (so no chat ever goes missing, UN-RFC 0028 section 6.2).
+
+        Contacts first, by name; then the others, the most recent chat first."""
+        contacts = [k for k, _ in self.contacts()]
+        last: dict[str, int] = {}
+        for m in self.visible(list(self.cache.get(self.my_inbox, {}).values())):
+            if m.kind == KIND_CHAT and m.sender_key:
+                last[m.sender_key] = max(last.get(m.sender_key, -1), m.number)
+        for i, e in enumerate(self.sent):
+            if e.get("kind") == KIND_CHAT and e.get("to"):
+                last[e["to"]] = max(last.get(e["to"], -1), e.get("after", 0))
+        me = self.identity().key_text
+        others = sorted((k for k in last if k not in contacts and k != me),
+                        key=lambda k: last[k], reverse=True)
+        return contacts + others
 
     def _load_sent(self) -> list[dict]:
         try:
@@ -1675,12 +1691,12 @@ class Session:
         return art.message_id
 
     async def post(self, group_id: str, subject: str, body: str,
-                   references: list[str] | None = None, kind: str = KIND_LETTER) -> str:
-        """Post to a group: a letter (a post with a subject) or a chat line (UN-RFC 0028)."""
+                   references: list[str] | None = None, kind: str = KIND_POST) -> str:
+        """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028)."""
         if kind not in self.group_kinds(group_id):
             raise SessionError("this group does not take " +
                                ("chat lines" if kind == KIND_CHAT else "posts with a subject"))
-        if kind == KIND_LETTER and not subject.strip():
+        if kind == KIND_POST and not subject.strip():
             raise SessionError("a post needs a subject")
         author = self.identity()
         entry = self.group_entry(group_id)

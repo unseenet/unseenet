@@ -127,7 +127,7 @@ The protocol is designed to be extended without breaking old software:
 | 0025 | Key Ripening and Standing                     | Standards Track |
 | 0026 | Nostr Gateways                                | Standards Track |
 | 0027 | Attachments                                   | Standards Track |
-| 0028 | Chats and Letters                             | Standards Track |
+| 0028 | Chats and Posts                               | Standards Track |
 | 0029 | Key-bound Groups, Lifetime and Renewal        | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by

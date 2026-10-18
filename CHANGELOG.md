@@ -9,12 +9,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
-- Chats and letters (UN-RFC 0028, draft): every message says whether it
-  is a chat line or a letter (a post with a subject), in groups and in
-  private messages. Messages from older clients count as letters. (#152)
-  - Private messages: the terminal client shows letters under *Letters*
-    (previously *Private messages*) and chats under each contact; `m`
-    writes a letter, and the command palette has *Chat with someone*.
+- Chats and posts (UN-RFC 0028, draft): every message says whether it
+  is a chat line or a post (with a subject), in groups and in
+  private messages. Messages from older clients count as posts. (#152)
+  - Private messages: the terminal client shows private posts under *Private posts*
+    (previously *Private messages*) and chats under *Chats* (previously
+    *Contacts*), one conversation per person, contact or not; `m`
+    writes a post, `c` opens your contacts (chat, write a post, rename,
+    remove), and the command palette has *Chat with someone*.
     The kind is sealed inside the message.
   - Groups: a chat line no longer gets its first line as a made-up
     subject. Shown as threads, chat lines are marked » and kept
@@ -218,7 +220,7 @@ after that, upgrade. There is no compatibility guarantee before 1.0
   group. (#17)
 - The footer shows only the shortcuts that work where you are (Invite only
   in closed groups you own, New post only where you may post, ...). In chat
-  view, Esc leaves the input line so the letters are shortcuts again, and
+  view, Esc leaves the input line so the posts are shortcuts again, and
   Enter goes back to writing. (#18)
 - `unseenet-monitor`: a program of its own that shows how a node is doing -
   traffic in the last hour, peers, storage, Tor, warnings and the last log

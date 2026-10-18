@@ -56,17 +56,17 @@ def parse_canonical_json(body: str) -> dict:
     return obj
 
 
-# --- chats and letters (UN-RFC 0028) ---------------------------------------
+# --- chats and posts (UN-RFC 0028) ---------------------------------------
 
-KIND_CHAT, KIND_LETTER = "chat", "letter"
-MESSAGE_KINDS = (KIND_CHAT, KIND_LETTER)
+KIND_CHAT, KIND_POST = "chat", "post"
+MESSAGE_KINDS = (KIND_CHAT, KIND_POST)
 
 
 def message_kind(art: Article) -> str:
     """The kind of a message (UN-RFC 0028 section 3.1): of a plain article, or of the
-    inner article of a closed group or an inbox. Without the header, a letter."""
+    inner article of a closed group or an inbox. Without the header, a post."""
     value = art.get("Message-Kind", "").strip().lower()
-    return KIND_CHAT if value == KIND_CHAT else KIND_LETTER
+    return KIND_CHAT if value == KIND_CHAT else KIND_POST
 
 
 def _kinds(data: dict) -> tuple[str, ...]:
@@ -76,7 +76,7 @@ def _kinds(data: dict) -> tuple[str, ...]:
     kinds = data["kinds"]
     if (not isinstance(kinds, list) or not kinds or len(set(kinds)) != len(kinds)
             or any(k not in MESSAGE_KINDS for k in kinds)):
-        raise ValueError('kinds must be a non-empty list of "chat" and/or "letter"')
+        raise ValueError('kinds must be a non-empty list of "chat" and/or "post"')
     return tuple(kinds)
 
 
@@ -290,7 +290,7 @@ def _aad(group_id: str, epoch: int) -> bytes:
 
 def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author: crypto.Identity,
                       *, from_name: str, subject: str, body: str,
-                      references: list[str] | None = None, kind: str = KIND_LETTER,
+                      references: list[str] | None = None, kind: str = KIND_POST,
                       pow_bits: int = 18) -> Article:
     """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption."""
     if kind not in MESSAGE_KINDS:
@@ -338,10 +338,10 @@ def _sender_message(group_id: str, outer_key_text: str, inner_canonical: bytes) 
 def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: str, body: str,
                   sender: crypto.Identity | None = None, reply_inbox: str | None = None,
                   references: list[str] | None = None, content_type: str | None = None,
-                  kind: str = KIND_LETTER, pow_bits: int = 18) -> Article:
+                  kind: str = KIND_POST, pow_bits: int = 18) -> Article:
     """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
 
-    ``kind`` is a chat or a letter (UN-RFC 0028); it travels inside the sealed box.
+    ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box.
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
@@ -435,7 +435,7 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
     kind = message_kind(art)                               # UN-RFC 0028, section 5
     if art.control is None and kind not in manifest.kinds:
         raise ArticleError("permission", "this group takes " + " and ".join(
-            {"chat": "chat lines", "letter": "posts with a subject"}[k] for k in manifest.kinds)
+            {"chat": "chat lines", "post": "posts with a subject"}[k] for k in manifest.kinds)
             + f", not a {'chat line' if kind == KIND_CHAT else 'post with a subject'}")
     if manifest.can_post_directly(pk):
         return
