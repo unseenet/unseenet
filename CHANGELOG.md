@@ -25,6 +25,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
     posts only, or chat lines only (manifest field `kinds`). Nodes
     refuse the other kind in open, moderated and channel groups.
     **Nodes must be updated** before groups use `kinds`.
+- Comments in channels (UN-RFC 0030, draft): a channel's owner can let
+  anyone comment on posts while only the owner and posters start
+  threads, optionally for a number of days after each post (manifest
+  fields `comments` and `comment_days`; *Edit group* in the terminal
+  client, `--comments` and `--comment-days` for `group-create`). A
+  node holds a comment that arrives before its thread for up to an hour
+  and answers the sender "try again later" (`431` after `TAKETHIS`,
+  `436` after `IHAVE`, `441 later` after `POST`). (#162)
+  **Nodes must be updated** before channels open for comments.
 
 ## [0.3.1] - 2026-10-18
 

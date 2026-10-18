@@ -94,9 +94,14 @@ change. The owner chooses the group's type when creating it:
 |------|--------------|--------------|-----------|
 | **Open** | anyone | anyone | no |
 | **Moderated** | anyone | moderators, or with a moderator's approval | no |
-| **Channel** | anyone | the owner and chosen posters | no |
+| **Channel** | anyone | the owner and chosen posters; readers may comment if the owner allows it | no |
 | **Closed** | members only | members only | yes, end to end |
 | **Inbox** | the owner only | anyone | yes, sealed to the owner |
+
+A channel's owner can open it for **comments** (UN-RFC 0030): then anyone
+may reply to a post, but only the owner and posters start new threads -
+like a news site or a blog with comments. The owner can also close
+comments on a thread a number of days after it was posted.
 
 A group can also be **local**: it then exists on one node only and is
 never replicated. That is used for things like the contact inbox of a

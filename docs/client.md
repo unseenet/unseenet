@@ -552,6 +552,9 @@ As a group's owner you choose who else has a role, in the command palette
 - **Make moderator**: moderators post directly in a moderated group,
   approve others' posts, and can withdraw any post in the group.
 - **Make poster** (channels): posters may post in your channel.
+- **Edit group** (channels): *Readers may comment on posts* lets anyone
+  reply to a post in your channel, optionally only for a number of days
+  after it was posted. New threads are still yours and your posters'.
 - **Moderators and posters** lists them and removes one.
 - **Members of closed group** lists the people you invited from this
   client, and **removes** one. The group then gets a new key, sent to

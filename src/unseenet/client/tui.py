@@ -456,6 +456,17 @@ KINDS_CHOICES = [("Takes posts and chat lines", "both"),
                  ("Takes chat lines only (a chat group)", "chat")]
 KINDS = {"both": None, "post": ["post"], "chat": ["chat"]}
 
+COMMENTS_CHOICES = [("Only you and your posters write", "none"),
+                    ("Readers may comment on posts", "open")]
+
+
+def comments_label(d: dict) -> str:
+    """How a channel takes comments (UN-RFC 0030), for the group's info."""
+    if d.get("comments") != "open":
+        return "none - only the owner and posters write"
+    days = d.get("comment_days")
+    return "anyone may comment" + (f", for {days} days after each post" if days else "")
+
 
 GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
                    "e.g. dk.snak or andlo.test. The first part is the hierarchy.")
@@ -478,6 +489,7 @@ class CreateGroupDialog(Dialog):
                          value="everywhere", allow_blank=False, id="where")
             yield Select(DELIVERY_CHOICES, value="threads", allow_blank=False, id="view")
             yield Select(KINDS_CHOICES, value="both", allow_blank=False, id="kinds")
+            yield Select(COMMENTS_CHOICES, value="none", allow_blank=False, id="comments")
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
             yield Label("Rules (optional) - shown to people before they post:", classes="hint")
             yield TextArea("", id="rules", soft_wrap=True)
@@ -487,6 +499,12 @@ class CreateGroupDialog(Dialog):
 
     def on_mount(self) -> None:
         self.query_one("#rules", TextArea).styles.height = 6
+        self.query_one("#comments", Select).display = False
+
+    @on(Select.Changed, "#type")
+    def _type_changed(self, event: Select.Changed) -> None:
+        # only a channel can be opened for comments (UN-RFC 0030)
+        self.query_one("#comments", Select).display = event.value == "channel"
 
     @on(Input.Changed, "#name")
     def _check_name(self, event: Input.Changed) -> None:
@@ -513,7 +531,8 @@ class CreateGroupDialog(Dialog):
                       "local": self.query_one("#where", Select).value == "local",
                       "rules": self.query_one("#rules", TextArea).text.strip(),
                       "view": view, "low_latency": fast,
-                      "kinds": KINDS[self.query_one("#kinds", Select).value]})
+                      "kinds": KINDS[self.query_one("#kinds", Select).value],
+                      "comments": self.query_one("#comments", Select).value})
 
 
 class InputDialog(Dialog):
@@ -761,6 +780,7 @@ class GroupInfoDialog(Dialog):
                  "Takes:     " + {("post",): "posts with a subject only (a discussion group)",
                                   ("chat",): "chat lines only (a chat group)"}.get(
                      tuple(d.get("kinds") or ()), "posts and chat lines"),
+                 *([f"Comments:  {comments_label(d)}"] if d.get("type") == "channel" else []),
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
                  + ("     Local to one node" if d.get("local") else ""),
                  f"Version:   {d.get('serial', 1)}"]
@@ -821,6 +841,11 @@ class EditGroupDialog(Dialog):
             yield Input(value=d.get("description", ""), placeholder="Description (one paragraph)",
                         id="description")
             yield Select(DELIVERY_CHOICES, value=current, allow_blank=False, id="view")
+            if d.get("type") == "channel":
+                yield Select(COMMENTS_CHOICES, value=d.get("comments", "none"), allow_blank=False,
+                             id="comments")
+                yield Input(value=str(d.get("comment_days") or ""), id="comment_days",
+                            placeholder="Days a thread takes comments (empty: always)")
             yield Input(value=str(d.get("min_pow", 0)), placeholder="Minimum postage in bits (16-24)",
                         id="min_pow")
             yield Label("Rules - shown to people before their first post:", classes="hint")
@@ -840,10 +865,18 @@ class EditGroupDialog(Dialog):
             self.app.notify("Postage between 0 and 28 bits, please", severity="error")
             return
         view, fast = DELIVERY[self.query_one("#view", Select).value]
-        self.dismiss({"title": self.query_one("#title", Input).value.strip(),
-                      "description": self.query_one("#description", Input).value.strip(),
-                      "rules": self.query_one("#body", TextArea).text.strip(),
-                      "view": view, "low_latency": fast, "min_pow": min_pow})
+        changes = {"title": self.query_one("#title", Input).value.strip(),
+                   "description": self.query_one("#description", Input).value.strip(),
+                   "rules": self.query_one("#body", TextArea).text.strip(),
+                   "view": view, "low_latency": fast, "min_pow": min_pow}
+        if self.data.get("type") == "channel":
+            days = self.query_one("#comment_days", Input).value.strip()
+            if days and (not days.isdigit() or int(days) < 1):
+                self.app.notify("Comment days: a whole number of days, or empty", severity="error")
+                return
+            changes["comments"] = self.query_one("#comments", Select).value
+            changes["comment_days"] = int(days) if days else None
+        self.dismiss(changes)
 
 
 class ReadScreen(Screen):
@@ -1358,7 +1391,7 @@ class UnseenetApp(App):
         if action == "new_post":
             return contact or (group and s.may_post(gid))
         if action == "reply":
-            return contact or (m is not None and m.readable and (m.private or s.may_post(gid)))
+            return contact or (m is not None and m.readable and (m.private or s.may_reply(gid)))
         if action == "invite":
             g = self.groups.get(gid)
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
@@ -2312,7 +2345,7 @@ class UnseenetApp(App):
             gid = await self.session.create_group(
                 result["name"], result["gtype"], result["title"], local=result["local"],
                 rules=result["rules"], view=result["view"], low_latency=result["low_latency"],
-                kinds=result.get("kinds"),
+                kinds=result.get("kinds"), comments=result.get("comments"),
                 min_pow=16 if result["low_latency"] else sess_default_pow())
         except (SessionError, ValueError, OSError, ConnectionError) as exc:
             self.notify(f"Could not create group: {exc}", severity="error", timeout=8)

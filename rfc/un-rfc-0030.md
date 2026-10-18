@@ -141,6 +141,10 @@ UN-RFC 0022 section 4 gains an optional profile field:
   and `comment_days` (section 3). Section 5: the channel rule is
   replaced by section 4 of this document.
 - **UN-RFC 0022** section 4: the profile field `bot` (section 6).
+- **UN-RFC 0005** section 4: the rejection reason `441 later` answers a
+  `POST` that may succeed later; after `IHAVE` the temporary failure is
+  `436`, and after `TAKETHIS` a node answers `431`, which the feeding
+  node treats as "try later" (section 5.2).
 - **UN-RFC 0000** section 6: 0030 is added to the index.
 
 # 8. Rationale
