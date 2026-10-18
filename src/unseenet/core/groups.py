@@ -327,12 +327,13 @@ def _aad(group_id: str, epoch: int) -> bytes:
 def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author: crypto.Identity,
                       *, from_name: str, subject: str, body: str,
                       references: list[str] | None = None, kind: str = KIND_POST,
-                      pow_bits: int = 18) -> Article:
+                      content_type: str | None = None, pow_bits: int = 18) -> Article:
     """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption."""
     if kind not in MESSAGE_KINDS:
         raise ValueError(f"unknown message kind: {kind}")
     inner = Article([("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
-                     ("Content-Type", "text/plain; charset=utf-8"), ("Message-Kind", kind)], body)
+                     ("Content-Type", content_type or "text/plain; charset=utf-8"),
+                     ("Message-Kind", kind)], body)
     blob = crypto.aead_encrypt(keys.enc_key, inner.to_bytes(), _aad(group_id, epoch))
     outer_body = "\n".join(textwrap.wrap(b64(blob), 76)) + "\n"
     art = new_article(group_id, None, outer_body, references=references,

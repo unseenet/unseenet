@@ -227,7 +227,8 @@ async def block(s: "Session", group_id: str, key_text: str, reason: str,
     body = json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
     hz.parse_hierarchy_list(body, h.name)          # never post a list with mistakes
     await s.fetch_group(h.list)
-    await s.post(h.list, f"Groups of {h.name}, {data['updated']} (block)", body)
+    await s.post(h.list, f"Groups of {h.name}, {data['updated']} (block)", body,
+                 content_type="application/json")
     _store(s)["lists"][h.name] = body
     s.save()
     return h.name
@@ -596,7 +597,7 @@ async def revoke_subname(s: "Session", name: str) -> None:
             from .session import SessionError
             raise SessionError("could not make your revocation group")
     revoked = {(n, v) for n, v in st["my_revoked"]}
-    await s.post(gid, nm.REVOKED_SUBJECT, nm.make_revocations(revoked))
+    await s.post(gid, nm.REVOKED_SUBJECT, nm.make_revocations(revoked), content_type="text/plain; charset=utf-8")
     s.save()
 
 
