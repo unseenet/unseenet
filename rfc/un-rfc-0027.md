@@ -457,6 +457,8 @@ with members
 | `retention_days` | integer | How long blobs are kept at most                      |
 | `encrypted`      | boolean | Whether it carries blobs of closed groups and inboxes |
 | `refusal_lists`  | boolean | Whether it follows refusal lists (section 7.3)       |
+| `daily_per_key`  | integer | Blob octets accepted per author key per day (8.1)    |
+| `daily_per_group`| integer | Blob octets accepted per group per day (8.1)         |
 
 A node without `blobs` carries none. Carrying blobs is never the
 default: an implementation MUST ship with blobs turned off, and the
@@ -467,6 +469,31 @@ days, and `encrypted` off.
 Clients SHOULD show the policy when the user adds a node (UN-RFC 0011),
 and SHOULD warn before posting attachments through a node without
 `blobs`, since the post would then reach others without its files.
+
+## 8.1 Daily Quotas
+
+A blob node SHOULD limit how many blob octets it accepts in a day per
+author key and per group. RECOMMENDED: 32 MiB per key and 256 MiB per
+group. Over the limit:
+
+- articles from the node's own clients are refused with `441 quota`;
+- articles from peers are accepted and forwarded as usual, but their
+  blobs are not fetched, so the discussion goes on without the files.
+
+Quotas are a local choice that only makes posting dearer, so every node
+may set its own (UN-RFC 0025 section 1). A quota per key alone is
+evaded with new keys; the quota per group is what bounds a group made
+for distributing files.
+
+## 8.2 Which Groups
+
+A group owner who allows attachments decides only that a group *may*
+have them. Which groups' blobs are carried is the operator's choice
+alone. Operators SHOULD carry blobs only for groups they have chosen,
+or for groups whose owner key they trust. If UN-RFC 0025 is adopted, a
+node MAY carry blobs only for groups whose owner key has reached a
+standing the operator chooses, so that a group created yesterday by a
+new key gets no files carried.
 
 # 9. Clients
 
@@ -566,7 +593,8 @@ rule unless they say otherwise.
   postage surcharge (section 4.5).
 - **UN-RFC 0005**: the capability `UNSEENET-BLOB`, the commands
   `BLOBPOST` and `BLOB`, the responses `226`, `245`, `345`, `445`, and
-  the posting refusals `441 blobs` and `441 refused` (section 6).
+  the posting refusals `441 blobs`, `441 refused` and `441 quota`
+  (sections 6, 7.3 and 8.1).
 - **UN-RFC 0011**: the policy field `blobs` (section 8).
 - **UN-RFC 0012**: blob retention and archives (section 7).
 
@@ -643,9 +671,23 @@ nothing for dot-stuffing to protect.
   they can only be fetched from the first node would reveal where the
   post was written. Implementations MUST NOT add "ask everybody" lookups
   for blobs.
+- **Splitting files.** Anybody can write a client that skips section 9,
+  create a group that allows attachments, and post a large file in
+  pieces of 8 MiB. Nodes enforce postage, sizes, the manifest and
+  staging, so this costs work, but SHA-256 is cheap on GPUs (UN-RFC 0006
+  section 5): postage slows it down and does not stop it. Nor is the
+  trick new: base64 or yEnc fits in text articles of 64 KiB just as well,
+  and in an encrypted group no node can see it. This document does not
+  make file distribution possible; it makes it something every operator
+  can limit. What stops it is that blobs are off by default, carried
+  only for groups the operator chooses (section 8.2), bounded by daily
+  quotas (section 8.1) and short retention, and can be refused one by
+  one or by list (section 7.3). A group made for distributing files
+  reaches only nodes whose operators chose to carry it.
 - **Storage exhaustion** is limited by the article limit on blobs
   (section 3.2), the postage surcharge (section 4.5), staging (section
-  6.2) and each node's own limits (section 8).
+  6.2), daily quotas (section 8.1) and each node's own limits
+  (section 8).
 - **Legal exposure of operators** is why blobs are off by default, why
   any blob can be refused without affecting the discussion, why refusal
   lists exist, and why carrying encrypted blobs, which no list can
