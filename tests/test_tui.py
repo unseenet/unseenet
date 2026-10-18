@@ -241,7 +241,7 @@ async def test_tui_contact_conversation(tmp_path, monkeypatch):
     b = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
     b.new_identity("sonia", "Sonia"); b.add_node(addr)
     await a.ensure_inbox(); await b.ensure_inbox()
-    await b.send_private(a.my_inbox, "Hej far", "Kan du hente mig?\n")
+    await b.send_private(a.my_inbox, "", "Kan du hente mig?\n", kind="chat")   # a chat (UN-RFC 0028)
     a.save(); await a.close(); await b.close()
 
     monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
@@ -342,7 +342,7 @@ async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
     owner.new_identity("o", "Owner"); owner.add_node(addr)
     gid = await owner.create_group("chat.venner", "open", view="chat", low_latency=True,
                                    rules="Kun hyggesnak.", min_pow=9)
-    await owner.post(gid, "hej", "Hej alle!\n")
+    await owner.post(gid, "", "Hej alle!\n", kind="chat")          # a chat line (UN-RFC 0028)
     await owner.close()
 
     me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
@@ -395,7 +395,7 @@ async def test_tui_chat_updates_by_push(tmp_path, monkeypatch):
         app.select_group(gid)
         assert await wait_for(pilot, lambda: app._inbox_ready and app.current_group == gid, 300)
         await pilot.pause(0.5)
-        await friend.post(gid, "hej", "Er du der?\n")          # no refresh: push must bring it
+        await friend.post(gid, "", "Er du der?\n", kind="chat")   # no refresh: push must bring it
         assert await wait_for(pilot, lambda: any(
             re.search(r"Friend~[a-z2-7]{4}: Er du der\?", str(ln.text)) for ln in app.query_one("#chat-log").lines), 100)
         await pilot.press("q")
@@ -700,7 +700,7 @@ async def test_tui_group_list_shows_icons(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
         await pilot.pause(0.5)
         labels = [str(n.label) for n in app.query_one("#groups").root.children]
-        assert any(label.startswith("@   Private messages") for label in labels)
+        assert any(label.startswith("@   Letters") for label in labels)
         assert any("  ≡ dk.snak" in label for label in labels)
         app.save_screenshot(str(tmp_path / "icons.svg"))
         await pilot.press("q")
@@ -708,7 +708,7 @@ async def test_tui_group_list_shows_icons(tmp_path, monkeypatch):
 
 
 async def test_tui_sent_private_messages_and_full_screen(tmp_path, monkeypatch):
-    """Private messages you sent show in Private messages (also to keys that are
+    """Private letters you sent show in Letters (also to keys that are
     not contacts); Enter reads a message on the whole screen, n/p move, Esc goes back."""
     from unseenet.client.tui import ReadScreen
     app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])

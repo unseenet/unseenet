@@ -7,6 +7,23 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- Chats and letters (UN-RFC 0028, draft): every message says whether it
+  is a chat line or a letter (a post with a subject), in groups and in
+  private messages. Messages from older clients count as letters. (#152)
+  - Private messages: the terminal client shows letters under *Letters*
+    (previously *Private messages*) and chats under each contact; `m`
+    writes a letter, and the command palette has *Chat with someone*.
+    The kind is sealed inside the message.
+  - Groups: a chat line no longer gets its first line as a made-up
+    subject. Shown as threads, chat lines are marked » and kept
+    together; shown as a chat, posts stand out with their subject.
+  - A group owner chooses what a group takes: posts and chat lines,
+    posts only, or chat lines only (manifest field `kinds`). Nodes
+    refuse the other kind in open, moderated and channel groups.
+    **Nodes must be updated** before groups use `kinds`.
+
 ## [0.3.1] - 2026-10-18
 
 Updates from an alpha to a release, and a stable release that sticks can
