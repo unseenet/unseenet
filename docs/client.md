@@ -113,6 +113,7 @@ else is in the command palette, ++ctrl+p++:
 | ++shift+d++ | Withdraw the selected post (yours, or in a group you own or moderate) |
 | ++v++ | Switch between chat and threads for the current group |
 | ++question-mark++ | About this group: its rules, type, owner and node |
+| `#` | Go to a group the selected post names, such as `#dk.snak` |
 | ++f1++ | About Unseenet, with links to the source and these pages |
 | ++ctrl+p++ | Command palette: everything above, by name, plus what is used less often, like creating a group or inviting someone to a closed group |
 
@@ -154,6 +155,20 @@ it has of each, e.g. `dk.snak (5) ◄1 ♦2`: one reply to you and two posts
 naming you. When new ones arrive, the client tells you which kind.
 Display names do not count as mentions, since anyone can call themselves
 anything. All this is worked out in your client; nothing is sent anywhere.
+
+## Pointing to another group
+
+Write `#` and a group's name to point someone to it: *you'll probably get
+better answers in #dk.snak.marsvin*. Press `#` on a post (or in the
+full-screen view) to go there: a group you follow opens, and for one you
+do not follow, the client shows what it is and asks before subscribing. If
+a post names several groups, you choose one; if several groups have the same
+name (with different owners), you choose by fingerprint, and you can write
+one yourself, as in `#dk.snak@abcd`.
+
+Group names are `a-z`, digits, `+`, `_`, `-` and dots, so `#dk.snak.` at the
+end of a sentence means `dk.snak`, while `# Heading` (with a space) and
+`#170` are not groups.
 
 ## Chat
 
@@ -369,8 +384,8 @@ and signatures are shown dimmed when you read.
 Press ++enter++ on a post (or click it a second time) to read it on the
 whole screen. There, ++r++ replies, ++m++ writes privately to the author,
 ++n++ and ++p++ go to the next and previous post, ++space++ pages down and
-then goes on to the next post, as in the old newsreaders, and ++escape++
-goes back to the list.
+then goes on to the next post, as in the old newsreaders, `#` goes to a
+group the post names, and ++escape++ goes back to the list.
 
 ![A post on the whole screen](img/client-read.svg)
 

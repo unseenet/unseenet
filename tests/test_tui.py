@@ -1182,3 +1182,38 @@ async def test_tui_for_you(tmp_path, monkeypatch):
         await pilot.press("q")
     await other.close()
     server.close()
+
+
+async def test_tui_group_ref(tmp_path, monkeypatch):
+    """#172: # on a post naming #dk.marsvin asks before subscribing, then opens it."""
+    from unseenet.client.tui import ConfirmDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    marsvin = await other.create_group("dk.marsvin", "open", min_pow=10)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        s = app.session
+        gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        await s.post(gid, "Marsvin?", "Du får nok bedre svar i #dk.marsvin.\n")
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        await pilot.pause(0.3)
+        app.current_message = next(iter(app.messages.values()))
+        app.action_group_ref()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 300)
+        assert marsvin not in s.data["subscribed"]            # never without asking
+        await pilot.pause(0.2)
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: marsvin in s.data["subscribed"], 300)
+        assert await wait_for(pilot, lambda: marsvin in app.groups, 300)
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        app.current_message = next(iter(app.messages.values()))
+        app.action_group_ref()                                # followed now: just opens it
+        assert await wait_for(pilot, lambda: app.current_group == marsvin, 300)
+        assert not isinstance(app.screen, ConfirmDialog)
+        await pilot.press("q")
+    await other.close()
+    server.close()

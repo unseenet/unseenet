@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
+from ..core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
 from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_manifest, manifest_article, message_kind, open_envelope,
@@ -523,6 +524,27 @@ class Session:
                 g.nodes.remove(home)
                 g.nodes.insert(0, home)
         return list(out.values())
+
+    async def find_group_ref(self, ref: "GroupRef") -> list[GroupInfo]:
+        """The groups a #reference (#172) can mean: from your nodes, plus groups you
+        already know of. Groups you follow come first, then the one the name stands
+        for on its own (endorsed or the only one, UN-RFC 0018), then the rest."""
+        try:
+            found = [g for g in await self.list_groups(f"{ref.name}@*") if ref.matches(g.group_id)]
+        except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError):
+            found = []
+        have = {g.group_id for g in found}
+        subscribed = set(self.data["subscribed"])
+        for gid in [*self.data["subscribed"], *self.data["groups"]]:
+            if gid not in have and ref.matches(gid):
+                have.add(gid)
+                found.append(GroupInfo(gid, self.data["groups"].get(gid, {}).get("title", ""),
+                                       self.data["groups"].get(gid, {}).get("type"),
+                                       subscribed=gid in subscribed))
+        also = {g.group_id for g in found}
+        return sorted(found, key=lambda g: (not g.subscribed,
+                                            self.group_label(g.group_id, also) != ref.name,
+                                            g.group_id))
 
     def subscribe(self, group_id: str, on: bool = True, node: str | None = None) -> None:
         split_group_id(group_id)

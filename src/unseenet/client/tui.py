@@ -34,7 +34,8 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import INBOX_NAME, KIND_CHAT, KIND_POST, personal_inbox_id
+from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
+                           personal_inbox_id, short_group_id)
 from . import session as _session_module
 from . import naming
 from . import richtext
@@ -913,6 +914,7 @@ class ReadScreen(Screen):
         Binding("n", "next", "Next"),
         Binding("p", "previous", "Previous"),
         Binding("space", "page", "Page down", show=False),
+        Binding("number_sign", "group_ref", "#group", show=False),
     ]
     CSS = """
     ReadScreen #read-head { padding: 0 1; background: $boost; color: $text; }
@@ -949,6 +951,9 @@ class ReadScreen(Screen):
 
     def action_message(self) -> None:
         self.app.action_message()
+
+    def action_group_ref(self) -> None:
+        self.app.action_group_ref()
 
     def action_next(self) -> None:
         if self.app.neighbour(+1) is None:
@@ -1384,6 +1389,7 @@ class UnseenetApp(App):
         Binding("a", "add_contact", "Add contact", show=False),
         Binding("D", "withdraw", "Withdraw", show=False),
         Binding("question_mark", "group_info", "About group"),
+        Binding("number_sign", "group_ref", "Go to #group", show=False),
         Binding("v", "toggle_view", "Chat/threads"),
         Binding("f", "read", "Full screen", show=False),
         Binding("f5", "refresh", "Refresh"),
@@ -2456,6 +2462,70 @@ class UnseenetApp(App):
         self.current_group = gid
         self.refresh_groups()
 
+    @work(group="dialog", exit_on_error=False)
+    async def action_group_ref(self) -> None:
+        """Open a group the current post names with #, or offer to subscribe (#172).
+        Never subscribes without asking."""
+        s, m = self.session, self.current_message
+        refs = group_refs(f"{m.subject}\n{m.body}") if m is not None and m.readable else []
+        if not refs:
+            self.notify("This post names no group. Write e.g. #dk.snak to name one.",
+                        severity="warning")
+            return
+        ref = refs[0]
+        if len(refs) > 1:
+            text = await self.push_screen_wait(KeyListDialog(
+                "Groups in this post", "Which one?", [(r.text, r.text) for r in refs], "Go"))
+            if not text:
+                return
+            ref = next(r for r in refs if r.text == text)
+        self.set_status(f"Looking for {ref.text} ...")
+        groups = await s.find_group_ref(ref)
+        self.set_status("")
+        if not groups:
+            where = (" (some of your nodes did not answer)" if getattr(s, "unreachable", None)
+                     else "")
+            self.notify(f"No group called {ref.name} on your nodes{where}.", severity="warning",
+                        timeout=8)
+            return
+        also = {g.group_id for g in groups}
+        g = groups[0]
+        if not g.subscribed and len(groups) > 1 and s.group_label(g.group_id, also) != ref.name:
+            gid = await self.push_screen_wait(KeyListDialog(
+                f"More than one {ref.name}", "Groups with the same name have different owners; "
+                "check the fingerprint.",
+                [(x.group_id, short_group_id(x.group_id) + (f"  {x.description}" if x.description
+                                                             else "")) for x in groups], "Choose"))
+            if not gid:
+                return
+            g = next(x for x in groups if x.group_id == gid)
+        if isinstance(self.screen, ReadScreen):
+            self.pop_screen()
+        if g.subscribed:
+            self.current_group = g.group_id
+            self.select_group(g.group_id)
+            return
+        label = s.group_label(g.group_id, also)
+        lines = [f"{g.group_id}"]
+        if g.description:
+            lines += ["", g.description]
+        warning = naming.group_warning(s, g.group_id, also)
+        if warning:
+            lines += ["", warning]
+        if g.type == "closed":
+            lines += ["", "A closed group: you can read it only if its owner invites you."]
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Subscribe to {label}?", "\n".join(lines), "Subscribe")):
+            return
+        node = next((n for n in g.nodes if n in s.nodes), None)
+        try:
+            s.subscribe(g.group_id, node=node)
+        except ValueError:
+            self.notify("That is not a valid group ID", severity="error")
+            return
+        self.current_group = g.group_id
+        self.refresh_groups()
+
     def _names_text(self) -> str:
         s = self.session
         mine = naming.my_names(s)
@@ -2649,6 +2719,8 @@ class UnseenetApp(App):
              "What you write is sent as Markdown (*emphasis*, `code`, :tada:) or as plain text "
              "(UN-RFC 0031)", self.action_toggle_markdown),
             ("About this group", "Its rules, type, owner and settings  [?]", self.action_group_info),
+            ("Go to a #group in this post", "Open a group the selected post names, such as "
+             "#dk.snak, or subscribe to it  [#]", self.action_group_ref),
             ("Switch chat / threads", "Show the current group as a chat or as threads  [v]",
              self.action_toggle_view),
             ("Edit group", "Owner: change title, description, rules, view and delivery",

@@ -62,6 +62,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   without prompting; its own Tor or a running one; postage, kinds and
   "try later" handled; reading back to avoid double posts. See
   *Writing a bot* in the docs. `tools/announce.py` now uses it. (#166)
+- `#group` references: write `#dk.snak.marsvin` to point to a group, and
+  press `#` on a post to go there - a group you follow opens, one you do
+  not is shown and you are asked before subscribing. The core has
+  `group_refs()` and `Session.find_group_ref()` for other clients;
+  showing them as links comes with markdown. (#172)
 
 ### Changed
 
