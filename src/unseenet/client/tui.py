@@ -34,7 +34,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import INBOX_NAME, personal_inbox_id
+from ..core.groups import INBOX_NAME, KIND_CHAT, personal_inbox_id
 from . import session as _session_module
 from . import naming
 from .. import names as nm
@@ -1516,7 +1516,8 @@ class UnseenetApp(App):
         tree.clear()
 
         def label(g: GroupInfo) -> Text:
-            unread = self.session.unread_count(g.group_id)
+            unread = (self.session.unread_letters() if g.group_id == self.session.my_inbox
+                      else self.session.unread_count(g.group_id))
             mine = self.session.for_you_count(g.group_id) if g.group_id != self.session.my_inbox else 0
             text = Text(self._group_label(g) + (f" ({unread})" if unread else "")
                         + (f" {REPLY_MARK}{mine}" if mine else ""))
@@ -1539,14 +1540,14 @@ class UnseenetApp(App):
         self._for_you_seen = getattr(self, "_for_you_seen", for_you)
         contacts = self.session.contacts()
         if contacts:
-            total = sum(self.session.unread_from(k) for k, _ in contacts)
+            total = sum(self.session.unread_from(k, KIND_CHAT) for k, _ in contacts)
             folder = Text("Contacts" + (f" ({total})" if total else ""))
             if total:
                 folder.stylize("bold")
             cnode = tree.root.add(folder, expand="Contacts" in was_open or "Contacts" not in known)
             nodes[("folder", "Contacts")] = cnode
             for key, name in contacts:
-                unread = self.session.unread_from(key)
+                unread = self.session.unread_from(key, KIND_CHAT)
                 text = Text(f"• {name}" + (f" ({unread})" if unread else ""))
                 if unread:
                     text.stylize("bold")
@@ -1574,7 +1575,7 @@ class UnseenetApp(App):
 
     def _group_label(self, g: GroupInfo) -> str:
         if g.group_id == self.session.my_inbox:
-            return f"{group_icons('inbox')} Private messages"
+            return f"{group_icons('inbox')} Letters"
         return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {self.session.group_label(g.group_id)}"
 
     @on(Tree.NodeSelected, "#groups")
@@ -1646,9 +1647,9 @@ class UnseenetApp(App):
         if gid == FOR_YOU:
             rows = [(m, 0) for m in s.for_you(unread_only=False)[:200]]   # newest first
         elif gid and gid.startswith(CONTACT):
-            rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):])]   # oldest first, like a chat
+            rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):], KIND_CHAT)]   # oldest first
         elif gid == s.my_inbox:
-            rows = self._threaded(s.visible(s.private_messages()))   # what you sent, too
+            rows = self._threaded(s.visible(s.letters()))   # what you sent, too (UN-RFC 0028)
         else:
             msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
             rows = self._threaded(s.visible(msgs))      # replies to ignored people stay
@@ -1659,7 +1660,11 @@ class UnseenetApp(App):
         for m, depth in rows:
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
-            subject = ("  " * (depth - 1) + "└ " if depth else "") + (m.subject or "(no subject)")
+            title = m.subject or "(no subject)"
+            if m.private and m.kind == KIND_CHAT:      # a chat among the letters: its first line
+                first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
+                title = "» " + first[:60] + ("…" if len(first) > 60 else "")
+            subject = ("  " * (depth - 1) + "└ " if depth else "") + title
             if m.private:
                 subject = f"{ICONS['inbox']} " + subject
             elif m.encrypted and m.readable:
@@ -1727,7 +1732,7 @@ class UnseenetApp(App):
     def action_toggle_view(self) -> None:
         gid = self.current_group
         if not gid or gid == self.session.my_inbox:
-            self.notify("Private messages are always shown as a list; open a contact for a chat",
+            self.notify("Letters are always shown as a list; open a contact to chat",
                         severity="warning")
             return
         new = "threads" if self.view_of(gid) == "chat" else "chat"
@@ -1753,7 +1758,8 @@ class UnseenetApp(App):
             if gid.startswith(CONTACT):
                 key = gid[len(CONTACT):]
                 owner = crypto.key_from_text(key)
-                await self.session.send_private(personal_inbox_id(owner), subject, text, owner_key=owner)
+                await self.session.send_private(personal_inbox_id(owner), "", text, owner_key=owner,
+                                                kind=KIND_CHAT)
             else:
                 msgid = await self.session.post(gid, subject, text)
                 if self.session.was_submitted(gid, msgid):
@@ -1799,10 +1805,11 @@ class UnseenetApp(App):
             return
         if gid.startswith(CONTACT):
             key = gid[len(CONTACT):]
-            msgs = self.session.conversation(key)
+            msgs = self.session.conversation(key, KIND_CHAT)
             self.query_one("#threads-title", Static).update(
-                f"@ {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
-                f"{self.session.unread_from(key)} unread  ·  only the two of you can read them")
+                f"» chat with {self.session.contact_name(key) or key[:20]}  ·  {len(msgs)} messages, "
+                f"{self.session.unread_from(key, KIND_CHAT)} unread  ·  only the two of you can read "
+                "them  ·  n: write a letter instead (letters are in Letters)")
             return
         g = self.groups.get(gid)
         total = len(self.session.cache.get(gid, {}))
@@ -1931,7 +1938,9 @@ class UnseenetApp(App):
             if not m:
                 self._write_to_contact(contact)
                 return
-            subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
+            # a letter in answer to a chat line starts without a subject; you give it one
+            subject = ("" if not m.subject else m.subject if m.subject.lower().startswith("re:")
+                       else f"Re: {m.subject}")
             self._write_to_contact(contact, subject, references=[*m.references, m.message_id])
             return
         g = self._need_group()
@@ -1941,6 +1950,11 @@ class UnseenetApp(App):
         subject = m.subject if m.subject.lower().startswith("re:") else f"Re: {m.subject}"
         text = split_signature(m.body)[0]          # never quote the signature
         quote = f"{m.from_name} wrote:\n" + "".join(f"> {ln}\n" for ln in text.rstrip().split("\n")) + "\n"
+        if m.private and m.kind == KIND_CHAT:    # a chat among the letters: answer in the chat
+            key = m.to_key or m.sender_key
+            if key:
+                self.select_group(CONTACT + key)
+                return
         if m.private and m.to_key:               # one you sent: write to them again
             self.compose_private(m.reply_inbox or personal_inbox_id(crypto.key_from_text(m.to_key)),
                                  f"Private message to {self._key_label(m.to_key)}", subject, quote,
@@ -1988,8 +2002,9 @@ class UnseenetApp(App):
         if m and m.private and not m.sender_key:
             known = ""
         key = await self.push_screen_wait(InputDialog(
-            "Private message", "Paste the recipient's key (they find it with k). "
-            "Only they will be able to read the message.", "ed25519:...", value=known))
+            "Write a letter", "Paste the recipient's key (they find it with k). "
+            "Only they will be able to read the letter. To chat instead: Ctrl+P, Chat with someone.",
+            "ed25519:...", value=known))
         if not key:
             return
         try:
@@ -1997,8 +2012,30 @@ class UnseenetApp(App):
         except crypto.CryptoError:
             self.notify("That is not a valid key", severity="error")
             return
-        self.compose_private(personal_inbox_id(owner), f"Private message to {key[:20]}…",
+        self.compose_private(personal_inbox_id(owner), f"Letter to {self._key_label(key)}",
                              owner_key=owner)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_chat_with(self) -> None:
+        """Open a chat with a key (UN-RFC 0028): a contact's, or anyone's."""
+        m = self.current_message
+        known = (m.sender_key or m.author_key) if m and m.readable else ""
+        if m and m.private and not m.sender_key:
+            known = m.to_key or ""
+        key = await self.push_screen_wait(InputDialog(
+            "Chat with someone", "Paste their key (they find it with k). Only the two of you "
+            "can read the chat.", "ed25519:...", value=known))
+        if not key:
+            return
+        try:
+            crypto.key_from_text(key)
+        except crypto.CryptoError:
+            self.notify("That is not a valid key", severity="error")
+            return
+        if key == self.session.identity().key_text:
+            self.notify("That is your own key", severity="warning")
+            return
+        self.select_group(CONTACT + key)
 
     @work(group="dialog", exit_on_error=False)
     async def action_bridges(self) -> None:
@@ -2373,7 +2410,10 @@ class UnseenetApp(App):
         commands = [
             ("New post", "Write a new post in the current group  [n]", self.action_new_post),
             ("Reply", "Reply to the selected post  [r]", self.action_reply),
-            ("Private message", "Write privately to someone by their key  [m]", self.action_message),
+            ("Write a letter", "A private letter with a subject, to someone by their key  [m]",
+             self.action_message),
+            ("Chat with someone", "A private chat with someone by their key (the author of the "
+             "selected post is filled in)", self.action_chat_with),
             ("Browse groups", "See all groups on the node, subscribe or unsubscribe  [g]",
              self.action_browse),
             ("Create group", "Create an open, moderated, channel, closed or inbox group",
@@ -2436,7 +2476,7 @@ class UnseenetApp(App):
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
             ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
-            ("Private messages", "Open your inbox", self.action_open_inbox),
+            ("Letters", "Open your private letters (chats are under each contact)", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
              self.action_mark_all_read),
             ("Unsubscribe from group", "Stop following the current group and forget it locally",

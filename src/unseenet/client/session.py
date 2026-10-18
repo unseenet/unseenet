@@ -16,10 +16,10 @@ from pathlib import Path
 
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
-from ..core.groups import (INBOX_SCHEME, MAX_RULES, VIEWS, decrypt_article, encrypted_article,
-                           encryption_epoch, inbox_article, make_key_update, make_manifest,
-                           manifest_article, open_envelope, open_inbox_article, personal_inbox_id,
-                           short_group_id, split_group_id)
+from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_LETTER, MAX_RULES, VIEWS, decrypt_article,
+                           encrypted_article, encryption_epoch, inbox_article, make_key_update,
+                           make_manifest, manifest_article, message_kind, open_envelope,
+                           open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
 from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -60,6 +60,7 @@ class Message:
     reply_inbox: str | None = None
     to_key: str | None = None             # a private message you sent: its recipient
     content_type: str = ""                # private messages: the inner Content-Type
+    kind: str = KIND_LETTER               # private messages: a chat or a letter (UN-RFC 0028)
 
     @property
     def author_fp(self) -> str:
@@ -950,8 +951,14 @@ class Session:
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
-                           remember: bool = True) -> str:
-        """Send a message to an inbox. Only its owner can read it."""
+                           kind: str = KIND_LETTER, remember: bool = True) -> str:
+        """Send a message to an inbox. Only its owner can read it.
+
+        ``kind`` is ``"letter"`` (a subject, read on its own, answered with a quote)
+        or ``"chat"`` (a line in a running conversation, no subject) - UN-RFC 0028.
+        """
+        if kind == KIND_CHAT:
+            subject = ""
         if not self.manifest_data(group_id):
             owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
             owner_key = owner_key or owner_from_manifest
@@ -961,7 +968,7 @@ class Session:
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
-            references=references, content_type=content_type, pow_bits=bits))
+            references=references, content_type=content_type, kind=kind, pow_bits=bits))
         msgid = art.message_id
         if not remember:
             return msgid
@@ -970,7 +977,7 @@ class Session:
                              # where it falls among received messages: dates are rounded to
                              # 10 minutes for privacy, so they cannot order a conversation
                              "after": self._high.get(self.my_inbox, 0),
-                             "subject": subject, "body": art_body_text(body),
+                             "subject": subject, "body": art_body_text(body), "kind": kind,
                              "references": references or [],
                              "date": datetime.now(timezone.utc).isoformat()})
         self.data["read"].setdefault(self.my_inbox, []).append(msgid)
@@ -1142,7 +1149,8 @@ class Session:
             msg = Message(-1 - i, e["msgid"], self.my_inbox, subject=e["subject"],
                           from_name="You", author_key=mine, body=e["body"],
                           references=e.get("references", []), encrypted=True, private=True,
-                          sender_key=mine, reply_inbox=e.get("group"), to_key=e.get("to"))
+                          sender_key=mine, reply_inbox=e.get("group"), to_key=e.get("to"),
+                          kind=KIND_CHAT if e.get("kind") == KIND_CHAT else KIND_LETTER)
             try:
                 msg.date = datetime.fromisoformat(e["date"])
             except (KeyError, ValueError):
@@ -1160,20 +1168,46 @@ class Session:
             order[m.message_id] = (after.get(m.message_id, 0), 1, i)
         return sorted(received + sent, key=lambda m: order[m.message_id])
 
-    def conversation(self, key_text: str) -> list["Message"]:
-        """All private messages between you and a key, both directions, oldest first."""
+    def conversation(self, key_text: str, kind: str | None = None) -> list["Message"]:
+        """Private messages between you and a key, both directions, oldest first.
+
+        ``kind`` keeps only chats or only letters (UN-RFC 0028); None keeps both.
+        """
         received = [m for m in self.cache.get(self.my_inbox, {}).values()
-                    if m.sender_key == key_text]
-        return self._in_order(received, self.sent_messages(key_text))
+                    if m.sender_key == key_text and (kind is None or m.kind == kind)]
+        sent = [m for m in self.sent_messages(key_text) if kind is None or m.kind == kind]
+        return self._in_order(received, sent)
 
-    def private_messages(self) -> list["Message"]:
-        """Everything in your inbox and everything you sent privately, oldest first."""
-        return self._in_order(list(self.cache.get(self.my_inbox, {}).values()),
-                              self.sent_messages())
+    def private_messages(self, kind: str | None = None) -> list["Message"]:
+        """Your inbox and what you sent privately, oldest first; only one ``kind`` if given."""
+        return self._in_order(
+            [m for m in self.cache.get(self.my_inbox, {}).values() if kind is None or m.kind == kind],
+            [m for m in self.sent_messages() if kind is None or m.kind == kind])
 
-    def unread_from(self, key_text: str) -> int:
+    def unread_from(self, key_text: str, kind: str | None = None) -> int:
         return sum(1 for m in self.cache.get(self.my_inbox, {}).values()
-                   if m.sender_key == key_text and not self.is_read(m))
+                   if m.sender_key == key_text and (kind is None or m.kind == kind)
+                   and not self.is_read(m))
+
+    def unread_private(self, kind: str | None = None) -> int:
+        """Unread private messages of one kind (or all), from anyone."""
+        return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
+                   if (kind is None or m.kind == kind) and not self.is_read(m))
+
+    def _in_letters(self, m: "Message") -> bool:
+        """Letters, and chats with people who are not contacts (they have no
+        conversation of their own to show up in, so they must not vanish)."""
+        if m.kind != KIND_CHAT:
+            return True
+        return not self.contact_name(m.to_key or m.sender_key)
+
+    def letters(self) -> list["Message"]:
+        """What the "Letters" view shows (UN-RFC 0028 section 3), oldest first."""
+        return [m for m in self.private_messages() if self._in_letters(m)]
+
+    def unread_letters(self) -> int:
+        return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
+                   if self._in_letters(m) and not self.is_read(m))
 
     def _load_sent(self) -> list[dict]:
         try:
@@ -1557,6 +1591,7 @@ class Session:
             return
         msg.subject, msg.body = inner.get("Subject", ""), inner.body
         msg.content_type = inner.get("Content-Type", "")
+        msg.kind = message_kind(inner)
         msg.reply_inbox = inner.get("Reply-Inbox")
         if sender is None:
             msg.from_name, msg.author_key = "anonymous", ""

@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- Private messages are chats or letters (UN-RFC 0028, draft). The kind is
+  sealed inside the message. The terminal client shows letters under
+  *Letters* (previously *Private messages*) and chats under each contact;
+  `m` writes a letter, and the command palette has *Chat with someone*.
+  Messages from older clients count as letters. (#152)
+
 ## [0.3.1] - 2026-10-18
 
 Updates from an alpha to a release, and a stable release that sticks can

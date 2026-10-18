@@ -293,6 +293,17 @@ def verify_member_signature(art: Article, member_pk: bytes) -> bool:
 
 # --- inbox groups (UN-RFC 0009) ----------------------------------------------
 
+# UN-RFC 0028: a private message is a chat or a letter; without the header, a letter.
+KIND_CHAT, KIND_LETTER = "chat", "letter"
+MESSAGE_KINDS = (KIND_CHAT, KIND_LETTER)
+
+
+def message_kind(inner: Article) -> str:
+    """The kind of an inner inbox article (UN-RFC 0028 section 2)."""
+    value = inner.get("Message-Kind", "").strip().lower()
+    return KIND_CHAT if value == KIND_CHAT else KIND_LETTER
+
+
 def personal_inbox_id(pk: bytes) -> str:
     return make_group_id(INBOX_NAME, pk)
 
@@ -304,13 +315,19 @@ def _sender_message(group_id: str, outer_key_text: str, inner_canonical: bytes) 
 def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: str, body: str,
                   sender: crypto.Identity | None = None, reply_inbox: str | None = None,
                   references: list[str] | None = None, content_type: str | None = None,
-                  pow_bits: int = 18) -> Article:
-    """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3)."""
+                  kind: str = KIND_LETTER, pow_bits: int = 18) -> Article:
+    """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
+
+    ``kind`` is a chat or a letter (UN-RFC 0028); it travels inside the sealed box.
+    """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
+    if kind not in MESSAGE_KINDS:
+        raise ValueError(f"unknown message kind: {kind}")
     one_time = crypto.Identity.generate()
-    headers = [("From", from_name), ("Subject", subject),
-               ("Content-Type", content_type or "text/plain; charset=utf-8")]
+    headers = [("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
+               ("Content-Type", content_type or "text/plain; charset=utf-8"),
+               ("Message-Kind", kind)]
     if reply_inbox:
         headers.append(("Reply-Inbox", reply_inbox))
     if sender is not None:
