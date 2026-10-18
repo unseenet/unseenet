@@ -1,10 +1,10 @@
-# Using the client
+# Using the terminal client
 
 The TUI client is a terminal program. It starts its own private Tor,
 connects to a node and keeps everything you have - identity, group keys,
 subscriptions, what you have read - in one encrypted file, the **vault**.
 
-Prefer a window and a mouse? The [web client](web.md) uses the same vault
+Prefer a window and a mouse? The [graphical client](graphical.md) uses the same vault
 and works the same way.
 
 ## Install
@@ -379,7 +379,7 @@ unformatted too, so readers like tin see it as you wrote it.
 - **Nothing is ever loaded from outside**: no web images, no previews.
   Images can only be attachments in the network itself; anything else
   shows as its description.
-- Links show their real address; the web client warns before opening one
+- Links show their real address; the graphical client warns before opening one
   that is not a `.onion` address.
 - Shortcodes are GitHub's, Slack's and Discord's names (gemoji). On a
   terminal without emoji glyphs (the bootable image's console) they show

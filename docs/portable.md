@@ -1,11 +1,11 @@
-# Portable (Linux, macOS, Windows)
+# Portable (Linux, macOS, Windows) · Terminal
 
 The portable builds are the easiest way to use Unseenet: one folder with the
 client **and Tor** inside, nothing to install. Unzip it, start it, done. Put
 the folder on a USB stick and you carry your Unseenet with you - your keys,
 groups and contacts are in the encrypted vault inside it.
 
-This page is about the terminal client. The [web client](web.md) has
+This page is about the terminal client. The [graphical client](graphical.md) has
 portable and bootable builds of its own, which can share the stick and the
 vault with these.
 
