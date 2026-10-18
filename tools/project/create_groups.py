@@ -124,12 +124,32 @@ GROUPS = (
      "Each day's anniversaries from Wikipedia's \"On this day\", by a bot.",
      BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
      "ed25519:ame5agdrby6zyjqusfnpyicxg4nygfai3lqwewz2ctkkjuid3hxa", 20),
+    ("alt.news.globalvoices", "channel", "threads", "Global Voices: citizen media from around the world",
+     "Whole stories from Global Voices, by a bot. Comment on any story.",
+     BOT_RULES.format(source="Global Voices (CC BY 3.0)"),
+     "ed25519:ojyu2pv2v3aye2tw4xbel3ha5loujwxqjao5wnoe55dw7zc4fw7q", 20),
+    ("alt.news.theconversation", "channel", "threads", "The Conversation: news analysis by researchers",
+     "The opening of articles from The Conversation, with a link to the rest, by a bot.",
+     BOT_RULES.format(source="The Conversation (CC BY-ND 4.0)"),
+     "ed25519:7ky3decxcamoqttl2fqysiie24ptdxt4mld5yrxdb2ftbheukydq", 20),
+    ("alt.privacy.eff", "channel", "threads", "EFF Deeplinks: digital rights, privacy, free speech",
+     "Posts from the Electronic Frontier Foundation's Deeplinks blog, by a bot.",
+     BOT_RULES.format(source="EFF Deeplinks (CC BY 4.0)"),
+     "ed25519:uangztkgxp6ql2nxj6fy34d2bjspykt5taxfi7i4urrcm2o4kvca", 20),
+    ("alt.space.nasa", "channel", "threads", "NASA Image of the Day",
+     "NASA's Image of the Day: the caption and a link to the picture, by a bot.",
+     BOT_RULES.format(source="NASA (not copyrighted)"),
+     "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq", 20),
 )
 
 # Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
 COMMENTS = {
     "alt.news.wikipedia": ("open", 14),
     "alt.history.onthisday": ("open", 7),
+    "alt.news.globalvoices": ("open", 14),
+    "alt.news.theconversation": ("open", 14),
+    "alt.privacy.eff": ("open", 14),
+    "alt.space.nasa": ("open", 7),
 }
 
 

@@ -69,6 +69,10 @@ project's list.
 | `unseenet.admin` | open | anyone: hierarchy requests and name disputes |
 | `alt.news.wikipedia` | channel, comments open (14 days) | the news bot: one post per story in Wikipedia's *In the news*; anyone comments |
 | `alt.history.onthisday` | channel, comments open (7 days) | the on-this-day bot: the day's anniversaries; anyone comments |
+| `alt.news.globalvoices` | channel, comments open (14 days) | the Global Voices bot: whole stories (CC BY 3.0); anyone comments |
+| `alt.news.theconversation` | channel, comments open (14 days) | The Conversation bot: opening paragraphs and a link (CC BY-ND 4.0), at most 8 a day |
+| `alt.privacy.eff` | channel, comments open (14 days) | the EFF bot: Deeplinks posts (CC BY 4.0) |
+| `alt.space.nasa` | channel, comments open (7 days) | the NASA bot: Image of the Day |
 
 All have the fingerprint `ph5fc5hop5232qsz`, for example
 `unseenet.announce@ph5fc5hop5232qsz`. The node list and the root list are
