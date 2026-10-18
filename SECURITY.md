@@ -16,6 +16,20 @@ stick), and how to reproduce it.
 We answer within a week, work out a fix with you, and credit you in the
 release notes unless you would rather not be named.
 
+## Supported versions
+
+Unseenet is pre-alpha. Until 1.0:
+
+- The **latest minor release** (now 0.3.x) gets security and bug fixes,
+  until the next minor release comes out. Then upgrade.
+- Fixes are made on `main` first and carried to a `release/0.x` branch,
+  which is created the first time a fix is needed. That branch takes only
+  fixes: no new features and no protocol changes.
+- There is no compatibility guarantee before 1.0. A new minor release
+  tries to keep talking to nodes of the previous one
+  ([Versioning](docs/development.md#versioning)), but the network follows
+  the newest version: the project's own nodes always run it.
+
 ## What counts
 
 Anything that could reveal who someone is, where they are, what they read
