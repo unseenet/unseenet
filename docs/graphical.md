@@ -3,7 +3,7 @@
 The graphical client is Unseenet in a window on your own computer: the same
 groups, keys and vault as the terminal client, drawn with a mouse-friendly interface in the look of
 this site. It lives in its own repository,
-[unseenet/unseenet-web](https://github.com/unseenet/unseenet-web).
+[unseenet/unseenet-gui](https://github.com/unseenet/unseenet-gui).
 
 !!! warning "Pre-alpha prototype"
     Neither the graphical client nor the Unseenet core has had a security review.
@@ -19,18 +19,18 @@ group's owner decides which a group is, and ++v++ shows it the other way.
 ## Two ways to run it
 
 Both are built from every change and self-tested; the newest are the
-[development pre-release](https://github.com/unseenet/unseenet-web/releases/tag/dev).
+[development pre-release](https://github.com/unseenet/unseenet-gui/releases/tag/dev).
 
 **Portable (Linux, macOS, Windows) · Graphical.** Unzip and start, from a USB stick or a
 folder. Tor is included, and everything stays in `data/` beside the
 programs.
 
-- Windows: `Unseenet Web.exe` opens an app window (no console).
-- macOS: `Start Unseenet Web.command` opens an app window.
-- Linux: `sh start-web-linux.sh` opens Chromium, Chrome, Edge or Brave
+- Windows: `Unseenet Graphical.exe` opens an app window (no console).
+- macOS: `Start Unseenet Graphical.command` opens an app window.
+- Linux: `sh start-graphical-linux.sh` opens Chromium, Chrome, Edge or Brave
   without tabs if you have one, else your browser.
 
-**Bootable (USB, SSD etc.) · Graphical.** Write `unseenet-web-…-x86_64.img.xz` to a USB
+**Bootable (USB, SSD etc.) · Graphical.** Write `unseenet-gui-…-x86_64.img.xz` to a USB
 stick (for example with Raspberry Pi Imager or balenaEtcher), boot from it,
 and the client starts full screen and runs from memory, as with the
 terminal client's [bootable image](bootable.md). The first screen sets up
@@ -44,17 +44,17 @@ vault. Do not run both on the same vault at the same time.
 
 ## How it works
 
-The code is called `unseenet-web` because it draws its window with web
-technology - but it is not a website. It runs on your own computer, nothing
+The graphical client draws its window with web technology, but it is not a
+website. It runs on your own computer, nothing
 is hosted anywhere, and on Linux the window it opens in your browser only
 talks to the program on your own machine.
 
 ```
- window ──HTTP/WebSocket──▶ unseenet-web ──▶ unseenet core ──Tor──▶ nodes
+ window ──HTTP/WebSocket──▶ unseenet-gui ──▶ unseenet core ──Tor──▶ nodes
  (127.0.0.1 only)           (local server)   vault, keys, postage
 ```
 
-`unseenet-web` is a small local server around the core's `Session`, the
+`unseenet-gui` is a small local server around the core's `Session`, the
 same one the terminal client uses. It opens the same encrypted vault,
 starts the same Tor and talks to the same nodes. The window only draws what
 you see: **keys, signing, encryption and postage never leave the core**, and
@@ -66,7 +66,7 @@ token that every request must carry, and a strict Content-Security-Policy
 keeps the page from loading anything from outside. What people wrote is
 shown as text, never as HTML, and links in posts are not clickable, because
 following one would leave Tor. The
-[README](https://github.com/unseenet/unseenet-web#security) has the details.
+[README](https://github.com/unseenet/unseenet-gui#security) has the details.
 
 ## What it can do, and not yet
 
@@ -85,9 +85,9 @@ several identities and updating the stick.
 You need Python 3.11 or newer:
 
 ```sh
-pip install "unseenet-web @ git+https://github.com/unseenet/unseenet-web"
-unseenet-web            # opens your browser
-unseenet-web --window   # in its own window (pip install "unseenet-web[window] @ ...")
+pip install "unseenet-gui @ git+https://github.com/unseenet/unseenet-gui"
+unseenet-gui            # opens your browser
+unseenet-gui --window   # in its own window (pip install "unseenet-gui[window] @ ...")
 ```
 
 `--window` uses the system's web view in private mode, so nothing ends up in
