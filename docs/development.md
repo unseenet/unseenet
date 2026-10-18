@@ -266,8 +266,11 @@ software can evolve quickly while the network stays compatible.
 [Semantic versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
 - **Before 1.0** (now): anything may change. `MINOR` is raised for new
-  features *and* for breaking changes; `PATCH` for fixes only. Every
-  release is marked as a pre-release on GitHub.
+  features *and* for breaking changes; `PATCH` for fixes only. A stable
+  release (`vX.Y.Z`) is GitHub's "latest" release even before 1.0: the
+  stable update channel of Portable and Bootable fetches
+  `releases/latest`, which never points at a pre-release. Test releases
+  (`a`, `b`, `rc`) and development builds are pre-releases.
 - **From 1.0**: `MAJOR` for breaking changes (command line, `node.toml`,
   vault format, dropping a protocol version), `MINOR` for new features,
   `PATCH` for fixes.

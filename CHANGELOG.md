@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+- A stable release is now GitHub's "latest" release. Before 1.0 every
+  release was marked as a pre-release, so `releases/latest` did not exist
+  and Portable and Bootable on the stable channel found no signed version
+  to update to. (v0.3.0 was corrected by hand on GitHub.)
+
 ## [0.3.0] - 2026-10-18
 
 Names, moderation and updates. People and groups get names you can
