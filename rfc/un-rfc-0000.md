@@ -131,6 +131,7 @@ The protocol is designed to be extended without breaking old software:
 | 0029 | Key-bound Groups, Lifetime and Renewal        | Standards Track |
 | 0030 | Comments in Channels                          | Standards Track |
 | 0031 | Formatting: Markdown and Emoji                | Standards Track |
+| 0032 | Mention Notices                               | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
