@@ -879,3 +879,33 @@ async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
     for p in (me, other):
         await p.close()
     server.close()
+
+
+async def test_find_group_ref(tmp_path, monkeypatch):
+    """#172: what #dk.marsvin can mean - followed groups first, unknown names nothing."""
+    from unseenet.core.groups import GroupRef
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    me, a, b = person("me"), person("a"), person("b")
+    ga = await a.create_group("dk.marsvin", "open", min_pow=8)
+    gb = await b.create_group("dk.marsvin", "open", min_pow=8)
+    found = await me.find_group_ref(GroupRef("dk.marsvin"))
+    assert {g.group_id for g in found} == {ga, gb}
+    assert not any(g.subscribed for g in found)
+    me.subscribe(gb)
+    found = await me.find_group_ref(GroupRef("dk.marsvin"))
+    assert found[0].group_id == gb and found[0].subscribed
+    only = await me.find_group_ref(GroupRef("dk.marsvin", ga.split("@")[1][:4]))
+    assert [g.group_id for g in only] == [ga]
+    assert await me.find_group_ref(GroupRef("dk.findesikke")) == []
+    for p in (me, a, b):
+        await p.close()
+    server.close()

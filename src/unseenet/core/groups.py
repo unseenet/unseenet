@@ -23,6 +23,50 @@ INBOX_NAME = "inbox"            # personal inbox: inbox@<fp> (UN-RFC 0009, 2.2)
 
 # --- group IDs (section 1) -------------------------------------------------
 
+# --- #group references in posts (#172) --------------------------------------
+
+# '#' and a group name, optionally '@' and the start of the owner's fingerprint:
+# #dk.snak.marsvin or #dk.snak@abcd. Not inside a word, a URL fragment or an
+# address; '# heading' (with a space) is markdown, not a reference. The name must
+# have a letter, so '#170' stays an issue number, and it must end where a name
+# can: '#dk.snak.' is dk.snak, '#dk.supernørder' is nothing (names are a-z).
+GROUP_REF_RE = re.compile(
+    r"(?<![\w@#/&.+-])#(?=[a-z0-9+_.-]*[a-z])"
+    r"([a-z0-9][a-z0-9+_-]*(?:\.[a-z0-9][a-z0-9+_-]*)*)"
+    r"(?:@([a-z2-7]{4,16}))?"
+    r"(?![\w+@-]|\.\w)")
+
+
+@dataclass(frozen=True)
+class GroupRef:
+    """A group named in a text: '#name', or '#name@fp' with a fingerprint prefix."""
+    name: str
+    fp: str = ""
+
+    @property
+    def text(self) -> str:
+        return f"#{self.name}" + (f"@{self.fp}" if self.fp else "")
+
+    def matches(self, group_id: str) -> bool:
+        try:
+            name, fp = split_group_id(group_id)
+        except ValueError:
+            return False
+        return name == self.name and fp.startswith(self.fp)
+
+
+def group_refs(text: str) -> list[GroupRef]:
+    """The groups a text names with #, each once, in the order they appear (#172)."""
+    out: list[GroupRef] = []
+    for m in GROUP_REF_RE.finditer(text or ""):
+        if len(m.group(1)) > 128:
+            continue
+        ref = GroupRef(m.group(1), m.group(2) or "")
+        if ref not in out:
+            out.append(ref)
+    return out
+
+
 def make_group_id(name: str, owner_pk: bytes) -> str:
     if not _NAME_RE.match(name) or len(name) > 128:
         raise ValueError(f"invalid group name {name!r}")
