@@ -1529,6 +1529,10 @@ class UnseenetApp(App):
             await self.session.refresh_known_nodes()
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
             pass
+        try:                                    # inbox, profile...: renew when due (UN-RFC 0029)
+            await self.session.renew_key_bound()
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
+            pass
         try:                                    # names of groups and people (UN-RFC 0018, 0019)
             if await self.session.refresh_naming():
                 await self._render_groups()

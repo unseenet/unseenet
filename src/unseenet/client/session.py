@@ -7,12 +7,13 @@ encrypted vault (UN-RFC 0007); articles are cached in memory only.
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 import base64
 import json
 from dataclasses import dataclass, field
 from typing import NamedTuple
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..core import crypto
@@ -22,6 +23,7 @@ from ..core.groups import (INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS,
                            make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
 from ..core.groups import _comments  # UN-RFC 0030 field check
+from ..core.groups import RENEW_WHEN_LEFT, RENEW_WINDOW, is_key_bound, stored_expires
 from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
@@ -981,9 +983,13 @@ class Session:
                 except NNTPError:
                     return False
             if not await self._call(exists, self.node_for(gid)):
+                # a serial above any we used before: the inbox may have expired (UN-RFC 0029, 8)
+                serial = int(self.manifest_data(gid).get("serial", 0)) + 1
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
-                                    min_pow=DEFAULT_POW, pow_bits=await self.required_pow(gid))
+                                    min_pow=DEFAULT_POW, serial=serial,
+                                    pow_bits=await self.required_pow(gid))
                 await self._post_article(art)
+                entry["manifest"] = json.loads(art.body)
             entry.update({"type": "inbox", "owner": True})
         if gid not in self.data["subscribed"]:
             self.data["subscribed"].insert(0, gid)
@@ -1006,6 +1012,75 @@ class Session:
             raise SessionError("that group is not an inbox")
         return crypto.key_from_text(entry["owner_key"])
 
+    def _expired(self, group_id: str, now: datetime | None = None) -> bool:
+        """A key-bound group whose last seen manifest has run out (UN-RFC 0029, 5)."""
+        exp = stored_expires(self.manifest_data(group_id))
+        return (is_key_bound(group_id) and bool(self.manifest_data(group_id))
+                and (exp is None or (now or datetime.now(timezone.utc)) >= exp))
+
+    # ------------------------------------------------------------------
+    # renewal of key-bound groups (UN-RFC 0029 section 4)
+    # ------------------------------------------------------------------
+    def key_bound_groups(self, name: str | None = None) -> list[str]:
+        """The key-bound groups this identity owns and has a manifest for."""
+        fp = self.identity(name).fingerprint
+        out = []
+        for gid, entry in self.data["groups"].items():
+            if entry.get("owner") and entry.get("manifest") and is_key_bound(gid):
+                try:
+                    if split_group_id(gid)[1] == fp:
+                        out.append(gid)
+                except ValueError:
+                    continue
+        return sorted(out)
+
+    def key_bound_expiry(self, name: str | None = None) -> datetime | None:
+        """When this identity's key-bound groups run out, if not renewed (the earliest)."""
+        dates = [stored_expires(self.manifest_data(g)) for g in self.key_bound_groups(name)]
+        if not dates:
+            return None
+        if any(d is None for d in dates):
+            return datetime.fromtimestamp(0, timezone.utc)   # from before UN-RFC 0029
+        return min(dates)
+
+    async def renew_key_bound(self, now: datetime | None = None,
+                              rng: random.Random | None = None) -> list[str]:
+        """Renew key-bound groups that are due, without asking (UN-RFC 0029 section 4).
+
+        Each identity is renewed at a random moment, chosen on its own, within 30 days
+        of becoming due, and all of its key-bound groups together at that moment. If
+        expiry is near (or the manifest has no ``expires``), it renews at once.
+        Returns the groups renewed."""
+        now = now or datetime.now(timezone.utc)
+        rng = rng or random.SystemRandom()
+        renewed: list[str] = []
+        for name, ident_entry in self.data["identities"].items():
+            groups = self.key_bound_groups(name)
+            expiry = self.key_bound_expiry(name)
+            if not groups or expiry is None or expiry - now >= RENEW_WHEN_LEFT:
+                ident_entry.pop("renew_at", None)
+                continue
+            urgent = expiry - now < RENEW_WINDOW * 2
+            at = ident_entry.get("renew_at")
+            if at is None and not urgent:
+                at = (now + timedelta(seconds=rng.uniform(0, RENEW_WINDOW.total_seconds()))
+                      ).timestamp()
+                ident_entry["renew_at"] = at
+                self.save()
+            if not urgent and now.timestamp() < at:
+                continue
+            owner = self.identity(name)
+            for gid in groups:
+                data = self.manifest_data(gid)
+                data["serial"] = int(data.get("serial", 1)) + 1     # the vault remembers it
+                art = manifest_article(owner, gid, data, await self.required_pow(None), now=now)
+                await self._post_article(art)
+                self.group_entry(gid)["manifest"] = data
+                renewed.append(gid)
+            ident_entry.pop("renew_at", None)
+            self.save()
+        return renewed
+
     async def send_private(self, group_id: str, subject: str, body: str, *,
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
@@ -1018,8 +1093,14 @@ class Session:
         if kind == KIND_CHAT:
             subject = ""
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
+        if self._expired(group_id):          # UN-RFC 0029 section 6: look again first
+            self.data["groups"].get(group_id, {}).pop("manifest", None)
+            self.data["groups"].get(group_id, {}).pop("owner_key", None)
         if not self.manifest_data(group_id):
-            owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
+            try:
+                owner_from_manifest = await self.inbox_owner(group_id)   # also learns its min_pow
+            except SessionError as exc:
+                raise SessionError("the receiver has no inbox you can reach") from exc
             owner_key = owner_key or owner_from_manifest
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
@@ -1592,7 +1673,8 @@ class Session:
         Of the valid ones the newest wins (section 3.2). True if it was taken."""
         from ..core.groups import Manifest
         try:
-            m = Manifest.from_article(art)
+            # our own inbox from before UN-RFC 0029 has no expires: take it, to renew it
+            m = Manifest.from_article(art, stored=bool(entry.get("owner")))
         except (ArticleError, ValueError, TypeError):
             return False
         if m.group_id != group_id:
