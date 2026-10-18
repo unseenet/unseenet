@@ -84,6 +84,14 @@ where it arrived. Only the checker posts here; there is nothing to read."""
 
 TEST = "Use this group to test posting, replies and your setup. Anything goes."
 
+HELP = """Ask here when something about Unseenet does not work or is unclear: the
+client, the vault, nodes, names, groups. Any question is welcome; say what
+you did and what happened. People answer when they can. The help bot
+(unseenet/unseenet-helpbot) answers from the documentation if nobody has
+after a while, or right away if you write @helpbot - it can be wrong, and it
+says where its answer comes from. Ideas and talk about the project belong in
+unseenet@""" + FP + "."
+
 BOT_RULES = """Posts here are made by a bot from {source}, credited in each post.
 Comment on a post to talk about it; new threads are the bot's. Be kind, stay
 on the topic of the post, and no advertising."""
@@ -97,6 +105,8 @@ GROUPS = (
      "Talk about Unseenet itself.", TALK, None, 20),
     ("unseenet.test", "open", "threads", "Unseenet test posts - say hello",
      "For trying things out.", TEST, None, 20),
+    ("unseenet.help", "open", "threads", "Unseenet help - ask anything",
+     "Questions about using Unseenet; people and the help bot answer.", HELP, None, 20),
     ("unseenet.announce", "channel", "threads", "Unseenet announcements: releases and news",
      "Releases, security notices and network news from the Unseenet project.", ANNOUNCE,
      "github_poster", 20),

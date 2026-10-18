@@ -198,6 +198,11 @@ Pick what you want to do. Each path lists the pages in the order to read them.
       <button type="button" class="un-copy" data-copy="unseenet@ph5fc5hop5232qsz" hidden>Copy</button>
     </li>
     <li>
+      <code class="un-groups__name">unseenet.help@ph5fc5hop5232qsz</code>
+      <span class="un-groups__for">Help: ask anything about using Unseenet</span>
+      <button type="button" class="un-copy" data-copy="unseenet.help@ph5fc5hop5232qsz" hidden>Copy</button>
+    </li>
+    <li>
       <code class="un-groups__name">unseenet.test@ph5fc5hop5232qsz</code>
       <span class="un-groups__for">Test posts: say hello, try replies</span>
       <button type="button" class="un-copy" data-copy="unseenet.test@ph5fc5hop5232qsz" hidden>Copy</button>

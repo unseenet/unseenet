@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- A help group, `unseenet.help`, which new clients (terminal and web)
+  follow from the start, so newcomers know where to ask. The help bot
+  (unseenet/unseenet-helpbot) answers there from the docs. Vaults that
+  already exist are not changed. (#189)
+
 - Profiles (UN-RFC 0022): an identity can publish a public profile -
   about, languages, links, a bot mark - in its key-bound group
   `profile@<fp>`, and a small picture in `avatar@<fp>`. Every key has an

@@ -60,6 +60,7 @@ project's list.
 |-------|------|-----------|
 | `unseenet` | open | anyone |
 | `unseenet.test` | open | anyone |
+| `unseenet.help` | open | anyone: questions; the help bot answers from the docs ([unseenet-helpbot](https://github.com/unseenet/unseenet-helpbot)) |
 | `unseenet.announce` | channel | the GitHub poster: releases and news |
 | `unseenet.nodes` | channel | the GitHub poster: the node list ([UN-RFC 0010](../spec/un-rfc-0010.md)) |
 | `unseenet.hierarchies` | channel | the GitHub poster: the root list ([UN-RFC 0018](../spec/un-rfc-0018.md)) |
