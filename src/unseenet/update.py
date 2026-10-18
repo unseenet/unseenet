@@ -75,14 +75,23 @@ class UpdateError(Exception):
 # Versions
 # ----------------------------------------------------------------------
 def version_key(v: str) -> tuple:
-    """Order 0.2.1.dev3 < 0.2.1 < 0.2.2.dev1 (PEP 440's release and dev parts)."""
-    m = re.match(r"^v?(\d+(?:\.\d+)*)(?:\.dev(\d+))?", v.strip())
+    """Order versions as PEP 440 does, for the parts Unseenet uses:
+    0.3.0.dev1 < 0.3.0a1.dev2 < 0.3.0a1 < 0.3.0b1 < 0.3.0rc1 < 0.3.0 < 0.3.1.dev1.
+    """
+    m = re.match(r"^v?(\d+(?:\.\d+)*)(?:(a|b|rc)(\d+))?(?:\.dev(\d+))?", v.strip())
     if not m:
-        return ((-1,), (0, 0))
+        return ((-1,), (-2, 0), (0, 0))
     release = tuple(int(x) for x in m.group(1).split("."))
     release += (0,) * (4 - len(release))
-    dev = (0, int(m.group(2))) if m.group(2) else (1, 0)   # a dev build comes before its release
-    return (release, dev)
+    phase, num, dev = m.group(2), m.group(3), m.group(4)
+    if phase:
+        pre = ({"a": 0, "b": 1, "rc": 2}[phase], int(num))
+    elif dev:
+        pre = (-1, 0)              # X.devN comes before every pre-release of X
+    else:
+        pre = (3, 0)               # the release itself comes after all of them
+    devkey = (0, int(dev)) if dev else (1, 0)   # a dev build comes before what it builds up to
+    return (release, pre, devkey)
 
 
 def stick_version(media: Path) -> str:

@@ -12,6 +12,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   release was marked as a pre-release, so `releases/latest` did not exist
   and Portable and Bootable on the stable channel found no signed version
   to update to. (v0.3.0 was corrected by hand on GitHub.)
+- Portable and Bootable update from an alpha or its development build
+  (0.3.0a2.dev10, say) to the release (0.3.0). They took all three to be
+  the same version and said they were up to date. A stick that already
+  runs such a version can update with `python3 -m unseenet.update --media
+  /media/usb --channel stable --force` from the Shell in the menu.
 
 ## [0.3.0] - 2026-10-18
 
