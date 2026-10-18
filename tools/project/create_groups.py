@@ -24,7 +24,13 @@ never needs the project key itself:
   UNSEENET_ANNOUNCE_SEED), which posts releases, the node list, the root list
   and the project's hierarchy list (tools/announce.py), and the daily canaries
   (tools/node_health.py);
-- registrar keys: see setup_registrar.py.
+- registrar keys: see setup_registrar.py;
+- bot keys, written here as public keys: the bots of unseenet/unseenet-bots,
+  which run on unseenet-node3 as the user `bots` with their keys in
+  /home/bots/.config/unseenet-bots/ (see the backup notes).
+
+The bots' channels are open for comments (UN-RFC 0030): readers may reply to
+a post, only the bot starts threads.
 """
 
 from __future__ import annotations
@@ -78,7 +84,12 @@ where it arrived. Only the checker posts here; there is nothing to read."""
 
 TEST = "Use this group to test posting, replies and your setup. Anything goes."
 
-# name, type, view, title, description, rules, poster (a key in the vault), min_pow.
+BOT_RULES = """Posts here are made by a bot from {source}, credited in each post.
+Comment on a post to talk about it; new threads are the bot's. Be kind, stay
+on the topic of the post, and no advertising."""
+
+# name, type, view, title, description, rules, poster (a key in the vault, or a
+# public key "ed25519:..." for keys kept elsewhere), min_pow.
 # The poster is only used when a group is created; later changes to posters
 # are made by the scripts that own them (setup_registrar.py).
 GROUPS = (
@@ -105,11 +116,26 @@ GROUPS = (
      "github_poster", 20),
     ("unseenet.admin", "open", "threads", "Hierarchy requests and name disputes",
      "Requests for hierarchies, decisions, and complaints about names.", ADMIN, None, 22),
+    ("alt.news.wikipedia", "channel", "threads", "News from Wikipedia's In the news",
+     "One post per story in Wikipedia's \"In the news\", by a bot. Comment on any story.",
+     BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
+     "ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza", 20),
+    ("alt.history.onthisday", "channel", "threads", "On this day in history",
+     "Each day's anniversaries from Wikipedia's \"On this day\", by a bot.",
+     BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
+     "ed25519:ame5agdrby6zyjqusfnpyicxg4nygfai3lqwewz2ctkkjuid3hxa", 20),
 )
+
+# Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
+COMMENTS = {
+    "alt.news.wikipedia": ("open", 14),
+    "alt.history.onthisday": ("open", 7),
+}
 
 
 # What this list decides for groups that already exist, and each field's default.
-SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0}
+SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
+            "comments": "none", "comment_days": None}
 
 
 def _short(value) -> str:
@@ -127,6 +153,9 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
         return None, []
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
+    for k, default in (("comments", "none"), ("comment_days", None)):
+        if data.get(k, default) == default:
+            data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
     notes = [f"    {k}: {_short(current.get(k, '-'))!r} -> {_short(wanted[k])!r}" for k in changes]
     return data, notes
@@ -150,8 +179,9 @@ async def main() -> None:
                 sys.exit(f"{gid}: no node has its manifest and the vault has none; "
                          "is a node reachable?")
             current = max(known, key=lambda m: int(m.get("serial", 0)))
+            comments, comment_days = COMMENTS.get(name, ("none", None))
             wanted = {"view": view, "title": title, "description": desc, "rules": rules,
-                      "min_pow": min_pow}
+                      "min_pow": min_pow, "comments": comments, "comment_days": comment_days}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -161,12 +191,16 @@ async def main() -> None:
             print(f"{gid}: will update to serial {data['serial']}")
             print("\n".join(notes))
             continue
-        if poster and poster not in s.data:
+        if poster and not poster.startswith("ed25519:") and poster not in s.data:
             sys.exit(f"{gid} needs the {poster} key, which is not in the vault")
-        posters = [s.data[poster]["key"]] if poster else []
+        posters = ([poster] if poster.startswith("ed25519:") else [s.data[poster]["key"]]) \
+            if poster else []
+        comments, comment_days = COMMENTS.get(name, (None, None))
         art = make_manifest(owner, name, gtype, title=title, description=desc, rules=rules,
                             posters=posters, min_pow=min_pow, retention_days=90,
-                            view=None if view == "threads" else view, pow_bits=_owner.POW_BITS)
+                            view=None if view == "threads" else view,
+                            comments=comments, comment_days=comment_days,
+                            pow_bits=_owner.POW_BITS)
         todo.append((art, gtype, True))
         print(f"{gid}: will create ({gtype}, view {view}, posters {posters or 'none'})")
     if not dry:

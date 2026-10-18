@@ -15,6 +15,7 @@ project of their own.
 | **Release key** `ed25519:clbv6765...` | Repository secret `UNSEENET_RELEASE_KEY` only | Sign the checksums of development builds, which sticks accept only on the development channel |
 | **Registrar keys**, one per replica | On each replica's machine, in its vault | Sign name certificates in `unseenet.names` |
 | **Registrar inbox key** | The owner vault and every replica's vault | Open claims; nothing else |
+| **Bot keys**, one per bot ([unseenet-bots](https://github.com/unseenet/unseenet-bots)) | On `unseenet-node3`, user `bots`, in `/home/bots/.config/unseenet-bots/` | Post new threads in their own channel |
 
 The project key never touches GitHub, a node or a replica. Everything that
 runs unattended uses a key that the project key has listed as a **poster**
@@ -66,6 +67,8 @@ project's list.
 | `unseenet.canary` | channel | the GitHub poster: daily connection checks ([UN-RFC 0021](../spec/un-rfc-0021.md)) |
 | `unseenet.names` | channel | the registrar's replicas ([UN-RFC 0019](../spec/un-rfc-0019.md)) |
 | `unseenet.admin` | open | anyone: hierarchy requests and name disputes |
+| `alt.news.wikipedia` | channel, comments open (14 days) | the news bot: one post per story in Wikipedia's *In the news*; anyone comments |
+| `alt.history.onthisday` | channel, comments open (7 days) | the on-this-day bot: the day's anniversaries; anyone comments |
 
 All have the fingerprint `ph5fc5hop5232qsz`, for example
 `unseenet.announce@ph5fc5hop5232qsz`. The node list and the root list are
