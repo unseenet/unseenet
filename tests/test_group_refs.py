@@ -35,3 +35,15 @@ def test_group_ref_matches():
     assert not GroupRef("dk.snak", "bbbb").matches(gid)
     assert not GroupRef("dk").matches(gid)
     assert not GroupRef("dk.snak").matches("not a group id")
+
+
+def test_group_links_in_rendered_text():
+    """#172: the terminal client shows #group references as clickable links."""
+    from unseenet.client import richtext
+    from unseenet.core import markup
+    text = richtext.blocks(markup.body("Spørg i #dk.marsvin, ikke *#dk.snak*. Se [#x.y](https://e.org)\n",
+                                       markup.MARKDOWN_TYPE, "post"))
+    clicks = [s.style.meta.get("@click") for s in text.spans
+              if s.style and not isinstance(s.style, str) and s.style.meta]
+    assert clicks == ["app.group_ref('#dk.marsvin')", "app.group_ref('#dk.snak')"]
+    assert "#dk.marsvin" in text.plain

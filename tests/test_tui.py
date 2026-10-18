@@ -1217,3 +1217,21 @@ async def test_tui_group_ref(tmp_path, monkeypatch):
         await pilot.press("q")
     await other.close()
     server.close()
+
+
+async def test_tui_group_ref_link(tmp_path, monkeypatch):
+    """#172: clicking a #group link runs group_ref with that reference."""
+    from unseenet.client.tui import ConfirmDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr)
+    await other.create_group("dk.marsvin", "open", min_pow=10)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        await app.run_action("app.group_ref('#dk.marsvin')")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 300)
+        assert "dk.marsvin" in str(app.screen.query_one("Label").render())
+        await pilot.press("q")
+    await other.close()
+    server.close()

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import os
 
+from rich.style import Style
 from rich.text import Text
+
+from ..core.groups import GROUP_REF_RE
 
 QUOTE = "│ "
 WIDE = 60
@@ -19,13 +22,30 @@ def _glyphs() -> bool:
     return os.environ.get("TERM", "") not in ("linux", "dumb")
 
 
-def inline(nodes: list[dict], base: str = "") -> Text:
+def group_links(text: str, base: str = "") -> Text:
+    """Text with its #group references (unseenet #172) shown as links: a click runs
+    the app's group_ref action, which opens the group or asks before subscribing."""
+    out = Text()
+    last = 0
+    for m in GROUP_REF_RE.finditer(text):
+        if m.start() > last:
+            out.append(text[last:m.start()], style=base or None)
+        ref = m.group(0)
+        out.append(ref, style=Style.parse((base + " bold underline").strip())
+                   + Style.from_meta({"@click": f"app.group_ref({ref!r})"}))
+        last = m.end()
+    if last < len(text):
+        out.append(text[last:], style=base or None)
+    return out
+
+
+def inline(nodes: list[dict], base: str = "", refs: bool = True) -> Text:
     out = Text()
     glyphs = _glyphs()
     for n in nodes:
         t = n.get("t")
         if t == "text":
-            out.append(n["v"], style=base or None)
+            out.append(group_links(n["v"], base) if refs else Text(n["v"], style=base or ""))
         elif t == "br":
             out.append("\n")
         elif t == "code":
@@ -35,14 +55,14 @@ def inline(nodes: list[dict], base: str = "") -> Text:
         elif t == "image":
             out.append(f"[image: {n['alt'] or 'no description'}]", style="dim")
         elif t == "link":
-            inner = inline(n["c"], (base + " underline").strip())
+            inner = inline(n["c"], (base + " underline").strip(), refs=False)
             out.append(inner)
             shown = inner.plain.strip()
             if shown != n["href"]:                 # always show the real address (section 3.4)
                 out.append(f" <{n['href']}>", style="dim")
         elif t in ("em", "strong", "del"):
             style = {"em": "italic", "strong": "bold", "del": "strike"}[t]
-            out.append(inline(n["c"], (base + " " + style).strip()))
+            out.append(inline(n["c"], (base + " " + style).strip(), refs))
     return out
 
 
