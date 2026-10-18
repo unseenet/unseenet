@@ -909,3 +909,63 @@ async def test_find_group_ref(tmp_path, monkeypatch):
     for p in (me, a, b):
         await p.close()
     server.close()
+
+
+async def test_mention_notices(tmp_path, monkeypatch):
+    """UN-RFC 0032: a notice tells @lorensen about a post in a group he does not
+    follow; the receiver checks it; false, ignored and doubled notices are not shown."""
+    from unseenet import names as nm
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    me, other = person("andreas"), person("other")
+    reg = crypto.Identity.generate()
+    certs = [nm.make_certificate(reg, "lorensen", me.identity().key_text, 1)]
+    _registrar_store(me, reg, certs)
+    _registrar_store(other, reg, certs)
+    await me.ensure_inbox()
+    gid = await other.create_group("dk.snak", "open", min_pow=8)
+    secret = await other.create_group("familie", "closed", min_pow=8)
+
+    text = "Spørg @lorensen om marsvin, eller mail andreas@example.org.\n"
+    assert other.mentioned("Marsvin", text) == [("@lorensen", me.identity().key_text)]
+    assert other.mentioned("", "@ukendt og @lorensen.dk") == []            # not resolvable
+    assert me.mentioned("", "@lorensen") == []                             # not yourself
+    assert not other.may_notify(secret) and other.may_notify(gid)
+
+    post = await other.post(gid, "Marsvin", text)
+    keys = [k for _, k in other.mentioned("Marsvin", text)]
+    assert await other.send_mention_notices(gid, post, "Marsvin", "post", keys, delay=0) == 1
+    assert await other.send_mention_notices(gid, post, "Marsvin", "post", keys, delay=0) == 0  # once
+    plain = await other.post(gid, "Andet", "Intet navn her\n")               # a false notice
+    await other.send_mention_notices(gid, plain, "Andet", "post", keys, delay=0)
+
+    await me.fetch_group(me.my_inbox)
+    found = me.for_you()
+    assert [m.mention_of for m in found] == [post]
+    assert me.for_you_counts() == (0, 1)
+    assert not any(me.is_notice(m) for m in me.private_posts())             # in For you only
+    assert me.notice_post(found[0])["subject"] == "Marsvin"
+    assert gid not in me.data["subscribed"]                                 # checking follows nothing
+
+    me.set_notice_settings(receive=False)
+    assert me.for_you() == []
+    me.set_notice_settings(receive=True)
+    me.ignore(other.identity().key_text, "Other")
+    assert me.for_you() == []
+    me.unignore(other.identity().key_text)
+
+    me.subscribe(gid)                                                       # now it is marked there
+    await me.fetch_group(gid)
+    assert [m.message_id for m in me.for_you()] == [post]
+    for p in (me, other):
+        await p.close()
+    server.close()

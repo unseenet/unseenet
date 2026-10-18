@@ -67,6 +67,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   not is shown and you are asked before subscribing. The core has
   `group_refs()` and `Session.find_group_ref()` for other clients.
   References are underlined and can be clicked. (#172)
+- Mention notices (UN-RFC 0032): naming someone by a certified name in a
+  post also tells them in their inbox, so they see it in a group they do
+  not follow - at most 5 per post, a few minutes later, never for closed
+  groups or private posts. The compose window shows who is told and can
+  say no; the command palette turns sending or showing them off.
+  Received notices are checked against the post and show in *For you*.
+  Core: `Session.mentioned()`, `send_mention_notices()`,
+  `check_notices()`, `notices()`. (#171)
 
 ### Changed
 

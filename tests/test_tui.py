@@ -1235,3 +1235,47 @@ async def test_tui_group_ref_link(tmp_path, monkeypatch):
         await pilot.press("q")
     await other.close()
     server.close()
+
+
+async def test_tui_mention_notice(tmp_path, monkeypatch):
+    """UN-RFC 0032: the compose window says who is told; they get a notice in For you."""
+    import unseenet.client.session as sess
+    from unseenet import names as nm
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess.random, "uniform", lambda a, b: 0)    # no waiting in tests
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    sonia = Session(Vault.open(tmp_path / "s.vault", "pw", **KDF), status=lambda *_: None)
+    sonia.new_identity("sonia", "Sonia"); sonia.add_node(addr)
+    await sonia.ensure_inbox()
+    reg = crypto.Identity.generate()
+    certs = [nm.make_certificate(reg, "sonia", sonia.identity().key_text, 1).to_json()]
+    for p in (sonia,):
+        p.data.setdefault("naming", {}).setdefault("names", {}).update(
+            {"registrars": [reg.key_text], "certs": certs, "revoked": []})
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        app.session.data.setdefault("naming", {}).setdefault("names", {}).update(
+            {"registrars": [reg.key_text], "certs": certs, "revoked": []})
+        gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        app.select_group(gid)
+        await pilot.pause(0.3)
+        await pilot.press("n")
+        await pilot.pause(0.3)
+        await pilot.press(*"Marsvin")
+        await pilot.click("#body")
+        await pilot.press("ctrl+home")
+        await pilot.press(*"Hej @sonia")
+        await pilot.pause(0.2)
+        assert "Told: @sonia" in str(app.screen.query_one("#notify-who").render())
+        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 400)
+        for _ in range(100):
+            await sonia.fetch_group(sonia.my_inbox)
+            if sonia.for_you():
+                break
+            await pilot.pause(0.1)
+        assert [m.subject for m in sonia.for_you()] == ["Marsvin"]
+        await pilot.press("q")
+    await sonia.close()
+    server.close()
