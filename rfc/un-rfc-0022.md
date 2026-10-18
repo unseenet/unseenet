@@ -17,9 +17,13 @@ Matrix, Facebook, TikTok and so on. A **public profile** is kept in the
 manifest of a well-known group the identity owns, `profile@<fingerprint>`,
 so that anyone who knows the key can find it, nodes carry it like any
 other group, and it never expires. A **private profile** is the same
-object sent only to chosen people or to a closed group. Profiles are
-optional, contain only text, and are never fetched from or opened on
-the clearnet by a client without the user asking.
+object sent only to chosen people or to a closed group. An identity
+may also have a small **picture**, kept apart from the text in a group
+of its own, `avatar@<fingerprint>`, that nodes carry only if their
+operator chooses to, and every identity has an **identicon** derived
+from its key. Profiles and pictures are optional, and nothing in them
+is ever fetched from or opened on the clearnet by a client without the
+user asking.
 
 # 1. Motivation
 
@@ -47,6 +51,11 @@ on one identity and off another, and honest about what it reveals.
 - **Link:** an entry in the profile's `links` (section 4.2).
 - **Link proof:** a string placed on the linked page that shows the
   identity controls it (section 7).
+- **Picture:** the JSON object of section 8.1, a small image of the
+  identity's choosing.
+- **Avatar group:** the group `avatar@<fingerprint of the identity>`
+  (section 8.2).
+- **Identicon:** a pattern derived from a key (section 8.4).
 
 # 3. What Does Not Change
 
@@ -188,7 +197,7 @@ and MAY then remove the group (UN-RFC 0013).
 Neither can recall copies that others have already kept: archive nodes
 (UN-RFC 0012), readers' caches and anybody who saved the text. Clients
 MUST say so when a user publishes, changes or removes a public profile
-(section 8.1).
+(section 9.1).
 
 # 6. Private Profiles
 
@@ -249,9 +258,120 @@ not find the string; many services refuse Tor or need JavaScript.
 Clients MUST show unchecked links as stated by the identity, not as
 belonging to it.
 
-# 8. Clients
+# 8. Pictures
 
-## 8.1 Publishing
+An identity MAY have a small picture, shown next to its names in
+clients that can show images. Every identity also has an **identicon**,
+a pattern derived from its key, which clients show when there is no
+picture or pictures are turned off. Pictures are optional and separate
+from the text profile: an identity can have either, both or neither.
+
+## 8.1 The Picture Object
+
+A picture is a JSON object in canonical JSON:
+
+| Field  | Type    | Req. | Meaning                                                  |
+|--------|---------|------|----------------------------------------------------------|
+| `v`    | integer | yes  | `1`                                                      |
+| `type` | string  | yes  | `image/png`, `image/jpeg` or `image/webp`                |
+| `px`   | integer | yes  | Width and height in pixels, 32 to 128                    |
+| `data` | string  | yes  | b64 of the image file, at most 8192 octets before encoding |
+| `alt`  | string  | no   | A short description, at most 128 characters              |
+
+Unknown fields MUST be preserved and ignored. The image MUST be square,
+`px` by `px`, and a single still frame: no animation. It is carried
+inline rather than as a blob (section 12).
+
+The client that creates a picture MUST produce it as UN-RFC 0027
+section 9.1 requires for images: decoded and encoded anew from its
+pixels, in sRGB, with no metadata of any kind. It scales the image to
+`px` itself; it MUST NOT send the user's original file.
+
+A client that receives a picture MUST treat it as UN-RFC 0027 section
+9.2 requires for any file: determine the type from the content, decode
+it only in a restricted process, and treat a picture as absent if the
+content does not match `type`, the decoded image is not `px` by `px`,
+or it has more than one frame.
+
+## 8.2 The Avatar Group
+
+An identity's public picture lives in the group it owns named `avatar`:
+
+```
+avatar@<fingerprint of the identity's key>
+```
+
+Its Group ID follows from the key, like the profile group's (section
+5.1). Its manifest is as for the profile group, with `name`: `avatar`
+and, instead of `profile`, the field
+
+- `avatar`: the picture object of section 8.1.
+
+It is read, changed and removed as a public profile is (sections 5.2
+and 5.3), and nothing published in it can be recalled either.
+
+A picture is kept in its own group, not in the profile group, so that
+a node operator can carry profiles without carrying pictures (section
+10), and a reader's client can fetch text without fetching images.
+
+## 8.3 Pictures in Private Profiles
+
+A private profile (section 6) MAY carry a picture in the field
+`avatar` of the profile object. Section 4.4 then applies to the profile
+without that field, and the field itself MUST NOT exceed 11 264 octets.
+The picture is shown only in the context the profile was sent in, as
+for the rest of a private profile.
+
+The profile object in a profile group's manifest MUST NOT have an
+`avatar` field. A client MUST ignore one there.
+
+## 8.4 Identicons
+
+So that every client shows the same pattern for the same key, the
+identicon of a public key `pk` is derived from
+
+```
+seed = H( DS("UNSEENET-IDENTICON-1") || pk )
+```
+
+(UN-RFC 0003 section 1) as follows:
+
+- **Colour:** hue `h = (256 * seed[0] + seed[1]) mod 360` degrees, with
+  saturation 55 % and lightness 50 % (HSL). A client MAY adjust
+  lightness to its theme, but MUST keep the hue.
+- **Pattern:** a grid of 5 × 5 cells, mirrored about its middle
+  column. For `i` from 0 to 14, cell `i` lies in column `c = i div 5`
+  and row `r = i mod 5`, and is filled when bit `i mod 8` (0 is the
+  least significant) of `seed[2 + i div 8]` is 1. Column `4 - c` repeats
+  column `c`. Filled cells take the colour; empty cells the background.
+
+A terminal client MAY draw it with block characters, or show only the
+colour. An identicon is a help for the eye, not a proof: different keys
+can have similar identicons, and an attacker can search for a key with
+a chosen one. Clients MUST show it together with the short form of the
+fingerprint (UN-RFC 0019 section 8), never instead of it.
+
+## 8.5 Showing Pictures
+
+- A client MUST NOT publish a picture unless the user chooses one. The
+  first time, it MUST tell the user, in plain words, that a photo of
+  themselves, or a picture they also use elsewhere, can be found with a
+  reverse image search and ties the identity to them or to their other
+  accounts, and that a published picture cannot be fully taken back.
+  It SHOULD suggest a drawing or the identicon instead.
+- It MUST show the picture exactly as it will be published before
+  publishing it.
+- A picture is shown next to the identity's names and short form, never
+  instead of them, and never as if it were part of a post.
+- A client SHOULD let the user turn pictures off, and then shows
+  identicons. It MUST NOT decode the picture of a key the user has
+  hidden (section 9.2) or ignores.
+- A client MAY warn when two different keys have the same picture
+  (equal `data`), since a copied picture is the easiest impersonation.
+
+# 9. Clients
+
+## 9.1 Publishing
 
 - A client MUST NOT publish a public profile unless the user creates one.
 - Before publishing a public profile for the first time, and before
@@ -268,7 +388,7 @@ belonging to it.
   closed groups or for anonymous posts, as with names (UN-RFC 0019
   section 12).
 
-## 8.2 Showing
+## 9.2 Showing
 
 - A client SHOULD let the user open the profile of any author, member
   or name holder, showing in this order: the names of UN-RFC 0019
@@ -279,35 +399,48 @@ belonging to it.
   points to, by itself. It MAY copy a link to the clipboard when asked,
   and MAY hand an `onion` link to Tor Browser when asked.
 - It SHOULD cache profiles and MAY read the profiles of all authors in a
-  group the user reads, rather than one at a time (section 12).
+  group the user reads, rather than one at a time (section 13).
 - It SHOULD let the user hide the profile of a key.
 
-# 9. Nodes
+# 10. Nodes
 
 A node carries profile groups like any other group; it needs nothing
 new to do so. Because a profile group is small and holds no ordinary
 articles, a node whose `new_groups` policy is `trusted` or `manual`
 (UN-RFC 0004 section 3.3) SHOULD still accept profile groups with a
-valid manifest, unless its operator has chosen not to carry them.
+valid manifest, unless its operator has chosen not to carry them. The
+same holds for avatar groups once the operator has turned them on.
 
 A node says whether it does in its node information (UN-RFC 0011
-section 4), in the policy field
+section 4), in the policy fields
 
 | Field      | Type   | Meaning                                              |
 |------------|--------|------------------------------------------------------|
 | `profiles` | string | `accept`: carries profile groups; `refuse`: does not |
+| `avatars`  | string | `accept`: carries avatar groups; `refuse`: does not  |
 
-A node MAY refuse or remove the profile group of an identity it blocks
-(UN-RFC 0018 section 8.2) or whose profile breaks its rules or the law,
+Avatar groups (section 8.2) carry images, and no node should carry
+images it has not chosen to (UN-RFC 0027 section 1). An implementation
+MUST therefore ship with `avatars` set to `refuse`; the operator turns
+it on. A node that does not state `avatars` is taken to refuse them.
+
+A node that follows refusal lists (UN-RFC 0027 section 7.3) MUST also
+apply them to pictures: it computes the blob ID of the decoded `data`
+of an avatar manifest (UN-RFC 0027 section 3.1) and refuses the
+manifest if that ID is listed. The same lists then cover a picture
+whether it was posted as an attachment or as an avatar.
+
+A node MAY refuse or remove the profile or avatar group of an identity it blocks
+(UN-RFC 0018 section 8.2) or whose profile or picture breaks its rules or the law,
 as with any group.
 
-# 10. Signature Purposes
+# 11. Signature Purposes
 
 No new purposes. A public profile is signed as part of its manifest
 (`UNSEENET-ARTICLE-1`), a private profile as part of its article or
 inner article.
 
-# 11. Rationale
+# 12. Rationale
 
 - **Why in the manifest and not in an article?** A manifest is group
   state, which nodes never expire (UN-RFC 0017), and of several
@@ -322,9 +455,24 @@ inner article.
   the identity, follows from the key like the personal inbox, and needs
   no new node rules. The cost is many small groups; they hold one
   manifest each.
-- **Why no pictures?** Images make profiles large, make spam and abuse
-  more harmful and harder to judge, and are a way to leak metadata. A
-  later document may add a small avatar if there is a need.
+- **Why pictures inline, and not as blobs?** A picture must last as
+  long as the profile, and a manifest is the only thing nodes never
+  expire. Manifests are control articles and cannot reference blobs
+  (UN-RFC 0027 section 7.1), and blobs expire with the articles that
+  reference them. At 128 × 128 pixels a picture fits easily in 8 KiB,
+  which is cheap to carry inline.
+- **Why a group of its own?** So that an operator can carry text
+  profiles without carrying images, and a reader can fetch profiles
+  without fetching pictures. It costs one more small group per identity
+  that has a picture.
+- **Why so small, and no animation?** Small pictures limit what abuse
+  can show and what nodes must carry, and leave less room for hidden
+  data; still images are calmer to read beside, and rule out the
+  many-frame decompression attacks of UN-RFC 0027 section 9.2.
+- **Why specify identicons?** If every client drew its own, the same
+  person would look different in the TUI, the web client and on
+  Android. A fixed derivation costs a few lines and gives everybody a
+  recognisable mark without uploading anything.
 - **Why an open list of kinds?** Services come and go. A fixed field per
   service would need a protocol change for each new one; `kind` and
   `value` need none, and `x-` kinds can be tried before they are added.
@@ -339,16 +487,16 @@ inner article.
   Tor; a browser started from it would not. Opening a link should be a
   decision the user makes outside the client.
 
-# 12. Security and Privacy Considerations
+# 13. Security and Privacy Considerations
 
 - **Linking.** This is the main risk. A profile, and above all a link to
   an account under a real name, ties the identity to a person. Section
-  8.1 requires clients to say so before it happens. Users who need to
+  9.1 requires clients to say so before it happens. Users who need to
   stay anonymous should not publish a profile on that identity at all.
 - **No recall.** Anything public can be kept by others (section 5.3).
 - **What nodes learn.** A node sees which profile groups a client asks
   about, and so whose profiles a user looks at. Caching and reading the
-  profiles of a whole group at once (8.2) make single lookups less
+  profiles of a whole group at once (9.2) make single lookups less
   telling. Private profiles are invisible to nodes.
 - **Impersonation.** A profile can claim anything: a famous name in
   `about`, somebody else's accounts in `links`. Clients show names only
@@ -361,17 +509,30 @@ inner article.
   or replace control characters (4.1), so that a profile cannot move the
   cursor, change colours or set the terminal title.
 - **Abuse.** A profile can contain threats or illegal content like any
-  post. Nodes can refuse or remove the group (section 9), and readers
-  can hide it (8.2). The size limit (4.4) keeps the damage small.
+  post. Nodes can refuse or remove the group (section 10), and readers
+  can hide it (9.2). The size limit (4.4) keeps the damage small.
+- **Pictures.** A picture can tell who somebody is as surely as a
+  link: a photo of their face, or a picture they use on another
+  account, found with a reverse image search. Section 8.5 requires
+  clients to say so. Re-encoding (section 8.1) removes the metadata a
+  file carries, but not what the image itself shows.
+- **Hostile images.** A picture is decoded on the reader's machine,
+  which makes it an attack on image parsers. Section 8.1 applies the
+  receiving rules of UN-RFC 0027 section 9.2.
+- **Copied pictures.** Anybody can use somebody else's picture.
+  Clients show it only beside names and fingerprints and MAY warn about
+  duplicates (section 8.5).
 - **Proof checks.** Fetching a page leaks to the service that somebody
   checked it over Tor, and when. That is why it is never automatic.
 
-# 13. Changes to Other Documents
+# 14. Changes to Other Documents
 
-- UN-RFC 0004 section 3.1: the manifest field `profile` (object, only
-  in profile groups) is added.
-- UN-RFC 0008 section 3.1.1: profile groups are data groups.
-- UN-RFC 0011 section 4: the policy field `profiles` (section 9).
+- UN-RFC 0004 section 3.1: the manifest fields `profile` (object, only
+  in profile groups) and `avatar` (object, only in avatar groups) are
+  added.
+- UN-RFC 0008 section 3.1.1: profile and avatar groups are data groups.
+- UN-RFC 0011 section 4: the policy fields `profiles` and `avatars`
+  (section 10).
 - UN-RFC 0000 section 6: 0022 is added to the index.
 
 # Copyright Notice
