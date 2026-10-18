@@ -2019,7 +2019,7 @@ class UnseenetApp(App):
                 msgid = await self.session.post(gid, "", text, kind=KIND_CHAT)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
-                elif (self.session.notice_settings()["send"] and self.session.may_notify(gid)):
+                if self.session.notice_settings()["send"] and self.session.may_notify(gid):
                     found = self.session.mentioned("", text)[:MAX_MENTION_NOTICES]
                     if found:
                         self._send_notices(gid, msgid, "", KIND_CHAT, [k for _, k in found])
@@ -2466,15 +2466,15 @@ class UnseenetApp(App):
         except (SessionError, OSError, ConnectionError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             return
+        who = (f"{len(notify)} " + ("person is" if len(notify) == 1 else "people are")
+               if notify else "")
         if self.session.was_submitted(g.group_id, msgid):
             self.notify("Sent to the moderators. It appears in the group when one of them "
-                        "approves it.", timeout=10)
+                        "approves it" + (f"; then {who} told." if notify else "."), timeout=10)
         else:
-            self.notify("Sent" + (f" - {len(notify)} "
-                                  + ("person is" if len(notify) == 1 else "people are")
-                                  + " told in a few minutes" if notify else ""))
-            if notify:
-                self._send_notices(g.group_id, msgid, subject, KIND_POST, notify)
+            self.notify("Sent" + (f" - {who} told in a few minutes" if notify else ""))
+        if notify:                    # after approval, for a post the moderators have
+            self._send_notices(g.group_id, msgid, subject, KIND_POST, notify)
         self.select_group(g.group_id)
 
     @work(group="dialog", exit_on_error=False)

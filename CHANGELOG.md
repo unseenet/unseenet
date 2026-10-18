@@ -75,6 +75,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   Received notices are checked against the post and show in *For you*.
   Core: `Session.mentioned()`, `send_mention_notices()`,
   `check_notices()`, `notices()`. (#171)
+- Mention notices for a post in a moderated group wait until a moderator
+  approves it, and go when the post appears in the group. (#171)
 
 ### Changed
 

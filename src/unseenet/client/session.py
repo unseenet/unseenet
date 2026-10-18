@@ -152,6 +152,7 @@ class Session:
             for entry in d["groups"].values():
                 entry.setdefault("node", d["nodes"][0])
         self.sent: list[dict] = self._load_sent()
+        self._notice_tasks: dict[str, asyncio.Task] = {}   # notices on their way, by post
 
     # ------------------------------------------------------------------
     # identities & settings
@@ -1327,8 +1328,19 @@ class Session:
     async def send_mention_notices(self, group_id: str, msgid: str, subject: str, kind: str,
                                    keys: list[str], delay: float | None = None) -> int:
         """Tell up to 5 people that a post of yours names them (section 4). Waits a
-        random time first unless ``delay`` is given. Returns how many were sent."""
+        random time first unless ``delay`` is given. Returns how many were sent.
+
+        A post sent to the moderators is not in the group yet: the notices wait
+        until it appears there (approved, same Message-ID), and go then."""
         if not self.may_notify(group_id) or not keys:
+            return 0
+        if self.was_submitted(group_id, msgid) and not any(
+                m.message_id == msgid for m in self.cache.get(group_id, {}).values()):
+            waiting = self.data.setdefault("notices_waiting", {})
+            waiting[msgid] = {"group": group_id, "subject": subject, "kind": kind,
+                              "keys": keys[:MAX_MENTION_NOTICES],
+                              "since": datetime.now(timezone.utc).isoformat()}
+            self.save()
             return 0
         if delay is None:
             delay = random.uniform(5, 120)
@@ -1760,7 +1772,39 @@ class Session:
             self.save_offline()
         if group_id == self.my_inbox:
             await self.check_notices()             # UN-RFC 0032, section 5
+        self._release_waiting_notices(group_id)
         return sorted(cache.values(), key=lambda m: m.number)
+
+    def _release_waiting_notices(self, group_id: str) -> None:
+        """Send the notices of posts the moderators have now approved (they are in the
+        group); forget those of posts that never came (rejected) after 30 days."""
+        waiting = self.data.get("notices_waiting")
+        if not waiting:
+            return
+        here = {m.message_id for m in self.cache.get(group_id, {}).values()}
+        now = datetime.now(timezone.utc)
+        changed = False
+        for msgid, w in list(waiting.items()):
+            try:
+                old = now - datetime.fromisoformat(w["since"]) > timedelta(days=30)
+            except (KeyError, ValueError):
+                old = True
+            if old:
+                waiting.pop(msgid)
+                changed = True
+            elif w.get("group") == group_id and msgid in here and msgid not in self._notice_tasks:
+                self._notice_tasks[msgid] = asyncio.get_running_loop().create_task(
+                    self._send_waiting(msgid, w))
+        if changed:
+            self.save()
+
+    async def _send_waiting(self, msgid: str, w: dict) -> None:
+        try:
+            await self.send_mention_notices(w["group"], msgid, w["subject"], w["kind"], w["keys"])
+            self.data.get("notices_waiting", {}).pop(msgid, None)
+            self.save()
+        finally:
+            self._notice_tasks.pop(msgid, None)
 
     # ------------------------------------------------------------------
     # offline cache (UN-RFC 0007: encrypted with the vault key)
