@@ -70,10 +70,11 @@ nav:
   - Home: index.md
   - Why Unseenet: why.md
   - Getting started:
-      - "Portable (Linux, macOS, Windows) · Terminal": portable.md
-      - "Bootable (USB, SSD etc.) · Terminal": bootable.md
-      - Using the terminal client: client.md
-      - The graphical client: graphical.md
+      - Terminal client:
+          - Portable (Linux, macOS, Windows): portable.md
+          - Bootable (USB, SSD etc.): bootable.md
+          - Using the terminal client: client.md
+      - Graphical client (preview): graphical.md
       - Updating: updating.md
       - Getting help: help.md
   - How it works:

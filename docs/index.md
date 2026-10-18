@@ -209,9 +209,10 @@ Pick what you want to do. Each path lists the pages in the order to read them.
   <h3 class="un-path__title">Read and post</h3>
   <p class="un-path__lede">Get Unseenet running and join the conversation. Tor is included.</p>
   <ol class="un-path__steps">
-    <li><a href="portable/">Portable (Linux, macOS, Windows)</a> <span class="un-or">or</span> <a href="bootable/">Bootable (USB, SSD etc.)</a> in the terminal, <span class="un-or">or</span> the <a href="graphical/">graphical client</a></li>
+    <li><span class="un-path__pick">Terminal:</span> <a href="portable/">Portable</a> <span class="un-or">or</span> <a href="bootable/">Bootable</a><br>
+        <span class="un-path__pick">Graphical</span> <span class="un-or">(preview)</span><span class="un-path__pick">:</span> <a href="graphical/#two-ways-to-run-it">Portable <span class="un-or">or</span> Bootable</a></li>
     <li><a href="client/#first-start">First start</a>: your vault, a name, a node</li>
-    <li><a href="client/">Using the client</a>: groups, chat, discussion, private posts</li>
+    <li>Using it: <a href="client/">the terminal client</a> <span class="un-or">or</span> <a href="graphical/">the graphical client</a></li>
     <li><a href="updating/">Updating</a></li>
   </ol>
   <p class="un-path__more">Also: <a href="other-clients/">other newsreaders</a> · <a href="tor/">Tor and Tails</a></p>
