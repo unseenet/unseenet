@@ -40,6 +40,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   "try later" handled; reading back to avoid double posts. See
   *Writing a bot* in the docs. `tools/announce.py` now uses it. (#166)
 
+### Changed
+
+- Replies and mentions are counted apart: a group shows e.g.
+  `dk.snak (5) ◄1 ♦2`, *For you* the same for all groups, and the
+  notification says whether it is a reply or a post naming you. The core
+  has `Session.for_you_counts()` for other clients. (#170)
+
 ## [0.3.1] - 2026-10-18
 
 Updates from an alpha to a release, and a stable release that sticks can

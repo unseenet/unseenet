@@ -871,8 +871,11 @@ async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
     assert me.for_me(msgs["Spørgsmål"]) is None                     # your own post
     assert {m.subject for m in me.for_you()} == {"Hej", "Re: Spørgsmål"}
     assert me.for_you_count(gid) == 2
+    assert me.for_you_counts(gid) == (1, 1)                         # #170: replies, mentions apart
+    assert me.for_you_counts() == (1, 1)                            # all followed groups
     me.mark_read(msgs["Hej"])
     assert me.for_you_count(gid) == 1
+    assert me.for_you_counts(gid) == (1, 0)
     for p in (me, other):
         await p.close()
     server.close()
