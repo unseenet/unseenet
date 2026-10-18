@@ -7,9 +7,19 @@ and in the [web client](web.md). Ask there when something does not work or
 is unclear: the client, the vault, nodes, names, groups. Say what you did
 and what happened. Any question is welcome.
 
-People answer when they can. If nobody has after half an hour, the
-**help bot** answers, and it answers right away if your post names it:
-`@helpbot`. It also answers follow-up questions in reply to its answers.
+People answer when they can. The **help bot** steps in when nobody has:
+
+| You write | The bot answers |
+|-----------|-----------------|
+| a new post (a thread) | after 30 minutes without a reply |
+| a chat line that asks something | after 10 minutes without an answer |
+| anything with `@helpbot` in it | right away |
+| a reply to one of its answers | right away - ask your follow-up there |
+
+Times in Unseenet are rounded to 10 minutes for privacy, so the wait can be
+up to 10 minutes longer, and the answer itself takes the bot a minute or
+two to write. When it finds nothing in the docs, it stays quiet - unless
+you named it, then it says so.
 
 ## The help bot
 
