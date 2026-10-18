@@ -113,6 +113,8 @@ nav:
       - "0022 Profiles": spec/un-rfc-0022.md
       - "0023 Gateways": spec/un-rfc-0023.md
       - "0024 Usenet gateways": spec/un-rfc-0024.md
+      - "0025 Key ripening": spec/un-rfc-0025.md
+      - "0026 Nostr gateways": spec/un-rfc-0026.md
       - "0027 Attachments": spec/un-rfc-0027.md
   - The project:
       - The project's keys: project/keys.md
