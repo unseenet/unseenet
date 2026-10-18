@@ -573,14 +573,14 @@ class Session:
                            min_pow: int = DEFAULT_POW, local: bool = False,
                            retention_days: int | None = None, rules: str = "",
                            view: str | None = None, low_latency: bool = False,
-                           node: str | None = None) -> str:
+                           kinds: list[str] | None = None, node: str | None = None) -> str:
         owner = self.identity()
         node = node or self.node
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
-                            rules=rules, view=view, low_latency=low_latency,
+                            rules=rules, view=view, low_latency=low_latency, kinds=kinds,
                             pow_bits=await self.required_pow(None, node=node))
         await self._post_article(art, node)
         entry = {"type": gtype, "owner": True, "keys": {}, "manifest": json.loads(art.body),
@@ -712,11 +712,21 @@ class Session:
         """The newest manifest seen for a group ({} if none yet)."""
         return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))
 
+    def group_kinds(self, group_id: str) -> tuple[str, ...]:
+        """What a group takes: chat lines, posts with a subject, or both (UN-RFC 0028, 4.1)."""
+        data = self.manifest_data(group_id)
+        if data.get("type") == "inbox" or group_id == self.my_inbox:
+            return (KIND_CHAT, KIND_LETTER)
+        kinds = data.get("kinds")
+        if isinstance(kinds, list) and kinds and all(k in (KIND_CHAT, KIND_LETTER) for k in kinds):
+            return tuple(kinds)
+        return (KIND_CHAT, KIND_LETTER)
+
     async def update_group(self, group_id: str, **changes) -> dict:
         """Publish a new manifest with a higher serial (owner only).
 
-        Allowed changes: title, description, rules, view, low_latency, min_pow, retention_days.
-        Type, owner and locality can never change (UN-RFC 0004, 4).
+        Allowed changes: title, description, rules, view, kinds, low_latency, min_pow,
+        retention_days. Type, owner and locality can never change (UN-RFC 0004, 4).
         """
         entry = self.data["groups"].get(group_id, {})
         if not entry.get("owner"):
@@ -725,13 +735,19 @@ class Session:
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
         allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
-                   "retention_days", "banned", "moderators", "posters"}
+                   "retention_days", "banned", "moderators", "posters", "kinds"}
+        if "kinds" in changes and changes["kinds"] is not None:
+            kinds = list(dict.fromkeys(changes["kinds"]))
+            if not kinds or any(k not in (KIND_CHAT, KIND_LETTER) for k in kinds):
+                raise SessionError('kinds must be "chat", "letter" or both')
+            # both is the default and is left out of the manifest (UN-RFC 0028, 4.1)
+            changes["kinds"] = None if set(kinds) == {KIND_CHAT, KIND_LETTER} else kinds
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
             if value in (None, "", False, []) and key in ("title", "description", "rules",
                                                          "low_latency", "banned", "moderators",
-                                                         "posters"):
+                                                         "posters", "kinds"):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -1574,7 +1590,8 @@ class Session:
             msg.raw = raw
             self._decrypt_into(msg, art, entry)
         else:
-            msg.subject, msg.from_name, msg.body = art["Subject"], art["From"], art.body
+            msg.subject, msg.from_name, msg.body = art.get("Subject", ""), art["From"], art.body
+            msg.kind = message_kind(art)                     # UN-RFC 0028
             naming.note_certificate(self, msg.author_key, art.get(names.HEADER))
         return msg
 
@@ -1609,7 +1626,8 @@ class Session:
             return
         inner = decrypt_article(art, crypto.GroupKeys(bytes.fromhex(key_hex)))
         msg.readable = True
-        msg.subject, msg.from_name, msg.body = inner["Subject"], inner["From"], inner.body
+        msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
+        msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
 
     def _redecrypt(self, group_id: str) -> None:
         entry = self.group_entry(group_id)
@@ -1657,7 +1675,13 @@ class Session:
         return art.message_id
 
     async def post(self, group_id: str, subject: str, body: str,
-                   references: list[str] | None = None) -> str:
+                   references: list[str] | None = None, kind: str = KIND_LETTER) -> str:
+        """Post to a group: a letter (a post with a subject) or a chat line (UN-RFC 0028)."""
+        if kind not in self.group_kinds(group_id):
+            raise SessionError("this group does not take " +
+                               ("chat lines" if kind == KIND_CHAT else "posts with a subject"))
+        if kind == KIND_LETTER and not subject.strip():
+            raise SessionError("a post needs a subject")
         author = self.identity()
         entry = self.group_entry(group_id)
         cert = None
@@ -1670,13 +1694,15 @@ class Session:
             def build(bits):                       # postage is CPU work: runs in a thread
                 return encrypted_article(
                     group_id, epoch, keys, author, from_name=self.display_name(),
-                    subject=subject, body=body, references=references, pow_bits=bits)
+                    subject=subject, body=body, references=references, kind=kind, pow_bits=bits)
         else:
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
 
             def build(bits):
-                art = new_article(group_id, subject, body, from_name=self.display_name(),
-                                  references=references, extra=[cert] if cert else None)
+                # a chat line has an empty subject; the kind is a header (UN-RFC 0028, 3.2-3.3)
+                art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
+                                  from_name=self.display_name(), references=references,
+                                  extra=[("Message-Kind", kind)] + ([cert] if cert else []))
                 return art.finalize(author, bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):

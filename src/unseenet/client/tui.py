@@ -34,7 +34,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import INBOX_NAME, KIND_CHAT, personal_inbox_id
+from ..core.groups import INBOX_NAME, KIND_CHAT, KIND_LETTER, personal_inbox_id
 from . import session as _session_module
 from . import naming
 from .. import names as nm
@@ -450,6 +450,11 @@ DELIVERY_CHOICES = [("Discussion - shown as threads", "threads"),
                     ("Data for programs - hidden when people browse", "data")]
 DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": ("chat", True),
             "data": ("data", False)}
+# what a group takes (UN-RFC 0028, 4.1); "both" is the manifest's default
+KINDS_CHOICES = [("Takes posts and chat lines", "both"),
+                 ("Takes posts with a subject only (a discussion group)", "letter"),
+                 ("Takes chat lines only (a chat group)", "chat")]
+KINDS = {"both": None, "letter": ["letter"], "chat": ["chat"]}
 
 
 GROUP_NAME_HELP = ("Lowercase letters, digits and - _ +, parts separated by dots, "
@@ -472,6 +477,7 @@ class CreateGroupDialog(Dialog):
                           ("Only on this node (local)", "local")],
                          value="everywhere", allow_blank=False, id="where")
             yield Select(DELIVERY_CHOICES, value="threads", allow_blank=False, id="view")
+            yield Select(KINDS_CHOICES, value="both", allow_blank=False, id="kinds")
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
             yield Label("Rules (optional) - shown to people before they post:", classes="hint")
             yield TextArea("", id="rules", soft_wrap=True)
@@ -506,7 +512,8 @@ class CreateGroupDialog(Dialog):
                       "title": self.query_one("#title", Input).value.strip(),
                       "local": self.query_one("#where", Select).value == "local",
                       "rules": self.query_one("#rules", TextArea).text.strip(),
-                      "view": view, "low_latency": fast})
+                      "view": view, "low_latency": fast,
+                      "kinds": KINDS[self.query_one("#kinds", Select).value]})
 
 
 class InputDialog(Dialog):
@@ -715,6 +722,9 @@ class GroupInfoDialog(Dialog):
                  f"Shown as:  {d.get('view', 'threads')}"
                  + ("   fast delivery (less anonymity about who posts from where)"
                     if d.get("low_latency") else ""),
+                 "Takes:     " + {("letter",): "posts with a subject only (a discussion group)",
+                                  ("chat",): "chat lines only (a chat group)"}.get(
+                     tuple(d.get("kinds") or ()), "posts and chat lines"),
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
                  + ("     Local to one node" if d.get("local") else ""),
                  f"Version:   {d.get('serial', 1)}"]
@@ -1328,6 +1338,12 @@ class UnseenetApp(App):
         self.query_one("#chat-log").focus()          # now the letters are shortcuts again
 
     def action_write(self) -> None:
+        gid = self.current_group
+        if (gid and not gid.startswith(CONTACT) and gid in self.groups
+                and KIND_CHAT not in self.session.group_kinds(gid)):
+            self.notify("This is a discussion group: it takes posts with a subject only - n writes one",
+                        severity="warning")
+            return
         self.query_one("#chat-input").focus()
 
     def __init__(self, vault_path: Path):
@@ -1629,8 +1645,14 @@ class UnseenetApp(App):
         pos = {m.message_id: i for i, m in enumerate(msgs)}
         by_id = {m.message_id: m for m in msgs}
         threads: dict[str, list[Message]] = {}
+        run = None             # consecutive chat lines stay together, not a thread each (UN-RFC 0028)
         for m in msgs:
-            root = next((r for r in m.references if r in by_id), m.message_id)
+            root = next((r for r in m.references if r in by_id), None)
+            if root is None and m.kind == KIND_CHAT and not m.private:
+                root = run = run or m.message_id
+            else:
+                run = None
+            root = root or m.message_id
             threads.setdefault(root, []).append(m)
         out = []
         for root, items in sorted(threads.items(),
@@ -1661,7 +1683,7 @@ class UnseenetApp(App):
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
             title = m.subject or "(no subject)"
-            if m.private and m.kind == KIND_CHAT:      # a chat among the letters: its first line
+            if m.kind == KIND_CHAT and m.readable:     # a chat line among posts: its first line
                 first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
                 title = "» " + first[:60] + ("…" if len(first) > 60 else "")
             subject = ("  " * (depth - 1) + "└ " if depth else "") + title
@@ -1721,7 +1743,14 @@ class UnseenetApp(App):
             line.append(who, style="bold green" if own else "bold")
             if not own and self.session.contact_name(m.author_key):
                 line.append(" √", style="green")
-            line.append(": " + text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
+            if m.readable and m.kind != KIND_CHAT:      # a letter in a chat stands out (UN-RFC 0028)
+                line.append(": ")
+                line.append(f"≡ {m.subject or '(no subject)'}", style="bold underline")
+                line.append("  (a post - r answers it with a quote)", style="dim")
+                text = "\n" + text
+                line.append(text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
+            else:
+                line.append(": " + text.replace("\n", "\n" + " " * (len(when) + len(who) + 3)))
             log.write(line)
             if not self.session.is_read(m):
                 self.session.mark_read(m, save=False)
@@ -1761,7 +1790,7 @@ class UnseenetApp(App):
                 await self.session.send_private(personal_inbox_id(owner), "", text, owner_key=owner,
                                                 kind=KIND_CHAT)
             else:
-                msgid = await self.session.post(gid, subject, text)
+                msgid = await self.session.post(gid, "", text, kind=KIND_CHAT)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
                 await self.session.fetch_group(gid)
@@ -1928,6 +1957,10 @@ class UnseenetApp(App):
             self._write_to_contact(contact)
             return
         g = self._need_group()
+        if g and KIND_LETTER not in self.session.group_kinds(g.group_id):
+            self.notify("This is a chat group: it takes chat lines only, no posts with a subject",
+                        severity="warning")
+            return
         if g:
             self.compose_post(g)
 
@@ -2184,6 +2217,7 @@ class UnseenetApp(App):
             gid = await self.session.create_group(
                 result["name"], result["gtype"], result["title"], local=result["local"],
                 rules=result["rules"], view=result["view"], low_latency=result["low_latency"],
+                kinds=result.get("kinds"),
                 min_pow=16 if result["low_latency"] else sess_default_pow())
         except (SessionError, ValueError, OSError, ConnectionError) as exc:
             self.notify(f"Could not create group: {exc}", severity="error", timeout=8)

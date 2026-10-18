@@ -56,6 +56,30 @@ def parse_canonical_json(body: str) -> dict:
     return obj
 
 
+# --- chats and letters (UN-RFC 0028) ---------------------------------------
+
+KIND_CHAT, KIND_LETTER = "chat", "letter"
+MESSAGE_KINDS = (KIND_CHAT, KIND_LETTER)
+
+
+def message_kind(art: Article) -> str:
+    """The kind of a message (UN-RFC 0028 section 3.1): of a plain article, or of the
+    inner article of a closed group or an inbox. Without the header, a letter."""
+    value = art.get("Message-Kind", "").strip().lower()
+    return KIND_CHAT if value == KIND_CHAT else KIND_LETTER
+
+
+def _kinds(data: dict) -> tuple[str, ...]:
+    """A manifest's ``kinds`` (UN-RFC 0028 section 4.1); raises ValueError if invalid."""
+    if "kinds" not in data:
+        return MESSAGE_KINDS
+    kinds = data["kinds"]
+    if (not isinstance(kinds, list) or not kinds or len(set(kinds)) != len(kinds)
+            or any(k not in MESSAGE_KINDS for k in kinds)):
+        raise ValueError('kinds must be a non-empty list of "chat" and/or "letter"')
+    return tuple(kinds)
+
+
 # --- manifests (section 3) --------------------------------------------------
 
 @dataclass
@@ -76,6 +100,7 @@ class Manifest:
     rules: str = ""                      # UN-RFC 0014
     view: str = "threads"                # UN-RFC 0008
     low_latency: bool = False            # UN-RFC 0008
+    kinds: tuple[str, ...] = MESSAGE_KINDS   # UN-RFC 0028, 4.1
     banned: list[bytes] = field(default_factory=list)   # UN-RFC 0004, 5.1
     message_id: str = ""
     raw: dict = field(default_factory=dict)
@@ -100,6 +125,8 @@ class Manifest:
                 local=data.get("local") is True, submissions=data.get("submissions"),
                 rules=str(data.get("rules", "")), view=data.get("view", "threads"),
                 low_latency=data.get("low_latency") is True,
+                # an inbox takes both kinds, whatever it says (UN-RFC 0028, 4.1)
+                kinds=MESSAGE_KINDS if data.get("type") == "inbox" else _kinds(data),
                 banned=[_banned_key(b) for b in data.get("banned", [])],
                 message_id=art.message_id, raw=data,
             )
@@ -133,7 +160,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   min_pow: int = 0, retention_days: int = 90, sealed: str | None = None,
                   local: bool = False, submissions: str | None = None,
                   rules: str = "", view: str | None = None, low_latency: bool = False,
-                  pow_bits: int = 18) -> Article:
+                  kinds: list[str] | None = None, pow_bits: int = 18) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -159,6 +186,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["view"] = view
     if low_latency:
         data["low_latency"] = True
+    if kinds is not None and tuple(kinds) != MESSAGE_KINDS and gtype != "inbox":
+        data["kinds"] = list(kinds)          # both is the default, so it is left out
     return manifest_article(owner, group_id, data, pow_bits)
 
 
@@ -172,6 +201,7 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
         raise ValueError(f"rules are limited to {MAX_RULES} characters")
     if data.get("view", "threads") not in VIEWS:
         raise ValueError("view must be one of " + ", ".join(VIEWS))
+    _kinds(data)                                           # UN-RFC 0028, 4.1
     art = new_article(group_id, None, canonical_json(data),
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)
@@ -260,9 +290,13 @@ def _aad(group_id: str, epoch: int) -> bytes:
 
 def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author: crypto.Identity,
                       *, from_name: str, subject: str, body: str,
-                      references: list[str] | None = None, pow_bits: int = 18) -> Article:
-    inner = Article([("From", from_name), ("Subject", subject),
-                     ("Content-Type", "text/plain; charset=utf-8")], body)
+                      references: list[str] | None = None, kind: str = KIND_LETTER,
+                      pow_bits: int = 18) -> Article:
+    """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption."""
+    if kind not in MESSAGE_KINDS:
+        raise ValueError(f"unknown message kind: {kind}")
+    inner = Article([("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
+                     ("Content-Type", "text/plain; charset=utf-8"), ("Message-Kind", kind)], body)
     blob = crypto.aead_encrypt(keys.enc_key, inner.to_bytes(), _aad(group_id, epoch))
     outer_body = "\n".join(textwrap.wrap(b64(blob), 76)) + "\n"
     art = new_article(group_id, None, outer_body, references=references,
@@ -292,17 +326,6 @@ def verify_member_signature(art: Article, member_pk: bytes) -> bool:
 
 
 # --- inbox groups (UN-RFC 0009) ----------------------------------------------
-
-# UN-RFC 0028: a private message is a chat or a letter; without the header, a letter.
-KIND_CHAT, KIND_LETTER = "chat", "letter"
-MESSAGE_KINDS = (KIND_CHAT, KIND_LETTER)
-
-
-def message_kind(inner: Article) -> str:
-    """The kind of an inner inbox article (UN-RFC 0028 section 2)."""
-    value = inner.get("Message-Kind", "").strip().lower()
-    return KIND_CHAT if value == KIND_CHAT else KIND_LETTER
-
 
 def personal_inbox_id(pk: bytes) -> str:
     return make_group_id(INBOX_NAME, pk)
@@ -409,6 +432,11 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         return
     if "Encrypted" in art:
         raise ArticleError("permission", "encryption only allowed in closed groups")
+    kind = message_kind(art)                               # UN-RFC 0028, section 5
+    if art.control is None and kind not in manifest.kinds:
+        raise ArticleError("permission", "this group takes " + " and ".join(
+            {"chat": "chat lines", "letter": "posts with a subject"}[k] for k in manifest.kinds)
+            + f", not a {'chat line' if kind == KIND_CHAT else 'post with a subject'}")
     if manifest.can_post_directly(pk):
         return
     if manifest.type == "moderated" and has_valid_approval(art, manifest):

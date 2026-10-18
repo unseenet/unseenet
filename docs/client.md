@@ -163,6 +163,20 @@ press ++escape++ to use the shortcuts (++n++, ++r++, ++g++, ...) and
 the client remembers your choice per group. Conversations with contacts
 open as a chat.
 
+What you write is a **chat line** (from the input line) or a **post**
+with a subject (from the compose window, ++n++), and every message says
+which it is ([UN-RFC 0028](spec/un-rfc-0028.md)). So the view only
+changes how a group looks, never what is in it: shown as threads, chat
+lines are marked `»` with their first line and kept together instead of
+each becoming a thread; shown as a chat, a post stands out with its
+subject, and ++r++ answers it with a quote.
+
+The owner decides what a group **takes**: posts and chat lines (the
+default), posts only (a discussion group) or chat lines only (a chat
+group). It is chosen when the group is created, and shown under *About
+this group* (++question-mark++). In open, moderated and channel groups
+the nodes refuse the other kind; in closed groups the clients do.
+
 ![A chat group: messages in order and an input line at the bottom](img/client-chat.svg)
 
 A group's owner can mark it as a chat, so it opens that way for

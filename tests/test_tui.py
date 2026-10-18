@@ -342,7 +342,7 @@ async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
     owner.new_identity("o", "Owner"); owner.add_node(addr)
     gid = await owner.create_group("chat.venner", "open", view="chat", low_latency=True,
                                    rules="Kun hyggesnak.", min_pow=9)
-    await owner.post(gid, "hej", "Hej alle!\n")
+    await owner.post(gid, "", "Hej alle!\n", kind="chat")          # a chat line (UN-RFC 0028)
     await owner.close()
 
     me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
@@ -395,7 +395,7 @@ async def test_tui_chat_updates_by_push(tmp_path, monkeypatch):
         app.select_group(gid)
         assert await wait_for(pilot, lambda: app._inbox_ready and app.current_group == gid, 300)
         await pilot.pause(0.5)
-        await friend.post(gid, "hej", "Er du der?\n")          # no refresh: push must bring it
+        await friend.post(gid, "", "Er du der?\n", kind="chat")   # no refresh: push must bring it
         assert await wait_for(pilot, lambda: any(
             re.search(r"Friend~[a-z2-7]{4}: Er du der\?", str(ln.text)) for ln in app.query_one("#chat-log").lines), 100)
         await pilot.press("q")
