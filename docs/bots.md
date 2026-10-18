@@ -75,13 +75,35 @@ To avoid posting the same thing twice after a restart,
 
 ## Be a good bot
 
-- Say that you are a bot (a profile with `bot: true`, UN-RFC 0030
-  section 6, once profiles are in the client), and name a person to
-  contact.
+- Say that you are a bot: publish a profile with the bot mark
+  (`Session.publish_profile` with `make_profile(..., bot=True)`,
+  UN-RFC 0022), and name a person to contact.
 - Post only what you may: credit the source and link to it, as its
   licence asks.
 - Post rarely. A channel that floods is a channel people unsubscribe
   from.
 
-Ready-made bots, and a runner for them, live in
+## The project's bots
+
+The project runs a few bots of its own, each with its own key and a
+profile that says it is a bot.
+
+| Bot | Group | What it posts |
+|-----|-------|---------------|
+| Wikipedia news | `alt.news.wikipedia` | one post per story in Wikipedia's *In the news* |
+| On this day | `alt.history.onthisday` | the day's anniversaries from Wikipedia |
+| Global Voices | `alt.news.globalvoices` | whole stories (CC BY 3.0) |
+| The Conversation | `alt.news.theconversation` | the opening of articles, with a link |
+| EFF Deeplinks | `alt.privacy.eff` | posts on digital rights and privacy |
+| NASA | `alt.space.nasa` | NASA's Image of the Day |
+| Unseenet help | `unseenet.help` | answers to questions, from the docs, issues and pull requests ([Getting help](help.md)) |
+
+The news bots post in channels: only the bot starts threads, and anyone
+may comment on a post. They are built on `unseenet.core.poster` and live,
+with a runner you can use for your own, in
 [unseenet/unseenet-bots](https://github.com/unseenet/unseenet-bots).
+
+The help bot is different: it reads a group and answers in its threads,
+so it is built on the client's `Session`, like the terminal and web
+clients. Its code, with an install script for a server, is
+[unseenet/unseenet-helpbot](https://github.com/unseenet/unseenet-helpbot).

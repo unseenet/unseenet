@@ -72,13 +72,16 @@ nav:
       - Portable (Linux, macOS, Windows): portable.md
       - Bootable (USB, SSD etc.): bootable.md
       - Using the client: client.md
+      - The web client: web.md
       - Updating: updating.md
+      - Getting help: help.md
   - How it works:
       - Concepts: concepts.md
       - Tor and Tails: tor.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
-      - Writing a bot: bots.md
+      - Gateways to other networks: gateways.md
+      - Bots: bots.md
   - Running a node:
       - Installation: node/install.md
       - Configuration: node/configuration.md

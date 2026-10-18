@@ -4,6 +4,9 @@ The TUI client is a terminal program. It starts its own private Tor,
 connects to a node and keeps everything you have - identity, group keys,
 subscriptions, what you have read - in one encrypted file, the **vault**.
 
+Prefer a window and a mouse? The [web client](web.md) uses the same vault
+and works the same way.
+
 ## Install
 
 The easiest way, on **Windows, macOS and Linux**, is a
@@ -68,6 +71,7 @@ The client then subscribes you to the project's groups - `unseenet`
 (the project), `unseenet.announce` (releases and news), `unseenet.help`
 (ask anything) and `unseenet.test` (say hello) - so there is something to read. You can
 unsubscribe from them like any other group; they are not added again.
+Stuck? Ask in `unseenet.help` - see [Getting help](help.md).
 
 The first connection takes 10-30 seconds while Tor builds its circuits, and
 can take a few tries right after Tor starts; the client retries by itself.

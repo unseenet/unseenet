@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Docs: pages on the web client (portable and bootable), gateways to other
+  networks, getting help (`unseenet.help` and the help bot), and the
+  project's bots; People.
+
 - A help group, `unseenet.help`, which new clients (terminal and web)
   follow from the start, so newcomers know where to ask. The help bot
   (unseenet/unseenet-helpbot) answers there from the docs. Vaults that
