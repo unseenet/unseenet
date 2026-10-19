@@ -129,6 +129,7 @@ nav:
       - "0032 Mention notices": spec/un-rfc-0032.md
       - "0033 Pinned posts": spec/un-rfc-0033.md
       - "0034 Feeds and following": spec/un-rfc-0034.md
+      - "0035 Pages and sites": spec/un-rfc-0035.md
       - "0036 Attestations": spec/un-rfc-0036.md
       - "0037 Matrix gateways": spec/un-rfc-0037.md
   - The project:
