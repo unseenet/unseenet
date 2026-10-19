@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import atexit
+import errno
 import json
 import os
+import socket
 import struct
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -21,6 +25,157 @@ MEMLIMIT = nacl.pwhash.argon2id.MEMLIMIT_MODERATE
 
 class VaultError(ValueError):
     pass
+
+
+class VaultLocked(VaultError):
+    """The vault is open in another program."""
+
+
+LOCKED_MESSAGE = ("This vault is already open in another Unseenet program. "
+                  "Close it there first.")
+
+# ---------------------------------------------------------------------------
+# The vault lock: one program at a time (each saves the whole vault, the last
+# one to save would win). A lock file beside the vault, locked by the OS, so a
+# crashed program never leaves it locked. Where the file system has no locks
+# (some FAT sticks on macOS) the file holds "pid host" and a dead or foreign
+# holder counts as gone. Opening the same vault twice in one program is
+# allowed: the program itself keeps one copy in step.
+# ---------------------------------------------------------------------------
+_held: dict[str, list] = {}          # resolved vault path -> [lock, number of opens]
+_held_lock = threading.Lock()
+
+
+def _os_lock(fd: int) -> bool | None:
+    """True: locked. False: another program holds it. None: no locks on this file system."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError as exc:
+        if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK, errno.EACCES,
+                         getattr(errno, "EDEADLOCK", errno.EDEADLK), errno.EDEADLK):
+            return False
+        if exc.errno in (errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOLCK, errno.EINVAL,
+                         errno.ENOSYS):
+            return None
+        raise
+
+
+def _holder_alive(text: str) -> bool:
+    """A "pid host" lock file: is that program still running here?"""
+    parts = text.split()
+    if len(parts) < 2 or not parts[0].isdigit():
+        return False
+    if parts[1] != socket.gethostname():
+        return False                  # the stick was in another computer; that one is gone
+    pid = int(parts[0])
+    if pid == os.getpid():
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)   # QUERY_LIMITED
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class _VaultLock:
+    def __init__(self, vault_path: Path):
+        self.path = vault_path.with_name(vault_path.name + ".lock")
+        self.fd: int | None = None
+        self.by_file = False          # the "pid host" fallback, removed on release
+
+    def _stamp(self) -> bytes:
+        return f"{os.getpid()} {socket.gethostname()}\n".encode()
+
+    def acquire(self) -> None:
+        try:
+            fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError as exc:
+            if exc.errno in (errno.EROFS, errno.EACCES, errno.EPERM):
+                return                # read-only: this program could not save either
+            raise
+        try:
+            got = _os_lock(fd)
+        except BaseException:
+            os.close(fd)
+            raise
+        if got:
+            self.fd = fd
+            os.ftruncate(fd, 0)
+            os.write(fd, self._stamp())   # who holds it, for people looking at the stick
+            return
+        if got is False:
+            os.close(fd)
+            raise VaultLocked(LOCKED_MESSAGE)
+        try:
+            text = os.read(fd, 200).decode("ascii", "replace")
+        finally:
+            os.close(fd)
+        if _holder_alive(text):
+            raise VaultLocked(LOCKED_MESSAGE)
+        with open(self.path, "wb") as f:
+            f.write(self._stamp())
+        self.by_file = True
+        atexit.register(self.release)
+
+    def release(self) -> None:
+        if self.fd is not None:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    os.lseek(self.fd, 0, os.SEEK_SET)
+                    msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+            os.close(self.fd)         # the OS lock goes with it; the file stays
+            self.fd = None
+        if self.by_file:
+            self.by_file = False
+            try:
+                if self.path.read_bytes() == self._stamp():
+                    self.path.unlink()
+            except OSError:
+                pass
+
+
+def _lock(path: Path) -> str:
+    key = str(path.resolve())
+    with _held_lock:
+        entry = _held.get(key)
+        if entry is not None:
+            entry[1] += 1
+            return key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock = _VaultLock(path)
+        lock.acquire()
+        _held[key] = [lock, 1]
+        return key
+
+
+def _unlock(key: str) -> None:
+    with _held_lock:
+        entry = _held.get(key)
+        if entry is None:
+            return
+        entry[1] -= 1
+        if entry[1] <= 0:
+            del _held[key]
+            entry[0].release()
 
 
 def _key(passphrase: str, salt: bytes, ops: int, mem: int) -> bytes:
@@ -65,21 +220,40 @@ class Vault:
     not kept. Saves are serialized and written with permissions 0600.
     """
 
-    def __init__(self, path: Path, key: bytes, salt: bytes, ops: int, mem: int, data: dict):
+    def __init__(self, path: Path, key: bytes, salt: bytes, ops: int, mem: int, data: dict,
+                 lock_key: str | None = None):
         self.path, self.data = path, data
         self._key, self._salt, self._ops, self._mem = key, salt, ops, mem
         self._lock = threading.Lock()
+        self._lock_key = lock_key
+
+    def close(self) -> None:
+        """Let other programs open the vault (also happens when this program ends)."""
+        key, self._lock_key = self._lock_key, None
+        if key is not None:
+            _unlock(key)
 
     @classmethod
     def open(cls, path: Path, passphrase: str, ops: int = OPSLIMIT, mem: int = MEMLIMIT) -> "Vault":
+        """Open (or start) a vault. Raises :class:`VaultLocked` if another program has it.
+
+        The lock is taken first, so a second program is told at once, before the
+        slow key derivation, and is released again if the passphrase is wrong.
+        """
         path = Path(path)
-        if not path.exists():
-            salt = os.urandom(16)
+        lock_key = _lock(path)
+        try:
+            if not path.exists():
+                salt = os.urandom(16)
+                key = _key(passphrase, salt, ops, mem)
+                return cls(path, key, salt, ops, mem,
+                           {"v": 1, "identities": {}, "groups": {}, "nodes": []}, lock_key)
+            ops, mem, salt, box = _unpack(path.read_bytes())
             key = _key(passphrase, salt, ops, mem)
-            return cls(path, key, salt, ops, mem, {"v": 1, "identities": {}, "groups": {}, "nodes": []})
-        ops, mem, salt, box = _unpack(path.read_bytes())
-        key = _key(passphrase, salt, ops, mem)
-        return cls(path, key, salt, ops, mem, json.loads(_open_box(key, box)))
+            return cls(path, key, salt, ops, mem, json.loads(_open_box(key, box)), lock_key)
+        except BaseException:
+            _unlock(lock_key)
+            raise
 
     def save(self) -> None:
         with self._lock:

@@ -9,6 +9,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- The client can use a Tor that is already running instead of starting
+  its own, so it works in Tails (#140). On Tails it uses Tails' Tor by
+  itself; elsewhere choose with Ctrl+P → *Tor: which Tor*,
+  `unseenet cli tor 127.0.0.1:9050`, or `UNSEENET_TOR_SOCKS`. Each node
+  gets its own circuit (a SOCKS username per node), and if that Tor does
+  not answer the client says so rather than starting its own. Core:
+  `existing_tor`, `Socks` and `check_socks` in `unseenet.core.tor`, used by
+  every client through `Session`.
+- The vault is locked while a program has it open (#141): a second
+  program - say the graphical client next to the terminal client - is
+  told "This vault is already open in another Unseenet program" instead
+  of quietly overwriting the first one's changes (and keys of closed
+  groups). The lock is the OS's, so a crash leaves nothing locked; on file
+  systems without locks (FAT on macOS) a `pid host` lock file stands in.
+  In the core (`Vault.open`, new `Vault.close`), so it covers every client.
 - The group list is a tree: under `alt.*` the groups are shown without
   `alt.` (`.news.wikipedia`), and a part of a name that two or more groups
   share is a folder that folds (`.history` with `.egypt` and `.denmark`).

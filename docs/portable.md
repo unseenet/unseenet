@@ -119,6 +119,14 @@ XSalsa20-Poly1305, [UN-RFC 0007](spec/un-rfc-0007.md)):
 - `unseenet.vault.cache`, `.sent` - saved posts and your sent private
   messages
 - `unseenet-tor/` - Tor's state (no secrets of yours)
+- `unseenet.vault.lock` - there while a program has the vault open
+
+**One program at a time.** The terminal client, the
+[graphical client](graphical.md) and the command line can all use the
+vault, but not at once: each keeps the whole vault in memory and saves it
+whole, so the last to save would undo the other's changes. The second one
+says *"This vault is already open in another Unseenet program"*. If a
+program crashed, the lock goes with it.
 
 **Back up `data/`.** It is small. If you lose the stick and have no copy,
 your identity is gone - nobody, not even a node operator, can restore it.
@@ -170,6 +178,10 @@ Some networks block Tor: workplaces, schools, hotels, some countries. Press
 
 The built-in bridges come with each release, from the Tor Project. From the
 command line: `unseenet cli bridges obfs4`.
+
+On Tails, or with a Tor that is already running, the client uses that Tor
+and its bridges instead - see
+[Using a Tor that is already running](tor.md#using-a-tor-that-is-already-running).
 
 ## Checking a copy
 

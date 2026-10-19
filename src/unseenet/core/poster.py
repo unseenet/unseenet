@@ -61,7 +61,9 @@ def load_key(*, key_file: str | Path | None = None, vault: str | Path | None = N
             passphrase = os.environ.get(passphrase_env)
             if not passphrase:
                 raise PosterError(f"set {passphrase_env} to unlock {vault}")
-            data = Vault.open(Path(vault), passphrase).data
+            opened = Vault.open(Path(vault), passphrase)
+            opened.close()                  # only the key is needed; let others open it
+            data = opened.data
             ids = data.get("identities") or {}
             name = identity or data.get("default_identity") or next(iter(ids), None)
             if name not in ids:

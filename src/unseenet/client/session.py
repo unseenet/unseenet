@@ -27,7 +27,8 @@ from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_R
 from ..core.groups import _comments  # UN-RFC 0030 field check
 from ..core.groups import RENEW_WHEN_LEFT, RENEW_WINDOW, is_key_bound, stored_expires
 from ..core import profiles as prof
-from ..core.tor import BRIDGE_MODES, TorError, TorProcess, bridges_for
+from ..core.tor import (BRIDGE_MODES, Socks, TorError, TorProcess, bridges_for, check_socks,
+                        existing_tor, parse_socks)
 from ..core.vault import Vault
 from ..nntp import Client, NNTPError
 from .. import names
@@ -137,6 +138,7 @@ class Session:
         self.status = status            # callback for progress messages
         self.tor: TorProcess | None = None
         self._tor_lock = asyncio.Lock()   # one Tor per session, however many connect at once
+        self._checked_socks: Socks | None = None        # an existing Tor that answered
         self._clients: dict[str, Client] = {}          # one connection per node
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
@@ -366,8 +368,11 @@ class Session:
         status(f"Connected to {address}")
         return client
 
-    async def _ensure_tor(self, status) -> int:
+    async def _ensure_tor(self, status) -> int | Socks:
         """Our Tor's SOCKS port, starting Tor first if it is not running.
+
+        Or a Tor that is already running (Tails, ``UNSEENET_TOR_SOCKS``, the
+        ``tor.socks`` setting): then we start nothing and only check it answers.
 
         Several connections (each node, the watch connections) start at once. Without
         the lock each started its own Tor on the same data directory: the extra ones
@@ -375,6 +380,20 @@ class Session:
         file, so a client could end up talking to a Tor that was gone.
         """
         async with self._tor_lock:
+            try:
+                existing = existing_tor(self.data.get("tor"))
+            except TorError as exc:
+                raise SessionError(str(exc)) from exc
+            if existing is not None:
+                if existing != self._checked_socks:
+                    status(f"Using the Tor at {existing} ({existing.source}) ...")
+                    try:
+                        await check_socks(existing)
+                    except TorError as exc:
+                        raise SessionError(f"{exc}. Start that Tor, or let Unseenet start "
+                                           "its own (Ctrl+P: Tor).") from exc
+                    self._checked_socks = existing
+                return existing
             if self.tor is not None and not self.tor.alive():
                 await self.tor.stop()
                 self.tor = None
@@ -462,6 +481,39 @@ class Session:
     def bridge_setting(self) -> dict:
         return dict(self.data.get("tor") or {"mode": "off"})
 
+    def tor_in_use(self) -> Socks | None:
+        """The running Tor this session uses, or None when it starts its own."""
+        try:
+            return existing_tor(self.data.get("tor"))
+        except TorError:
+            return None
+
+    def tor_setting(self) -> str:
+        """``"auto"``, ``"own"`` or ``host:port`` - which Tor to use (the vault setting)."""
+        return (self.data.get("tor") or {}).get("socks") or "auto"
+
+    async def set_tor(self, value: str) -> None:
+        """Use a running Tor (``host:port``), our own (``own``), or decide (``auto``).
+
+        ``auto`` uses Tails' Tor on Tails and starts our own everywhere else.
+        """
+        value = value.strip().lower() if value.strip().lower() in ("auto", "own", "") else value.strip()
+        if value not in ("auto", "own", ""):
+            try:
+                host, port = parse_socks(value)
+            except TorError as exc:
+                raise SessionError(str(exc)) from exc
+            value = str(Socks(host, port))
+        tor = dict(self.data.get("tor") or {"mode": "off"})
+        if value in ("auto", ""):
+            tor.pop("socks", None)
+        else:
+            tor["socks"] = value
+        self.data["tor"] = tor
+        self.save()
+        self._checked_socks = None
+        await self.close()
+
     async def set_bridges(self, mode: str, custom: list[str] | None = None) -> None:
         """Change how Tor connects; Tor is restarted at the next connection."""
         if mode not in BRIDGE_MODES:
@@ -469,7 +521,9 @@ class Session:
         lines = [ln.strip() for ln in (custom or []) if ln.strip()]
         if mode == "custom" and not lines:
             raise SessionError("paste at least one bridge line")
-        self.data["tor"] = {"mode": mode, "custom": lines}
+        tor = dict(self.data.get("tor") or {})        # keeps the choice of Tor (socks)
+        tor.update(mode=mode, custom=lines)
+        self.data["tor"] = tor
         self.save()
         await self.close()
 

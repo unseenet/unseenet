@@ -40,6 +40,16 @@ def self_test(network: bool = True, node: str | None = None) -> int:
     print(f"Program:   {portable.program_dir()}")
     print(f"Portable:  {root if root else 'no (files go in the current directory)'}")
     print(f"Vault:     {portable.default_vault_path().resolve()}")
+    from .core.tor import existing_tor
+    try:
+        existing = existing_tor(None)       # UNSEENET_TOR_SOCKS or Tails; not the vault's setting
+    except TorError as exc:
+        print(f"Tor:       BAD SETTING ({exc})")
+        return 1
+    if existing is not None:
+        print(f"Tor:       the Tor already running at {existing} ({existing.source}); "
+              "Unseenet starts none")
+        return _test_existing_tor(existing, node) if network else 0
     try:
         binary = TorProcess.find_binary()
     except TorError as exc:
@@ -76,6 +86,31 @@ def self_test(network: bool = True, node: str | None = None) -> int:
                 return 3
             finally:
                 await tor.stop()
+        print("This build works.")
+        return 0
+    return asyncio.run(run())
+
+
+def _test_existing_tor(socks, node: str | None) -> int:
+    from .core.tor import TorError, check_socks
+
+    async def run() -> int:
+        try:
+            await check_socks(socks)
+            print("Tor answers.")
+            if node:
+                from .nntp import Client
+                print(f"Reaching node {node} over Tor ...")
+                client = await asyncio.wait_for(Client.connect(node, socks), 120)
+                caps = await client.fetch_capabilities()
+                await client.quit()
+                print(f"Node answers: {caps[0] if caps else '?'}.")
+        except TorError as exc:
+            print(f"Tor does not answer: {exc}")
+            return 2
+        except (OSError, ConnectionError, asyncio.TimeoutError) as exc:
+            print(f"Could not reach the node: {exc}")
+            return 3
         print("This build works.")
         return 0
     return asyncio.run(run())

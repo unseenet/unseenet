@@ -2544,12 +2544,45 @@ class UnseenetApp(App):
 
     @work(group="dialog", exit_on_error=False)
     async def action_bridges(self) -> None:
+        existing = self.session.tor_in_use()
+        if existing is not None:
+            self.notify(f"Unseenet uses the Tor at {existing} ({existing.source}). Bridges are "
+                        "set up in that Tor, not here.", severity="warning", timeout=8)
+            return
         result = await self.push_screen_wait(BridgesDialog(self.session.bridge_setting()))
         if not result:
             return
         await self.session.set_bridges(result["mode"], result["custom"])
         self.notify("Saved - Tor reconnects " +
                     ("directly" if result["mode"] == "off" else f"with {result['mode']} bridges"))
+        self._watching.clear()
+        self.refresh_groups()
+        self._start_watches()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_tor(self) -> None:
+        """Which Tor: our own, or one already running (Tails, Whonix, a system tor)."""
+        s = self.session
+        existing = s.tor_in_use()
+        now = (f"Now: the Tor at {existing} ({existing.source})." if existing
+               else "Now: Unseenet starts its own Tor.")
+        value = await self.push_screen_wait(InputDialog(
+            "Which Tor",
+            "auto - use Tails' Tor on Tails, start our own everywhere else (the default)\n"
+            "own - always start our own Tor\n"
+            "127.0.0.1:9050 - the SOCKS port of a Tor that is already running, "
+            "e.g. a system tor or Whonix\n\n" + now,
+            "auto, own or 127.0.0.1:9050", s.tor_setting()))
+        if value is None:
+            return
+        try:
+            await s.set_tor(value)
+        except SessionError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        existing = s.tor_in_use()
+        self.notify("Saved - " + (f"using the Tor at {existing}" if existing
+                                  else "Unseenet starts its own Tor"))
         self._watching.clear()
         self.refresh_groups()
         self._start_watches()
@@ -3047,6 +3080,8 @@ class UnseenetApp(App):
                             self.action_about)
         yield SystemCommand("Tor bridges", "Connect through bridges where Tor is blocked",
                             self.action_bridges)
+        yield SystemCommand("Tor: which Tor", "Start our own Tor, or use one already running "
+                            "(Tails, Whonix, a system tor)", self.action_tor)
         if portable_root() is not None:
             yield SystemCommand("Update Unseenet", "Get the newest release onto this stick or "
                                 "folder, over Tor - data/ is kept", self.action_update)
