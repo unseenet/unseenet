@@ -1230,6 +1230,7 @@ async def test_tui_group_ref_link(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
         await app.run_action("app.group_ref('#dk.marsvin')")
         assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 300)
+        assert await wait_for(pilot, lambda: laid_out(app, "Label")), stack(app)   # #231
         assert "dk.marsvin" in str(app.screen.query_one("Label").render())
         await pilot.press("q")
     await other.close()
@@ -1347,5 +1348,57 @@ async def test_tui_chat_input_says_why_you_cannot_write(tmp_path, monkeypatch):
         assert "only the owner and posters" in box.placeholder
         assert app.focused is None or app.focused.id != "chat-input"
         assert not app.check_action("new_post", ())
+
+
+def _leaves(tree):
+    out = []
+
+    def walk(node):
+        for n in node.children:
+            if n.children:
+                walk(n)
+            elif n.data is not None:
+                out.append(n.data)
+    walk(tree.root)
+    return out
+
+
+async def test_tui_search_groups_while_browsing_and_in_your_list(tmp_path, monkeypatch):
+    """#13: typing in the group browser searches it; / searches your own list; Esc
+    clears the search before it closes anything."""
+    from textual.widgets import Input
+    from unseenet.client.tui import BrowseDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch,
+                                         ["dk.snak", "dk.snak.marsvin", "alt.test"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 4, 300)
+        await pilot.pause(0.3)
+        app.query_one("#groups").focus()
+        await pilot.press("slash")
+        box = app.query_one("#groups-filter", Input)
+        assert box.has_class("shown") and app.focused is box
+        await pilot.press(*"marsvin")
+        tree = app.query_one("#groups")
+        assert await wait_for(pilot, lambda: [str(g).split("@")[0] for g in _leaves(tree)]
+                              == ["dk.snak.marsvin"], 100), _leaves(tree)
+        await pilot.press("escape")
+        assert await wait_for(pilot, lambda: len(_leaves(tree)) >= 4 and not box.has_class("shown"))
+
+        await pilot.press("g")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 300)
+        dialog = app.screen
+        btree = dialog.query_one("#browse-tree")
+        assert await wait_for(pilot, lambda: laid_out(app, "#browse-tree"))
+        btree.focus()
+        await pilot.press(*"alt")                      # just typing searches
+        assert await wait_for(pilot, lambda: [g.group_id.split("@")[0] for g in _leaves(btree)]
+                              == ["alt.test"], 100)
+        assert dialog.query_one("#browse-filter", Input).value == "alt"
+        assert "1 of" in str(dialog.query_one("#browse-count").render())
+        await pilot.press("escape")                    # clears the search ...
+        assert await wait_for(pilot, lambda: len(_leaves(btree)) >= 3)
+        assert isinstance(app.screen, BrowseDialog)
+        await pilot.press("escape")                    # ... and then closes
+        assert await wait_for(pilot, lambda: not isinstance(app.screen, BrowseDialog))
         await pilot.press("q")
     server.close()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import os
 import re
 import traceback
@@ -39,6 +40,7 @@ from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
 from . import session as _session_module
 from . import naming
 from . import richtext
+from . import groupfilter
 from .grouptree import fingerprint_suffix, group_tree
 from ..core import markup
 from ..core import about
@@ -191,6 +193,8 @@ Screen { background: $surface; }
 #groups-pane { width: 34; border-right: solid $primary-darken-2; }
 #groups-title, #threads-title { background: $primary-darken-2; color: $text; padding: 0 1; text-style: bold; }
 #groups { height: 1fr; }
+#groups-filter { display: none; }
+#groups-filter.shown { display: block; }
 #threads { height: 45%; }
 #article { height: 1fr; padding: 0 1; border-top: solid $primary-darken-2; }
 #article-head { color: $text-muted; }
@@ -1406,9 +1410,17 @@ class BrowseTree(Tree):
             self.post_message(self.Toggle(node))
 
 
+# Typing in a list moves to its search box with the first letter in it; an Input
+# that selects all on focus would let the next letter replace it (Textual >= 0.86).
+NO_SELECT_ON_FOCUS = ({"select_on_focus": False}
+                      if "select_on_focus" in inspect.signature(Input.__init__).parameters else {})
+
+
 class BrowseDialog(Dialog):
-    """All groups on the node, by hierarchy; Enter toggles subscription."""
+    """All groups on the node, by hierarchy; Enter toggles subscription. Typing (or /)
+    searches the list, locally (#13)."""
     CANCEL_RESULT = True
+    BINDINGS = [Binding("slash", "search", "Search")]
 
     def __init__(self, groups: list[GroupInfo]):
         super().__init__()
@@ -1416,6 +1428,8 @@ class BrowseDialog(Dialog):
         self.known = {g.group_id for g in groups}
         self.current: GroupInfo | None = None
         self.peeked: dict[str, tuple[dict, int] | str] = {}   # group -> (manifest, posts) or error
+        self.fetched: dict[str, dict] = {}       # manifests read for a type: search (UN-RFC 0041)
+        self.query_text = ""
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog list"):
@@ -1424,30 +1438,101 @@ class BrowseDialog(Dialog):
             yield Label("Space, Enter or a click on [ ]: subscribe or unsubscribe. "
                         "Enter on a hierarchy opens or closes it.  Esc: close.", classes="hint")
             yield Label(ICON_LEGEND, classes="hint", markup=False)
+            yield Input(placeholder=f"Search (/ or just type): {groupfilter.HELP}",
+                        id="browse-filter", **NO_SELECT_ON_FOCUS)
+            yield Label("", id="browse-count", classes="hint", markup=False)
             tree: Tree = BrowseTree("groups", id="browse-tree")
             tree.show_root = False
-            expand = len(self.groups) <= 15
-            for top, items in by_hierarchy(self.groups):
-                parent = tree.root
-                if top:
-                    subs = sum(1 for g in items if g.subscribed)
-                    parent = tree.root.add(Text(f"{top}.*   {len(items)} groups"
-                                                + (f", {subs} subscribed" if subs else "")),
-                                           expand=expand or subs > 0)
-                for g in items:
-                    parent.add_leaf(self._label(g), data=g)
-            if not self.groups:
-                tree.root.add_leaf(Text("No groups yet - use Ctrl+P, Create group, to create one."))
+            self._fill(tree, self.groups, searching=False)
             yield tree
             yield Static("Move to a group to see what it is.", id="group-details",
                          classes="details", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("OK", variant="primary", id="cancel")
 
+    def _fill(self, tree: Tree, groups: list[GroupInfo], searching: bool) -> None:
+        tree.clear()
+        expand = searching or len(groups) <= 15
+        for top, items in by_hierarchy(groups):
+            parent = tree.root
+            if top:
+                subs = sum(1 for g in items if g.subscribed)
+                parent = tree.root.add(Text(f"{top}.*   {len(items)} groups"
+                                            + (f", {subs} subscribed" if subs else "")),
+                                       expand=expand or subs > 0)
+            for g in items:
+                parent.add_leaf(self._label(g), data=g)
+        if not groups:
+            tree.root.add_leaf(Text("No groups match your search." if searching else
+                                    "No groups yet - use Ctrl+P, Create group, to create one."))
+
+    def _known_data(self) -> dict:
+        out = dict(self.fetched)
+        out.update({gid: p[0] for gid, p in self.peeked.items() if isinstance(p, tuple)})
+        return out
+
+    def _refilter(self) -> None:
+        s = self.app.session
+        shown = s.filter_groups(self.groups, self.query_text, self._known_data())
+        f = groupfilter.parse(self.query_text)
+        self._fill(self.query_one("#browse-tree", Tree), shown, searching=bool(f))
+        count = (f"{len(shown)} of {len(self.groups)} groups" if f else "")
+        if f.unknown:
+            count += ("  -  " if count else "") + "not understood: " + " ".join(f.unknown)
+        if f.needs_manifests and any(not g.type and g.group_id not in self._known_data()
+                                     for g in self.groups):
+            count += "  -  reading group types ..."
+            self._fetch_types()
+        self.query_one("#browse-count", Label).update(count)
+
+    @work(exclusive=True, group="types", exit_on_error=False)
+    async def _fetch_types(self) -> None:
+        try:
+            await self.app.session.group_manifests(self.groups, self.fetched)
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError,
+                asyncio.IncompleteReadError) as exc:
+            self.app.notify(f"Could not read the group types: {exc}", severity="warning")
+            for g in self.groups:                 # do not ask again in this dialog
+                self.fetched.setdefault(g.group_id, {})
+        if self.is_attached:
+            self._refilter()
+
+    @on(Input.Changed, "#browse-filter")
+    def _search(self, event: Input.Changed) -> None:
+        self.query_text = event.value
+        self._refilter()
+
+    @on(Input.Submitted, "#browse-filter")
+    def _search_done(self, event: Input.Submitted) -> None:
+        self.query_one("#browse-tree", Tree).focus()
+
+    def action_search(self) -> None:
+        self.query_one("#browse-filter", Input).focus()
+
+    def action_cancel(self) -> None:
+        box = self.query_one("#browse-filter", Input)
+        if box.value:                            # Esc clears the search first
+            box.value = ""
+            self.query_one("#browse-tree", Tree).focus()
+            return
+        super().action_cancel()
+
+    def on_key(self, event) -> None:
+        """Just typing in the list starts a search."""
+        char = event.character
+        if (getattr(self.focused, "id", None) == "browse-tree" and char and char.isprintable()
+                and char not in (" ", "/")):
+            box = self.query_one("#browse-filter", Input)
+            box.focus()
+            box.insert_text_at_cursor(char)
+            event.stop()
+            event.prevent_default()
+
     def _label(self, g: GroupInfo) -> Text:
         mark = "[x]" if g.subscribed else "[ ]"
         peek = self.peeked.get(g.group_id)
-        data = peek[0] if isinstance(peek, tuple) else self.app.session.manifest_data(g.group_id)
+        data = peek[0] if isinstance(peek, tuple) else (
+            self.fetched.get(g.group_id) or self.app.session.manifest_data(g.group_id))
         icons = group_icons(g.type, data)
         where = ""
         if len(self.app.session.nodes) > 1 and g.nodes:
@@ -1587,6 +1672,7 @@ class UnseenetApp(App):
         Binding("n", "new_post", "New post"),
         Binding("r", "reply", "Reply"),
         Binding("g", "browse", "Groups"),
+        Binding("slash", "search_groups", "Search groups", show=False),
         Binding("j", "join", "Join", show=False),
         Binding("m", "message", "Message"),
         Binding("c", "contacts", "Contacts", show=False),
@@ -1622,7 +1708,8 @@ class UnseenetApp(App):
         chat = bool(gid) and self.view_of(gid) == "chat"
         typing = getattr(self.focused, "id", None) == "chat-input"
         if action == "leave_input":
-            return typing
+            return typing or bool(self.group_query) \
+                or getattr(self.focused, "id", None) == "groups-filter"
         if action == "write":
             return chat and not typing
         if action == "new_post":
@@ -1643,6 +1730,10 @@ class UnseenetApp(App):
         return True
 
     def action_leave_input(self) -> None:
+        if getattr(self.focused, "id", None) != "chat-input" and (
+                self.group_query or getattr(self.focused, "id", None) == "groups-filter"):
+            self._close_group_search()               # Esc ends a search of your groups
+            return
         self.query_one("#chat-log").focus()          # now the letters are shortcuts again
 
     def action_write(self) -> None:
@@ -1684,6 +1775,7 @@ class UnseenetApp(App):
         self.current_message: Message | None = None
         self._inbox_ready = False
         self._watching: set[str] = set()
+        self.group_query = ""                    # the search in your group list (#13)
 
     # --- layout ---
     def compose(self) -> ComposeResult:
@@ -1691,6 +1783,9 @@ class UnseenetApp(App):
         with Horizontal():
             with Vertical(id="groups-pane"):
                 yield Static("Groups", id="groups-title")
+                # disabled while hidden, or it would take the focus at start
+                yield Input(placeholder="Search your groups", id="groups-filter", disabled=True,
+                            **NO_SELECT_ON_FOCUS)
                 yield Tree("groups", id="groups")
             with Vertical():
                 yield Static("Select a group", id="threads-title", markup=False)
@@ -1912,7 +2007,7 @@ class UnseenetApp(App):
                     inside = {g.group_id for g in child.all_items()}
                     folder = parent.add(folder_label("." + child.label, child.all_items()),
                                         data=("folder", key),
-                                        expand=key in was_open
+                                        expand=searching or key in was_open
                                         or (key not in known and self.current_group in inside))
                     nodes[("folder", key)] = folder
                     add_branch(folder, child)
@@ -1924,6 +2019,10 @@ class UnseenetApp(App):
         select = None
         nodes: dict = {}
         groups = list(self.groups.values())
+        searching = bool(groupfilter.parse(self.group_query))
+        if searching:                            # #13: only what matches, every folder open
+            groups = self.session.filter_groups(groups, self.group_query)
+            was_open, known = set(), set()
         mine = [g for g in groups if g.group_id == self.session.my_inbox]
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
@@ -1932,11 +2031,12 @@ class UnseenetApp(App):
         text = Text(f"{REPLY_MARK} For you" + for_you_marks(for_you))
         if for_you.total:
             text.stylize("bold")
-        nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
+        if not searching:
+            nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
         self._for_you_seen = getattr(self, "_for_you_seen", None) or for_you
         # one chat per person: your contacts, and anyone else you have chatted with
         # (UN-RFC 0028, 6.2); posts are in Private posts
-        partners = self.session.chat_partners()
+        partners = [] if searching else self.session.chat_partners()
         if partners:
             total = sum(self.session.unread_from(k, KIND_CHAT) for k in partners)
             folder = Text("Chats" + (f" ({total})" if total else ""))
@@ -1966,7 +2066,7 @@ class UnseenetApp(App):
                     nodes[g.group_id] = tree.root.add_leaf(label(g), data=g.group_id)
                 continue
             parent = tree.root.add(folder_label(f"{top}.*", items), data=("folder", top),
-                                   expand=top in was_open or top not in known)
+                                   expand=searching or top in was_open or top not in known)
             nodes[("folder", top)] = parent
             add_branch(parent, group_tree(top, [(g.group_id.rpartition("@")[0], g) for g in items]))
         # Put the cursor back where it was (or on the current group); the tree computes
@@ -1987,6 +2087,28 @@ class UnseenetApp(App):
         if g.group_id == self.session.my_inbox:
             return f"{group_icons('inbox')} Private posts"
         return f"{group_icons(g.type, self.session.manifest_data(g.group_id))} {self.session.group_label(g.group_id)}"
+
+    def action_search_groups(self) -> None:
+        box = self.query_one("#groups-filter", Input)
+        box.disabled = False
+        box.add_class("shown")
+        box.focus()
+
+    @on(Input.Changed, "#groups-filter")
+    def _groups_search(self, event: Input.Changed) -> None:
+        self.group_query = event.value
+        self.run_worker(self._render_groups(), exclusive=True, group="render-groups")
+
+    @on(Input.Submitted, "#groups-filter")
+    def _groups_search_done(self, event: Input.Submitted) -> None:
+        self.query_one("#groups", Tree).focus()
+
+    def _close_group_search(self) -> None:
+        box = self.query_one("#groups-filter", Input)
+        box.value = ""
+        box.remove_class("shown")
+        box.disabled = True
+        self.query_one("#groups", Tree).focus()
 
     @on(Tree.NodeSelected, "#groups")
     def _group_selected(self, event: Tree.NodeSelected) -> None:
