@@ -429,9 +429,14 @@ async def c_invite(app: App, args) -> None:
 
 
 async def c_post(app: App, args) -> None:
+    from .core import portals
     author = app.identity(args.identity)
-    body = sys.stdin.read() if args.body is None else args.body
     entry = app.data["groups"].get(args.group, {})
+    found = portals.portals(entry.get("manifest") or {})
+    if found and not args.publish_outside_tor:      # UN-RFC 0023 section 3.5
+        sys.exit(portals.warning(args.group.rpartition("@")[0], found)
+                 + "\n\nAdd --publish-outside-tor to post anyway.")
+    body = sys.stdin.read() if args.body is None else args.body
     if entry.get("type") == "closed":
         epoch = max(int(e) for e in entry["keys"])
         keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
@@ -465,7 +470,10 @@ async def c_read(app: App, args) -> None:
                 continue
             ctl = art.control
             if ctl and ctl[0] == "manifest":
-                entry["type"] = entry["type"] or json.loads(art.body)["type"]
+                data = json.loads(art.body)
+                entry["type"] = entry["type"] or data["type"]
+                if int(data.get("serial", 0)) >= int((entry.get("manifest") or {}).get("serial", 0)):
+                    entry["manifest"] = data           # the newest: for its portals (c_post)
                 continue
             if ctl and ctl[0] in ("key-update", "key-grant"):
                 opened = open_envelope(art, me)
@@ -489,6 +497,11 @@ async def c_read(app: App, args) -> None:
             print(f"\n[{n}] {subj}\n    From: {frm} ({short}) {author[:20]}...\n    Date: {art['Date']}"
                   f"\n    Message-ID: {art.message_id}\n")
             print("    " + body.rstrip("\n").replace("\n", "\n    "))
+    from .core import portals
+    found = portals.portals(entry.get("manifest") or {})
+    if found:
+        print("\nAlso published outside Tor, through portals:\n  "
+              + portals.describe(found).replace("\n", "\n  "))
     app.vault.save()
 
 
@@ -557,6 +570,8 @@ def client_main(argv=None) -> None:
     s.add_argument("group")
     s.add_argument("--subject", "-s", required=True)
     s.add_argument("--body")
+    s.add_argument("--publish-outside-tor", action="store_true",
+                   help="post even though the group has portals to other networks")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s = sub.add_parser("bridges", help="show or set Tor bridges, for networks that block Tor")
