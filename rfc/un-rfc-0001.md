@@ -29,6 +29,9 @@ It is non-normative; the normative rules are in UN-RFC 0002 to 0006.
    little as possible (see UN-RFC 0007).
 5. **Open protocol.** Anybody can write a compatible node or client from
    these documents alone.
+6. **Usenet scale.** The network must keep working at the size old
+   Usenet reached, and beyond, without every node or client having to
+   grow with it (section 1.2).
 
 ## 1.1 Non-Goals
 
@@ -39,6 +42,41 @@ It is non-normative; the normative rules are in UN-RFC 0002 to 0006.
   node carries what its operator chooses.
 - **Perfect anonymity against a global adversary.** Unseenet inherits
   Tor's threat model and does not improve on it.
+
+## 1.2 Design Targets
+
+Every document in this series is written for a network of the size
+below. These are targets for design, not promises of performance; they
+say what a design must survive (unseenet #219).
+
+| What                                                            | Target                    |
+|-----------------------------------------------------------------|---------------------------|
+| Identities (keys) ever seen                                     | 10 million                |
+| Identities active within a year                                 | 1 million                 |
+| Ordinary groups                                                 | 100 000                   |
+| Nodes                                                           | 1 000 to 10 000           |
+| Subjects of one issuer (UN-RFC 0036) or one registrar           | 1 million                 |
+| Full node: the text of every ordinary group                     | runs on a free-tier cloud VM (a few cores, a few GB of RAM, about 200 GB of disk) |
+| Leaf or partial node                                            | runs on a Raspberry Pi    |
+| A client opening a busy group (500 authors), empty cache, over Tor | under 10 seconds       |
+
+What follows from them:
+
+- Nothing a node or client does routinely may cost in proportion to the
+  number of identities. What grows with people - key-bound groups
+  (UN-RFC 0029) - is found by derived IDs, not listed or compared one
+  by one (unseenet #217).
+- A client fetches what it needs in batches (unseenet #218), so that
+  opening a group costs a bounded number of round trips over Tor.
+- A full node carries the text of every ordinary group. Blobs, sites
+  and pictures are the operator's choice. A partial node carries less
+  and says so in its node information.
+- Services that serve many people - registrars, issuers, gateways -
+  keep what each client must fetch bounded, whatever their own size
+  (for example UN-RFC 0036 section 7).
+
+A document that cannot meet a target says so in its scale
+considerations (UN-RFC 0000 section 4).
 
 # 2. Terminology
 

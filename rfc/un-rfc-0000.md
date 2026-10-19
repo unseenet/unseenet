@@ -75,6 +75,14 @@ the header MUST say so with `Updates:` and/or `Obsoletes:` lines.
 5. A Proposed document becomes Standard when two independent
    implementations interoperate.
 
+Every Draft MUST say what it costs every node and every client at the
+design targets of UN-RFC 0001 section 1.2 - storage, traffic, round
+trips over Tor and anything that grows with the number of identities
+or groups - in a section "Scale Considerations", or a bullet "Scale"
+under its security and privacy considerations. A document that adds
+something every identity may have (a key-bound group, a field in every
+manifest) MUST give an upper bound per identity.
+
 Published Standard documents are never edited in substance. Errors are
 fixed by errata notes at the end of the document; changes are made by a
 new UN-RFC that `Updates:` or `Obsoletes:` the old one.
