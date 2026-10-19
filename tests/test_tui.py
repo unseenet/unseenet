@@ -1316,3 +1316,36 @@ async def test_confirm_dialog_focuses_cancel(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: getattr(app.focused, "id", None) == "cancel", 100)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_chat_input_says_why_you_cannot_write(tmp_path, monkeypatch):
+    """#181: in a channel you cannot post in, the chat line is unavailable before
+    you type, with the reason as its placeholder; n and r stay hidden."""
+    import unseenet.client.session as sess
+    from textual.widgets import Input
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    owner = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    owner.new_identity("owner", "Owner"); owner.add_node(addr)
+    gid = await owner.create_group("news.live", "channel", min_pow=10, view="chat")
+    await owner.post(gid, "", "Første nyhed\n", kind="chat")
+    reader = Session(Vault.open(tmp_path / "r.vault", "pw", **KDF), status=lambda *_: None)
+    reader.new_identity("reader", "Reader"); reader.add_node(addr)
+    reader.subscribe(gid)
+    reader.save(); await reader.close(); await owner.close()
+
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "r.vault")
+    async with app.run_test(size=(120, 36)) as pilot:
+        assert await app_ready(pilot, app)
+        app.select_group(gid)
+        box = app.query_one("#chat-input", Input)
+        assert await wait_for(pilot, lambda: app.current_group == gid and box.disabled, 300)
+        assert "only the owner and posters" in box.placeholder
+        assert app.focused is None or app.focused.id != "chat-input"
+        assert not app.check_action("new_post", ())
+        await pilot.press("q")
+    server.close()

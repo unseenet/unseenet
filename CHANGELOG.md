@@ -17,6 +17,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Clients know before you write whether you may, and say why (#181):
+  `Session.write_permission(group_id, reply_to=None, kind="post")`
+  returns a `Permission(allowed, reason, code)` from the cached manifest -
+  the kinds a group takes, the ban list, maintainers' blocks, type and
+  posters, closed-group membership, and comments in channels with their
+  `comment_days`. `may_post`/`may_reply` are thin wrappers around it. In
+  the terminal client the chat line is unavailable, with the reason as
+  its placeholder, where a chat line would be refused; New post and
+  Reply hide where they would be refused and give the reason when used
+  anyway; a channel post whose comments have closed says "Comments
+  closed". The node still has the last word.
+
 - `XUN-MANIFESTS` (UN-RFC 0041, #218): nodes return the current
   manifests of up to 256 groups in one answer and advertise
   `UNSEENET-MANIFESTS 256`; an answer carries at most 1 MiB of articles,
