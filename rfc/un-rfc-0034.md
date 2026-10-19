@@ -153,6 +153,35 @@ a client SHOULD NOT quote the entry in a comment by default. Where a
 comment answers another comment, the indentation and the "in answer to"
 note take the place of a quote.
 
+## 4.4 Many Comments
+
+An entry in a busy feed can collect thousands of comments. A reader
+should see the entry and the newest conversation at once, and the
+client should not fetch thousands of articles over Tor to show them.
+
+- **Collapsed by default.** Under each entry the client shows the
+  number of comments and the newest one or two (section 4.1). Opening
+  the comments shows the newest page of them, oldest first within the
+  page, with a way to load the earlier pages. A page SHOULD hold 20 to
+  50 comments.
+- **Answers collapsed too.** Answers to a comment (the second level of
+  section 4.2) are shown as "N answers" until the reader opens them.
+- **Always shown.** Even when the rest is collapsed, a client SHOULD
+  show, marked as such, comments by the feed's starters (UN-RFC 0030
+  section 2), comments by identities the reader follows, the reader's
+  own comments and the answers to them, and a comment the reader came
+  to through a mention (UN-RFC 0032). These rules depend only on things
+  the reader can see and change; a client MUST NOT pick comments to show
+  by how many answers or reactions they have (section 7).
+- **Fetch what is shown.** A client SHOULD count comments and build the
+  tree from overview data (`OVER`/`XOVER` where the node offers them,
+  otherwise the headers it already holds), and fetch the bodies of
+  comments only when they are shown. It SHOULD keep what it has fetched,
+  so that opening an entry again costs nothing.
+- **Owners can close.** An owner whose entry draws more comments than
+  is useful can stop them with `comment_days` (UN-RFC 0030) or close
+  comments on the whole feed.
+
 # 5. Personal Feeds
 
 ## 5.1 The Feed Group
