@@ -58,6 +58,18 @@ class SessionError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class Permission:
+    """Whether you may write somewhere, and if not, the reason to show (#181)."""
+    allowed: bool
+    reason: str = ""
+    code: str = "ok"     # own_inbox, kind, banned, blocked, not_member, channel,
+                         # channel_thread, comments_closed
+
+    def __bool__(self) -> bool:
+        return self.allowed
+
+
 @dataclass
 class Message:
     number: int
@@ -696,29 +708,81 @@ class Session:
         self.subscribe(art.group)
         return art.group
 
-    def may_post(self, group_id: str) -> bool:
-        """Whether a new post of yours would be accepted here (UN-RFC 0004, 2).
-        Unknown groups count as yes: the node has the last word."""
+    def write_permission(self, group_id: str, reply_to: "Message | None" = None,
+                         kind: str | None = KIND_POST, now: datetime | None = None
+                         ) -> "Permission":
+        """Whether you may write here, and if not, why - to tell people *before* they
+        write (#181). Checks, from the cached manifest: the kinds a group takes
+        (UN-RFC 0028), the ban list (0004 section 5.1) and maintainers' blocks (0018),
+        type and posters, closed-group membership, and comments in channels with
+        their ``comment_days`` (0030). ``reply_to``: the post you would answer;
+        ``kind`` None: any kind. An unknown group is allowed: the node has the last
+        word, and this only spares surprises."""
         if group_id == self.my_inbox:
-            return False                     # nobody posts to their own inbox
+            return Permission(False, "Nobody posts to their own inbox - write to a contact",
+                              "own_inbox")
         entry = self.data["groups"].get(group_id, {})
         data = entry.get("manifest") or {}
         gtype = data.get("type") or entry.get("type")
-        if entry.get("owner") or not gtype:
-            return True
-        if gtype == "channel":
-            return self.identity().key_text in data.get("posters", [])
+        if not gtype:
+            return Permission(True)
+        if kind is not None and kind not in self.group_kinds(group_id):
+            return Permission(False, "This group takes chat lines only" if kind == KIND_POST
+                              else "This group takes posts with a subject only - n writes one",
+                              "kind")
+        if gtype == "inbox":
+            return Permission(True)
+        me = self.identity().key_text
+        for key, reason in self.banned(group_id):
+            if key == me:
+                return Permission(False, "You are banned from this group"
+                                  + (f": {reason}" if reason else ""), "banned")
+        blocked = self.hierarchy_blocks(group_id).get(me)
+        if blocked:
+            hierarchy, reason = blocked
+            return Permission(False, f"The maintainers of {hierarchy} block you"
+                              + (f": {reason}" if reason else ""), "blocked")
+        if entry.get("owner") or data.get("owner") == me or me in data.get("moderators", []):
+            return Permission(True)
         if gtype == "closed":
-            return bool(entry.get("keys"))    # a member: you have the group's key
-        return True                          # open, moderated (goes to approval), inbox
+            return (Permission(True) if entry.get("keys") else
+                    Permission(False, "You are not a member of this closed group", "not_member"))
+        if gtype != "channel":
+            return Permission(True)          # open, moderated (goes to approval)
+        if me in data.get("posters", []):
+            return Permission(True)
+        if data.get("comments") != "open":
+            return Permission(False, "Channel: only the owner and posters write", "channel")
+        if reply_to is None:
+            return Permission(False, "Channel: only the owner and posters start threads - "
+                              "you may comment on one", "channel_thread")
+        days = data.get("comment_days")
+        root = self.find_message(group_id, reply_to.thread_root)
+        if isinstance(days, int) and root is not None and root.date is not None:
+            if (now or datetime.now(timezone.utc)) > root.date + timedelta(days=days):
+                return Permission(False, "Comments on this thread have closed",
+                                  "comments_closed")
+        return Permission(True)
 
-    def may_reply(self, group_id: str) -> bool:
-        """Whether a reply of yours would be accepted: as :meth:`may_post`, and in a
-        channel open for comments, a comment from anyone (UN-RFC 0030)."""
-        if self.may_post(group_id):
-            return True
-        data = self.manifest_data(group_id)
-        return data.get("type") == "channel" and data.get("comments") == "open"
+    def find_message(self, group_id: str, message_id: str) -> "Message | None":
+        """A message of a group this client has read, by Message-ID."""
+        for m in self.cache.get(group_id, {}).values():
+            if m.message_id == message_id:
+                return m
+        return None
+
+    def may_post(self, group_id: str) -> bool:
+        """Whether a new post of yours would be accepted here (any kind)."""
+        return self.write_permission(group_id, kind=None).allowed
+
+    def may_reply(self, group_id: str, reply_to: "Message | None" = None) -> bool:
+        """Whether a reply of yours would be accepted, comments in channels included."""
+        if reply_to is None:                 # without the post: is a comment possible at all
+            data = self.manifest_data(group_id)
+            if data.get("type") == "channel" and data.get("comments") == "open":
+                p = self.write_permission(group_id, kind=None)
+                return p.allowed or p.code == "channel_thread"
+        return self.write_permission(group_id, reply_to, kind=None).allowed
 
     # --- moderation (UN-RFC 0004 section 5, UN-RFC 0009 section 3) ---
     def moderates(self, group_id: str) -> bool:

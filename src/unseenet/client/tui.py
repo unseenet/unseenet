@@ -1626,9 +1626,10 @@ class UnseenetApp(App):
         if action == "write":
             return chat and not typing
         if action == "new_post":
-            return contact or (group and s.may_post(gid))
-        if action == "reply":
-            return contact or (m is not None and m.readable and (m.private or s.may_reply(gid)))
+            return contact or (group and s.write_permission(gid, kind=KIND_POST).allowed)
+        if action == "reply":                     # #181: hidden when it would be refused
+            return contact or (m is not None and m.readable and (
+                m.private or s.write_permission(gid, reply_to=m, kind=KIND_POST).allowed))
         if action == "invite":
             g = self.groups.get(gid)
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
@@ -1646,12 +1647,32 @@ class UnseenetApp(App):
 
     def action_write(self) -> None:
         gid = self.current_group
-        if (gid and not gid.startswith(CONTACT) and gid in self.groups
-                and KIND_CHAT not in self.session.group_kinds(gid)):
-            self.notify("This is a discussion group: it takes posts with a subject only - n writes one",
-                        severity="warning")
-            return
+        if gid and not gid.startswith(CONTACT) and gid in self.groups:
+            p = self.session.write_permission(gid, kind=KIND_CHAT)
+            if not p:
+                self.notify(p.reason, severity="warning")
+                return
         self.query_one("#chat-input").focus()
+
+    def _update_chat_input(self, gid: str | None) -> None:
+        """The chat line is unavailable, with the reason as its placeholder, where a
+        chat line would be refused - not after you typed one (#181)."""
+        box = self.query_one("#chat-input", Input)
+        p = (self.session.write_permission(gid, kind=KIND_CHAT)
+             if gid and not gid.startswith(CONTACT) and gid != FOR_YOU else None)
+        if p is not None and not p:
+            box.disabled, box.placeholder = True, p.reason
+        else:
+            box.disabled = False
+            box.placeholder = "Write a message - Enter sends, Esc for the shortcuts"
+
+    def _focus_view(self, gid: str) -> None:
+        if self.view_of(gid) != "chat":
+            self.query_one("#threads").focus()
+        elif self.query_one("#chat-input", Input).disabled:
+            self.query_one("#chat-log").focus()
+        else:
+            self.query_one("#chat-input").focus()
 
     def __init__(self, vault_path: Path):
         super().__init__()
@@ -1987,7 +2008,7 @@ class UnseenetApp(App):
             except (SessionError, OSError, ConnectionError) as exc:
                 self.set_status(f"Offline ({exc}) - showing saved messages")
             self._render_threads()
-            self.query_one("#chat-input" if self.view_of(gid) == "chat" else "#threads").focus()
+            self._focus_view(gid)
             return
         g = self.groups.get(gid) or GroupInfo(gid)
         self.query_one("#threads-title", Static).update(f"{self.session.group_label(g.group_id)} - loading ...")
@@ -2007,7 +2028,7 @@ class UnseenetApp(App):
         if gid in self.groups:
             self.groups[gid].type = self.session.group_entry(gid).get("type")
         self._render_threads()
-        self.query_one("#chat-input" if self.view_of(gid) == "chat" else "#threads").focus()
+        self._focus_view(gid)
         if self.session.rules_unseen(gid) and isinstance(self.screen, Screen) \
                 and not isinstance(self.screen, ModalScreen):
             self.action_group_info(first_time=True)
@@ -2076,6 +2097,7 @@ class UnseenetApp(App):
         self._render_title()
         mode = self.view_of(gid)
         self._apply_view(mode)
+        self._update_chat_input(gid)
         if mode == "chat":
             chron = [m for m, _ in rows] if gid and gid.startswith(CONTACT) \
                 else sorted((m for m, _ in rows), key=lambda m: m.number)
@@ -2215,13 +2237,12 @@ class UnseenetApp(App):
         self.session.data.setdefault("views", {})[gid] = new
         self.session.save()
         self._render_threads()
-        if new == "chat":
-            self.query_one("#chat-input").focus()
+        self._focus_view(gid)
 
     @on(Input.Submitted, "#chat-input")
     def _chat_submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if not text or not self.current_group:
+        if not text or not self.current_group or event.input.disabled:
             return
         event.input.value = ""
         self.send_chat(self.current_group, text)
@@ -2329,6 +2350,9 @@ class UnseenetApp(App):
                 if msg.to_key else
                 "\n@ private message - only you can read it" if msg.private
                 else "\n∩ end-to-end encrypted" if msg.encrypted else "")
+        if not msg.private and self.session.write_permission(
+                msg.group, reply_to=msg, kind=None).code == "comments_closed":
+            note += "\n✕ Comments closed"                  # where Reply would be (#181)
         head = f"[b]{escape(msg.subject)}[/b]\nFrom: {who}\nDate: {date}{note}"
         if msg.readable:
             text, sig = split_signature(msg.body)
@@ -2420,12 +2444,13 @@ class UnseenetApp(App):
             self._write_to_contact(contact)
             return
         g = self._need_group()
-        if g and KIND_POST not in self.session.group_kinds(g.group_id):
-            self.notify("This is a chat group: it takes chat lines only, no posts with a subject",
-                        severity="warning")
+        if not g:
             return
-        if g:
-            self.compose_post(g)
+        p = self.session.write_permission(g.group_id, kind=KIND_POST)
+        if not p:
+            self.notify(p.reason, severity="warning")
+            return
+        self.compose_post(g)
 
     def action_reply(self) -> None:
         contact = self._current_contact()
@@ -2457,6 +2482,11 @@ class UnseenetApp(App):
                                  owner_key=crypto.key_from_text(m.to_key),
                                  references=[*m.references, m.message_id])
             return
+        if not m.private:
+            p = self.session.write_permission(m.group, reply_to=m, kind=KIND_POST)
+            if not p:
+                self.notify(p.reason, severity="warning")
+                return
         if m.private:
             target = self.session.reply_target(m)
             if not target:
