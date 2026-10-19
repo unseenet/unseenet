@@ -109,6 +109,10 @@ CREATE TABLE IF NOT EXISTS kb_sums (            -- per level-nibble prefix of ke
     PRIMARY KEY (level, prefix)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS kb_meta (built INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS reconcile_state (    -- UN-RFC 0040 section 6: when to reconcile next
+    peer       TEXT PRIMARY KEY,
+    next_at    INTEGER NOT NULL
+);
 """
 
 KB_LEVELS = 4          # running sums down to the first 4 nibbles (65 536 prefixes) of key
@@ -343,6 +347,17 @@ class Store:
 
     def set_pulled(self, peer: str, since: int) -> None:
         self.db.execute("INSERT OR REPLACE INTO pull_state VALUES (?, ?)", (peer, since))
+        self.db.commit()
+
+    def reconcile_due(self, peer: str, now: float | None = None) -> bool:
+        """Never reconciled with ``peer``, or its next time has come (UN-RFC 0040, 6)."""
+        row = self.db.execute("SELECT next_at FROM reconcile_state WHERE peer=?",
+                              (peer,)).fetchone()
+        return row is None or (now or time.time()) >= row[0]
+
+    def set_reconciled(self, peer: str, next_at: float) -> None:
+        self.db.execute("INSERT OR REPLACE INTO reconcile_state VALUES (?, ?)",
+                        (peer, int(next_at)))
         self.db.commit()
 
     def close_previous(self, group_id: str, epoch: int) -> None:

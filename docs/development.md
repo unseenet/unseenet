@@ -30,13 +30,14 @@ src/unseenet/
     article.py          parse/serialize, canonical form, Message-ID, validation 0002
     pow.py              postage                              0006
     groups.py           group IDs, manifests, rules, closed groups              0004
-    store.py            SQLite: articles, history, groups, epochs, peer queues
+    store.py            SQLite: articles, history, groups, epochs, peer queues, key-bound index
+    reconcile.py        range-based reconciliation of key-bound state   0040 §4
     tor.py              own tor process + control port + SOCKS                  0005 §1, 0007 §3
     vault.py            encrypted client vault               0007 §2
   node/
     server.py           acceptance pipeline + ONNTP server   0002 §5, 0004, 0005
     peering.py          streaming feeds, node-key authentication      0005 §5.2, 0016
-    pulling.py          catch-up by NEWNEWS/ARTICLE                    0017
+    pulling.py          catch-up: XUN-RECONCILE, then NEWNEWS/ARTICLE  0017, 0040 §6
   client/
     session.py          vault, persistent node connection, reading/posting, read marks
     tui.py              `unseenet-tui` (Textual)

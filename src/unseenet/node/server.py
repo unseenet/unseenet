@@ -17,8 +17,8 @@ from ..core.groups import canonical_json, parse_canonical_json
 from ..core import crypto, profiles, reconcile
 from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
-from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, parse_key_update,
-                           split_group_id)
+from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, is_key_bound,
+                           parse_key_update, split_group_id)
 from ..core.store import Store
 from ..nntp import MAX_LINE, RECONCILE_MAX_BYTES, dot_stuff, read_block
 from .stats import Stats
@@ -85,6 +85,10 @@ class Node:
         # comments that came before their thread (UN-RFC 0030, 4.1):
         # thread root Message-ID -> [(time held, raw, source, from_peer)]
         self._held: dict[str, list[tuple[float, bytes, str | None, bool]]] = {}
+        # UN-RFC 0040 section 6: key-bound groups whose manifest a peer's article
+        # showed we lack, since when; and the peers to reconcile with soon.
+        self._kb_waiting: dict[str, float] = {}
+        self.reconcile_wanted: set[str] = set()
 
     def watch(self, pattern: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -138,6 +142,8 @@ class Node:
             raise
         self.stats.accepted_one(how or ("peer" if from_peer else "client"))
         self._release_held(art.message_id)
+        if art.control == ["manifest"]:
+            self._kb_waiting.pop(art.group, None)
         return art
 
     # --- comments before their thread (UN-RFC 0030 section 4.1) ---
@@ -169,6 +175,31 @@ class Node:
                     self.accept(raw, source=source, from_peer=from_peer)
                 except ArticleError as err:
                     log.debug("held comment not accepted: %s", err)
+
+    # --- key-bound groups whose manifest has not arrived (UN-RFC 0040 section 6) ---
+    KB_WAIT_SECONDS = 6 * 3600.0
+    KB_WAIT_MAX = 10000
+
+    def _wait_for_manifest(self, group_id: str, source: str | None) -> None:
+        """A peer offers an article in a key-bound group we hold no manifest for.
+        Rather than refuse it, ask the peer to try again later (431/436), and have
+        the next pull from it reconcile, which fetches the manifest. After
+        KB_WAIT_SECONDS without it the article is refused as before: the group
+        may simply not exist."""
+        now = time.monotonic()
+        if len(self._kb_waiting) >= self.KB_WAIT_MAX:
+            for gid in [g for g, t in self._kb_waiting.items() if now - t > self.KB_WAIT_SECONDS]:
+                del self._kb_waiting[gid]
+        since = self._kb_waiting.get(group_id)
+        if since is None:
+            if len(self._kb_waiting) >= self.KB_WAIT_MAX:
+                return
+            since = self._kb_waiting[group_id] = now
+        if now - since > self.KB_WAIT_SECONDS:
+            return
+        if source:
+            self.reconcile_wanted.add(source)
+        raise ArticleError("later", "the group's manifest is not on this node yet")
 
     def _thread_root(self, message_id: str) -> Article | None:
         """An article this node holds, for comments in channels (UN-RFC 0030, 4)."""
@@ -205,6 +236,8 @@ class Node:
             return self._accept_rmgroup(art, manifest, raw, source, from_peer)
         if not is_manifest:
             if manifest is None:
+                if from_peer and is_key_bound(art.group) and not self.store.known_group(art.group):
+                    self._wait_for_manifest(art.group, source)
                 raise ArticleError("group", "group not carried")
             if manifest.local and from_peer:
                 raise ArticleError("group", "local group: never accepted from peers")
@@ -445,6 +478,22 @@ class Node:
                 self.store.enqueue(peer.name, art.message_id, time.time() + random.uniform(lo, hi))
         for event in self._listeners:
             event.set()
+
+    def offer(self, peer_name: str, message_ids: list[str]) -> int:
+        """Queue articles a reconciliation showed ``peer_name`` lacks, for its feeder
+        (UN-RFC 0040 section 4.3: offered with CHECK/TAKETHIS). Returns how many."""
+        peer = self.peer_config(peer_name)
+        if peer is None:
+            return 0
+        n = 0
+        for msgid in message_ids:
+            meta = self.store.get_meta(msgid)
+            if meta and wildmat(peer.groups, meta[0]):
+                self.store.enqueue(peer.name, msgid, time.time())
+                n += 1
+        for event in self._listeners:
+            event.set()
+        return n
 
     def excludes(self) -> str:
         """UN-RFC 0021 section 3: `excludes` from node.toml, plus every dropped group."""
