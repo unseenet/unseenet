@@ -1279,3 +1279,29 @@ async def test_tui_mention_notice(tmp_path, monkeypatch):
         await pilot.press("q")
     await sonia.close()
     server.close()
+
+
+async def test_tui_group_tree_drops_prefix_and_folds(tmp_path, monkeypatch):
+    """Under dk.* the names lose dk.; a shared part is a folder of its own."""
+    app, server = await _app_with_groups(
+        tmp_path, monkeypatch, ["dk.snak", "dk.historie.egypten", "dk.historie.danmark"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 4, 300)
+        await pilot.pause(0.5)
+        tree = app.query_one("#groups")
+        dk = next(n for n in tree.root.children if n.data == ("folder", "dk"))
+        assert str(dk.label).startswith("dk.*")
+        labels = [str(n.label) for n in dk.children]
+        assert any(l.endswith(".historie") for l in labels), labels
+        assert any(l.endswith(".snak") and "dk.snak" not in l for l in labels), labels
+        hist = next(n for n in dk.children if n.data == ("folder", "dk.historie"))
+        assert [str(n.label).split()[-1] for n in hist.children] == [".danmark", ".egypten"]
+        hist.expand()
+        await pilot.pause(0.1)
+        app.refresh_groups()                 # folding is kept when the list is rebuilt
+        await pilot.pause(1.5)
+        dk = next(n for n in tree.root.children if n.data == ("folder", "dk"))
+        hist = next(n for n in dk.children if n.data == ("folder", "dk.historie"))
+        assert hist.is_expanded
+        await pilot.press("q")
+    server.close()

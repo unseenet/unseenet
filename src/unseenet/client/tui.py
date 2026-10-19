@@ -39,6 +39,7 @@ from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
 from . import session as _session_module
 from . import naming
 from . import richtext
+from .grouptree import fingerprint_suffix, group_tree
 from ..core import markup
 from ..core import about
 from ..core import profiles as prof
@@ -1792,25 +1793,73 @@ class UnseenetApp(App):
     async def _render_groups(self) -> None:
         tree = self.query_one("#groups", Tree)
         tree.show_root = False
+        # folders are known by ("folder", key): "Chats", a hierarchy ("alt") or a part
+        # of a name within one ("alt.history")
         def folder_key(node) -> str:
-            return str(node.label).split(" (")[0].split(".*")[0]
+            return node.data[1] if isinstance(node.data, tuple) else str(node.label).split(" (")[0]
+
+        def all_folders(node):
+            for n in node.children:
+                if n.children:
+                    yield n
+                    yield from all_folders(n)
         cursor = tree.cursor_node
         keep = (cursor.data if cursor is not None and cursor.data is not None
                 else ("folder", folder_key(cursor)) if cursor is not None else None)
         scroll_y = tree.scroll_y
-        was_open = {folder_key(n) for n in tree.root.children if n.children and n.is_expanded}
-        known = {folder_key(n) for n in tree.root.children if n.children}
+        was_open = {folder_key(n) for n in all_folders(tree.root) if n.is_expanded}
+        known = {folder_key(n) for n in all_folders(tree.root)}
         tree.clear()
 
-        def label(g: GroupInfo) -> Text:
+        def label(g: GroupInfo, shown: str | None = None) -> Text:
+            """The group's line; ``shown`` is its name under its folder (``.history.egypt``)."""
             unread = (self.session.unread_private_posts() if g.group_id == self.session.my_inbox
                       else self.session.unread_count(g.group_id))
             marks = (for_you_marks(self.session.for_you_counts(g.group_id))
                      if g.group_id != self.session.my_inbox else "")
-            text = Text(self._group_label(g) + (f" ({unread})" if unread else "") + marks)
+            if shown is None:
+                text = Text(self._group_label(g))
+            else:
+                full = self.session.group_label(g.group_id)
+                text = Text(f"{group_icons(g.type, self.session.manifest_data(g.group_id))} ")
+                if shown.startswith("."):
+                    text.append(".", style="dim")
+                    shown = shown[1:]
+                text.append(shown + fingerprint_suffix(full))
+            text.append((f" ({unread})" if unread else "") + marks)
             if unread:
                 text.stylize("bold")
             return text
+
+        def folder_label(name: str, items: list[GroupInfo]) -> Text:
+            unread = sum(self.session.unread_count(g.group_id) for g in items)
+            text = Text()
+            if name.startswith("."):
+                text.append(".", style="dim")
+                name = name[1:]
+            text.append(name + (f" ({unread})" if unread else ""))
+            if unread:
+                text.stylize("bold")
+            return text
+
+        def add_branch(parent, node) -> None:
+            """A hierarchy's or folder's contents: its own group first, then the rest."""
+            for g in node.items:                # alt.history in .history, unseenet in unseenet.*
+                nodes[g.group_id] = parent.add_leaf(label(g, node.own_label), data=g.group_id)
+            for child in node.children:
+                if child.is_folder:
+                    key = child.path
+                    inside = {g.group_id for g in child.all_items()}
+                    folder = parent.add(folder_label("." + child.label, child.all_items()),
+                                        data=("folder", key),
+                                        expand=key in was_open
+                                        or (key not in known and self.current_group in inside))
+                    nodes[("folder", key)] = folder
+                    add_branch(folder, child)
+                else:
+                    for g in child.items:
+                        nodes[g.group_id] = parent.add_leaf(label(g, "." + child.label),
+                                                            data=g.group_id)
 
         select = None
         nodes: dict = {}
@@ -1833,7 +1882,8 @@ class UnseenetApp(App):
             folder = Text("Chats" + (f" ({total})" if total else ""))
             if total:
                 folder.stylize("bold")
-            cnode = tree.root.add(folder, expand="Chats" in was_open or "Chats" not in known)
+            cnode = tree.root.add(folder, data=("folder", "Chats"),
+                                  expand="Chats" in was_open or "Chats" not in known)
             nodes[("folder", "Chats")] = cnode
             for key in partners:
                 name = self.session.contact_name(key) or ""
@@ -1851,19 +1901,21 @@ class UnseenetApp(App):
                     text.stylize("bold")
                 nodes[CONTACT + key] = cnode.add_leaf(text, data=CONTACT + key)
         for top, items in by_hierarchy([g for g in groups if g not in mine]):
-            parent = tree.root
-            if top:
-                unread = sum(self.session.unread_count(g.group_id) for g in items)
-                folder = Text(f"{top}.*" + (f" ({unread})" if unread else ""))
-                if unread:
-                    folder.stylize("bold")
-                parent = tree.root.add(folder, expand=top in was_open or top not in known)
-                nodes[("folder", top)] = parent
-            for g in items:
-                nodes[g.group_id] = parent.add_leaf(label(g), data=g.group_id)
+            if not top:                          # a hierarchy of one: no folder, full name
+                for g in items:
+                    nodes[g.group_id] = tree.root.add_leaf(label(g), data=g.group_id)
+                continue
+            parent = tree.root.add(folder_label(f"{top}.*", items), data=("folder", top),
+                                   expand=top in was_open or top not in known)
+            nodes[("folder", top)] = parent
+            add_branch(parent, group_tree(top, [(g.group_id.rpartition("@")[0], g) for g in items]))
         # Put the cursor back where it was (or on the current group); the tree computes
         # line numbers on its next refresh, so do it after that.
         select = nodes.get(keep) or nodes.get(self.current_group)
+        up = select.parent if select is not None else None
+        while up is not None and up is not tree.root:     # a group opened from a folded folder
+            up.expand()
+            up = up.parent
 
         def restore() -> None:
             if select is not None and select.line >= 0:

@@ -9,6 +9,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- The group list is a tree: under `alt.*` the groups are shown without
+  `alt.` (`.news.wikipedia`), and a part of a name that two or more groups
+  share is a folder that folds (`.history` with `.egypt` and `.denmark`).
+  A part only one group has stays in its name, and a folder holding only
+  one folder is joined with it (`.usenet.comp`). The full name is still
+  shown when a group is open, in search and as the web client's tooltip.
+  Folders start folded unless the open group is in them; hierarchies start
+  open. Core: `unseenet.client.grouptree`, used by the terminal and the
+  web client.
+
 - Docs: pages on the web client (portable and bootable), gateways to other
   networks, getting help (`unseenet.help` and the help bot), and the
   project's bots; People.
