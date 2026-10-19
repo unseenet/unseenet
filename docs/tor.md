@@ -73,6 +73,33 @@ Tor hides *where* you are. It does not hide *what* you do:
   where Tor is blocked, use a bridge (see
   [If Tor cannot connect](portable.md#if-tor-cannot-connect)).
 
+## Using a Tor that is already running
+
+By default the client starts its own Tor and nobody else uses it. It can
+use a Tor that is already running instead - on Tails it does so by
+itself:
+
+| Setting | What the client does |
+|---|---|
+| `auto` (the default) | Tails' Tor on [Tails](#tails), its own Tor everywhere else |
+| `own` | Always starts its own Tor |
+| `127.0.0.1:9050` | Uses the Tor with that SOCKS port and starts none (a system tor, Whonix: `10.152.152.10:9050`) |
+
+Set it in the terminal client with **Ctrl+P → Tor: which Tor**, with
+`unseenet cli tor 127.0.0.1:9050` on the command line, or for one run with
+the environment variable `UNSEENET_TOR_SOCKS=127.0.0.1:9050` (also `own`
+or `auto`), which wins over the setting.
+
+- The address must be an IP address or `localhost`, never a host name:
+  a name would be looked up outside Tor before Tor is reached.
+- Each node gets its own SOCKS username, so Tor builds a separate circuit
+  for each node.
+- [Bridges](portable.md#if-tor-cannot-connect) are then that Tor's
+  business. The client's bridge setting is not used.
+- If that Tor does not answer, the client says so and starts no Tor of
+  its own - quietly falling back would defeat the point on Tails.
+- `unseenet --self-test` says which Tor is used.
+
 ## Tor for other programs
 
 The client's own Tor is private. If you want to reach Unseenet from other
@@ -96,14 +123,25 @@ from a USB stick. Everything it does goes through Tor, and it forgets
 everything when you shut it down, unless you save it in its encrypted
 *Persistent Storage*. It leaves no traces on the computer it runs on.
 
-That makes Tails a good match for Unseenet - but there is no Unseenet
-client for Tails yet.
+That makes Tails a good match for Unseenet. Tails' firewall only lets
+Tails' own Tor reach the internet, so the client notices it is on Tails
+and uses Tails' Tor (`127.0.0.1:9050`) instead of starting its own.
 
-!!! warning "The Unseenet client does not run in Tails yet"
-    The client starts its own Tor. Tails' firewall only lets Tails' own
-    Tor connect to the internet, so the client's Tor is blocked. The
-    client needs an option to use an existing Tor instead; until it has
-    one, use Tails to **read** with a classic newsreader.
+### The Unseenet client in Tails
+
+1. Start Tails and connect to Tor.
+2. Unpack the [portable client](portable.md) for Linux into your
+   Persistent Storage (`~/Persistent`), so the vault survives a restart.
+   A copy on a second stick works too.
+3. Open a terminal there and run `./unseenet`.
+
+The vault lives beside the program as usual. Its bundled Tor is simply
+not started.
+
+!!! note "Not yet tried on a real Tails"
+    The client detects Tails and uses its Tor, and this is tested on
+    ordinary Linux with a Tor on port 9050. It has not yet been tried on
+    Tails itself. Please tell the `unseenet` group how it goes.
 
 ### Reading with tin in Tails
 

@@ -243,8 +243,17 @@ class App:
         address = nodes[0]
         socks = None
         if address.split(":")[0].endswith(".onion"):
-            if self.tor is None:
-                from .core.tor import TorError, bridges_for
+            from .core.tor import TorError, check_socks, existing_tor
+            try:
+                existing = existing_tor(self.data.get("tor"))
+                if existing is not None:
+                    await check_socks(existing)
+            except TorError as exc:
+                sys.exit(f"Tor: {exc}")
+            if existing is not None:
+                socks = existing
+            elif self.tor is None:
+                from .core.tor import bridges_for
                 tor_dir = self.vault.path.parent / "unseenet-tor"
                 binary = TorProcess.find_binary()
                 try:
@@ -254,7 +263,8 @@ class App:
                 self.tor = TorProcess(tor_dir, binary, bridges=bridges)
                 print("Starting Tor" + (" with bridges" if bridges else "") + " ...", file=sys.stderr)
                 await self.tor.start()
-            socks = self.tor.socks_port
+            if existing is None:
+                socks = self.tor.socks_port
         client = await Client.connect(address, socks)
         await client.fetch_capabilities()
         try:
@@ -510,12 +520,38 @@ async def c_bridges(app: App, args) -> None:
         lines = [ln for ln in args.line or []]
         if args.mode == "custom" and not lines:
             sys.exit("custom bridges need at least one --line \"obfs4 1.2.3.4:443 ...\"")
-        app.data["tor"] = {"mode": args.mode, "custom": lines}
+        app.data["tor"] = {**(app.data.get("tor") or {}), "mode": args.mode, "custom": lines}
         app.vault.save()
     setting = app.data.get("tor") or {"mode": "off"}
     print(f"Bridges: {setting['mode']}")
     for line in setting.get("custom", []) if setting["mode"] == "custom" else []:
         print(f"  {line}")
+
+
+async def c_tor(app: App, args) -> None:
+    """Which Tor to use: our own, or one that is already running (Tails, Whonix)."""
+    from .core.tor import Socks, TorError, existing_tor, parse_socks
+    if args.use:
+        tor = dict(app.data.get("tor") or {"mode": "off"})
+        value = args.use.strip()
+        if value.lower() == "auto":
+            tor.pop("socks", None)
+        elif value.lower() == "own":
+            tor["socks"] = "own"
+        else:
+            try:
+                tor["socks"] = str(Socks(*parse_socks(value)))
+            except TorError as exc:
+                sys.exit(str(exc))
+        app.data["tor"] = tor
+        app.vault.save()
+    print(f"Setting: {(app.data.get('tor') or {}).get('socks') or 'auto'}")
+    try:
+        socks = existing_tor(app.data.get("tor"))
+    except TorError as exc:
+        sys.exit(str(exc))
+    print(f"In use:  the Tor at {socks} ({socks.source})" if socks else
+          "In use:  Unseenet starts its own Tor")
 
 
 async def c_gateways(app: App, args) -> None:
@@ -564,7 +600,7 @@ COMMANDS = {
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw,
     "post": c_post, "read": c_read,
-    "bridges": c_bridges, "gateways": c_gateways,
+    "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
 }
 
 
@@ -621,6 +657,10 @@ def client_main(argv=None) -> None:
     s = sub.add_parser("bridges", help="show or set Tor bridges, for networks that block Tor")
     s.add_argument("mode", nargs="?", choices=["off", "obfs4", "snowflake", "custom"])
     s.add_argument("--line", action="append", help="a bridge line (custom; repeat for more)")
+    s = sub.add_parser("tor", help="show or set which Tor to use: our own or one already running")
+    s.add_argument("use", nargs="?", metavar="auto|own|HOST:PORT",
+                   help="auto: Tails' Tor on Tails, else our own; own: always our own; "
+                        "HOST:PORT: the SOCKS port of a running Tor, e.g. 127.0.0.1:9050")
 
     args = p.parse_args(argv)
     asyncio.run(client_command(args))

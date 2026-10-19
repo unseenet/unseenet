@@ -8,6 +8,7 @@ GETINFO) are a few lines of text. See the Tor control-spec for details.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import os
 import platform
@@ -17,6 +18,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from python_socks import ProxyError
 from python_socks.async_.asyncio import Proxy
@@ -312,8 +314,114 @@ PERMANENT_ONION_ERRORS = {0xF4, 0xF5, 0xF6}
 ONION_RETRY_PAUSES = (3.0, 10.0)
 
 
-async def open_connection(address: str, socks_port: int | None):
+# ---------------------------------------------------------------------------
+# A Tor that is already running (Tails, Whonix, a system tor)
+# ---------------------------------------------------------------------------
+TOR_SOCKS_ENV = "UNSEENET_TOR_SOCKS"     # "9050", "127.0.0.1:9050", or "own"
+TAILS_SOCKS = ("127.0.0.1", 9050)        # Tails' Tor; its firewall blocks any other
+
+
+@dataclass(frozen=True)
+class Socks:
+    """The SOCKS port of a Tor that someone else runs.
+
+    With ``isolate`` each destination gets its own SOCKS username, so Tor (which
+    isolates streams by SOCKS username by default) gives each node its own circuit.
+    ``source`` says where the setting came from, for the client to show.
+    """
+    host: str
+    port: int
+    source: str = ""
+    isolate: bool = True
+
+    def __str__(self) -> str:
+        host = f"[{self.host}]" if ":" in self.host else self.host
+        return f"{host}:{self.port}"
+
+
+def running_on_tails() -> bool:
+    if Path("/etc/amnesia/version").exists():
+        return True
+    try:
+        return 'NAME="Tails"' in Path("/etc/os-release").read_text()
+    except OSError:
+        return False
+
+
+def parse_socks(value: str) -> tuple[str, int]:
+    """``"9050"``, ``"127.0.0.1:9050"`` or ``"[::1]:9050"`` as (host, port).
+
+    The host must be an IP address or ``localhost``: a name would be looked up
+    outside Tor before Tor is even reached.
+    """
+    value = value.strip()
+    host, sep, port = value.rpartition(":")
+    if not sep:
+        host, port = "127.0.0.1", value
+    host = host.strip("[]") or "127.0.0.1"
+    if host != "localhost":
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            raise TorError(f"Tor SOCKS address {value!r}: use an IP address, "
+                           "e.g. 127.0.0.1:9050") from None
+    if not port.isdigit() or not 0 < int(port) < 65536:
+        raise TorError(f"Tor SOCKS address {value!r}: the port must be a number, e.g. 9050")
+    return host, int(port)
+
+
+def existing_tor(setting: dict | None) -> Socks | None:
+    """The running Tor to use, or None to start our own.
+
+    In order: ``UNSEENET_TOR_SOCKS``, the vault's ``tor.socks`` setting, then
+    Tails (detected), where our own Tor could not reach the network anyway.
+    ``"own"`` in either place always starts our own Tor; ``"auto"`` or nothing
+    means "Tails' Tor on Tails, else our own".
+    """
+    for value, source in ((os.environ.get(TOR_SOCKS_ENV, ""), TOR_SOCKS_ENV),
+                          ((setting or {}).get("socks", ""), "setting")):
+        value = (value or "").strip()
+        if value.lower() == "own":
+            return None
+        if value and value.lower() != "auto":
+            return Socks(*parse_socks(value), source=source)
+    if running_on_tails():
+        return Socks(*TAILS_SOCKS, source="Tails")
+    return None
+
+
+async def check_socks(socks: Socks, timeout: float = 10) -> None:
+    """Make sure a SOCKS5 server answers there (a greeting, nothing is sent onwards)."""
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(socks.host, socks.port), timeout)
+    except (OSError, asyncio.TimeoutError) as exc:
+        raise TorError(f"no Tor answers on {socks} ({socks.source}): "
+                       f"{exc or 'timed out'}") from exc
+    try:
+        writer.write(b"\x05\x02\x00\x02")       # SOCKS5; no auth or username/password
+        await writer.drain()
+        reply = await asyncio.wait_for(reader.readexactly(2), timeout)
+    except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+        raise TorError(f"{socks} ({socks.source}) does not answer like Tor's SOCKS port") from exc
+    finally:
+        writer.close()
+    if reply[0] != 5 or reply[1] == 0xFF:
+        raise TorError(f"{socks} ({socks.source}) is not a SOCKS5 port")
+
+
+def _proxy_url(socks: int | Socks, dest_host: str) -> str:
+    if isinstance(socks, int):
+        return f"socks5://127.0.0.1:{socks}"
+    auth = f"{quote('unseenet-' + dest_host, safe='')}:unseenet@" if socks.isolate else ""
+    return f"socks5://{auth}{socks}"
+
+
+async def open_connection(address: str, socks_port: int | Socks | None):
     """Open a stream to ``host:port``; .onion hosts go through Tor's SOCKS port.
+
+    ``socks_port`` is our own Tor's port, or a :class:`Socks` of a Tor that is
+    already running.
 
     Hostnames are resolved by Tor (remote DNS), never locally (UN-RFC 0005, section 1).
     """
@@ -323,7 +431,7 @@ async def open_connection(address: str, socks_port: int | None):
     if host.endswith(".onion"):
         if not socks_port:
             raise TorError(f"Tor is required to reach {host}")
-        proxy = Proxy.from_url(f"socks5://127.0.0.1:{socks_port}", rdns=True)
+        proxy = Proxy.from_url(_proxy_url(socks_port, host), rdns=True)
         for attempt, pause in enumerate(ONION_RETRY_PAUSES + (None,)):
             try:
                 sock = await proxy.connect(dest_host=host, dest_port=int(port))
