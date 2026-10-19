@@ -7,7 +7,7 @@ This is the list of every group the project owns, with its type, its posters,
 its view and its rules, so that anyone can see how the project is set up and
 do the same for their own. Missing groups are created. A group that exists
 (the owner vault knows it) gets a new manifest, with the next serial, if its
-view, title, description, rules, min_pow or portals differ from this list; everything
+view, title, description, rules, min_pow, kinds or portals differ from this list; everything
 else in its manifest, such as its posters or `claims`, is kept. Groups that
 match are left alone, so running the script again changes nothing.
 
@@ -82,6 +82,13 @@ CANARY = """Connection checks for the known nodes (UN-RFC 0021). Every day the p
 checker posts one small canary to each listed node and looks the next day
 where it arrived. Only the checker posts here; there is nothing to read."""
 
+CHAT = """Chat about Unseenet: quick questions, hello, what you are trying. This group
+is also the Matrix room #unseenet:unseenet.org - a portal run by the project's
+gateway. Everything written here is published there too, outside Tor, under
+your name and the start of your key; messages from Matrix appear here, signed
+by the gateway. Copies arrive seconds to minutes late, on purpose. Longer
+discussion belongs in unseenet@""" + FP + "."
+
 TEST = "Use this group to test posting, replies and your setup. Anything goes."
 
 HELP = """Ask here when something about Unseenet does not work or is unclear: the
@@ -102,8 +109,10 @@ on the topic of the post, and no advertising."""
 # are made by the scripts that own them (setup_registrar.py).
 GROUPS = (
     ("unseenet", "open", "threads", "Unseenet - the project: protocol, software, ideas",
-     "Talk about Unseenet itself. Also open on Matrix as #unseenet:unseenet.org (a portal: "
-     "what you post here is published there too, outside Tor).", TALK, None, 20),
+     "Talk about Unseenet itself.", TALK, None, 20),
+    ("unseenet.chat", "open", "chat", "Unseenet chat - also on Matrix",
+     "Chat about Unseenet, open on Matrix as #unseenet:unseenet.org (a portal: what you "
+     "write here is published there too, outside Tor).", CHAT, None, 18),
     ("unseenet.test", "open", "threads", "Unseenet test posts - say hello",
      "For trying things out.", TEST, None, 20),
     ("unseenet.help", "open", "threads", "Unseenet help - ask anything",
@@ -169,14 +178,17 @@ COMMENTS = {
 # unseenet-helpbot VM (see UN-RFC 0037 for Matrix).
 OFFICIAL_GATEWAY = "ed25519:dxgwb5ltpnmmh33rab6rpsfzmmdqrzwkrnzjtj4oos7m2ffl4aiq"
 PORTALS = {
-    "unseenet": [{"network": "matrix", "source": "#unseenet:unseenet.org",
-                  "gateway": [OFFICIAL_GATEWAY]}],
+    "unseenet.chat": [{"network": "matrix", "source": "#unseenet:unseenet.org",
+                       "gateway": [OFFICIAL_GATEWAY]}],
 }
+
+# What a group takes (UN-RFC 0028 section 4.1), where it is not both.
+KINDS = {"unseenet.chat": ["chat"]}
 
 
 # What this list decides for groups that already exist, and each field's default.
 SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
-            "comments": "none", "comment_days": None, "portals": []}
+            "comments": "none", "comment_days": None, "portals": [], "kinds": None}
 
 
 def _short(value) -> str:
@@ -194,7 +206,8 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
         return None, []
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
-    for k, default in (("comments", "none"), ("comment_days", None), ("portals", [])):
+    for k, default in (("comments", "none"), ("comment_days", None), ("portals", []),
+                       ("kinds", None)):
         if data.get(k, default) == default:
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
@@ -223,7 +236,7 @@ async def main() -> None:
             comments, comment_days = COMMENTS.get(name, ("none", None))
             wanted = {"view": view, "title": title, "description": desc, "rules": rules,
                       "min_pow": min_pow, "comments": comments, "comment_days": comment_days,
-                      "portals": PORTALS.get(name, [])}
+                      "portals": PORTALS.get(name, []), "kinds": KINDS.get(name)}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -242,7 +255,7 @@ async def main() -> None:
                             posters=posters, min_pow=min_pow, retention_days=90,
                             view=None if view == "threads" else view,
                             comments=comments, comment_days=comment_days,
-                            pow_bits=_owner.POW_BITS)
+                            kinds=KINDS.get(name), pow_bits=_owner.POW_BITS)
         if PORTALS.get(name):                   # make_manifest has no portals: add and re-sign
             data = json.loads(art.body)
             data["portals"] = PORTALS[name]
