@@ -133,6 +133,7 @@ nav:
       - "0036 Attestations": spec/un-rfc-0036.md
       - "0037 Matrix gateways": spec/un-rfc-0037.md
       - "0038 Gateway cooperation": spec/un-rfc-0038.md
+      - "0040 Key-bound groups at scale": spec/un-rfc-0040.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
