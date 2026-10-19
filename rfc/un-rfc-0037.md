@@ -92,7 +92,9 @@ checked before every pass:
 1. the gateway's account is a member of the room, having joined on an
    invitation from the room (section 6);
 2. the room's join rule (`m.room.join_rules`) is `public`;
-3. the room has no `m.room.encryption` state.
+3. the room has no `m.room.encryption` state;
+4. the room is not a space (`m.room.create` with `type` `m.space`): spaces
+   hold rooms, and nobody writes in them.
 
 It imports `m.room.message` events whose `msgtype` is `m.text`,
 `m.notice` or `m.emote`, and edits of them (section 4.4). In addition
