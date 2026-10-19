@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0036                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0003, 0004, 0008, 0022, 0029
+Updates: 0000, 0003, 0004, 0008, 0012, 0017, 0022, 0029
 
                        Unseenet: Attestations
 ```
@@ -229,16 +229,22 @@ manifest (UN-RFC 0004 section 3) has:
 - `name`: `attest`;
 - `type`: `channel`, with no `posters`;
 - `view`: `data` (UN-RFC 0008 section 3.1.1);
-- `attestations`: an array of at most 32 attestations whose `subject`
+- `attestations`: an array of at most 24 attestations whose `subject`
   is the owner (section 6.2);
-- `revoked`: an array of revocations the owner has made as an issuer
-  (section 7);
+- `revocations`: the revocation lists of the owner as an issuer
+  (section 7.2);
 - `expires`: as for key-bound groups (UN-RFC 0029);
 - `retention_days`: RECOMMENDED `7`.
 
-Either array may be missing or empty. The manifest MUST NOT exceed
-65 536 octets. Ordinary articles in an attestation group mean nothing;
-clients MUST ignore them.
+Either field may be missing or empty. The manifest MUST NOT exceed
+32 768 octets, the size every node accepts (UN-RFC 0002 section 1).
+Other articles than the revocation lists of section 7 mean nothing in
+an attestation group; clients MUST ignore them.
+
+A client MUST NOT create the attestation group of a key until the user
+publishes an attestation with it or revokes one as an issuer. Most keys
+never need one, and every group costs every node something (section
+11).
 
 A client reads an attestation group as it reads a profile group
 (UN-RFC 0022 section 5.2): it asks a node for the current manifest and
@@ -292,23 +298,91 @@ it only in that context.
 
 An issuer revokes an attestation before it expires - when a member
 leaves, when a checked link disappears, when it learns that it was
-deceived - by adding an entry to the `revoked` array of its own
-attestation group:
+deceived. Revocation has to work for an issuer with a handful of
+subjects and for an association or an eID issuer with hundreds of
+thousands, without a client ever fetching more than one small list
+to check one attestation.
+
+## 7.1 Revocation Lists
+
+An issuer publishes its revocations in **revocation lists**: articles
+in its own attestation group with
 
 ```
-{"serial":...,"subject":...,"type":...}
+Content-Type: application/x-unseenet-revocations
+Revocations: <shard>
 ```
 
-An entry revokes every attestation by that issuer with that subject
-and type whose `serial` is less than or equal to the entry's. For
-`link`, an entry MAY also have `value`, and then revokes only that
-link. The issuer MAY drop an entry once every attestation it revokes
-has expired, which keeps the list short.
+and as body the canonical JSON `{"revoked":[...],"shard":...,"v":1}`,
+where `shard` repeats the header. Each entry in `revoked` is a string
 
-A client that shows an attestation (section 9) SHOULD read the
-issuer's attestation group, and SHOULD cache it. If it cannot reach the
-group, it MAY show the attestation from cache, but MUST then say that
-revocation could not be checked.
+```
+<fingerprint of the subject> <type> <serial>
+```
+
+for example `ph5fc5hop5232qsz member 3`. It revokes every attestation
+by the issuer whose subject has that fingerprint (UN-RFC 0003 section
+2), whose type is `type` and whose `serial` is less than or equal to
+`serial`. For `link` it revokes all links of the subject up to that
+serial; the issuer issues again those that are still valid.
+
+An issuer uses either one shard, `*`, holding the revocations for all
+subjects, or 32 shards, one for each character of the b32 alphabet
+(UN-RFC 0003 section 1), each holding the revocations for the subjects
+whose fingerprint begins with that character. The body of a revocation
+list MUST NOT exceed 30 000 octets, so that the article fits within
+the size every node accepts (UN-RFC 0002 section 1).
+
+## 7.2 Finding Them
+
+The manifest of the issuer's attestation group has the field
+
+- `revocations`: an object whose keys are the shards in use - either
+  only `*`, or b32 characters - and whose values are the Message-IDs of
+  their current revocation lists.
+
+A shard that is not a key has no revocations. To revoke, the issuer
+posts the new revocation list and then a new manifest that names it.
+It MAY gather revocations and publish them together, for example once
+a day; until then the attestations it revokes still count.
+
+A client checks an attestation by reading the issuer's attestation
+group manifest (section 6.1). If the manifest names the shard of the
+subject, or `*`, it fetches that one article with `ARTICLE
+<message-id>`, and accepts it as the list if its author is the issuer,
+its `Revocations` header is the shard and its body is valid. It caches
+the list until the manifest's `serial` changes. A client that cannot
+reach the manifest or the list MAY show the attestation from cache,
+but MUST then say that revocation could not be checked.
+
+## 7.3 Group State
+
+UN-RFC 0017 section 2 is extended: the state of an attestation group
+also includes the revocation lists named in its current manifest.
+Nodes keep them whatever the group's retention, and list them in
+`NEWNEWS` right after the manifest (UN-RFC 0017 section 3). When a
+newer manifest no longer names a list, it expires normally.
+
+UN-RFC 0012 section 3 is amended as for pages (UN-RFC 0035 section
+6.2): a node MUST NOT reject a revocation list for being older than
+the window if the current manifest of its group names it.
+
+## 7.4 Capacity and Lifetimes
+
+An entry takes about 28 octets, so one list holds about 1 000
+revocations and 32 shards about 32 000. An issuer drops an entry once
+every attestation it revokes has expired, so its lists hold only the
+revocations made within one lifetime of its attestations.
+
+An issuer whose revocations within one lifetime would not fit MUST
+issue shorter lifetimes, and SHOULD then renew automatically (section
+5.2). For example, an association with 100 000 members of whom 15 000
+leave in a year fits with lifetimes of one year; one ten times larger
+needs lifetimes of about a month.
+
+An issuer MAY leave out of its lists attestations that expire within
+7 days anyway, and a client MAY then skip the revocation check for an
+attestation whose whole lifetime is 7 days or less.
 
 # 8. Trust
 
@@ -423,6 +497,15 @@ outside this document.
   issuer checked. Policies (section 5.4), per-type trust and showing
   the issuer every time keep this visible; revocation (section 7) and
   expiry limit the damage when an issuer is found out.
+- **Scale.** Each attestation group is one more key-bound group, and
+  key-bound groups are the part of the network that grows with the
+  number of people (unseenet #217). This document therefore creates
+  the group only when needed (section 6.1), bounds its size, and keeps
+  revocation checks to two fetches (section 7).
+- **Delayed revocation.** Between a revocation and the manifest that
+  publishes it, and for as long as a client relies on its cache, a
+  revoked attestation still counts. Issuers that need revocation to
+  take effect quickly should publish at once and use short lifetimes.
 - **Stolen issuer keys.** A thief can issue attestations until the
   issuer's users stop trusting the key. Organisations and eID issuers
   SHOULD keep their keys offline or in a vault and issue from a
@@ -474,6 +557,16 @@ outside this document.
   states the same principle for standing). Anybody can run an issuer;
   the project's registrar (UN-RFC 0019 section 7.2) gives names, not
   trust.
+- **Why sharded revocation lists named in the manifest.** A client
+  needs at most two fetches to check an attestation - the issuer's
+  manifest and one list - whether the issuer has ten subjects or a
+  million, and needs no new command. Naming the lists in the manifest
+  makes them group state, so nodes keep them; 32 shards keep the
+  manifest small. Entries use fingerprints rather than keys, which
+  halves their size; 16 characters of fingerprint are as safe here as
+  in link proofs (UN-RFC 0022 section 12). Beyond what 32 shards hold,
+  short lifetimes do the work, as short-lived certificates have
+  replaced revocation lists on the web.
 - **Why types with lifetimes.** Facts change: people leave
   associations, accounts are deleted, keys are lost. Short lifetimes,
   shortest for links, let attestations go stale by themselves and keep
@@ -513,7 +606,11 @@ UN-RFC 0003 section 3 is extended with:
 
 - UN-RFC 0003 section 3: the purpose `UNSEENET-ATTEST-1` (section 14).
 - UN-RFC 0004 section 3.1: the manifest fields `attestations` and
-  `revoked`, only in attestation groups.
+  `revocations`, only in attestation groups.
+- UN-RFC 0012 section 3: old revocation lists named in a current
+  manifest are accepted (section 7.3).
+- UN-RFC 0017 section 2: revocation lists named in the current
+  manifest are part of the group's state (section 7.3).
 - UN-RFC 0008 section 3.1.1: attestation groups are data groups.
 - UN-RFC 0022 section 7: a client MAY check all links of a profile at
   once when the user asks for that, and shows `link` attestations
