@@ -99,6 +99,18 @@ def test_complete_and_excludes():
     assert len(v["D"]) == 1 and "alt.test@x" in v["D"][0]
 
 
+def test_key_bound_groups_are_not_counted():
+    # UN-RFC 0040: nodes from before it list inbox@, profile@ ...; newer ones do not.
+    # Both must be judged complete.
+    fp = "ph5fc5hop5232qsz"
+    old = [f"{P} 3 1 y", f"inbox@{fp} 2 1 y", f"profile@{fp} 1 1 y", f"avatar@{fp} 1 1 y"]
+    assert cn.carried_groups(old) == {P}
+    assert cn.carried_groups([f"{P} 3 1 y", ""]) == {P}
+    r = {"A": reading("ABC", cn.carried_groups(old)), "B": reading("ABC", cn.carried_groups(old)),
+         "C": reading("ABC", cn.carried_groups([f"{P} 3 1 y"]))}
+    assert cn.verdicts(r, set("ABC"), {}) == {"A": [], "B": [], "C": []}
+
+
 def test_group_on_a_minority_does_not_count():
     r = {"A": reading(seen="ABC", groups=(P, "new@x")), "B": reading(seen="ABC"),
          "C": reading(seen="ABC")}
