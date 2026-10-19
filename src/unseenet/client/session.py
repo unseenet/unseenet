@@ -1159,33 +1159,67 @@ class Session:
     # ------------------------------------------------------------------
     PROFILE_CACHE_SECONDS = 24 * 3600
 
-    async def fetch_manifest(self, group_id: str, node: str | None = None):
-        """The newest valid, unexpired manifest of a small group of manifests only
-        (profile@, avatar@), read with HDR Control. None if the node has none."""
+    @staticmethod
+    def _checked_manifest(raw: bytes | None, group_id: str):
+        """A manifest from a node, checked as UN-RFC 0004 section 4 and 0041 section
+        3.1 ask: a valid signed article, by the owner in the Group ID, for this group,
+        not expired. None otherwise - a node is not trusted for any of it."""
         from ..core.groups import Manifest
+        if not raw:
+            return None
+        try:
+            raw = strip_reader_headers(raw)
+            art = Article.from_bytes(raw)
+            validate_structure(art, raw_size=len(raw))
+            m = Manifest.from_article(art)
+        except (ArticleError, ValueError, TypeError):
+            return None
+        return m if m.group_id == group_id and not m.expired() else None
 
-        async def run(c: Client):
-            try:
-                _, low, high = await c.group(group_id)
-            except NNTPError:
-                return None
-            if high < low:
-                return None
-            best = None
-            for line in await c.multiline(f"HDR Control {low}-{high}", 225):
-                number, _, value = line.partition(" ")
-                if value.strip().lower() != "manifest":
-                    continue
-                raw = await c.article(number)
-                try:
-                    m = Manifest.from_article(Article.from_bytes(raw))
-                except (ArticleError, ValueError, TypeError):
-                    continue
-                if m.group_id == group_id and not m.expired() and m.supersedes(best):
-                    best = m
-            return best
+    async def _manifest_by_group(self, c: Client, group_id: str):
+        """The newest valid manifest in a small group of manifests only (profile@,
+        avatar@), read with GROUP, HDR Control and ARTICLE: for nodes without
+        XUN-MANIFESTS (UN-RFC 0041 section 1)."""
+        try:
+            _, low, high = await c.group(group_id)
+        except NNTPError:
+            return None
+        if high < low:
+            return None
+        best = None
+        for line in await c.multiline(f"HDR Control {low}-{high}", 225):
+            number, _, value = line.partition(" ")
+            if value.strip().lower() != "manifest":
+                continue
+            m = self._checked_manifest(await c.article(number), group_id)
+            if m is not None and m.supersedes(best):
+                best = m
+        return best
 
-        return await self._call(run, node or self.node_for(group_id))
+    async def fetch_manifests(self, group_ids: list[str], node: str | None = None) -> dict:
+        """The current manifests of many groups, Group ID -> Manifest or None.
+
+        With XUN-MANIFESTS (UN-RFC 0041) in requests of up to 256 groups; else one
+        group at a time. Cached Message-IDs are not named (section 3.3), so a node
+        cannot recognise this client by what it holds."""
+        wanted = list(dict.fromkeys(group_ids))
+        by_node: dict[str | None, list[str]] = {}
+        for gid in wanted:
+            by_node.setdefault(node or self.node_for(gid), []).append(gid)
+        out: dict = {}
+        for address, gids in by_node.items():
+            async def run(c: Client, gids=gids):
+                if c.capability("UNSEENET-MANIFESTS") is None:
+                    return {g: await self._manifest_by_group(c, g) for g in gids}
+                answers = await c.manifests_all([(g, None) for g in gids])
+                return {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
+                        for g in gids}
+            out.update(await self._call(run, address))
+        return out
+
+    async def fetch_manifest(self, group_id: str, node: str | None = None):
+        """The current valid, unexpired manifest of one group; None if there is none."""
+        return (await self.fetch_manifests([group_id], node)).get(group_id)
 
     def _profile_cache(self) -> dict:
         return self.data.setdefault("profiles", {})
@@ -1202,9 +1236,7 @@ class Session:
         now = datetime.now(timezone.utc).timestamp()
         if hit is None or refresh or now - hit.get("fetched", 0) > self.PROFILE_CACHE_SECONDS:
             m = await self.fetch_manifest(prof.profile_id(pk))
-            p = prof.profile_from_manifest(m) if m else None
-            hit = {"fetched": now, "profile": p.raw if p else None, "serial": p.serial if p else 0}
-            cache[key_text] = hit
+            hit = self._cache_profile(key_text, m, now)
             self.save()
         obj = hit.get("profile")
         if not obj:
@@ -1213,6 +1245,41 @@ class Session:
             return prof.Profile.from_object(pk, prof.check_profile(obj), hit.get("serial", 0))
         except prof.ProfileError:
             return None
+
+    def _cache_profile(self, key_text: str, m, now: float) -> dict:
+        p = prof.profile_from_manifest(m) if m else None
+        hit = {"fetched": now, "profile": p.raw if p else None, "serial": m.serial if m else 0}
+        old = self._profile_cache().get(key_text)
+        if m is not None and old and m.serial < old.get("serial", 0):
+            hit = dict(old, fetched=now)    # never step back to an older serial (0041 3.1)
+        self._profile_cache()[key_text] = hit
+        return hit
+
+    async def prefetch_profiles(self, keys) -> int:
+        """Read the profiles of many keys at once into the cache - all the authors of
+        a group, rather than one when the user opens it (UN-RFC 0022 section 9.2,
+        UN-RFC 0041 section 3.2). Hidden profiles and our own are skipped. Returns
+        the number of keys asked for."""
+        cache = self._profile_cache()
+        now = datetime.now(timezone.utc).timestamp()
+        mine = self.identity().key_text
+        todo: dict[str, str] = {}
+        for key_text in dict.fromkeys(k.strip() for k in keys if k):
+            hit = cache.get(key_text)
+            if key_text == mine or self.profile_hidden(key_text) or (
+                    hit and now - hit.get("fetched", 0) <= self.PROFILE_CACHE_SECONDS):
+                continue
+            try:
+                todo[prof.profile_id(crypto.key_from_text(key_text))] = key_text
+            except crypto.CryptoError:
+                continue
+        if not todo:
+            return 0
+        found = await self.fetch_manifests(list(todo))
+        for gid, key_text in todo.items():
+            self._cache_profile(key_text, found.get(gid), now)
+        self.save()
+        return len(todo)
 
     def my_profile(self) -> dict | None:
         """This identity's published profile object, or None."""

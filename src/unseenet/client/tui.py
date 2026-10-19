@@ -3008,6 +3008,15 @@ class UnseenetApp(App):
         s = self.session
         mine = key == s.identity().key_text
         hidden = not mine and s.profile_hidden(key)
+        if not hidden:
+            # all the authors shown at once, so the node cannot tell whose profile
+            # the user opens (UN-RFC 0022 section 13, UN-RFC 0041 section 3.2)
+            authors = [x.author_key for x in self.messages.values()
+                       if x.readable and x.author_key]
+            try:
+                await s.prefetch_profiles([key.strip(), *authors])
+            except (SessionError, OSError, ConnectionError, NNTPError):
+                pass                        # profile_of below tries again and says why
         try:
             p = None if hidden else await s.profile_of(key.strip())
         except (SessionError, OSError, ConnectionError, NNTPError, crypto.CryptoError) as exc:
