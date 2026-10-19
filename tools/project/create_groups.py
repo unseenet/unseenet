@@ -7,7 +7,7 @@ This is the list of every group the project owns, with its type, its posters,
 its view and its rules, so that anyone can see how the project is set up and
 do the same for their own. Missing groups are created. A group that exists
 (the owner vault knows it) gets a new manifest, with the next serial, if its
-view, title, description, rules or min_pow differ from this list; everything
+view, title, description, rules, min_pow or portals differ from this list; everything
 else in its manifest, such as its posters or `claims`, is kept. Groups that
 match are left alone, so running the script again changes nothing.
 
@@ -102,7 +102,8 @@ on the topic of the post, and no advertising."""
 # are made by the scripts that own them (setup_registrar.py).
 GROUPS = (
     ("unseenet", "open", "threads", "Unseenet - the project: protocol, software, ideas",
-     "Talk about Unseenet itself.", TALK, None, 20),
+     "Talk about Unseenet itself. Also open on Matrix as #unseenet:unseenet.org (a portal: "
+     "what you post here is published there too, outside Tor).", TALK, None, 20),
     ("unseenet.test", "open", "threads", "Unseenet test posts - say hello",
      "For trying things out.", TEST, None, 20),
     ("unseenet.help", "open", "threads", "Unseenet help - ask anything",
@@ -163,9 +164,19 @@ COMMENTS = {
 }
 
 
+# Portals (UN-RFC 0023 section 3.5): name -> the group's counterparts on other networks,
+# each run by the gateway key listed. The project's official gateway runs on the
+# unseenet-helpbot VM (see UN-RFC 0037 for Matrix).
+OFFICIAL_GATEWAY = "ed25519:dxgwb5ltpnmmh33rab6rpsfzmmdqrzwkrnzjtj4oos7m2ffl4aiq"
+PORTALS = {
+    "unseenet": [{"network": "matrix", "source": "#unseenet:unseenet.org",
+                  "gateway": [OFFICIAL_GATEWAY]}],
+}
+
+
 # What this list decides for groups that already exist, and each field's default.
 SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
-            "comments": "none", "comment_days": None}
+            "comments": "none", "comment_days": None, "portals": []}
 
 
 def _short(value) -> str:
@@ -183,7 +194,7 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
         return None, []
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
-    for k, default in (("comments", "none"), ("comment_days", None)):
+    for k, default in (("comments", "none"), ("comment_days", None), ("portals", [])):
         if data.get(k, default) == default:
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
@@ -211,7 +222,8 @@ async def main() -> None:
             current = max(known, key=lambda m: int(m.get("serial", 0)))
             comments, comment_days = COMMENTS.get(name, ("none", None))
             wanted = {"view": view, "title": title, "description": desc, "rules": rules,
-                      "min_pow": min_pow, "comments": comments, "comment_days": comment_days}
+                      "min_pow": min_pow, "comments": comments, "comment_days": comment_days,
+                      "portals": PORTALS.get(name, [])}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -231,6 +243,10 @@ async def main() -> None:
                             view=None if view == "threads" else view,
                             comments=comments, comment_days=comment_days,
                             pow_bits=_owner.POW_BITS)
+        if PORTALS.get(name):                   # make_manifest has no portals: add and re-sign
+            data = json.loads(art.body)
+            data["portals"] = PORTALS[name]
+            art = manifest_article(owner, gid, data, pow_bits=_owner.POW_BITS)
         todo.append((art, gtype, True))
         print(f"{gid}: will create ({gtype}, view {view}, posters {posters or 'none'})")
     if not dry:

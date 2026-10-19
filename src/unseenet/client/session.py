@@ -766,6 +766,29 @@ class Session:
         """The newest manifest seen for a group ({} if none yet)."""
         return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))
 
+    # --- portals (UN-RFC 0023 section 3.5) ---
+    def group_portals(self, group_id: str) -> list[tuple[str, str]]:
+        """(network, source) of the group's portals: where its posts are also published."""
+        from ..core import portals
+        return portals.portals(self.manifest_data(group_id))
+
+    def portal_warning(self, group_id: str) -> str | None:
+        """The warning to show before posting, or None if there are no portals or the
+        user has accepted this set of them. A new or changed portal asks again."""
+        from ..core import portals
+        found = self.group_portals(group_id)
+        if not found:
+            return None
+        if self.data["groups"].get(group_id, {}).get("portals_ok") == portals.fingerprint(found):
+            return None
+        name = self.manifest_data(group_id).get("name") or group_id.rpartition("@")[0]
+        return portals.warning(name, found)
+
+    def accept_portals(self, group_id: str) -> None:
+        from ..core import portals
+        self.group_entry(group_id)["portals_ok"] = portals.fingerprint(self.group_portals(group_id))
+        self.save()
+
     def text_type(self) -> str:
         """The Content-Type your posts get: Markdown, unless you turned it off (UN-RFC 0031)."""
         from ..core.markup import MARKDOWN_TYPE, PLAIN_TYPE
@@ -2315,6 +2338,10 @@ class Session:
                    references: list[str] | None = None, kind: str = KIND_POST,
                    content_type: str | None = None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028)."""
+        if self.portal_warning(group_id):
+            # Clients ask first (portal_warning / accept_portals); this is the safety net.
+            raise SessionError("this group has a portal: its posts are also published outside "
+                               "Tor, and you have not accepted that yet")
         if kind not in self.group_kinds(group_id):
             raise SessionError("this group does not take " +
                                ("chat lines" if kind == KIND_CHAT else "posts with a subject"))

@@ -981,6 +981,11 @@ class GroupInfoDialog(Dialog):
                          + ("person" if len(bans) == 1 else "people") + " - "
                          + "; ".join(f"{b.get('key', '')[8:16]}...: {b.get('reason') or 'no reason given'}"
                                      for b in bans[:5]) + (" ..." if len(bans) > 5 else ""))
+        from ..core import portals as _portals
+        found = _portals.portals(d)
+        if found:                                  # UN-RFC 0023 3.5: always shown
+            lines += ["", "Also published outside Tor, through portals:"]
+            lines += ["  " + line for line in _portals.describe(found).splitlines()]
         if d.get("description"):
             lines += ["", d["description"]]
         with Vertical(classes="dialog"):
@@ -2141,6 +2146,10 @@ class UnseenetApp(App):
                 await self.session.send_private(personal_inbox_id(owner), "", text, owner_key=owner,
                                                 kind=KIND_CHAT)
             else:
+                if not await self._accept_portals(gid):
+                    self.query_one("#chat-input", Input).value = text
+                    self.set_status("")
+                    return
                 msgid = await self.session.post(gid, "", text, kind=KIND_CHAT)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
@@ -2576,6 +2585,18 @@ class UnseenetApp(App):
         self.compose_private(info["contact"], f"Message to the operator of {info.get('name', 'this node')}",
                              owner_key=operator)
 
+    async def _accept_portals(self, gid: str) -> bool:
+        """Before the first post in a group with portals: say where it will also appear
+        (UN-RFC 0023 section 3.5). True if there is nothing to accept or the user agreed."""
+        text = self.session.portal_warning(gid)
+        if text is None:
+            return True
+        if not await self.push_screen_wait(ConfirmDialog(
+                "This group is also published outside Tor", text, "Post anyway")):
+            return False
+        self.session.accept_portals(gid)
+        return True
+
     @work(group="post", exit_on_error=False)
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
                            references: list[str] | None = None) -> None:
@@ -2585,6 +2606,9 @@ class UnseenetApp(App):
         if not result:
             return
         subject, body, notify = result
+        if not await self._accept_portals(g.group_id):
+            self.notify("Not sent", timeout=4)
+            return
         self.set_status("Sending (computing postage) ...")
         try:
             msgid = await self.session.post(g.group_id, subject, body, references)

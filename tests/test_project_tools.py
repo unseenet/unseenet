@@ -103,6 +103,8 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     talk = f"unseenet@{setup['project'].fingerprint}"
     assert v.data["groups"][nodes]["manifest"]["view"] == "data"
     assert "view" not in v.data["groups"][talk]["manifest"]          # threads, the default
+    assert v.data["groups"][talk]["manifest"]["portals"][0]["source"] == "#unseenet:unseenet.org"
+    assert "portals" not in v.data["groups"][nodes]["manifest"]       # none, left out
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
                 if e.get("owner")}) == 16
