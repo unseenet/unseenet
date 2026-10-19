@@ -89,6 +89,42 @@ def body(text: str, content_type: str | None, kind: str = "post") -> list[dict]:
     return parse(text, kind) if is_markdown(content_type) else plain(text)
 
 
+MAX_TYPE = 128                        # a text type field (about_type, rules_type)
+
+
+def manifest_text(text: str, text_type: str | None) -> list[dict]:
+    """A profile's ``about`` or a group's ``rules`` as a tree (UN-RFC 0022 4.1, 0014 2.1).
+
+    Markdown has the post subset without images: a manifest cannot reference
+    blobs, so an image is shown as its alt text, as one that cannot be had.
+    """
+    if not is_markdown(text_type):
+        return plain(text)
+    return _without_images(parse(text))
+
+
+def text_type_for(markdown: bool, text: str) -> str | None:
+    """The type field to store with ``about`` or ``rules``: only Markdown is written,
+    since plain text is the default (and an empty text needs no type)."""
+    return MARKDOWN_TYPE if markdown and (text or "").strip() else None
+
+
+def _without_images(nodes):
+    out = []
+    for n in nodes:
+        if isinstance(n, list):                    # a list item's blocks
+            out.append(_without_images(n))
+        elif n.get("t") == "image":
+            out.append({"t": "text", "v": f"[image: {n.get('alt') or 'no description'}]"})
+        else:
+            n = dict(n)
+            for key in ("c", "items"):
+                if isinstance(n.get(key), list):
+                    n[key] = _without_images(n[key])
+            out.append(n)
+    return out
+
+
 # --- tokens to tree ---------------------------------------------------------------
 
 def _blocks(tokens, i: int, end: int, depth: int) -> tuple[list[dict], int]:

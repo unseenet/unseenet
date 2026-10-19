@@ -156,6 +156,9 @@ separate matters and need documents of their own.
   `text/markdown; charset=utf-8; variant=unseenet`.
 - UN-RFC 0028 section 6.2: what posts and chat lines may use of
   Markdown is section 3 of this document.
+- UN-RFC 0022 section 4.1 and UN-RFC 0014 section 2.1 let a profile's
+  `about` and a group's `rules` be Markdown with the post subset of
+  section 3.2, without images.
 
 # 7. Security and Privacy Considerations
 

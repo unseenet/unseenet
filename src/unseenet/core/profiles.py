@@ -9,6 +9,7 @@ from . import crypto
 from .article import Article
 from .encoding import DS, H, b64, b64decode
 from .groups import Manifest, canonical_json, make_group_id, manifest_article
+from .markup import MAX_TYPE, text_type_for
 
 PROFILE_NAME = "profile"                 # profile@<fp> (section 5.1)
 AVATAR_NAME = "avatar"                   # avatar@<fp> (section 8.2)
@@ -59,6 +60,9 @@ def check_profile(obj, *, private: bool = False) -> dict:
     about = obj.get("about", "")
     if not isinstance(about, str) or len(about) > MAX_ABOUT:
         raise ProfileError(f"about is text of at most {MAX_ABOUT} characters")
+    if "about_type" in obj and (not isinstance(obj["about_type"], str)
+                                or len(obj["about_type"]) > MAX_TYPE):
+        raise ProfileError(f"about_type is a Content-Type of at most {MAX_TYPE} characters")
     links = obj.get("links", [])
     if not isinstance(links, list) or len(links) > MAX_LINKS:
         raise ProfileError(f"at most {MAX_LINKS} links")
@@ -92,10 +96,15 @@ def check_profile(obj, *, private: bool = False) -> dict:
 
 
 def make_profile(about: str = "", links: list[dict] | None = None,
-                 lang: list[str] | None = None, bot: bool = False) -> dict:
+                 lang: list[str] | None = None, bot: bool = False,
+                 markdown: bool = False) -> dict:
+    """A profile object. ``markdown``: ``about`` is Markdown without images (4.1)."""
     obj: dict = {"v": 1}
     if about.strip():
         obj["about"] = about.strip("\n")
+        about_type = text_type_for(markdown, about)
+        if about_type:
+            obj["about_type"] = about_type
     if links:
         obj["links"] = [{k: v for k, v in link.items() if v} for link in links]
     if lang:
@@ -120,6 +129,7 @@ def clean_text(text: str) -> str:
 class Profile:
     key: bytes
     about: str = ""
+    about_type: str | None = None          # Markdown or plain (section 4.1)
     links: list[dict] | None = None
     lang: list[str] | None = None
     bot: bool = False
@@ -128,7 +138,9 @@ class Profile:
 
     @classmethod
     def from_object(cls, key: bytes, obj: dict, serial: int = 0) -> "Profile":
+        about_type = obj.get("about_type")
         return cls(key=key, about=clean_text(obj.get("about", "")),
+                   about_type=about_type if isinstance(about_type, str) else None,
                    links=[dict(link) for link in obj.get("links", [])],
                    lang=list(obj.get("lang", [])), bot=obj.get("bot") is True,
                    serial=serial, raw=obj)

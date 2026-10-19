@@ -151,6 +151,14 @@ async def test_group_rules_and_updates(tmp_path, monkeypatch):
     with pytest.raises(sess.SessionError):
         await owner.update_group(gid, type="closed")      # type can never change
 
+    # Markdown rules (UN-RFC 0014 2.1); emptied rules take their type with them
+    md = "text/markdown; charset=utf-8; variant=unseenet"
+    new = await owner.update_group(gid, rules="# Regler\n\n- vær søde", rules_type=md)
+    await reader.fetch_group(gid)
+    assert reader.manifest_data(gid)["rules_type"] == md
+    new = await owner.update_group(gid, rules="")
+    assert "rules" not in new and "rules_type" not in new
+
     # postage follows the group: a cheap chat group, a node with its own minimum
     chat = await owner.create_group("chat.venner", "open", view="chat", low_latency=True, min_pow=9)
     assert await owner.required_pow(chat) == 9
