@@ -86,7 +86,7 @@ says where they come from.
 |---------|-----------|-------------------------------------------|-----------|
 | Usenet  | `usenet`  | `dk.politik` → `usenet.dk.politik`         | UN-RFC 0024 |
 | FidoNet | `fido`    | an echo area such as `LINUX` → `fido.linux` | not yet |
-| Matrix  | `matrix`  | a public room → a name under `matrix.*`    | not yet |
+| Matrix  | `matrix`  | `#python:matrix.org` → `matrix.matrix-org.python` | UN-RFC 0037 |
 
 The network profile defines how a source's name maps to a valid group
 name (UN-RFC 0004 section 1). A source whose name cannot be mapped MUST
@@ -541,7 +541,7 @@ first proposed.
 |------------|------------------------------------------------|------------------|
 | `usenet`   | Usenet                                         | UN-RFC 0024      |
 | `fido`     | FidoNet echomail                               | not yet written  |
-| `matrix`   | Matrix rooms                                   | not yet written  |
+| `matrix`   | Matrix rooms                                   | UN-RFC 0037      |
 | `irc`      | IRC channels                                   | not yet written  |
 | `xmpp`     | XMPP group chats (MUC)                         | not yet written  |
 | `fedi`     | The fediverse (ActivityPub: Lemmy, Mastodon …) | not yet written  |
