@@ -7,6 +7,7 @@ import asyncio
 from .core import tor
 
 MAX_LINE = 512
+RECONCILE_MAX_BYTES = 16 * 1024 * 1024    # one XUN-RECONCILE message, either way
 
 
 def dot_stuff(raw: bytes) -> bytes:
@@ -124,6 +125,17 @@ class Client:
 
     async def newnews(self, wildmat: str, since: str) -> list[str]:
         return await self.multiline(f"NEWNEWS {wildmat} {since} GMT", 230)
+
+    async def reconcile(self, lines: list[str]) -> list[str]:
+        """One round of XUN-RECONCILE (UN-RFC 0040 section 4.3): range lines out,
+        the node's range lines back. Use with ``core.reconcile.reconcile``."""
+        self.writer.write(b"XUN-RECONCILE\r\n" + dot_stuff("\r\n".join(lines).encode()))
+        await self.writer.drain()
+        code, text = await self._response()
+        if code != 295:
+            raise NNTPError(code, text)
+        block = await read_block(self.reader, RECONCILE_MAX_BYTES)
+        return block.decode("utf-8", "replace").splitlines()
 
     async def quit(self) -> None:
         try:

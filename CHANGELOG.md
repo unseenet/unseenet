@@ -17,6 +17,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Nodes answer `XUN-RECONCILE` and advertise `UNSEENET-RECONCILE 1`
+  (UN-RFC 0040 section 4, second step of #217): two nodes compare the
+  key-bound manifests they hold by range fingerprints, at a cost that
+  follows the differences, not the number of groups (100 000 against
+  100 000 with 100 missing: three rounds). The store keeps the key-bound
+  state as an index with running sums per key prefix, kept up to date as
+  manifests arrive, are renewed, expire or are removed, and built once
+  from existing data on first start. Readers may use it too, one
+  exchange (64 rounds) per connection. Nothing uses it yet: pulling
+  reconciles in the next step. Core: `unseenet.core.reconcile`
+  (`answer`, `reconcile`), `Store.kb_count_sum`, `Store.kb_items`,
+  `Client.reconcile`.
 - Profiles and group rules can be Markdown (#211, UN-RFC 0022 section
   4.1 and 0014 section 2.1, amended): the new optional `about_type` and
   `rules_type` fields take a post's Content-Type, and the text gets the
