@@ -35,7 +35,7 @@ src/unseenet/
     tor.py              own tor process + control port + SOCKS                  0005 §1, 0007 §3
     vault.py            encrypted client vault               0007 §2
   node/
-    server.py           acceptance pipeline + ONNTP server   0002 §5, 0004, 0005
+    server.py           acceptance pipeline + ONNTP server   0002 §5, 0004, 0005, 0041
     peering.py          streaming feeds, node-key authentication      0005 §5.2, 0016
     pulling.py          catch-up: XUN-RECONCILE, then NEWNEWS/ARTICLE  0017, 0040 §6
   client/

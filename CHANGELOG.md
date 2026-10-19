@@ -17,6 +17,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- `XUN-MANIFESTS` (UN-RFC 0041, #218): nodes return the current
+  manifests of up to 256 groups in one answer and advertise
+  `UNSEENET-MANIFESTS 256`; an answer carries at most 1 MiB of articles,
+  the rest is answered `431` and asked for again. Unauthenticated
+  readers get 60 requests a minute. The client reads profiles and
+  pictures this way where the node has it, and with `GROUP`/`HDR`/
+  `ARTICLE` where it does not. Opening a profile in the TUI now reads the
+  profiles of all authors shown in one go (UN-RFC 0022 section 9.2), so
+  a busy group's 500 authors take two requests instead of some 1500
+  round trips, and the node cannot tell whose profile was opened.
+  Cached Message-IDs are not sent (section 3.3). Pulling fetches a
+  missing key-bound manifest from a peer with it (0041 section 4.3).
+  Core: `Client.manifests`, `Client.manifests_all`,
+  `Session.fetch_manifests`, `Session.prefetch_profiles`.
 - Nodes answer `XUN-RECONCILE` and advertise `UNSEENET-RECONCILE 1`
   (UN-RFC 0040 section 4, second step of #217): two nodes compare the
   key-bound manifests they hold by range fingerprints, at a cost that
@@ -180,6 +194,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `dk.snak (5) ◄1 ♦2`, *For you* the same for all groups, and the
   notification says whether it is a reply or a post naming you. The core
   has `Session.for_you_counts()` for other clients. (#170)
+
+
+### Fixed
+
+- The client checked the owner of a profile or picture manifest read
+  from a node, but not its signature, so a hostile node could have shown
+  a changed profile under the right key. Every manifest read with
+  `fetch_manifest` is now checked as a whole (UN-RFC 0041 section 3.1),
+  and a node serving an older serial no longer replaces a newer cached
+  profile.
 
 ## [0.3.1] - 2026-10-18
 

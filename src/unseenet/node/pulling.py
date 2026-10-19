@@ -136,6 +136,20 @@ class Puller:
         store = self.node.store
         if not is_key_bound(group) or store.known_group(group):
             return store.known_group(group)
+        if client.capability("UNSEENET-MANIFESTS") is not None:    # UN-RFC 0041 4.3
+            try:
+                [answer] = await client.manifests([(group, None)])
+            except NNTPError:
+                return False
+            if answer.code == 220 and answer.raw:
+                result["fetched"] += 1
+                try:
+                    self.node.accept(answer.raw, source=self.peer.name, from_peer=True,
+                                     how="pull")
+                    result["accepted"] += 1
+                except ArticleError:
+                    pass
+            return store.known_group(group)
         try:
             _, low, high = await client.group(group)
             if high < low:

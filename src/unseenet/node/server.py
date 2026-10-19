@@ -20,7 +20,8 @@ from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate
 from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, is_key_bound,
                            parse_key_update, split_group_id)
 from ..core.store import Store
-from ..nntp import MAX_LINE, RECONCILE_MAX_BYTES, dot_stuff, read_block
+from ..nntp import (MANIFESTS_ANSWER_BYTES, MANIFESTS_MAX, MAX_LINE, RECONCILE_MAX_BYTES,
+                    dot_stuff, read_block)
 from .stats import Stats
 
 log = logging.getLogger("unseenet.node")
@@ -548,6 +549,7 @@ class Session:
         self._challenge: tuple[bytes, bytes] | None = None   # (claimed key, nonce)
         self._auth_failures = 0
         self._reconcile_rounds = 0
+        self._manifest_requests: list[float] = []   # times of recent XUN-MANIFESTS
 
     def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -594,7 +596,7 @@ class Session:
                     "UNSEENET 1",
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
-                    "UNSEENET-RECONCILE 1"):
+                    "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}"):
             self.send(cap)
         self.send(".")
 
@@ -994,6 +996,61 @@ class Session:
         lines = reconcile.format_message(reconcile.answer(store, ranges))
         self.send("295 reconcile")
         self.writer.write(dot_stuff("\r\n".join(lines).encode()) if lines else b".\r\n")
+
+    MANIFESTS_PER_MINUTE = 60          # requests from an unauthenticated reader
+
+    async def cmd_xun_manifests(self, args):
+        """UN-RFC 0041: the current manifests of up to MANIFESTS_MAX groups at once.
+
+        One answer per line, in order, as ARTICLE/STAT answer: 220 with the article
+        as stored (no Path/Xref), 223 if the client holds the current one, 411 if we
+        have none, 431 for lines past MANIFESTS_ANSWER_BYTES (section 2.3)."""
+        try:
+            block = await read_block(self.reader, MANIFESTS_MAX * (MAX_LINE + 2))
+        except ValueError:
+            self.send(f"501 more than {MANIFESTS_MAX} lines")
+            return
+        entries: list[tuple[str, str | None]] = []
+        for line in block.decode("utf-8", "replace").splitlines():
+            parts = line.split()
+            if not parts or len(parts) > 2 or (len(parts) == 2 and not (
+                    parts[1].startswith("<") and parts[1].endswith(">"))):
+                self.send("501 malformed line: <group-id> [<message-id>]")
+                return
+            entries.append((parts[0], parts[1] if len(parts) == 2 else None))
+        if not entries or len(entries) > MANIFESTS_MAX:
+            self.send(f"501 between 1 and {MANIFESTS_MAX} lines")
+            return
+        if len({gid for gid, _ in entries}) != len(entries):
+            self.send("501 a Group ID appears twice")
+            return
+        if not self.peer:
+            now = time.monotonic()
+            self._manifest_requests = [t for t in self._manifest_requests if now - t < 60]
+            if len(self._manifest_requests) >= self.MANIFESTS_PER_MINUTE:
+                self.send("400 too many manifest requests; wait a minute")
+                return
+            self._manifest_requests.append(now)
+        store, sent, full = self.node.store, 0, False
+        self.send(f"296 {len(entries)} manifests follow")
+        for gid, held in entries:
+            if full:
+                self.send(f"431 {gid}")
+                continue
+            m = None if store.tombstone(gid) else store.manifest(gid)
+            raw = store.get(m.message_id) if m else None
+            if raw is None:
+                self.send(f"411 {gid}")
+            elif held == m.message_id:
+                self.send(f"223 0 {m.message_id} {gid}")
+            elif sent and sent + len(raw) > MANIFESTS_ANSWER_BYTES:
+                full = True
+                self.send(f"431 {gid}")
+            else:
+                sent += len(raw)
+                self.send(f"220 0 {m.message_id} {gid}")
+                self.writer.write(dot_stuff(raw))
+                await self.writer.drain()
 
     # --- posting ---
     def _try_accept(self, raw: bytes, from_peer: bool = False) -> ArticleError | None:

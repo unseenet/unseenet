@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 
 from .core import tor
 
 MAX_LINE = 512
 RECONCILE_MAX_BYTES = 16 * 1024 * 1024    # one XUN-RECONCILE message, either way
+MANIFESTS_MAX = 256                       # lines in one XUN-MANIFESTS request (UN-RFC 0041)
+MANIFESTS_ANSWER_BYTES = 1024 * 1024      # articles in one XUN-MANIFESTS answer (2.3)
+MANIFEST_MAX_BYTES = 128 * 1024           # one manifest article, read defensively
 
 
 def dot_stuff(raw: bytes) -> bytes:
@@ -53,6 +57,15 @@ class NNTPError(Exception):
     def __init__(self, code: int, text: str):
         super().__init__(f"{code} {text}")
         self.code, self.text = code, text
+
+
+@dataclass
+class ManifestAnswer:
+    """One answer to a line of XUN-MANIFESTS (UN-RFC 0041 section 2.2)."""
+    code: int                   # 220 article, 223 unchanged, 411 none, 431 ask again
+    group_id: str
+    message_id: str | None = None
+    raw: bytes | None = None    # the article, for 220
 
 
 class Client:
@@ -136,6 +149,54 @@ class Client:
             raise NNTPError(code, text)
         block = await read_block(self.reader, RECONCILE_MAX_BYTES)
         return block.decode("utf-8", "replace").splitlines()
+
+    async def manifests(self, entries: list[tuple[str, str | None]]) -> list[ManifestAnswer]:
+        """One XUN-MANIFESTS request (UN-RFC 0041 section 2): ``(group_id, held
+        Message-ID or None)`` in, one answer per entry back, in order."""
+        lines = [f"{gid} {held}" if held else gid for gid, held in entries]
+        self.writer.write(b"XUN-MANIFESTS\r\n" + dot_stuff("\r\n".join(lines).encode()))
+        await self.writer.drain()
+        code, text = await self._response()
+        if code != 296:
+            raise NNTPError(code, text)
+        if text.split()[:1] != [str(len(entries))]:
+            raise ConnectionError(f"unexpected XUN-MANIFESTS answer: {text[:40]!r}")
+        out = []
+        for gid, _ in entries:
+            code, text = await self._response()
+            parts = text.split()
+            if code in (220, 223):
+                if len(parts) < 3 or parts[2] != gid:
+                    raise ConnectionError(f"XUN-MANIFESTS answer out of order: {text[:60]!r}")
+                raw = await read_block(self.reader, MANIFEST_MAX_BYTES) if code == 220 else None
+                out.append(ManifestAnswer(code, gid, parts[1], raw))
+            elif code in (411, 431):
+                if parts[:1] != [gid]:
+                    raise ConnectionError(f"XUN-MANIFESTS answer out of order: {text[:60]!r}")
+                out.append(ManifestAnswer(code, gid))
+            else:
+                raise ConnectionError(f"unexpected XUN-MANIFESTS answer: {code} {text[:40]!r}")
+        return out
+
+    async def manifests_all(self, entries: list[tuple[str, str | None]]
+                            ) -> dict[str, ManifestAnswer]:
+        """XUN-MANIFESTS for any number of groups: in requests of the node's maximum,
+        asking again for lines answered 431 (section 2.3). Keyed by Group ID."""
+        try:
+            limit = max(1, int((self.capability("UNSEENET-MANIFESTS") or "").split()[0]))
+        except (IndexError, ValueError):
+            limit = MANIFESTS_MAX
+        todo = list(dict(entries).items())          # no Group ID twice (2.1)
+        out: dict[str, ManifestAnswer] = {}
+        while todo:
+            batch, todo = todo[:limit], todo[limit:]
+            answers = await self.manifests(batch)
+            again = [(a.group_id, dict(batch)[a.group_id]) for a in answers if a.code == 431]
+            if len(again) == len(batch):            # a node must send at least one
+                raise ConnectionError("XUN-MANIFESTS: the node sent nothing")
+            out.update((a.group_id, a) for a in answers if a.code != 431)
+            todo = again + todo
+        return out
 
     async def quit(self) -> None:
         try:
