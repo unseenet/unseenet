@@ -63,6 +63,23 @@ Item
 : One entry of a node's key-bound state: the pair (*key*, *value*) where
   *key* = SHA-256(Group ID) and *value* = SHA-256(Message-ID of the
   current manifest), both 32 octets, written as 64 lowercase hex digits.
+  Both are hashed as UTF-8 octets, exactly as they appear in the
+  article: the Group ID as in `Newsgroups`, and the Message-ID **with**
+  its angle brackets `<` and `>`, as in the `Message-ID` header. An
+  implementation that hashes the Message-ID without them computes
+  different fingerprints for every range, and two nodes never agree.
+
+  Test vector: Group ID `profile@example` and Message-ID
+  `<abc@example>` give
+
+  ```
+  key   545adb31607abddce27addb5f721edb1300bdd50fc5728de3461585c8a0b2828
+  value 5f0aa3f59b76dab7882d61597fc575585207cdfd34e08f54035576c9326eafa8
+  ```
+
+  and a range holding only this item has the fingerprint
+  `1a7d54bbcaac7496050261a6ad763789` (section 4.2). Without the angle
+  brackets, *value* would be `5f53878e...`, which is wrong.
 
 # 3. Not Listed
 
