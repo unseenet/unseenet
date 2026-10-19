@@ -28,7 +28,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   Reply hide where they would be refused and give the reason when used
   anyway; a channel post whose comments have closed says "Comments
   closed". The node still has the last word.
-
+- Search and filter the group list (#13). In the group browser (`g`)
+  just typing, or `/`, searches; in your own list `/` does. Words match
+  a group's name, title and description; `type:chat`, `type:open`,
+  `type:moderated`, `type:channel`, `type:closed`, `type:local`,
+  `owner:me`, `subscribed`/`-subscribed` and wildmats like `dk.*`
+  narrow it. Esc clears the search first. The search runs in the client,
+  so the node learns nothing about what you look for; for `type:` the
+  client reads the manifests of the listed groups it lacks in a few
+  `XUN-MANIFESTS` requests (UN-RFC 0041), checked like any manifest, and
+  never reads whole groups for it on older nodes. Core:
+  `unseenet.client.groupfilter`, `Session.filter_groups`,
+  `Session.group_manifests`, for the web client too.
 - `XUN-MANIFESTS` (UN-RFC 0041, #218): nodes return the current
   manifests of up to 256 groups in one answer and advertise
   `UNSEENET-MANIFESTS 256`; an answer carries at most 1 MiB of articles,

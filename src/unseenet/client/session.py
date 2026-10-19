@@ -195,6 +195,47 @@ class Session:
         entry = self.data["identities"][name or self.default_identity_name()]
         return crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
 
+    def my_fingerprints(self) -> tuple[str, ...]:
+        """The fingerprints of all your identities (owner:me in a group search, #13)."""
+        return tuple(crypto.fingerprint(crypto.Identity.from_seed(bytes.fromhex(e["seed"])).public_key)
+                     for e in self.data["identities"].values())
+
+    def filter_groups(self, groups: list["GroupInfo"], query: str,
+                      known: dict | None = None) -> list["GroupInfo"]:
+        """The groups that match a search (#13, ``client.groupfilter``), locally.
+        ``known``: manifest data fetched for groups you do not follow."""
+        from . import groupfilter
+        f = groupfilter.parse(query)
+        if not f:
+            return list(groups)
+        mine, known = self.my_fingerprints(), known or {}
+        return [g for g in groups if groupfilter.matches(
+            f, g.group_id, description=g.description, gtype=g.type,
+            data=known.get(g.group_id) or self.manifest_data(g.group_id),
+            subscribed=g.subscribed, my_fingerprints=mine)]
+
+    async def group_manifests(self, groups: list["GroupInfo"], known: dict) -> int:
+        """Fetch the manifests of listed groups whose type is not known yet, from the
+        node that carries each, in a few requests (UN-RFC 0041), into ``known``
+        (Group ID -> manifest data) and each GroupInfo's type. Asking for all of them
+        tells a node nothing about what you search for. Returns how many were asked."""
+        todo: dict[str | None, list[GroupInfo]] = {}
+        for g in groups:
+            if g.type or g.group_id in known or self.manifest_data(g.group_id):
+                continue
+            todo.setdefault(g.nodes[0] if g.nodes else None, []).append(g)
+        asked = 0
+        for node, items in todo.items():
+            found = await self.fetch_manifests([g.group_id for g in items], node,
+                                               fallback=False)
+            for g in items:
+                m = found.get(g.group_id)
+                known[g.group_id] = dict(m.raw) if m else {}
+                if m:
+                    g.type = m.type
+            asked += len(items)
+        return asked
+
     def display_name(self, name: str | None = None) -> str:
         return self.data["identities"][name or self.default_identity_name()]["display"]
 
@@ -1260,12 +1301,15 @@ class Session:
                 best = m
         return best
 
-    async def fetch_manifests(self, group_ids: list[str], node: str | None = None) -> dict:
+    async def fetch_manifests(self, group_ids: list[str], node: str | None = None,
+                              fallback: bool = True) -> dict:
         """The current manifests of many groups, Group ID -> Manifest or None.
 
         With XUN-MANIFESTS (UN-RFC 0041) in requests of up to 256 groups; else one
         group at a time. Cached Message-IDs are not named (section 3.3), so a node
-        cannot recognise this client by what it holds."""
+        cannot recognise this client by what it holds. ``fallback`` False: on a node
+        without the command, ask nothing (single lookups read whole groups, fine for
+        profile groups but not for ordinary ones) and return None for each."""
         wanted = list(dict.fromkeys(group_ids))
         by_node: dict[str | None, list[str]] = {}
         for gid in wanted:
@@ -1274,6 +1318,8 @@ class Session:
         for address, gids in by_node.items():
             async def run(c: Client, gids=gids):
                 if c.capability("UNSEENET-MANIFESTS") is None:
+                    if not fallback:
+                        return {g: None for g in gids}
                     return {g: await self._manifest_by_group(c, g) for g in gids}
                 answers = await c.manifests_all([(g, None) for g in gids])
                 return {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
