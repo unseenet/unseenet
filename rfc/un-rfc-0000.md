@@ -142,6 +142,7 @@ The protocol is designed to be extended without breaking old software:
 | 0032 | Mention Notices                               | Standards Track |
 | 0033 | Pinned Posts                                  | Standards Track |
 | 0034 | Feeds and Following                           | Standards Track |
+| 0035 | Pages and Sites                               | Standards Track |
 | 0036 | Attestations                                  | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
