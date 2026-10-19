@@ -38,8 +38,10 @@ async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
     async with app.run_test(size=(140, 45)) as pilot:
         assert await wait_for(pilot, lambda: app.session is not None)
         app.action_edit_profile()
-        await pilot.pause(0.2)
-        await pilot.click("#ok")                     # the warning before the first profile
+        # the warning before the first profile: wait for it rather than for a fixed time,
+        # the dialog is pushed from a worker and slow runners need longer than 0.2 s
+        assert await wait_for(pilot, lambda: type(app.screen).__name__ == "ConfirmDialog")
+        await pilot.click("#ok")
         assert await wait_for(pilot, lambda: bool(app.screen.query("#about")))
         app.screen.query_one("#about", TextArea).text = "Laver Unseenet"
         app.screen.query_one("#lang", Input).value = "da, en"
@@ -53,7 +55,7 @@ async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
         key = app.session.identity().key_text
         p = await app.session.profile_of(key)
         app.push_screen(ProfileDialog(key, "Andreas", p, mine=True))
-        await pilot.pause(0.2)
+        assert await wait_for(pilot, lambda: bool(app.screen.query("#profile-text")))
         text = str(app.screen.query_one("#profile-text").render())
         assert "Laver Unseenet" in text and "github: andlo  (code)" in text
         await pilot.press("escape")

@@ -18,17 +18,21 @@ async def test_contacts_and_recipient_by_name(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
     app = UnseenetApp(tmp_path / "me.vault")
     async with app.run_test(size=(120, 36)) as pilot:
-        for _ in range(100):
+        for _ in range(200):
             if app.session is not None:
                 break
             await pilot.pause(0.05)
+        assert app.session is not None
         assert app._recipient("sonia") == sonia                 # a name, any case
         assert app._recipient("Mik") == mikkel                  # the start of one
         assert app._recipient("Mi") is None                     # Mikkel and Mia: say which
         assert app._recipient("nobody") is None
         assert app._recipient(mia) == mia                       # a key still works
         app.action_contacts()
-        await pilot.pause(0.3)
+        for _ in range(200):                                     # pushed from a worker
+            if isinstance(app.screen, ContactsDialog):
+                break
+            await pilot.pause(0.05)
         assert isinstance(app.screen, ContactsDialog)
         await pilot.press("escape")
         await pilot.press("q")
