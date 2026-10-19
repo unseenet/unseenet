@@ -245,6 +245,13 @@ Owners change the title, description, rules, view and delivery with
 **Edit group** in the command palette (or the button in the ++question-mark++
 window). Every node gets the new version.
 
+Rules can be [Markdown](#formatting-markdown-and-emoji) - tick *Markdown*
+under the text - so a charter can have headings such as "Allowed" and
+"Not allowed", numbered lists and links. Pictures are not possible in
+rules: they live in the group's signed settings, which cannot carry
+attachments. Older clients show Markdown rules as the text you typed,
+which reads fine too ([UN-RFC 0014](spec/un-rfc-0014.md) section 2.1).
+
 ![About a group (?): its owner, type, postage, how long posts are kept, and its rules](img/client-group-info.svg)
 
 ## Leaving and removing groups
@@ -473,7 +480,10 @@ directions, in order. ++n++ there writes them a post instead.
 ## Your profile
 
 You can publish a short public profile: a few lines about yourself, the
-languages you write and links to your other accounts. Ctrl+P → **Your
+languages you write and links to your other accounts. With *Markdown*
+ticked, the lines about you can be a small home page: headings, lists,
+**strong** text, quotes, links and emoji, up to 2048 characters - but no
+pictures (your picture has its own place). Ctrl+P → **Your
 profile** writes, changes or removes it; links go one per line, as
 `kind address`, for example `github andlo` or
 `mastodon @andlo@fosstodon.org`.

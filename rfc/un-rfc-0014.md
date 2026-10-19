@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0014                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0004
+Updates: 0004, 0031
 
                   Unseenet: Group Rules (Charters)
 ```
@@ -29,7 +29,8 @@ UN-RFC 0004 section 3.1 is extended with:
 
 | Field   | Type   | Meaning                                                   |
 |---------|--------|-----------------------------------------------------------|
-| `rules` | string | The charter: purpose and rules, plain text, max 8192 characters |
+| `rules` | string | The charter: purpose and rules, max 8192 characters |
+| `rules_type` | string | How `rules` is written: `text/plain` (the default) or Markdown (section 2.1) |
 
 The existing fields `title` (one line) and `description` (a short
 paragraph) remain for listings; `rules` is the full text.
@@ -40,7 +41,30 @@ see that the rules changed by the serial.
 
 For closed groups, the manifest is public (UN-RFC 0004 section 6.6).
 Owners who do not want the rules to be public SHOULD put them in the
-encrypted `sealed` object instead, under the same name `rules`.
+encrypted `sealed` object instead, under the same names `rules` and
+`rules_type`.
+
+## 2.1 Plain Text or Markdown
+
+`rules_type` takes the same values as a post's `Content-Type`
+(UN-RFC 0031 section 2):
+
+- absent or `text/plain; charset=utf-8`: plain text;
+- `text/markdown; charset=utf-8; variant=unseenet`: Markdown, with the
+  subset of a post (UN-RFC 0031 section 3.2) **without images**, since a
+  manifest cannot reference blobs (UN-RFC 0027 section 7.1). An image is
+  shown as its alt text.
+
+Any other value is shown as plain text, and so is the text in a client
+that does not know the field - which is what Markdown is written to
+read like. Headings, lists and links let a charter have a structure
+("Purpose", "Allowed", "Not allowed", "Moderators") rather than being
+one block of text. A "read this first" post or FAQ belongs in a pinned
+post (UN-RFC 0033), not in the rules.
+
+Without `rules_type`, `rules` is plain text, so the field is optional
+and older manifests mean what they always meant. The limit of 8192
+characters counts the source text.
 
 # 3. Clients
 
@@ -53,8 +77,11 @@ A client:
 - SHOULD remind the reader that the group has rules when they write
   their first post in it.
 
-Rules are plain text and MUST be displayed as such, never interpreted as
-markup or followed as links automatically.
+Plain rules MUST be displayed as text, never interpreted as markup.
+Markdown rules are displayed as section 2.1 says. Either way, links in
+rules MUST NOT be followed without the reader's action (UN-RFC 0031
+section 3.4). A client that lets the owner write rules SHOULD offer the
+same choice of plain text or Markdown as its post editor.
 
 # 4. Enforcement
 

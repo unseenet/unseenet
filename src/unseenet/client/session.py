@@ -670,7 +670,8 @@ class Session:
                            retention_days: int | None = None, rules: str = "",
                            view: str | None = None, low_latency: bool = False,
                            kinds: list[str] | None = None, node: str | None = None,
-                           comments: str | None = None, comment_days: int | None = None) -> str:
+                           comments: str | None = None, comment_days: int | None = None,
+                           rules_type: str | None = None) -> str:
         owner = self.identity()
         node = node or self.node
         if retention_days is None:
@@ -678,6 +679,7 @@ class Session:
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
                             rules=rules, view=view, low_latency=low_latency, kinds=kinds,
+                            rules_type=rules_type,
                             comments=comments if gtype == "channel" else None,
                             comment_days=comment_days if gtype == "channel" else None,
                             pow_bits=await self.required_pow(None, node=node))
@@ -865,8 +867,8 @@ class Session:
     async def update_group(self, group_id: str, **changes) -> dict:
         """Publish a new manifest with a higher serial (owner only).
 
-        Allowed changes: title, description, rules, view, kinds, low_latency, min_pow,
-        retention_days. Type, owner and locality can never change (UN-RFC 0004, 4).
+        Allowed changes: title, description, rules, rules_type (UN-RFC 0014 2.1), view,
+        kinds, low_latency, min_pow, retention_days. Type, owner and locality can never change (UN-RFC 0004, 4).
         """
         entry = self.data["groups"].get(group_id, {})
         if not entry.get("owner"):
@@ -874,7 +876,7 @@ class Session:
         data = self.manifest_data(group_id)
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
-        allowed = {"title", "description", "rules", "view", "low_latency", "min_pow",
+        allowed = {"title", "description", "rules", "rules_type", "view", "low_latency", "min_pow",
                    "retention_days", "banned", "moderators", "posters", "kinds",
                    "comments", "comment_days"}
         if ("comments" in changes or "comment_days" in changes) and data.get("type") != "channel":
@@ -891,6 +893,7 @@ class Session:
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
             if value in (None, "", False, []) and key in ("title", "description", "rules",
+                                                         "rules_type",
                                                          "low_latency", "banned", "moderators",
                                                          "posters", "kinds", "comments",
                                                          "comment_days"):
@@ -899,6 +902,8 @@ class Session:
                 data[key] = value
         if len(data.get("rules", "")) > MAX_RULES:
             raise SessionError(f"rules are limited to {MAX_RULES} characters")
+        if not data.get("rules"):
+            data.pop("rules_type", None)          # no text, no type
         if data.get("view", "threads") not in VIEWS:
             raise SessionError("view must be threads or chat")
         try:

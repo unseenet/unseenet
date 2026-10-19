@@ -208,6 +208,8 @@ ModalScreen { align: center middle; }
 .dialog.list Tree, .dialog.list DataTable { height: 1fr; min-height: 3; }
 .dialog .details { height: auto; max-height: 10; margin-top: 1; padding: 0 1;
                    border-left: thick $primary-darken-2; color: $text; }
+#profile-view { height: auto; max-height: 24; margin-top: 1; padding: 0 1;
+                border-left: thick $primary-darken-2; }
 #names-details { margin: 1 0 1 0; }        /* the key line must not touch the field below */
 .dialog Label.title { text-style: bold; margin-bottom: 1; }
 .dialog Input, .dialog Select { margin-bottom: 1; }
@@ -559,6 +561,7 @@ class CreateGroupDialog(Dialog):
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
             yield Label("Rules (optional) - shown to people before they post:", classes="hint")
             yield TextArea("", id="rules", soft_wrap=True)
+            yield Checkbox(MARKDOWN_HINT, id="markdown", value=writes_markdown(self.app, None, ""))
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Create", variant="primary", id="ok")
@@ -596,6 +599,9 @@ class CreateGroupDialog(Dialog):
                       "title": self.query_one("#title", Input).value.strip(),
                       "local": self.query_one("#where", Select).value == "local",
                       "rules": self.query_one("#rules", TextArea).text.strip(),
+                      "rules_type": markup.text_type_for(
+                          self.query_one("#markdown", Checkbox).value,
+                          self.query_one("#rules", TextArea).text),
                       "view": view, "low_latency": fast,
                       "kinds": KINDS[self.query_one("#kinds", Select).value],
                       "comments": self.query_one("#comments", Select).value})
@@ -848,6 +854,26 @@ def identicon_text(key_text: str):
     return text
 
 
+MARKDOWN_HINT = "Markdown - # headings, - lists, **strong**, [links](https://...), :tada: (no pictures)"
+
+
+def manifest_text(text: str, text_type: str | None) -> Text:
+    """A profile's about or a group's rules, plain or Markdown (UN-RFC 0022 4.1, 0014 2.1)."""
+    return richtext.blocks(markup.manifest_text(profiles_clean(text), text_type))
+
+
+def profiles_clean(text: str) -> str:
+    return prof.clean_text(text or "")
+
+
+def writes_markdown(app, text_type: str | None, text: str) -> bool:
+    """Start an editor in Markdown if the text already is, or, for new text, if posts are."""
+    if (text or "").strip():
+        return markup.is_markdown(text_type)
+    s = getattr(app, "session", None)
+    return s is None or s.text_type() == markup.MARKDOWN_TYPE
+
+
 class ProfileDialog(Dialog):
     """Someone's profile (UN-RFC 0022 section 9.2): names, short form, about, lang, links."""
 
@@ -868,9 +894,11 @@ class ProfileDialog(Dialog):
                 yield Static("No public profile." if not self.hidden else
                              "You have hidden this profile.", markup=False)
             else:
-                lines = []
+                out = Text()
                 if p.about:
-                    lines += [p.about, ""]
+                    out.append_text(manifest_text(p.about, p.about_type))
+                    out.append("\n\n")
+                lines = []
                 if p.lang:
                     lines.append("Writes: " + ", ".join(p.lang))
                 if p.links:
@@ -878,8 +906,11 @@ class ProfileDialog(Dialog):
                     for link in p.links:
                         label = f"  ({link['label']})" if link.get("label") else ""
                         lines.append(f"  {link['kind']}: {link['value']}{label}")
-                yield Static("\n".join(lines).strip(), id="profile-text", classes="details",
-                             markup=False)
+                out.append("\n".join(lines))
+                out.rstrip()
+                # a scroll of its own: with Markdown, about can be a small home page
+                with VerticalScroll(id="profile-view"):
+                    yield Static(out, id="profile-text", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
                 if not self.mine:
@@ -904,8 +935,10 @@ class EditProfileDialog(Dialog):
                            for link in c.get("links", []))
         with Vertical(classes="dialog compose"):
             yield Label("Your public profile - anybody can read it", classes="title")
-            yield Label("About you, as plain text:", classes="hint")
+            yield Label("About you - a few lines, or a small home page:", classes="hint")
             yield TextArea(c.get("about", ""), id="about", soft_wrap=True)
+            yield Checkbox(MARKDOWN_HINT, id="markdown",
+                           value=writes_markdown(self.app, c.get("about_type"), c.get("about", "")))
             yield Input(value=", ".join(c.get("lang", [])), id="lang",
                         placeholder="Languages you write, e.g. da, en")
             yield Label("Links, one per line: kind value  (kinds: " + ", ".join(prof.LINK_KINDS)
@@ -938,7 +971,8 @@ class EditProfileDialog(Dialog):
         lang = [t.strip() for t in self.query_one("#lang", Input).value.split(",") if t.strip()]
         try:
             obj = prof.make_profile(self.query_one("#about", TextArea).text, links, lang,
-                                    bot=self.current.get("bot") is True)
+                                    bot=self.current.get("bot") is True,
+                                    markdown=self.query_one("#markdown", Checkbox).value)
         except prof.ProfileError as exc:
             self.app.notify(str(exc), severity="error")
             return
@@ -998,7 +1032,7 @@ class GroupInfoDialog(Dialog):
             yield Label("Rules" if d.get("rules") else "This group has no rules.", classes="title")
             if d.get("rules"):
                 with VerticalScroll(id="rules-view"):
-                    yield Static(d["rules"], markup=False)
+                    yield Static(manifest_text(d["rules"], d.get("rules_type")), markup=False)
             with Horizontal(classes="buttons"):
                 if self.can_edit:
                     yield Button("Edit group", id="edit")
@@ -1041,6 +1075,8 @@ class EditGroupDialog(Dialog):
                         id="min_pow")
             yield Label("Rules - shown to people before their first post:", classes="hint")
             yield TextArea(d.get("rules", ""), id="body", soft_wrap=True)
+            yield Checkbox(MARKDOWN_HINT, id="markdown",
+                           value=writes_markdown(self.app, d.get("rules_type"), d.get("rules", "")))
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Publish", variant="primary", id="ok")
@@ -1060,6 +1096,8 @@ class EditGroupDialog(Dialog):
                    "description": self.query_one("#description", Input).value.strip(),
                    "rules": self.query_one("#body", TextArea).text.strip(),
                    "view": view, "low_latency": fast, "min_pow": min_pow}
+        changes["rules_type"] = markup.text_type_for(self.query_one("#markdown", Checkbox).value,
+                                                     changes["rules"])
         if self.data.get("type") == "channel":
             days = self.query_one("#comment_days", Input).value.strip()
             if days and (not days.isdigit() or int(days) < 1):
@@ -2740,7 +2778,8 @@ class UnseenetApp(App):
         try:
             gid = await self.session.create_group(
                 result["name"], result["gtype"], result["title"], local=result["local"],
-                rules=result["rules"], view=result["view"], low_latency=result["low_latency"],
+                rules=result["rules"], rules_type=result.get("rules_type"),
+                view=result["view"], low_latency=result["low_latency"],
                 kinds=result.get("kinds"), comments=result.get("comments"),
                 min_pow=16 if result["low_latency"] else sess_default_pow())
         except (SessionError, ValueError, OSError, ConnectionError) as exc:

@@ -204,6 +204,7 @@ class Manifest:
     local: bool = False
     submissions: str | None = None
     rules: str = ""                      # UN-RFC 0014
+    rules_type: str | None = None        # UN-RFC 0014 2.1: Markdown or plain
     view: str = "threads"                # UN-RFC 0008
     low_latency: bool = False            # UN-RFC 0008
     kinds: tuple[str, ...] = MESSAGE_KINDS   # UN-RFC 0028, 4.1
@@ -234,6 +235,8 @@ class Manifest:
                 title=data.get("title", ""), description=data.get("description", ""),
                 local=data.get("local") is True, submissions=data.get("submissions"),
                 rules=str(data.get("rules", "")), view=data.get("view", "threads"),
+                rules_type=(data["rules_type"] if isinstance(data.get("rules_type"), str)
+                            else None),
                 low_latency=data.get("low_latency") is True,
                 # an inbox takes both kinds, whatever it says (UN-RFC 0028, 4.1)
                 kinds=MESSAGE_KINDS if data.get("type") == "inbox" else _kinds(data),
@@ -293,7 +296,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   local: bool = False, submissions: str | None = None,
                   rules: str = "", view: str | None = None, low_latency: bool = False,
                   kinds: list[str] | None = None, comments: str | None = None,
-                  comment_days: int | None = None, pow_bits: int = 18) -> Article:
+                  comment_days: int | None = None, pow_bits: int = 18,
+                  rules_type: str | None = None) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -315,6 +319,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["submissions"] = submissions
     if rules:
         data["rules"] = rules
+        if rules_type:
+            data["rules_type"] = rules_type
     if view:
         data["view"] = view
     if low_latency:
@@ -340,6 +346,9 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
     allows, so every new manifest of such a group is also its renewal."""
     if len(data.get("rules", "")) > MAX_RULES:
         raise ValueError(f"rules are limited to {MAX_RULES} characters")
+    if "rules_type" in data and (not isinstance(data["rules_type"], str)
+                                 or len(data["rules_type"]) > 128):
+        raise ValueError("rules_type is a Content-Type of at most 128 characters")
     if data.get("view", "threads") not in VIEWS:
         raise ValueError("view must be one of " + ", ".join(VIEWS))
     _kinds(data)                                           # UN-RFC 0028, 4.1

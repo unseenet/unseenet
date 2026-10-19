@@ -9,6 +9,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Profiles and group rules can be Markdown (#211, UN-RFC 0022 section
+  4.1 and 0014 section 2.1, amended): the new optional `about_type` and
+  `rules_type` fields take a post's Content-Type, and the text gets the
+  post subset of UN-RFC 0031 without images (manifests cannot hold blobs).
+  Readers that don't know the fields show the text as typed, so it is
+  compatible both ways. The terminal client renders both with the post
+  renderer, the profile in a scroll of its own, and its profile, create
+  and edit dialogs have a *Markdown* box (on for new text when you write
+  posts in Markdown). Core: `markup.manifest_text`, `markup.text_type_for`,
+  `make_profile(markdown=)`, `Profile.about_type`, `Manifest.rules_type`.
 - The client can use a Tor that is already running instead of starting
   its own, so it works in Tails (#140). On Tails it uses Tails' Tor by
   itself; elsewhere choose with Ctrl+P → *Tor: which Tor*,

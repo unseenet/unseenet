@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0022                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0004, 0008, 0011
+Updates: 0004, 0008, 0011, 0031
 
                     Unseenet: Profiles for Identities
 ```
@@ -77,6 +77,7 @@ A profile is a JSON object in canonical JSON (UN-RFC 0004 section 3):
 |---------|------------------|------|-------------------------------------------------|
 | `v`     | integer          | yes  | `1`                                             |
 | `about` | string           | no   | Free text, at most 2048 characters (4.1)        |
+| `about_type` | string      | no   | How `about` is written: `text/plain` (the default) or Markdown (4.1) |
 | `links` | array of objects | no   | At most 16 links (4.2)                          |
 | `lang`  | array of strings | no   | Languages the identity writes, as BCP 47 tags (`da`, `en`), at most 8 |
 | `bot`   | boolean          | no   | `true`: the identity posts automatically (UN-RFC 0030 section 6) |
@@ -90,10 +91,28 @@ identity's articles (UN-RFC 0002), and its names are its certificates.
 
 ## 4.1 About
 
-`about` is plain text in UTF-8. Lines are separated by LF. Clients MUST
-show it as text: no markup, no links made clickable, no terminal
-control characters (they MUST replace C0 and C1 control characters other
-than LF with a visible substitute).
+`about` is text in UTF-8. Lines are separated by LF. Clients MUST NOT
+show terminal control characters in it (they MUST replace C0 and C1
+control characters other than LF with a visible substitute).
+
+`about_type` says how it is written, with the same values as a post's
+`Content-Type` (UN-RFC 0031 section 2):
+
+- absent or `text/plain; charset=utf-8`: plain text. Clients MUST show
+  it as text: no markup, no links made clickable.
+- `text/markdown; charset=utf-8; variant=unseenet`: Markdown, with the
+  subset of a post (UN-RFC 0031 section 3.2) **without images**. A
+  profile lives in a manifest, and a manifest cannot reference blobs
+  (UN-RFC 0027 section 7.1); the picture has its own group (section 8).
+  An image in `about` is shown as its alt text, as UN-RFC 0031 section
+  3.5 shows an image that cannot be had. Links follow UN-RFC 0031
+  section 3.4: shown with where they go, never opened without the
+  reader's action.
+
+Any other value is shown as plain text. A client that does not know
+`about_type` shows the text as plain text, which is what Markdown is
+written to read like; that keeps the field compatible both ways. The
+limit of 2048 characters counts the source text.
 
 ## 4.2 Links
 
@@ -410,8 +429,11 @@ fingerprint (UN-RFC 0019 section 8), never instead of it.
 - A client SHOULD let the user open the profile of any author, member
   or name holder, showing in this order: the names of UN-RFC 0019
   section 8, the short form, `about`, `lang`, then the links.
-- It MUST show `about` and links as text (4.1, 4.2) and MUST NOT show
-  profile text as if it were part of a post.
+- It MUST show `about` as section 4.1 says - as text, or as Markdown
+  without images when `about_type` says so - and links as text (4.2),
+  and MUST NOT show profile text as if it were part of a post.
+- A client that lets the user write a profile SHOULD offer the same
+  choice of plain text or Markdown as its post editor.
 - It MUST NOT open a link in a browser, fetch it, or fetch anything it
   points to, by itself. It MAY copy a link to the clipboard when asked,
   and MAY hand an `onion` link to Tor Browser when asked.
@@ -555,6 +577,7 @@ inner article.
 - UN-RFC 0008 section 3.1.1: profile and avatar groups are data groups.
 - UN-RFC 0011 section 4: the policy fields `profiles` and `avatars`
   (section 10).
+- UN-RFC 0031: `about` may be Markdown without images (section 4.1).
 - UN-RFC 0000 section 6: 0022 is added to the index.
 
 # Copyright Notice
