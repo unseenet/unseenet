@@ -203,3 +203,11 @@ async def test_readers_get_one_exchange_per_connection():
         await c2.quit()
     finally:
         server.close()
+
+
+def test_vector_of_un_rfc_0040_section_2():
+    """The test vector in UN-RFC 0040 section 2: Message-ID hashed with <>."""
+    key, value = rc.item_key("profile@example"), rc.item_value("<abc@example>")
+    assert key.hex() == "545adb31607abddce27addb5f721edb1300bdd50fc5728de3461585c8a0b2828"
+    assert value.hex() == "5f0aa3f59b76dab7882d61597fc575585207cdfd34e08f54035576c9326eafa8"
+    assert rc.fingerprint(1, rc.item_hash(key, value)) == "1a7d54bbcaac7496050261a6ad763789"
