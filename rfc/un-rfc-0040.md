@@ -274,17 +274,33 @@ larger than:
 
 | Group        | Largest manifest article | Why                                          |
 |--------------|--------------------------|----------------------------------------------|
-| `inbox@`     | 8 KiB                    | Settings and the owner's own bans            |
+| `inbox@`     | 16 KiB                   | Settings and about 100 of the owner's own bans |
 | `feed@`      | 8 KiB                    | Settings (UN-RFC 0034)                        |
-| `profile@`   | 12 KiB                   | Profile of at most 8192 octets (UN-RFC 0022 section 4.4) |
-| `avatar@`    | 16 KiB                   | Picture of at most 8192 octets (UN-RFC 0022 section 8.1) |
+| `profile@`   | 10 KiB                   | Follows from the profile's 8192 octets (UN-RFC 0022 section 4.4) |
+| `avatar@`    | 12 KiB                   | Follows from the picture's 8192 octets (UN-RFC 0022 section 8.1) |
 | `names@`     | 64 KiB                   | Issuers only (UN-RFC 0019)                    |
 | `attest@`    | 64 KiB                   | Issuers only; revocations are sharded (UN-RFC 0036 section 7) |
 | `site@`      | 64 KiB                   | Only where the operator carries sites (UN-RFC 0035) |
 
-So an ordinary person costs every full node at most 44 KiB of state
-(inbox, feed, profile, picture), and typically a few KiB; an issuer or a
-site owner at most 236 KiB more. Articles posted in key-bound groups are
+The numbers are measured (October 2026), with the reference
+implementation, on the largest manifests the other documents allow and
+on the real ones in the network:
+
+| Group      | Largest allowed | Real (median) | Grows with                         |
+|------------|-----------------|---------------|------------------------------------|
+| `profile@` | 8.6 KiB         | 0.9 KiB       | the profile, at most 8192 octets   |
+| `avatar@`  | 11.5 KiB        | 4.8 KiB       | the picture, at most 8192 octets   |
+| `inbox@`   | 64 KiB without this limit | 0.6 KiB | about 160 octets per ban        |
+
+The limits of `profile@` and `avatar@` add room for postage headers
+and change nothing that was allowed. The `inbox@` limit is the one new
+constraint: about 100 bans. Banning single keys does not stop spam from
+throwaway keys anyway; key ripening and spam reports do (unseenet #121,
+#122).
+
+So an ordinary person costs every full node at most 46 KiB of state
+(inbox, feed, profile, picture), and typically 1.5 to 6.5 KiB; an
+issuer or a site owner at most 192 KiB more. Articles posted in key-bound groups are
 not state: they are limited by size, postage and retention like every
 article. A key-bound group that is not renewed expires (UN-RFC 0029
 section 5), so what a node carries follows the number of **active**
@@ -313,7 +329,7 @@ identities, not of every key ever seen.
   ranges are kept as running sums, so answering `F` is a lookup.
 - **Scale.** At the targets of UN-RFC 0001 section 1.2, with one million
   active identities and about four key-bound groups each:
-  - state: typically a few GB per full node, at most about 44 GB for
+  - state: typically 2 to 7 GB per full node, at most about 46 GB for
     ordinary identities (section 9);
   - the item index: key, value and Message-ID, about 130 octets each,
     some 500 MB;
@@ -341,13 +357,11 @@ identities, not of every key ever seen.
 - **Why limits per group in section 9?** The rule of UN-RFC 0000 section
   4 asks for a bound per identity, and the article limit of 64 KiB alone
   would allow 448 KiB per key - too much at a million keys for a full
-  node on a free-tier VM.
+  node on a free-tier VM. The load generator (unseenet #219) will check
+  the totals at scale.
 
 # 12. Open Issues
 
-- The limits of section 9 are first estimates and should be checked
-  against real manifests with the load generator (unseenet #219) before
-  this document leaves Draft.
 - Whether a partial node should answer a missing key-bound group at
   once with `411` and fetch it in the background, or hold the answer
   for a few seconds while it fetches (section 8).
