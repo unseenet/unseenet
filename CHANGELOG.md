@@ -29,6 +29,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   reconciles in the next step. Core: `unseenet.core.reconcile`
   (`answer`, `reconcile`), `Store.kb_count_sum`, `Store.kb_items`,
   `Client.reconcile`.
+- Pulling reconciles key-bound state before `NEWNEWS` (UN-RFC 0040
+  section 6, third step of #217): on the first pull from a peer, after a
+  pause of more than 7 days, once a day at a random time, and soon after
+  a peer offered an article whose key-bound group's manifest we lack. What
+  we lack is fetched first; what the peer lacks is queued for its feeder.
+  A new node catching up with 100 000 items needs 9 rounds and never asks
+  for more than about 16 000 listed items at once.
+  - An article in a key-bound group whose manifest the node does not hold
+    is no longer refused at once: when pulled, the node fetches the
+    group's manifests from the same peer and takes the article; when
+    pushed, it answers "try again later" (431/436) for up to six hours and
+    reconciles with that peer at its next pull.
+  - Core: `Node.offer`, `Store.reconcile_due`, `Store.set_reconciled`;
+    `core.reconcile.reconcile` starts with a fingerprint, lists only where
+    the peer has few items, and returns what it found with
+    `complete=False` instead of failing at `max_rounds`.
 - Profiles and group rules can be Markdown (#211, UN-RFC 0022 section
   4.1 and 0014 section 2.1, amended): the new optional `about_type` and
   `rules_type` fields take a post's Content-Type, and the text gets the

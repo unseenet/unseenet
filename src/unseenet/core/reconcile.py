@@ -182,22 +182,18 @@ class MemorySource:
 
 
 def describe(source: Source, lo: int, hi: int) -> Range:
-    """Our own F line for a range, or our L line if we hold few enough items."""
+    """Our F line for a range."""
     count, total = source.kb_count_sum(lo, hi)
-    if count <= LIST_MAX:
-        return Range(lo, hi, "L", items=source.kb_items(lo, hi))
     return Range(lo, hi, "F", fingerprint(count, total), count)
 
 
 def _split_or_list(source: Source, lo: int, hi: int) -> list[Range]:
+    """The node's rule for a range that differs: list at most LIST_MAX items,
+    otherwise SPLIT parts as F lines."""
     count, _ = source.kb_count_sum(lo, hi)
     if count <= LIST_MAX:
         return [Range(lo, hi, "L", items=source.kb_items(lo, hi))]
-    out = []
-    for a, b in split(lo, hi):
-        c, t = source.kb_count_sum(a, b)
-        out.append(Range(a, b, "F", fingerprint(c, t), c))
-    return out
+    return [describe(source, a, b) for a, b in split(lo, hi)]
 
 
 def answer(source: Source, ranges: list[Range]) -> list[Range]:
@@ -218,13 +214,18 @@ def answer(source: Source, ranges: list[Range]) -> list[Range]:
 # ---------------------------------------------------------------------------
 # driving an exchange
 # ---------------------------------------------------------------------------
+CLIENT_LIST_MAX = 1024          # we list our items only where the peer has at most this many
+ANSWER_BUDGET = 16384           # items a message of ours may ask the peer to list back
+
+
 @dataclass
 class Result:
     need: list[str] = field(default_factory=list)      # Message-IDs to fetch from the peer
     offer: list[str] = field(default_factory=list)     # Message-IDs the peer lacks or differs on
     rounds: int = 0
-    their_count: int | None = None                     # the peer's items in the whole range
-    same: bool = False                                 # nothing differs
+    their_count: int | None = None                     # the peer's items in lo..hi
+    complete: bool = True                              # False: stopped at max_rounds
+    same: bool = False                                 # complete, and nothing differs
 
 
 def _compare(result: Result, ours: list[tuple[bytes, str]], theirs: list[tuple[bytes, str]]):
@@ -233,42 +234,76 @@ def _compare(result: Result, ours: list[tuple[bytes, str]], theirs: list[tuple[b
     result.offer += [m for k, m in ours if other.get(k) != m]
 
 
+def _next(source: Source, r: Range) -> list[Range]:
+    """What we send for a range the peer answered with an F line that differs.
+
+    The rule of section 4.3, with one restraint: we list our items only where the
+    peer, too, has few, since it answers an L line with all of its own. A node far
+    behind therefore splits further rather than asking for a big list."""
+    mine, _ = source.kb_count_sum(r.lo, r.hi)
+    if mine <= LIST_MAX and r.count <= CLIENT_LIST_MAX:
+        return [Range(r.lo, r.hi, "L", items=source.kb_items(r.lo, r.hi))]
+    return [describe(source, a, b) for a, b in split(r.lo, r.hi)]
+
+
+def _batches(pending: list[Range], their: dict[tuple[int, int], int]) -> list[list[Range]]:
+    """Messages of at most MAX_RANGES ranges, each asking for at most ANSWER_BUDGET
+    listed items back (what an L line costs is the peer's count there)."""
+    out: list[list[Range]] = []
+    cur: list[Range] = []
+    budget = 0
+    for r in pending:
+        cost = their.get((r.lo, r.hi), LIST_MAX) if r.kind == "L" else LIST_MAX
+        if cur and (len(cur) >= MAX_RANGES or budget + cost > ANSWER_BUDGET):
+            out.append(cur)
+            cur, budget = [], 0
+        cur.append(r)
+        budget += cost
+    if cur:
+        out.append(cur)
+    return out
+
+
 async def reconcile(send, source: Source, lo: int = 0, hi: int = FULL,
                     max_rounds: int = MAX_ROUNDS) -> Result:
     """Reconcile ``lo``..``hi`` with a peer.
 
     ``send`` is an async callable that takes a list of range lines and returns
-    the peer's answer lines (one ``XUN-RECONCILE`` command; see
-    :meth:`unseenet.nntp.Client.reconcile`). Returns what to fetch and what to
-    offer; nothing is fetched or accepted here.
+    the peer's answer lines: one ``XUN-RECONCILE`` round, such as
+    ``unseenet.nntp.Client.reconcile``. Returns what to fetch and what to offer;
+    nothing is fetched or accepted here. A node far behind may need more than
+    ``max_rounds``: then the result holds what was found so far, ``complete`` is
+    False, and a later exchange (with the fetched items in place) goes further.
     """
     result = Result()
     pending = [describe(source, lo, hi)]
+    their: dict[tuple[int, int], int] = {}
     first = True
     while pending:
-        sent, pending = pending[:MAX_RANGES], pending[MAX_RANGES:]
-        result.rounds += 1
-        if result.rounds > max_rounds:
-            raise ReconcileError(f"not settled in {max_rounds} rounds")
-        got = parse_message(await send(format_message(sent)), answer=True)
-        if first:
-            # the first answer covers lo..hi: its counts are the peer's whole state
-            first = False
-            if len(got) == 1 and got[0].kind == "=":
-                result.their_count = source.kb_count_sum(lo, hi)[0]
-            else:
-                result.their_count = sum(r.count if r.kind == "F" else len(r.items)
-                                         for r in got)
-        for r in got:
-            if r.kind == "=":
-                continue
-            if r.kind == "L":
-                _compare(result, source.kb_items(r.lo, r.hi), r.items)
-                continue
-            mine_count, mine_total = source.kb_count_sum(r.lo, r.hi)
-            if mine_count == r.count and fingerprint(mine_count, mine_total) == r.fp:
-                continue
-            pending += _split_or_list(source, r.lo, r.hi)     # the same rule as the node's
+        batches = _batches(pending, their)
+        pending = []
+        for sent in batches:
+            if result.rounds >= max_rounds:
+                result.complete = False
+                break
+            result.rounds += 1
+            got = parse_message(await send(format_message(sent)), answer=True)
+            if first:
+                # the first answer covers lo..hi: its counts are the peer's whole state
+                first = False
+                result.their_count = (sent[0].count if len(got) == 1 and got[0].kind == "="
+                                      else sum(r.count if r.kind == "F" else len(r.items)
+                                               for r in got))
+            for r in got:
+                if r.kind == "L":
+                    _compare(result, source.kb_items(r.lo, r.hi), r.items)
+                elif r.kind == "F":
+                    mine_count, mine_total = source.kb_count_sum(r.lo, r.hi)
+                    if mine_count != r.count or fingerprint(mine_count, mine_total) != r.fp:
+                        their[(r.lo, r.hi)] = r.count
+                        pending += _next(source, r)
+        if not result.complete:
+            break
         pending.sort(key=lambda r: r.lo)
-    result.same = not result.need and not result.offer
+    result.same = result.complete and not result.need and not result.offer
     return result

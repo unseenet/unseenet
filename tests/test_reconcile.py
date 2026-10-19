@@ -58,6 +58,27 @@ async def test_empty_side_and_tiny_sets():
     assert r.need == r.offer == [] and r.rounds == 1
 
 
+async def test_empty_node_catches_up_in_bounded_messages():
+    """A new node: never asks for a big list, and stops at max_rounds with what it found."""
+    peer = Store()
+    far = int(time.time()) + 10**7
+    for gid, msgid in _ids(20000, 7).items():
+        peer._kb_put(gid, msgid, far)
+    peer.db.commit()
+    biggest = 0
+
+    async def send(lines):
+        nonlocal biggest
+        out = rc.format_message(rc.answer(peer, rc.parse_message(lines)))
+        biggest = max(biggest, len(out))
+        return out
+    r = await rc.reconcile(send, Store(), max_rounds=4096)
+    assert r.complete and len(r.need) == 20000 and r.their_count == 20000
+    assert biggest <= rc.ANSWER_BUDGET + rc.MAX_RANGES
+    part = await rc.reconcile(send, Store(), max_rounds=2)
+    assert not part.complete and not part.same and part.rounds == 2
+
+
 def test_messages_are_checked():
     full = f"{0:064x} end"
     assert rc.parse_message([f"{full} F {'0' * 32} 3"])[0].count == 3
