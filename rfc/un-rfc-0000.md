@@ -133,6 +133,7 @@ The protocol is designed to be extended without breaking old software:
 | 0031 | Formatting: Markdown and Emoji                | Standards Track |
 | 0032 | Mention Notices                               | Standards Track |
 | 0033 | Pinned Posts                                  | Standards Track |
+| 0034 | Feeds and Following                           | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

@@ -128,6 +128,7 @@ nav:
       - "0031 Markdown and emoji": spec/un-rfc-0031.md
       - "0032 Mention notices": spec/un-rfc-0032.md
       - "0033 Pinned posts": spec/un-rfc-0033.md
+      - "0034 Feeds and following": spec/un-rfc-0034.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
