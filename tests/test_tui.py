@@ -1305,3 +1305,15 @@ async def test_tui_group_tree_drops_prefix_and_folds(tmp_path, monkeypatch):
         assert hist.is_expanded
         await pilot.press("q")
     server.close()
+
+
+async def test_confirm_dialog_focuses_cancel(tmp_path, monkeypatch):
+    """Enter must not confirm by accident: Cancel has the focus when the dialog opens."""
+    from unseenet.client.tui import ConfirmDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(120, 36)) as pilot:
+        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        app.push_screen(ConfirmDialog("Sure?", "Really.", confirm="Remove", danger=True))
+        assert await wait_for(pilot, lambda: getattr(app.focused, "id", None) == "cancel", 100)
+        await pilot.press("q")
+    server.close()
