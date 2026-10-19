@@ -636,6 +636,10 @@ class InfoDialog(Dialog):
 
 
 class ConfirmDialog(Dialog):
+    # Cancel has the focus, so Enter never confirms by accident. AUTO_FOCUS instead of
+    # querying in on_mount: closing the app while the dialog mounted raised NoMatches.
+    AUTO_FOCUS = "#cancel"
+
     def __init__(self, title: str, text: str, confirm: str = "OK", danger: bool = False):
         super().__init__()
         self.title_, self.text, self.confirm, self.danger = title, text, confirm, danger
@@ -647,9 +651,6 @@ class ConfirmDialog(Dialog):
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button(self.confirm, variant="error" if self.danger else "primary", id="ok")
-
-    def on_mount(self) -> None:
-        self.query_one("#cancel").focus()
 
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
