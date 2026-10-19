@@ -108,6 +108,28 @@ KIND_CHAT, KIND_POST = "chat", "post"
 MESSAGE_KINDS = (KIND_CHAT, KIND_POST)
 
 
+MAX_SUPERSEDES = 32       # earlier versions an edit may name (UN-RFC 0042 section 2)
+
+
+def parse_supersedes(art: Article) -> list[str]:
+    """The earlier versions an edit names, newest first (UN-RFC 0042 section 2);
+    [] for an article that is not an edit. Raises ArticleError('syntax') if the
+    header is malformed, names more than 32, the article itself or one twice."""
+    value = art.get("Supersedes")
+    if value is None:
+        return []
+    ids = value.split()
+    if not ids or any(not (i.startswith("<") and i.endswith(">") and len(i) > 2) for i in ids):
+        raise ArticleError("syntax", "Supersedes must list Message-IDs")
+    if len(ids) > MAX_SUPERSEDES:
+        raise ArticleError("syntax", f"Supersedes names more than {MAX_SUPERSEDES} versions")
+    if len(set(ids)) != len(ids) or art.message_id in ids:
+        raise ArticleError("syntax", "Supersedes names a version twice, or the edit itself")
+    if art.control:
+        raise ArticleError("syntax", "a control article cannot be an edit")
+    return ids
+
+
 def message_kind(art: Article) -> str:
     """The kind of a message (UN-RFC 0028 section 3.1): of a plain article, or of the
     inner article of a closed group or an inbox. Without the header, a post."""
@@ -445,8 +467,10 @@ def _aad(group_id: str, epoch: int) -> bytes:
 def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author: crypto.Identity,
                       *, from_name: str, subject: str, body: str,
                       references: list[str] | None = None, kind: str = KIND_POST,
-                      content_type: str | None = None, pow_bits: int = 18) -> Article:
-    """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption."""
+                      content_type: str | None = None, pow_bits: int = 18,
+                      extra: list[tuple[str, str]] | None = None) -> Article:
+    """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption.
+    ``extra``: outer headers nodes must read, e.g. Supersedes (UN-RFC 0042, 2)."""
     if kind not in MESSAGE_KINDS:
         raise ValueError(f"unknown message kind: {kind}")
     inner = Article([("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
@@ -455,7 +479,7 @@ def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author:
     blob = crypto.aead_encrypt(keys.enc_key, inner.to_bytes(), _aad(group_id, epoch))
     outer_body = "\n".join(textwrap.wrap(b64(blob), 76)) + "\n"
     art = new_article(group_id, None, outer_body, references=references,
-                      extra=[("Encrypted", f"{ENC_SCHEME}; epoch={epoch}")])
+                      extra=[("Encrypted", f"{ENC_SCHEME}; epoch={epoch}")] + (extra or []))
     return art.finalize(author, pow_bits, member=keys.member)
 
 

@@ -1402,3 +1402,34 @@ async def test_tui_search_groups_while_browsing_and_in_your_list(tmp_path, monke
         assert await wait_for(pilot, lambda: not isinstance(app.screen, BrowseDialog))
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_edit_own_post(tmp_path, monkeypatch):
+    """UN-RFC 0042: e edits your own post in place; it is marked edited."""
+    from textual.widgets import TextArea
+    from unseenet.client.tui import ComposeDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await wait_for(pilot, lambda: len(app.groups) == 2, 300)
+        gid = next(g for g in app.groups if g.startswith("dk.snak@"))
+        await app.session.post(gid, "Hej", "Med en stavefjel\n")
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 1, 300)
+        app.query_one("#threads").focus()
+        await pilot.pause(0.2)
+        assert app.check_action("edit", ())
+        await pilot.press("e")
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ComposeDialog), 100)
+        assert await wait_for(pilot, lambda: laid_out(app, "#body")), stack(app)
+        body = app.screen.query_one("#body", TextArea)
+        assert "stavefjel" in body.text
+        body.text = body.text.replace("stavefjel", "stavefejl")
+        await pilot.press("ctrl+s")
+        assert await wait_for(pilot, lambda: len(app.messages) == 1 and next(
+            iter(app.messages.values())).edited is not None, 400)
+        m = next(iter(app.messages.values()))
+        assert "stavefejl" in m.body
+        head, _ = app.article(m)
+        assert "(edited" in head
+        await pilot.press("q")
+    server.close()

@@ -57,6 +57,16 @@ CREATE TABLE IF NOT EXISTS cancels (
     group_id   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS supersedes (       -- UN-RFC 0042: an earlier version -> its edit
+    old        TEXT PRIMARY KEY,
+    new        TEXT NOT NULL,
+    author_key TEXT NOT NULL,
+    group_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    first_date INTEGER                -- Date of the earliest version known, unix seconds
+);
+CREATE INDEX IF NOT EXISTS supersedes_new ON supersedes(new);
+
 CREATE TABLE IF NOT EXISTS tombstones (       -- UN-RFC 0013
     group_id   TEXT PRIMARY KEY,
     at         INTEGER NOT NULL,
@@ -404,6 +414,7 @@ class Store:
         self.db.execute("DELETE FROM closed_epochs WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM epoch_articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM cancels WHERE group_id=?", (group_id,))
+        self.db.execute("DELETE FROM supersedes WHERE group_id=?", (group_id,))
         self._kb_drop(group_id)
         self.db.commit()
         return cur.rowcount
@@ -417,6 +428,34 @@ class Store:
         row = self.db.execute("SELECT author_key, group_id FROM cancels WHERE target=?",
                               (target,)).fetchone()
         return (row[0], row[1]) if row else None
+
+    # --- edits (UN-RFC 0042) ---
+    def add_supersede(self, old: str, new: str, author_key: str, group_id: str, kind: str,
+                      first_date: int | None) -> None:
+        """Record that ``new`` replaces ``old`` - held and withdrawn, or not seen yet
+        (a pending supersede, section 3.1). The newest edit wins."""
+        self.db.execute("INSERT OR REPLACE INTO supersedes VALUES (?, ?, ?, ?, ?, ?)",
+                        (old, new, author_key, group_id, kind, first_date))
+
+    def supersede_for(self, old: str) -> tuple[str, str, str, str] | None:
+        """(edit, author_key, group_id, kind) for a replaced version, or None."""
+        row = self.db.execute("SELECT new, author_key, group_id, kind FROM supersedes WHERE old=?",
+                              (old,)).fetchone()
+        return tuple(row) if row else None
+
+    def first_date(self, message_id: str) -> int | None:
+        """The Date of the earliest version known of a post, given any version of it
+        (section 3.2); None if it was never edited or no date is known."""
+        row = self.db.execute(
+            "SELECT MIN(first_date) FROM supersedes WHERE new=? OR old=? OR new IN "
+            "(SELECT new FROM supersedes WHERE old=?)", (message_id, message_id, message_id)
+        ).fetchone()
+        return row[0] if row else None
+
+    def date_of(self, message_id: str) -> int | None:
+        row = self.db.execute("SELECT date FROM articles WHERE message_id=?",
+                              (message_id,)).fetchone()
+        return row[0] if row else None
 
     # --- key-bound state for reconciliation (UN-RFC 0040 section 4) ---
     def _kb_adjust(self, key: bytes, h: int, delta: int) -> None:

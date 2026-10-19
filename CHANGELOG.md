@@ -17,6 +17,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Edit your own posts and chat lines (UN-RFC 0042, #37). An edit is a
+  new article with `Supersedes` naming every earlier version (at most
+  32). Nodes check that it is the same author's, in the same group, of
+  the same kind and place in its thread, withdraw the earlier versions as
+  a cancel would, and refuse versions that arrive after their edit. A
+  channel thread's comments still close from its first version's date.
+  Private posts cannot be edited yet (#248). The client checks every edit
+  itself, shows the newest version in the first one's place marked
+  "(edited 21:58)" with replies to any version under it, keeps an edited
+  post read if you had read it, and withdrawing an edited post drops its
+  earlier versions too. In the terminal client `e` edits the selected
+  post, or in a chat your last line, and warns that people may have read
+  the earlier version; mention notices go only to newly mentioned
+  people. Core: `Session.edit`, `Session.may_edit`, `resolve_edits`.
+
 - Clients know before you write whether you may, and say why (#181):
   `Session.write_permission(group_id, reply_to=None, kind="post")`
   returns a `Permission(allowed, reason, code)` from the cached manifest -
