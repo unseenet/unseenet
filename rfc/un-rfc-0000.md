@@ -144,6 +144,9 @@ The protocol is designed to be extended without breaking old software:
 | 0034 | Feeds and Following                           | Standards Track |
 | 0035 | Pages and Sites                               | Standards Track |
 | 0036 | Attestations                                  | Standards Track |
+| 0037 | Matrix Gateways                               | Standards Track |
+| 0038 | Gateway Cooperation and the Gateway Directory | Standards Track |
+| 0040 | Key-bound Groups at Scale                     | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
