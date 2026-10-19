@@ -239,6 +239,7 @@ Pick what you want to do. Each path lists the pages in the order to read them.
     <li><a href="project/keys/">The project's keys</a> and <a href="project/nodes/">nodes</a></li>
     <li><a href="spec/un-rfc-0001/">UN-RFC 0001: Architecture</a></li>
   </ol>
+  <p class="un-path__more">Also: <a href="https://stats.unseenet.org/">the network in numbers</a>, counted daily</p>
 </section>
 
 <section class="un-path">
