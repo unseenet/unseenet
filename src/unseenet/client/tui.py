@@ -154,6 +154,13 @@ ICON_LEGEND = ("≡ posts  » chat  ¤ data for programs  √ moderated  ► cha
                "@ inbox  ⌂ local (one node)  · not known yet")
 
 
+def edited_when(m: Message) -> str:
+    """When a post was edited: the time today, else the date (UN-RFC 0042, 4.2)."""
+    at = m.edited.astimezone()
+    return at.strftime("%H:%M") if at.date() == datetime.now().astimezone().date() \
+        else at.strftime("%d %b %H:%M")
+
+
 def group_icons(gtype: str | None, data: dict | None = None) -> str:
     """Two icons and a space between, e.g. '∩ »' for a closed chat group."""
     data = data or {}
@@ -1682,6 +1689,7 @@ class UnseenetApp(App):
         Binding("s", "signature", "Signature", show=False),
         Binding("a", "add_contact", "Add contact", show=False),
         Binding("D", "withdraw", "Withdraw", show=False),
+        Binding("e", "edit", "Edit", show=False),
         Binding("question_mark", "group_info", "About group"),
         Binding("number_sign", "group_ref", "Go to #group", show=False),
         Binding("v", "toggle_view", "Chat/threads"),
@@ -1722,6 +1730,8 @@ class UnseenetApp(App):
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
         if action == "withdraw":
             return bool(m and group and s.may_cancel(m))
+        if action == "edit":                      # your own post, or your last chat line
+            return bool(group and self._editable(gid) is not None)
         if action == "add_contact":
             return bool(m and m.readable and m.author_key
                         and m.author_key != s.identity().key_text)
@@ -2203,6 +2213,8 @@ class UnseenetApp(App):
                 first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
                 title = "» " + first[:60] + ("…" if len(first) > 60 else "")
             subject = ("  " * (depth - 1) + "└ " if depth else "") + title
+            if m.edited:
+                subject += "  (edited)"
             notice = s.is_notice(m)                      # UN-RFC 0032: names you elsewhere
             if m.private and not notice:
                 subject = f"{ICONS['inbox']} " + subject
@@ -2285,6 +2297,8 @@ class UnseenetApp(App):
             else:
                 line.append(": ")
                 line.append(self._indented(m, text, len(when) + len(who) + 3, first=False))
+            if m.edited:
+                line.append(f"  (edited {edited_when(m)})", style="dim")
             log.write(line)
             if not self.session.is_read(m):
                 self.session.mark_read(m, save=False)
@@ -2457,6 +2471,8 @@ class UnseenetApp(App):
     def article(self, msg: Message) -> tuple[str, Text]:
         """The header (markup) and the body of a message, as the reader shows them."""
         date = msg.date.astimezone().strftime("%A %d %B %Y %H:%M") if msg.date else ""
+        if msg.edited:                                       # UN-RFC 0042, 4.2
+            date += f"  (edited {edited_when(msg)})"
         if msg.to_key:
             who = f"you  ·  to [b]{escape(self._key_label(msg.to_key))}[/b]"
         elif msg.private and msg.readable and not msg.sender_key:
@@ -2901,6 +2917,62 @@ class UnseenetApp(App):
         if notify:                    # after approval, for a post the moderators have
             self._send_notices(g.group_id, msgid, subject, KIND_POST, notify)
         self.select_group(g.group_id)
+
+    def _editable(self, gid: str) -> Message | None:
+        """What e edits: the selected post if it is yours; in a chat, your last line."""
+        s = self.session
+        if self.view_of(gid) == "chat":
+            mine = [m for m in s.visible(sorted(s.cache.get(gid, {}).values(),
+                                                key=lambda m: m.number)) if s.may_edit(m)]
+            return mine[-1] if mine else None
+        m = self.current_message
+        return m if m is not None and m.group == gid and s.may_edit(m) else None
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_edit(self) -> None:
+        """Edit your own post or chat line (UN-RFC 0042): a new version in its place."""
+        gid = self.current_group or ""
+        m = self._editable(gid)
+        g = self.groups.get(gid)
+        if m is None or g is None:
+            self.notify("Select one of your own posts to edit", severity="warning")
+            return
+        s = self.session
+        p = s.write_permission(gid, reply_to=m if m.references else None, kind=m.kind)
+        if not p and p.code != "channel_thread":
+            self.notify(p.reason, severity="warning")
+            return
+        warn = "People may already have read the earlier version, and may keep it."
+        if m.kind == KIND_CHAT:
+            text = await self.push_screen_wait(InputDialog(
+                "Edit your chat line", warn, "Your chat line", split_signature(m.body)[0].rstrip()))
+            if not text or text.strip() == split_signature(m.body)[0].strip():
+                return
+            subject, body, notify = "", text.strip(), []
+        else:
+            result = await self.push_screen_wait(ComposeDialog(
+                g, m.subject, m.body, is_reply=True,
+                heading=f"Edit your post in {s.group_label(gid)} - {warn}"))
+            if not result:
+                return
+            subject, body, notify = result
+        before = {k for _, k in s.mentioned(m.subject, m.body)}
+        notify = [k for k in notify if k not in before]   # only newly mentioned (0042, 4.3)
+        self.set_status("Sending the new version (computing postage) ...")
+        try:
+            msgid = await s.edit(m, subject, body)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        if s.was_submitted(gid, msgid):
+            self.notify("Sent to the moderators: the new version appears when one of them "
+                        "approves it", timeout=10)
+        else:
+            self.notify("Edited")
+        if notify:
+            self._send_notices(gid, msgid, subject, m.kind, notify)
+        self.select_group(gid)
 
     @work(group="dialog", exit_on_error=False)
     async def action_browse(self) -> None:

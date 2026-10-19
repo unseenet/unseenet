@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from email.utils import format_datetime
 import fnmatch
 import hmac
 import logging
@@ -17,6 +18,7 @@ from ..core.groups import canonical_json, parse_canonical_json
 from ..core import crypto, profiles, reconcile
 from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
+from ..core.groups import message_kind, parse_supersedes
 from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, is_key_bound,
                            parse_key_update, split_group_id)
 from ..core.store import Store
@@ -203,10 +205,19 @@ class Node:
         raise ArticleError("later", "the group's manifest is not on this node yet")
 
     def _thread_root(self, message_id: str) -> Article | None:
-        """An article this node holds, for comments in channels (UN-RFC 0030, 4)."""
+        """An article this node holds, for comments in channels (UN-RFC 0030, 4).
+        A root replaced by an edit is found through the edit, dated as its earliest
+        version, so that editing does not reopen comments (UN-RFC 0042, 3.2)."""
         raw = self.store.get(message_id)
+        if raw is None:
+            edit = self.store.supersede_for(message_id)
+            raw = self.store.get(edit[0]) if edit else None
         if raw is not None:
-            return Article.from_bytes(raw)
+            root = Article.from_bytes(raw)
+            first = self.store.first_date(message_id)
+            if first is not None and first < int(parse_date(root["Date"]).timestamp()):
+                root.set("Date", format_datetime(datetime.fromtimestamp(first, timezone.utc)))
+            return root
         if self.store.seen(message_id):      # was here, but expired or was cancelled
             raise ArticleError("permission", "that thread is no longer on this node")
         return None
@@ -257,11 +268,16 @@ class Node:
         elif ctl:
             self._accept_control(art, manifest, raw)
         else:
+            versions = parse_supersedes(art)          # an edit (UN-RFC 0042)
+            held = self._check_edit(art, manifest, versions) if versions else {}
             self._check_cancelled(art, manifest)
+            self._check_superseded(art)
             check_permitted(art, manifest, self.store.epochs(art.group),
                             self.store.closed_before(art.group), thread_root=self._thread_root)
             self._check_blocked(art)
             self.store.add(art, raw)
+            if versions:
+                self._apply_edit(art, versions, held)
         self._enqueue(art, source)
         self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
@@ -455,6 +471,64 @@ class Node:
             if best is None or date > best[0]:
                 best = (date, value)
         return best[1] if best else None
+
+    # --- edits (UN-RFC 0042) ---
+    @staticmethod
+    def _kind(art: Article) -> str:
+        # in a closed group the kind is in the encrypted inner article: unknown here
+        return "" if "Encrypted" in art else message_kind(art)
+
+    def _check_edit(self, art: Article, manifest: Manifest, versions: list[str]) -> dict:
+        """Section 3.1: every version we hold must be the same author's, in this group,
+        of the same kind and place in its thread, and no control article. Returns
+        {Message-ID: Date} of the versions held."""
+        if manifest.type == "inbox":
+            raise ArticleError("permission", "private posts cannot be edited")
+        author, kind = art["Author-Key"], self._kind(art)
+        refs = art.get("References", "").split()
+        held: dict[str, int] = {}
+        for v in versions:
+            meta = self.store.get_meta(v)
+            if meta is None:
+                continue
+            group_id, v_author = meta
+            old = Article.from_bytes(self.store.get(v))
+            if group_id != art.group or v_author != author:
+                raise ArticleError("permission", "only its author can edit a post")
+            if old.control:
+                raise ArticleError("permission", "control articles cannot be edited")
+            if kind and self._kind(old) and self._kind(old) != kind:
+                raise ArticleError("permission", "an edit keeps the kind of the post")
+            if old.get("References", "").split() != refs:
+                raise ArticleError("permission", "an edit keeps the post's place in its thread")
+            held[v] = int(parse_date(old["Date"]).timestamp())
+        return held
+
+    def _apply_edit(self, art: Article, versions: list[str], held: dict) -> None:
+        """Withdraw the versions held, remember the rest as pending (section 3.1)."""
+        store = self.store
+        dates = list(held.values()) + [d for d in (store.first_date(v) for v in versions)
+                                       if d is not None]
+        first = min(dates) if dates else None
+        for v in versions:
+            if v in held:
+                store.delete(v)                    # as a valid cancel (UN-RFC 0004, 7.2)
+            store.add_supersede(v, art.message_id, art["Author-Key"], art.group,
+                                self._kind(art), first)
+        store.db.execute("UPDATE supersedes SET new=? WHERE new IN (%s)" % ",".join("?" * len(versions)),
+                         (art.message_id, *versions))
+        store.db.commit()
+
+    def _check_superseded(self, art: Article) -> None:
+        """A version that arrives after its edit is refused (section 3.1)."""
+        pending = self.store.supersede_for(art.message_id)
+        if not pending or art.control:
+            return
+        _, author, group_id, kind = pending
+        if group_id == art.group and author == art["Author-Key"] and (
+                not kind or not self._kind(art) or kind == self._kind(art)):
+            self.store.remember(art.message_id)
+            raise ArticleError("permission", "article was replaced by an edit")
 
     def _check_cancelled(self, art: Article, manifest: Manifest) -> None:
         pending = self.store.cancel_for(art.message_id)

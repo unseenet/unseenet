@@ -134,6 +134,10 @@ A client that holds a valid edit:
 When a client receives a version older than one it already shows, it
 keeps the newer one.
 
+A valid cancel (UN-RFC 0004 section 7) of the version shown withdraws
+the post: the client drops the earlier versions it holds as well, or
+they would be shown again. Nodes have withdrawn them already.
+
 ## 4.3 Editing
 
 A client SHOULD let its user edit their own posts and chat lines. It

@@ -12,7 +12,7 @@ import re
 import base64
 import json
 import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import NamedTuple
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +20,7 @@ from pathlib import Path
 from ..core import crypto
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ..core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
+from ..core.groups import MAX_SUPERSEDES, parse_supersedes
 from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_manifest, manifest_article, message_kind, open_envelope,
@@ -53,6 +54,65 @@ class ForYouCount(NamedTuple):
     def total(self) -> int:
         return self.replies + self.mentions
 
+
+
+def resolve_edits(msgs: list[Message]) -> list[Message]:
+    """Show only the newest version of each edited post, in the first version's place,
+    marked edited, with replies to any version under it (UN-RFC 0042 sections 4-5).
+
+    An edit counts only if every earlier version present is by the same author, in
+    the same group and of the same kind (section 4.1); otherwise it is shown as an
+    ordinary post and replaces nothing - a node is not trusted for this. Two edits of
+    the same post: the later Date wins, on a tie the lower Message-ID (5.2). The
+    messages given are not changed; shown ones are copies."""
+    by_id = {m.message_id: m for m in msgs}
+    posts: dict[str, list[Message]] = {}           # first version -> its valid edits
+    for e in msgs:
+        if not e.supersedes or e.private:
+            continue
+        ok = True
+        for v in e.supersedes:
+            old = by_id.get(v)
+            if old is not None and (old.author_key != e.author_key or old.group != e.group
+                                    or old.private or (old.readable and e.readable
+                                                       and old.kind != e.kind)):
+                ok = False
+                break
+        if ok:
+            posts.setdefault(e.supersedes[-1], []).append(e)
+    if not posts:
+        return list(msgs)
+    canonical: dict[str, Message] = {}             # any replaced Message-ID -> shown edit
+    for first, edits in posts.items():
+        winner = max(edits, key=lambda e: (e.date or datetime.min.replace(tzinfo=timezone.utc),
+                                           [-ord(c) for c in e.message_id]))
+        ids = {first} | {v for e in edits for v in e.supersedes} | {e.message_id for e in edits}
+        ids.discard(winner.message_id)
+        present = [by_id[i] for i in ids if i in by_id] + [winner]
+        # newest first and the first version last, as an edit of it must list them
+        others = sorted(ids - set(winner.supersedes))
+        shown = replace(winner, edited=winner.date, versions=others + list(winner.supersedes),
+                        number=min(m.number for m in present))
+        original = by_id.get(first)
+        if original is not None and original.date is not None:
+            shown.date = original.date              # where and when it was first posted
+        for i in ids | {winner.message_id}:
+            canonical[i] = shown
+    out: list[Message] = []
+    done: set[str] = set()
+    for m in msgs:
+        shown = canonical.get(m.message_id)
+        if shown is not None:
+            if shown.message_id not in done:
+                done.add(shown.message_id)
+                out.append(shown)
+            continue
+        out.append(m)
+    for i, m in enumerate(out):                      # replies to any version: under the shown one
+        refs = [canonical[r].message_id if r in canonical else r for r in m.references]
+        if refs != m.references:
+            out[i] = replace(m, references=refs)
+    return out
 
 class SessionError(RuntimeError):
     pass
@@ -94,6 +154,9 @@ class Message:
     mention_group: str | None = None      # a mention notice: where the post is (UN-RFC 0032)
     mention_of: str | None = None         # ... and its Message-ID
     notices_for: str | None = None        # a bundle of notices for a submission (0032, 4.3)
+    supersedes: list[str] = field(default_factory=list)   # an edit: earlier versions (0042)
+    edited: datetime | None = None        # shown version is an edit, made then (0042, 4.2)
+    versions: list[str] = field(default_factory=list)     # earlier versions this one replaced
 
     @property
     def author_fp(self) -> str:
@@ -1975,7 +2038,9 @@ class Session:
         return None
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
-        """Leave out messages from people you ignore (your own are always shown)."""
+        """Leave out messages from people you ignore (your own are always shown), and
+        show only the newest version of an edited post (UN-RFC 0042)."""
+        msgs = resolve_edits(msgs)
         groups = {m.group for m in msgs}
         banned = {gid: {k for k, _ in self.banned(gid)} for gid in groups}
         if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
@@ -2387,9 +2452,16 @@ class Session:
             except (ArticleError, KeyError, ValueError):
                 target_author = cache[n].author_key
             if c.get("by") == target_author or c.get("by") in privileged:
-                del cache[n]
+                gone = cache.pop(n)
                 raws.pop(n, None)
                 changed = True
+                # withdrawing an edit withdraws the post: its earlier versions by the
+                # same author go too, or they would show again (UN-RFC 0042, 4.2)
+                for v in gone.supersedes:
+                    vn = by_id.get(v)
+                    if vn in cache and cache[vn].author_key == gone.author_key:
+                        del cache[vn]
+                        raws.pop(vn, None)
             else:                           # not valid for this target: forget it
                 del cancels[target]
                 changed = True
@@ -2460,6 +2532,11 @@ class Session:
             return None
         msg = Message(n, art.message_id, group_id, author_key=art["Author-Key"],
                       references=(art.get("References") or "").split())
+        if art.get("Encrypted", "").strip() != INBOX_SCHEME:   # not in inboxes (0042, 2)
+            try:
+                msg.supersedes = parse_supersedes(art)
+            except ArticleError:
+                pass
         try:
             msg.date = parse_date(art["Date"])
         except (TypeError, ValueError):
@@ -2535,7 +2612,10 @@ class Session:
     # read marks
     # ------------------------------------------------------------------
     def is_read(self, msg: Message) -> bool:
-        return msg.message_id in self.data["read"].get(msg.group, [])
+        marks = self.data["read"].get(msg.group, [])
+        # an edit of a post you read stays read (UN-RFC 0042): seeing it changed is
+        # what "(edited)" is for, not a new post
+        return msg.message_id in marks or any(v in marks for v in msg.versions)
 
     def mark_read(self, msg: Message, save: bool = True) -> None:
         marks = self.data["read"].setdefault(msg.group, [])
@@ -2570,9 +2650,31 @@ class Session:
             raise SessionError(f"rejected by node: {text}")
         return art.message_id
 
+    async def edit(self, msg: Message, subject: str, body: str,
+                   content_type: str | None = None) -> str:
+        """Post a new version of your own post or chat line (UN-RFC 0042 section 4.3):
+        same group, kind and place in its thread, naming every earlier version."""
+        if msg.private:
+            raise SessionError("private posts cannot be edited")
+        if msg.author_key != self.identity().key_text:
+            raise SessionError("you can only edit your own posts")
+        versions = [msg.message_id] + [v for v in msg.versions if v != msg.message_id]
+        if len(versions) > MAX_SUPERSEDES:
+            raise SessionError(f"a post can be edited at most {MAX_SUPERSEDES} times")
+        original = self.find_message(msg.group, msg.message_id) or msg   # its own References
+        return await self.post(msg.group, subject, body, references=original.references or None,
+                               kind=msg.kind, content_type=content_type or msg.content_type or None,
+                               supersedes=versions)
+
+    def may_edit(self, msg: Message) -> bool:
+        return (not msg.private and msg.readable and bool(msg.author_key)
+                and msg.author_key == self.identity().key_text
+                and len(msg.versions) + 1 <= MAX_SUPERSEDES)
+
     async def post(self, group_id: str, subject: str, body: str,
                    references: list[str] | None = None, kind: str = KIND_POST,
-                   content_type: str | None = None) -> str:
+                   content_type: str | None = None,
+                   supersedes: list[str] | None = None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028)."""
         if self.portal_warning(group_id):
             # Clients ask first (portal_warning / accept_portals); this is the safety net.
@@ -2584,6 +2686,7 @@ class Session:
         if kind == KIND_POST and not subject.strip():
             raise SessionError("a post needs a subject")
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
+        edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         author = self.identity()
         entry = self.group_entry(group_id)
         cert = None
@@ -2597,7 +2700,7 @@ class Session:
                 return encrypted_article(
                     group_id, epoch, keys, author, from_name=self.display_name(),
                     subject=subject, body=body, references=references, kind=kind,
-                    content_type=content_type, pow_bits=bits)
+                    content_type=content_type, pow_bits=bits, extra=edit_header)
         else:
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
 
@@ -2606,7 +2709,7 @@ class Session:
                 art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
                                   from_name=self.display_name(), references=references,
                                   extra=[("Content-Type", content_type), ("Message-Kind", kind)]
-                                  + ([cert] if cert else []))
+                                  + ([cert] if cert else []) + edit_header)
                 return art.finalize(author, bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):
