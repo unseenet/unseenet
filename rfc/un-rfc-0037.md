@@ -16,7 +16,8 @@ maps to `matrix.*`, how messages, replies, threads, edits and
 redactions convert in both directions, how the room's moderators give
 and withdraw their consent by inviting and removing the gateway, and
 which Matrix features a gateway must never use because they would reveal
-when an Unseenet author is active. Everything not said here follows
+when an Unseenet author is active. It also covers portals: rooms a
+gateway creates on its own homeserver for Unseenet groups. Everything not said here follows
 UN-RFC 0023.
 
 # 1. Overview
@@ -234,9 +235,36 @@ large homeservers ban.
 
 # 7. Portals
 
-Portals to Matrix (UN-RFC 0023 section 3.5) are not specified yet. A
-later revision will cover rooms the gateway creates on its own
-homeserver for Unseenet groups.
+A portal to Matrix (UN-RFC 0023 section 3.5) is a room the gateway
+creates for an Unseenet group whose owner has opened one. Its `source`
+in the manifest's `portals` entry is the room's alias, which MUST be on
+the gateway's own homeserver, e.g. `#unseenet:unseenet.org`.
+
+The gateway creates the room with its own account:
+
+- public (join rule `public`), listed in the server's room directory, and
+  never encrypted;
+- named after the Unseenet group followed by `(Unseenet)`, with a topic
+  saying that it is a portal to the named group (with its Group ID), that
+  messages are copied both ways and arrive late on purpose, and that
+  images and files are not carried. Both are kept up to date with the
+  group's manifest;
+- with the people the gateway operator names as the room's admins
+  invited and given the same power as the gateway, so that the room can
+  be moderated by people.
+
+The owner's opening of the portal is the consent for both directions, so
+the gateway joins and writes in its own room without an invitation and
+posts no notice (section 6). Unseenet articles become messages as in
+section 5.2; a new thread (an article that refers to nothing and whose
+subject does not start with `Re:`) has its subject after the author line.
+Messages written in the room are imported into the Unseenet group as in
+section 4, as chat lines. A group that takes no chat lines (UN-RFC 0028
+section 4.1) cannot have a Matrix portal.
+
+If the room is later made private or encrypted by one of its admins, the
+gateway stops exporting and importing (section 4.1) until it is public
+and unencrypted again.
 
 # 8. Timing Signals
 
