@@ -38,6 +38,7 @@ DATA_GROUPS = frozenset({
     "unseenet.hierarchies@ph5fc5hop5232qsz",
     "unseenet.checkgroups@ph5fc5hop5232qsz",
     "unseenet.names@ph5fc5hop5232qsz",
+    "unseenet.gateways@ph5fc5hop5232qsz",
 })
 
 # The project's groups a new client starts with, so there is something to read.

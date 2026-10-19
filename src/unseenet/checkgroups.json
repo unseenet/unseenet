@@ -13,6 +13,7 @@
     {"group": "unseenet.hierarchies@ph5fc5hop5232qsz", "note": "data: the root list"},
     {"group": "unseenet.checkgroups@ph5fc5hop5232qsz", "note": "data: this list"},
     {"group": "unseenet.names@ph5fc5hop5232qsz", "note": "data: name certificates"},
-    {"group": "unseenet.canary@ph5fc5hop5232qsz", "note": "data: connection checks"}
+    {"group": "unseenet.canary@ph5fc5hop5232qsz", "note": "data: connection checks"},
+    {"group": "unseenet.gateways@ph5fc5hop5232qsz", "note": "data: the gateway directory"}
   ]
 }

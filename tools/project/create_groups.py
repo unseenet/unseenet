@@ -89,6 +89,13 @@ your name and the start of your key; messages from Matrix appear here, signed
 by the gateway. Copies arrive seconds to minutes late, on purpose. Longer
 discussion belongs in unseenet@""" + FP + "."
 
+GATEWAYS = """The gateway directory (UN-RFC 0038 section 6): gateways to other networks
+announce themselves here, for clients to read (`unseenet gateways`). Each post
+is one gateway's announcement as JSON, signed by its key; the newest per key
+counts and ones older than 30 days are not shown. Anybody running a gateway
+may announce; this is a list, not an endorsement. A gatewayed group stays
+active while one of its gateways announces it."""
+
 TEST = "Use this group to test posting, replies and your setup. Anything goes."
 
 HELP = """Ask here when something about Unseenet does not work or is unclear: the
@@ -134,6 +141,8 @@ GROUPS = (
     ("unseenet.canary", "channel", "data", "Connection checks for known nodes",
      "Daily canary posts that show listed nodes are connected (UN-RFC 0021).", CANARY,
      "github_poster", 20),
+    ("unseenet.gateways", "open", "data", "The gateway directory",
+     "Gateways to other networks announce themselves here (UN-RFC 0038).", GATEWAYS, None, 18),
     ("unseenet.admin", "open", "threads", "Hierarchy requests and name disputes",
      "Requests for hierarchies, decisions, and complaints about names.", ADMIN, None, 22),
     ("alt.news.wikipedia", "channel", "threads", "News from Wikipedia's In the news",
