@@ -1,12 +1,19 @@
 {
   "canaries": {
-    "date": "2026-10-18",
+    "date": "2026-10-19",
     "posted": [
       "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
-      "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
-      "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya",
-      "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq"
+      "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka"
     ]
   },
-  "nodes": {}
+  "nodes": {
+    "ics4bgvbghmag7aw7qp6ap44zjh5tyn2d5ilfo7p7cb4ov6ap5hus4ad.onion": {
+      "first_failed": "2026-10-19",
+      "last_error": "Could not reach the node over Tor: Proxy connection timed out: 60"
+    },
+    "mwmkpsteb4utkbvy26utmjl6l4hhd3lj3p5wfa64evszfutbp3yrqxyd.onion": {
+      "first_failed": "2026-10-19",
+      "last_error": "Could not reach the node over Tor: Proxy connection timed out: 60"
+    }
+  }
 }
