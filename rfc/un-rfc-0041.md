@@ -16,8 +16,7 @@ authors and issuers. ONNTP has no command that returns several
 manifests at once, so each lookup costs a `GROUP`, a `HDR` and an
 `ARTICLE` over Tor. Opening a busy group with 500 authors then takes
 minutes. This document adds `XUN-MANIFESTS`, which returns the current
-manifest of up to 256 groups in one answer, and lets a client say which
-manifest it already holds so that unchanged ones are not sent again.
+manifest of up to 256 groups in one answer.
 
 # 1. Motivation
 
@@ -53,11 +52,11 @@ C: .
 
 Each line names one group by its Group ID - key-bound or ordinary -
 and optionally the Message-ID of the manifest of that group the client
-already holds. The lines form a multi-line block with dot-stuffing, as
-a posted article does. A request holds at least 1 and at most *max*
-lines, where *max* is the number the node advertises (section 2.4); a
-node MUST accept at least 64 and SHOULD accept 256. The same Group ID
-MUST NOT appear twice.
+already holds (section 3.3). The lines form a multi-line block with
+dot-stuffing, as a posted article does. A request holds at least 1 and
+at most *max* lines, where *max* is the number the node advertises
+(section 2.4); *max* MUST be at least 256. The same Group ID MUST NOT
+appear twice.
 
 ## 2.2 Answer
 
@@ -111,8 +110,8 @@ A node that implements the command lists in `CAPABILITIES`
 UNSEENET-MANIFESTS <max>
 ```
 
-where `<max>` is the largest number of lines it accepts in one request.
-A client MUST NOT send more. A client talking to a node without the
+where `<max>` is the largest number of lines it accepts in one request,
+at least 256. A client MUST NOT send more. A client talking to a node without the
 capability falls back to single lookups (section 1).
 
 ## 2.5 Example
@@ -136,8 +135,9 @@ S: ...
 S: .
 ```
 
-The first author's profile has not changed since the client cached it,
-the second author has a profile but no picture.
+The client named the profile it held of the first author (a client
+that has chosen to, section 3.3), which has not changed; the second
+author has a profile but no picture.
 
 # 3. Clients
 
@@ -162,14 +162,28 @@ A client that shows the posts of a group:
   13);
 - MAY ask for pictures only of the authors on screen, since pictures
   are larger (UN-RFC 0040 section 9);
-- SHOULD name the Message-ID of a manifest it holds, so that unchanged
-  manifests cost one line;
 - MUST keep the profiles it gets in its cache (UN-RFC 0022 section 9.2),
   including that a key has none (`411`), for as long as it caches
   profiles.
 
 A request for one group is allowed, and a client MAY use the command
 for every manifest it needs.
+
+## 3.3 Naming What the Client Holds
+
+By default a client does **not** name the Message-ID of a manifest it
+holds, and receives the article again. The Message-IDs a client has
+cached - above all old ones - can serve as a fingerprint: a node could
+recognise the same user across connections that Tor otherwise keeps
+apart, in the way ETags are used to track people on the web.
+
+- A client MAY offer naming them as a setting the user turns on, with
+  a short explanation of what it costs and saves.
+- A client meant for users who need to hide (a bootable client) MUST
+  NOT name them.
+
+What naming saves is small: refreshing 500 cached profiles costs about
+40 KiB instead of about 450 KiB, a few seconds once a day.
 
 # 4. Nodes
 
@@ -206,9 +220,9 @@ several such groups MAY ask for them in one request.
   lookup when the user opens a profile. A client MAY add some Group IDs
   of other keys it has seen to a request, as cover.
 - **What the Message-ID tells.** Naming the Message-ID a client holds
-  tells the node that this client has seen that manifest before. A
-  client that does not want to say so, for instance on a new node,
-  leaves it out and receives the article instead.
+  tells the node that this client has seen that manifest before, and a
+  set of them can link connections to one user. Clients therefore leave
+  them out by default (section 3.3).
 - **No new secrets.** Manifests are public and flooded to every full
   node, and every one of them can be read today with `GROUP` and
   `ARTICLE`. The command changes what a lookup costs, not what can be
@@ -227,9 +241,9 @@ several such groups MAY ask for them in one request.
   - with pictures of all 500 (typically 4.8 KiB each, about 2.4 MiB) it
     is about four answers more; showing pictures only on screen keeps it
     to a few;
-  - a client whose cache is up to date pays one short line each way per
-    group, so refreshing 500 cached profiles is two requests of some
-    40 KiB;
+  - refreshing 500 cached profiles costs the same as fetching them,
+    about 450 KiB, or about 40 KiB for a client that names what it holds
+    (section 3.3);
   - a node pays an index lookup per line and the reading of the
     articles it sends; nothing grows with the number of groups or
     identities in the network.
@@ -251,17 +265,32 @@ several such groups MAY ask for them in one request.
   and a client trusts only what it has checked. The Message-ID names
   exactly the article the client holds; if it is still current, nothing
   else needs to be sent.
+- **Why is it off by default?** The saving is a few seconds a day; the
+  risk is that a node can tell users apart across connections. Tor's
+  value is that it cannot (section 3.3).
 - **Why no form with fingerprints and names?** A key-bound Group ID *is*
   the name and the fingerprint (`profile@<fp>`). A second form would
   save nothing.
-- **Why 256 lines?** A line is at most 512 octets (UN-RFC 0005 section
-  6), so a request stays under 128 KiB; 256 profiles at their largest
-  (10 KiB, UN-RFC 0040 section 9) would be 2.5 MiB, which the size limit
-  of section 2.3 splits into answers that each arrive within seconds.
+- **Why 256 lines, and no lower minimum?** A line is at most 512
+  octets (UN-RFC 0005 section 6), so a request stays under 128 KiB. A
+  line costs the node one index lookup, so a smaller node saves almost
+  nothing by accepting fewer, while every client would have to handle
+  nodes with different limits. The size of an answer, not the number of
+  lines, is what needs a limit (section 2.3).
+- **Why 1 MiB?** An answer should arrive within a second or two over an
+  onion service, and a node should not build large answers in memory.
+  About 1100 profiles of typical size fit, so the limit is mostly met
+  with pictures. The number is an estimate (section 7).
 - **Why an `XUN-` name?** UN-RFC 0000 section 5: experimental commands
   carry the prefix until standardized, as `XUN-RECONCILE` does.
 
-# 7. Changes to Other Documents
+# 7. Open Issues
+
+- The size limit of section 2.3 (1 MiB) is an estimate. It is to be
+  measured with the load generator of unseenet #219 and set before this
+  document becomes Proposed.
+
+# 8. Changes to Other Documents
 
 - **UN-RFC 0005** section 2: `CAPABILITIES` may list
   `UNSEENET-MANIFESTS <max>`, and the command `XUN-MANIFESTS` is added.
