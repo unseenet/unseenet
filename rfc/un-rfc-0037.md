@@ -109,8 +109,12 @@ to UN-RFC 0023 section 4.1, a gateway MUST NOT import:
 3. events sent by the gateway's own account, and events whose content,
    or whose `m.new_content`, has the key `org.unseenet.message_id`
    (section 5.2): they came from Unseenet;
-4. redacted events (an empty `content`);
-5. events sent while the gateway was not a member of the room. After
+4. notices a gateway posts itself (section 6), which have the key
+   `org.unseenet.gateway` in their content: with several gateways in a
+   room (UN-RFC 0038), one gateway's notice is not a message for the
+   others to carry;
+5. redacted events (an empty `content`);
+6. events sent while the gateway was not a member of the room. After
    being removed and invited again, a gateway imports only what is sent
    from the new invitation on.
 
@@ -220,13 +224,13 @@ moderators: those whose power level lets them invite.
   public or is encrypted, it declines the invitation with a reason
   saying why, so the moderators see that the room will not be carried.
 - **Saying so in the room.** On joining, the gateway sends one
-  `m.notice` saying which Unseenet group the room is gatewayed to, that
+  `m.notice`, with `"org.unseenet.gateway": true` in its content, saying which Unseenet group the room is gatewayed to, that
   copies arrive seconds to minutes late in both directions on purpose,
   that images and files are not carried, how to reach the operator, and
   that kicking the gateway stops it.
 - **Withdrawal is a kick or a ban.** A gateway that is no longer a
   member stops importing and exporting at once. If it is invited again,
-  section 4.1 item 5 applies.
+  section 4.1 item 6 applies.
 - **Changes.** If a gatewayed room becomes private or encrypted, the
   gateway stops (section 4.1) and stays in the room until removed.
 
