@@ -16,12 +16,7 @@ from unseenet.node.server import Node, NodeConfig  # noqa: E402
 KDF = {"ops": 1, "mem": 8192 * 1024}
 
 
-async def wait_for(pilot, cond, tries=200):
-    for _ in range(tries):
-        if cond():
-            return True
-        await pilot.pause(0.05)
-    return False
+from tuihelp import app_ready, laid_out, press, stack, wait_for  # noqa: E402,F401
 
 
 async def test_tui_create_group_and_post(tmp_path, monkeypatch):
@@ -38,7 +33,7 @@ async def test_tui_create_group_and_post(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
     app = UnseenetApp(vault_path)
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None)
+        assert await app_ready(pilot, app), stack(app)
         app.action_create_group()          # only in the command palette, no key
         await pilot.pause(0.2)
         await pilot.click("#name")
@@ -353,7 +348,8 @@ async def test_tui_chat_group_and_rules_on_first_visit(tmp_path, monkeypatch):
     app = UnseenetApp(tmp_path / "me.vault")
     async with app.run_test(size=(140, 40)) as pilot:
         # unlocking runs in the background; selecting before it is done is a race
-        assert await wait_for(pilot, lambda: app.session is not None and gid in app.groups, 300)
+        assert await app_ready(pilot, app), stack(app)
+        assert await wait_for(pilot, lambda: gid in app.groups, 300)
         app.select_group(gid)
         # the rules are shown the first time
         assert await wait_for(pilot, lambda: isinstance(app.screen, GroupInfoDialog), 300)
@@ -418,7 +414,7 @@ async def test_tui_about_screen(tmp_path, monkeypatch):
     app = UnseenetApp(vault_path)
     monkeypatch.setattr(app, "open_url", lambda url, **kw: opened.append(url))
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None)
+        assert await app_ready(pilot, app), stack(app)
         await pilot.press("f1")
         assert await wait_for(pilot, lambda: isinstance(app.screen, AboutDialog))
         await pilot.click("#repo")
@@ -602,9 +598,12 @@ async def test_tui_browse_does_not_subscribe_to_someone_elses_inbox(tmp_path, mo
     async with app.run_test(size=(120, 40)) as pilot:
         assert await wait_for(pilot, lambda: app._inbox_ready, 300)
         await pilot.press("g")
-        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog), 100)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, BrowseDialog)
+                              and laid_out(app, "#browse-tree"), 100), stack(app)
         dialog = app.screen
         tree = dialog.query_one("#browse-tree")
+        assert await wait_for(pilot, lambda: any(
+            getattr(n.data, "group_id", "") == gid for n in tree.root.children), 100)
         leaf = next(n for n in tree.root.children if n.data is not None
                     and getattr(n.data, "group_id", "") == gid)
         tree.move_cursor(leaf)
@@ -614,9 +613,9 @@ async def test_tui_browse_does_not_subscribe_to_someone_elses_inbox(tmp_path, mo
         await pilot.pause(0.3)
         assert gid not in app.session.data["subscribed"]
         assert any("is an inbox" in n.message for n in app._notifications)
-        await pilot.click("#cancel")
-        await pilot.pause(0.3)
-        assert app.is_running and not isinstance(app.screen, BrowseDialog)
+        await press(pilot, app, "#cancel")
+        assert await wait_for(pilot, lambda: not isinstance(app.screen, BrowseDialog)), stack(app)
+        assert app.is_running
         await pilot.press("q")
     server.close()
 
@@ -850,7 +849,7 @@ async def test_tui_names_dialog(tmp_path, monkeypatch):
     real = app.notify
     monkeypatch.setattr(app, "notify", lambda msg, **kw: (notes.append(msg), real(msg, **kw)))
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None)
+        assert await app_ready(pilot, app), stack(app)
         await pilot.press("@")
         assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog), 300)
         assert "no names yet" in str(app.screen.query_one("#names-details").render())
@@ -900,7 +899,7 @@ async def test_tui_names_transfer_and_release(tmp_path, monkeypatch):
     app, server = await _app_with_groups(tmp_path, monkeypatch, [])
     new_key = crypto.Identity.generate().key_text
     async with app.run_test(size=(120, 34)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         for action in ("transfer", "release"):
             app.action_names()
             assert await wait_for(pilot, lambda: isinstance(app.screen, NamesDialog)
@@ -1030,7 +1029,7 @@ async def test_tui_moderation_queue(tmp_path, monkeypatch):
     app, server = await _app_with_groups(tmp_path, monkeypatch, [])
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         s = app.session
         gid = await s.create_group("dk.mod", "moderated", min_pow=10)
         user = Session(Vault.open(tmp_path / "u.vault", "pw", **KDF), status=lambda *_: None)
@@ -1062,7 +1061,7 @@ async def test_tui_report_post(tmp_path, monkeypatch):
     gid = await owner.create_group("dk.snak", "open", min_pow=10)
     await owner.post(gid, "Grimt", "x\n")
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         app.session.subscribe(gid)
         await app._render_groups()
         for _ in range(5):              # the start-up refresh may pick another group first
@@ -1102,7 +1101,7 @@ async def test_tui_give_a_name_and_answer_a_request(tmp_path, monkeypatch):
     sonia.new_identity("s", "Sonia"); sonia.add_node(addr)
     await sonia.ensure_inbox()
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         s = app.session
         cert = nm.make_certificate(reg, "lorensen", s.identity().key_text, 1)
         for p in (s, sonia):
@@ -1157,7 +1156,7 @@ async def test_tui_for_you(tmp_path, monkeypatch):
     other.new_identity("o", "Other"); other.add_node(addr)
     gid = await other.create_group("dk.snak", "open", min_pow=10)
     async with app.run_test(size=(140, 40)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         s = app.session
         s.subscribe(gid)
         mine = await s.post(gid, "Spørgsmål", "?\n")
@@ -1312,7 +1311,7 @@ async def test_confirm_dialog_focuses_cancel(tmp_path, monkeypatch):
     from unseenet.client.tui import ConfirmDialog
     app, server = await _app_with_groups(tmp_path, monkeypatch, ["dk.snak"])
     async with app.run_test(size=(120, 36)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None, 300)
+        assert await app_ready(pilot, app), stack(app)
         app.push_screen(ConfirmDialog("Sure?", "Really.", confirm="Remove", danger=True))
         assert await wait_for(pilot, lambda: getattr(app.focused, "id", None) == "cancel", 100)
         await pilot.press("q")

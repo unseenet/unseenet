@@ -15,31 +15,7 @@ from unseenet.node.server import Node, NodeConfig  # noqa: E402
 KDF = {"ops": 1, "mem": 8192 * 1024}
 
 
-async def wait_for(pilot, cond, tries=200):
-    for _ in range(tries):
-        if cond():
-            return True
-        await pilot.pause(0.05)
-    return False
-
-
-def laid_out(app, selector: str) -> bool:
-    """The widget is on the current screen *and* has a place on it. A dialog pushed from a
-    worker is in the DOM before its first layout; a click then lands on nothing."""
-    found = app.screen.query(selector)
-    return bool(found) and found.first().region.area > 0
-
-
-def stack(app) -> str:
-    return " > ".join(type(s).__name__ for s in app.screen_stack)
-
-
-async def press(pilot, app, selector: str) -> None:
-    """Press a dialog's button through its own handler. A mouse click at the button's
-    place missed on slow CI runners (13 of 15 red runs), with no error at all."""
-    assert await wait_for(pilot, lambda: laid_out(app, selector)), stack(app)
-    app.screen.query_one(selector, Button).press()
-    await pilot.pause()
+from tuihelp import app_ready, laid_out, press, stack, wait_for  # noqa: E402
 
 
 async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
@@ -55,7 +31,7 @@ async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
     monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
     app = UnseenetApp(vault_path)
     async with app.run_test(size=(140, 45)) as pilot:
-        assert await wait_for(pilot, lambda: app.session is not None)
+        assert await app_ready(pilot, app), stack(app)
         app.action_edit_profile()
         # the warning before the first profile: wait for it rather than for a fixed time,
         # the dialog is pushed from a worker and slow runners need longer than 0.2 s
