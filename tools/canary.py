@@ -10,8 +10,8 @@ listed). Each day the checker
 
 From the readings, ``verdicts`` decides for each node whether it is
 *connected* (its canary got out to most nodes, and it has every canary that
-did) and *complete* (it carries every group most connected nodes carry,
-except what it excludes).
+did) and *complete* (it carries every ordinary group most connected nodes
+carry, except what it excludes; key-bound groups are not counted, UN-RFC 0040).
 
 The canaries are signed with the GitHub poster key (UNSEENET_ANNOUNCE_SEED),
 a poster in unseenet.canary. Without it, nothing is posted and nothing is
@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from unseenet.core import crypto  # noqa: E402
 from unseenet.core.article import Article, ArticleError, new_article  # noqa: E402
 from unseenet.core.encoding import b64  # noqa: E402
+from unseenet.core.groups import is_key_bound  # noqa: E402
 from unseenet.known_nodes import CANARY_GROUP  # noqa: E402
 from unseenet.nntp import strip_reader_headers  # noqa: E402
 from unseenet.node.server import wildmat  # noqa: E402
@@ -162,6 +163,17 @@ async def _connect(address: str, socks_port: int):
     return client
 
 
+def carried_groups(active: list[str]) -> set[str]:
+    """The groups a node carries, as completeness counts them: ordinary groups only.
+
+    Key-bound groups (inbox@, profile@, ...) are checked by reconciliation, not by
+    name (UN-RFC 0040 sections 3 and 7). Nodes from before UN-RFC 0040 still list
+    them; they are left out here, so old and new nodes are judged alike.
+    """
+    return {g for g in (line.split()[0] for line in active if line.strip())
+            if not is_key_bound(g)}
+
+
 async def read_node(address: str, socks_port: int, poster: bytes, day: date) -> Reading:
     """Which canaries of ``day`` the node has, its groups and its excludes."""
     client = await _connect(address, socks_port)
@@ -171,7 +183,7 @@ async def read_node(address: str, socks_port: int, poster: bytes, day: date) -> 
             lines = await client.multiline("LIST UNSEENET.NODEINFO", 215)
             info = json.loads(lines[0]) if lines else {}
             r.excludes = str((info.get("policy") or {}).get("excludes") or "")
-        r.groups = {line.split()[0] for line in await client.list_active() if line.strip()}
+        r.groups = carried_groups(await client.list_active())
         if CANARY_GROUP in r.groups:
             since = datetime.combine(day - timedelta(days=1), time(), timezone.utc)
             for msgid in await client.newnews(CANARY_GROUP, since.strftime("%Y%m%d %H%M%S")):

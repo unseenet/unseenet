@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Changed
+
+- Node health no longer counts key-bound groups (`inbox@`, `profile@`,
+  `avatar@`, `names@`) when it decides whether a listed node is complete,
+  first step of #217 (UN-RFC 0040 section 7). Nodes that still list them
+  and nodes that don't are judged alike, so the later change that takes
+  them out of `LIST` does not make updated nodes look incomplete.
+
 ### Added
 
 - Profiles and group rules can be Markdown (#211, UN-RFC 0022 section
