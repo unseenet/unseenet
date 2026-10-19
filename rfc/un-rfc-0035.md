@@ -419,6 +419,19 @@ capsules, need a document of their own.
   through it, as for any group. Over Tor it does not learn by whom.
 - **Rendering cost.** The 64 KiB limit and the rendering limits of
   UN-RFC 0031 section 7 keep a crafted page from hanging a client.
+- **Scale.** A personal site is one more key-bound group per identity,
+  but it exists only when its owner asks for it (section 7.2), so it
+  does not grow with the number of identities as profiles do. The upper
+  bound per identity is one site of at most 128 pages of 64 KiB
+  (8 MiB of text) and 8 MiB of blobs (sections 3, 4.2 and 6.4); with
+  the default `max_pages` of 32 the text is at most 2 MiB. Old versions
+  expire (section 6.1), so editing does not make a site grow. A node
+  carries sites only when its operator turns them on, and may carry
+  their text without their blobs (section 6.5), so at the design
+  targets of UN-RFC 0001 section 1.2 a node pays only for the sites it
+  has chosen. A new node gets a site through the ordinary state
+  transfer of UN-RFC 0017 (sections 6.2 and 6.3), with no extra round
+  trips.
 
 # Copyright Notice
 
