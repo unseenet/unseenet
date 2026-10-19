@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("textual")
 
-from textual.widgets import Input, TextArea  # noqa: E402
+from textual.widgets import Button, Input, TextArea  # noqa: E402
 
 from unseenet.client.session import Session  # noqa: E402
 from unseenet.client.tui import ProfileDialog, UnseenetApp, identicon_text  # noqa: E402
@@ -21,6 +21,25 @@ async def wait_for(pilot, cond, tries=200):
             return True
         await pilot.pause(0.05)
     return False
+
+
+def laid_out(app, selector: str) -> bool:
+    """The widget is on the current screen *and* has a place on it. A dialog pushed from a
+    worker is in the DOM before its first layout; a click then lands on nothing."""
+    found = app.screen.query(selector)
+    return bool(found) and found.first().region.area > 0
+
+
+def stack(app) -> str:
+    return " > ".join(type(s).__name__ for s in app.screen_stack)
+
+
+async def press(pilot, app, selector: str) -> None:
+    """Press a dialog's button through its own handler. A mouse click at the button's
+    place missed on slow CI runners (13 of 15 red runs), with no error at all."""
+    assert await wait_for(pilot, lambda: laid_out(app, selector)), stack(app)
+    app.screen.query_one(selector, Button).press()
+    await pilot.pause()
 
 
 async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
@@ -41,12 +60,12 @@ async def test_tui_publish_and_show_profile(tmp_path, monkeypatch):
         # the warning before the first profile: wait for it rather than for a fixed time,
         # the dialog is pushed from a worker and slow runners need longer than 0.2 s
         assert await wait_for(pilot, lambda: type(app.screen).__name__ == "ConfirmDialog")
-        await pilot.click("#ok")
-        assert await wait_for(pilot, lambda: bool(app.screen.query("#about")))
+        await press(pilot, app, "#ok")
+        assert await wait_for(pilot, lambda: laid_out(app, "#about")), stack(app)
         app.screen.query_one("#about", TextArea).text = "Laver Unseenet"
         app.screen.query_one("#lang", Input).value = "da, en"
         app.screen.query_one("#links", TextArea).text = "github andlo  # code"
-        await pilot.click("#ok")
+        await press(pilot, app, "#ok")
         assert await wait_for(pilot, lambda: app.session.has_published_profile(), 400)
         mine = app.session.my_profile()
         assert mine["about"] == "Laver Unseenet" and mine["lang"] == ["da", "en"]
