@@ -14,13 +14,13 @@ from datetime import datetime, timedelta, timezone
 
 from .. import __version__
 from ..core.groups import canonical_json, parse_canonical_json
-from ..core import crypto, profiles
+from ..core import crypto, profiles, reconcile
 from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, parse_key_update,
                            split_group_id)
 from ..core.store import Store
-from ..nntp import MAX_LINE, dot_stuff, read_block
+from ..nntp import MAX_LINE, RECONCILE_MAX_BYTES, dot_stuff, read_block
 from .stats import Stats
 
 log = logging.getLogger("unseenet.node")
@@ -498,6 +498,7 @@ class Session:
         self._user: str | None = None
         self._challenge: tuple[bytes, bytes] | None = None   # (claimed key, nonce)
         self._auth_failures = 0
+        self._reconcile_rounds = 0
 
     def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -543,7 +544,8 @@ class Session:
                     "LIST ACTIVE NEWSGROUPS OVERVIEW.FMT HEADERS", "NEWNEWS", "OVER MSGID", "HDR",
                     "UNSEENET 1",
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
-                    "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY"):
+                    "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
+                    "UNSEENET-RECONCILE 1"):
             self.send(cap)
         self.send(".")
 
@@ -916,6 +918,33 @@ class Session:
             if wildmat(pattern, gid):
                 self.send(msgid)
         self.send(".")
+
+    async def cmd_xun_reconcile(self, args):
+        """UN-RFC 0040 section 4.3: compare key-bound state by range fingerprints.
+
+        Open to readers too, so anyone can check a node; a reader gets one exchange
+        (MAX_ROUNDS rounds) per connection, an authenticated peer is not limited."""
+        try:
+            block = await read_block(self.reader, RECONCILE_MAX_BYTES)
+        except ValueError:
+            self.send("501 reconciliation message too large")
+            return
+        if not self.peer:
+            self._reconcile_rounds += 1
+            if self._reconcile_rounds > reconcile.MAX_ROUNDS:
+                self.send("400 too many reconciliation rounds; connect again")
+                await self.writer.drain()
+                raise ConnectionError("reconciliation round limit")
+        try:
+            ranges = reconcile.parse_message(block.decode("utf-8", "replace").splitlines())
+        except (reconcile.ReconcileError, ValueError) as err:
+            self.send(f"501 {err}")
+            return
+        store = self.node.store
+        store.kb_sweep()
+        lines = reconcile.format_message(reconcile.answer(store, ranges))
+        self.send("295 reconcile")
+        self.writer.write(dot_stuff("\r\n".join(lines).encode()) if lines else b".\r\n")
 
     # --- posting ---
     def _try_accept(self, raw: bytes, from_peer: bool = False) -> ArticleError | None:

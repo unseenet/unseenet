@@ -7,6 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 
+from .reconcile import FULL, MOD, item_hash, item_key, item_value
 from . import crypto
 from .article import Article, parse_date
 from .groups import MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound, stored_expires
@@ -89,7 +90,28 @@ CREATE TABLE IF NOT EXISTS peer_queue (
     not_before REAL NOT NULL,
     PRIMARY KEY (peer, message_id)
 );
+
+-- UN-RFC 0040 section 4: the key-bound state as items, ordered by key, with
+-- running sums per key prefix so a range's fingerprint is a few lookups.
+CREATE TABLE IF NOT EXISTS kb_items (
+    key        BLOB PRIMARY KEY,                -- SHA-256(Group ID)
+    group_id   TEXT NOT NULL UNIQUE,
+    message_id TEXT NOT NULL,                   -- the current manifest
+    h          BLOB NOT NULL,                   -- SHA-256(key || SHA-256(Message-ID))
+    expires_at INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS kb_items_expires ON kb_items(expires_at);
+CREATE TABLE IF NOT EXISTS kb_sums (            -- per level-nibble prefix of key, levels 0-4
+    level      INTEGER NOT NULL,
+    prefix     INTEGER NOT NULL,
+    count      INTEGER NOT NULL,
+    total      BLOB NOT NULL,                   -- sum of h mod 2^256, 32 octets big-endian
+    PRIMARY KEY (level, prefix)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS kb_meta (built INTEGER NOT NULL);
 """
+
+KB_LEVELS = 4          # running sums down to the first 4 nibbles (65 536 prefixes) of key
 
 
 class Store:
@@ -99,6 +121,8 @@ class Store:
         self.db.executescript(SCHEMA)
         self.db.commit()
         self._backfill_epoch_articles()
+        if not self.db.execute("SELECT 1 FROM kb_meta").fetchone():
+            self.kb_rebuild()                 # stores from before UN-RFC 0040
 
     def _backfill_epoch_articles(self) -> None:
         """Stores from before UN-RFC 0017 did not record which articles define epochs."""
@@ -201,6 +225,7 @@ class Store:
                 " (SELECT MAX(epoch) - 1 FROM epoch_articles WHERE group_id=?))",
                 (group_id, now - days * 86400, group_id, group_id))
             deleted += cur.rowcount
+        self.kb_sweep(now)
         self.remove_expired_key_bound(now)
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))
         self.db.execute("DELETE FROM refused WHERE at < ?", (now - (default_days + 2) * 86400,))
@@ -262,6 +287,9 @@ class Store:
                         " VALUES (?, '{}', '', 0)", (m.group_id,))
         self.db.execute("UPDATE groups SET manifest=?, manifest_id=?, serial=? WHERE group_id=?",
                         (json.dumps(m.raw), m.message_id, m.serial, m.group_id))
+        if is_key_bound(m.group_id) and not m.local:
+            self._kb_put(m.group_id, m.message_id,
+                         self._expires_at(m.group_id, json.dumps(m.raw), m.message_id))
         self.db.commit()
 
     def groups(self) -> list[tuple[str, int, int, str]]:
@@ -361,6 +389,7 @@ class Store:
         self.db.execute("DELETE FROM closed_epochs WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM epoch_articles WHERE group_id=?", (group_id,))
         self.db.execute("DELETE FROM cancels WHERE group_id=?", (group_id,))
+        self._kb_drop(group_id)
         self.db.commit()
         return cur.rowcount
 
@@ -373,6 +402,114 @@ class Store:
         row = self.db.execute("SELECT author_key, group_id FROM cancels WHERE target=?",
                               (target,)).fetchone()
         return (row[0], row[1]) if row else None
+
+    # --- key-bound state for reconciliation (UN-RFC 0040 section 4) ---
+    def _kb_adjust(self, key: bytes, h: int, delta: int) -> None:
+        """Add (delta 1) or take out (-1) one item's hash in the running sums."""
+        k = int.from_bytes(key, "big")
+        for level in range(KB_LEVELS + 1):
+            prefix = k >> (256 - 4 * level)
+            row = self.db.execute("SELECT count, total FROM kb_sums WHERE level=? AND prefix=?",
+                                  (level, prefix)).fetchone()
+            count = (row[0] if row else 0) + delta
+            total = ((int.from_bytes(row[1], "big") if row else 0) + delta * h) % MOD
+            if count:
+                self.db.execute("INSERT OR REPLACE INTO kb_sums VALUES (?, ?, ?, ?)",
+                                (level, prefix, count, total.to_bytes(32, "big")))
+            else:
+                self.db.execute("DELETE FROM kb_sums WHERE level=? AND prefix=?", (level, prefix))
+
+    def _kb_put(self, group_id: str, message_id: str, expires_at: int | None) -> None:
+        """The current manifest of a key-bound group (no commit)."""
+        key = item_key(group_id)
+        h = item_hash(key, item_value(message_id))
+        row = self.db.execute("SELECT h, message_id FROM kb_items WHERE key=?", (key,)).fetchone()
+        if row and row[1] == message_id:
+            self.db.execute("UPDATE kb_items SET expires_at=? WHERE key=?", (expires_at or 0, key))
+            return
+        if row:
+            self._kb_adjust(key, int.from_bytes(row[0], "big"), -1)
+        self.db.execute("INSERT OR REPLACE INTO kb_items VALUES (?, ?, ?, ?, ?)",
+                        (key, group_id, message_id, h.to_bytes(32, "big"), expires_at or 0))
+        self._kb_adjust(key, h, 1)
+
+    def _kb_drop(self, group_id: str) -> None:
+        key = item_key(group_id)
+        row = self.db.execute("SELECT h FROM kb_items WHERE key=?", (key,)).fetchone()
+        if row:
+            self.db.execute("DELETE FROM kb_items WHERE key=?", (key,))
+            self._kb_adjust(key, int.from_bytes(row[0], "big"), -1)
+
+    def kb_sweep(self, now: float | None = None) -> int:
+        """Take groups whose manifest has expired out of the state (UN-RFC 0029 section 5:
+        an expired group is absent). A renewal puts them back."""
+        gone = [r[0] for r in self.db.execute(
+            "SELECT group_id FROM kb_items WHERE expires_at <= ?", (int(now or time.time()),))]
+        for gid in gone:
+            self._kb_drop(gid)
+        if gone:
+            self.db.commit()
+        return len(gone)
+
+    def kb_rebuild(self) -> None:
+        """Build the index from the groups table: for stores from before it existed."""
+        self.db.execute("DELETE FROM kb_items")
+        self.db.execute("DELETE FROM kb_sums")
+        now = time.time()
+        for gid, manifest, mid in list(self.db.execute(
+                "SELECT group_id, manifest, manifest_id FROM groups WHERE serial > 0")):
+            if not is_key_bound(gid) or json.loads(manifest or "{}").get("local"):
+                continue
+            at = self._expires_at(gid, manifest, mid)
+            if at is not None and at > now:
+                self._kb_put(gid, mid, at)
+        self.db.execute("DELETE FROM kb_meta")
+        self.db.execute("INSERT INTO kb_meta VALUES (?)", (int(now),))
+        self.db.commit()
+
+    @staticmethod
+    def _kb_bound(n: int) -> bytes:
+        return n.to_bytes(32, "big")
+
+    def _kb_scan(self, lo: int, hi: int, what: str):
+        sql = f"SELECT {what} FROM kb_items WHERE key >= ?"
+        args: list = [self._kb_bound(lo)]
+        if hi < FULL:
+            sql += " AND key < ?"
+            args.append(self._kb_bound(hi))
+        return self.db.execute(sql + " ORDER BY key", args)
+
+    def kb_items(self, lo: int = 0, hi: int = FULL) -> list[tuple[bytes, str]]:
+        """(key, Message-ID) of the items with lo <= key < hi, by key."""
+        return [(bytes(k), m) for k, m in self._kb_scan(lo, hi, "key, message_id")]
+
+    def kb_count_sum(self, lo: int = 0, hi: int = FULL) -> tuple[int, int]:
+        """Count and sum of the items with lo <= key < hi.
+
+        Whole prefixes come from the running sums; only the parts of the range
+        finer than KB_LEVELS nibbles at its two edges are read item by item."""
+        count = total = 0
+        stack = [(0, 0)]
+        while stack:
+            level, prefix = stack.pop()
+            shift = 256 - 4 * level
+            a, b = prefix << shift, (prefix + 1) << shift
+            if b <= lo or a >= hi:
+                continue
+            row = self.db.execute("SELECT count, total FROM kb_sums WHERE level=? AND prefix=?",
+                                  (level, prefix)).fetchone()
+            if not row:
+                continue                               # nothing under this prefix
+            if lo <= a and b <= hi:
+                count += row[0]
+                total += int.from_bytes(row[1], "big")
+            elif level == KB_LEVELS:
+                for (h,) in self._kb_scan(max(a, lo), min(b, hi), "h"):
+                    count += 1
+                    total += int.from_bytes(h, "big")
+            else:
+                stack += [(level + 1, prefix * 16 + i) for i in range(16)]
+        return count, total % MOD
 
     # --- numbers for the operator (node/stats.py) ---
     def group_count(self) -> int:
