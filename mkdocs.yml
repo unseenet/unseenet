@@ -132,6 +132,7 @@ nav:
       - "0035 Pages and sites": spec/un-rfc-0035.md
       - "0036 Attestations": spec/un-rfc-0036.md
       - "0037 Matrix gateways": spec/un-rfc-0037.md
+      - "0038 Gateway cooperation": spec/un-rfc-0038.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
