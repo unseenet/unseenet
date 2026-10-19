@@ -108,7 +108,8 @@ by them is never fetched.
 
 | Unseenet header  | Value                                                            |
 |------------------|------------------------------------------------------------------|
-| `Subject`        | kind 11: the `title` tag, or the first line of the content. kind 1111: `Re: ` and the subject of the thread it belongs to. kind 9: the first line of the content, at most 80 characters |
+| `Subject`        | kind 11: the `title` tag, or the first line of the content. kind 1111: `Re: ` and the subject of the thread it belongs to. kind 9: empty - a chat line has no subject, and none is made up (UN-RFC 0028 section 3.3) |
+| `Message-Kind`   | kind 9: `chat`; kinds 11 and 1111: `post` (UN-RFC 0028)          |
 | `From`           | The author's display name from their `kind:0` profile where the relay serves one, otherwise the shortened `npub` (`npub1abcdefgh…wxyz`) |
 | `References`     | Section 4.4                                                      |
 | `Origin-Network` | `nostr`                                                          |
