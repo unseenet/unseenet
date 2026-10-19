@@ -518,12 +518,53 @@ async def c_bridges(app: App, args) -> None:
         print(f"  {line}")
 
 
+async def c_gateways(app: App, args) -> None:
+    """The gateway directory (UN-RFC 0038 section 6): what to invite on other networks."""
+    from .core.gateways import DIRECTORY_GROUP, current
+    arts = []
+    async with app.connect() as c:
+        try:
+            _, low, high = await c.group(args.directory or DIRECTORY_GROUP)
+        except NNTPError:
+            sys.exit("The gateway directory is not carried by this node.")
+        for n in range(low, high + 1):
+            raw = await c.article(str(n))
+            if raw is None:
+                continue
+            try:
+                art = Article.from_bytes(_strip_reader_headers(raw))
+            except ArticleError:
+                continue
+            if not art.control:
+                arts.append(art)
+    found = current(arts)
+    if args.network:
+        found = [a for a in found if any(n.network == args.network for n in a.networks)]
+    if not found:
+        print("No gateway has announced itself in the last 30 days.")
+        return
+    print("Gateways that announced themselves (a list, not a recommendation):\n")
+    for a in found:
+        print(f"{a.name}  [{a.fingerprint}]  last announced {a.date:%Y-%m-%d}")
+        for n in a.networks:
+            if args.network and n.network != args.network:
+                continue
+            does = [w for w, on in (("import", n.imports), ("export", n.exports),
+                                    ("portals", n.portals), ("takes invitations", n.requests)) if on]
+            print(f"  {n.network}: {n.account}  ({', '.join(does)})")
+        print(f"  operator {a.operator[:20]}...  contact {a.contact}")
+        print(f"  serves {len(a.groups)} group(s)")
+        if a.policy:
+            print(f"  policy: {a.policy}")
+        print()
+
+
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw,
     "post": c_post, "read": c_read,
-    "bridges": c_bridges,
+    "bridges": c_bridges, "gateways": c_gateways,
 }
 
 
@@ -574,6 +615,9 @@ def client_main(argv=None) -> None:
                    help="post even though the group has portals to other networks")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
+    s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")
+    s.add_argument("--network", help="only this network, e.g. matrix")
+    s.add_argument("--directory", help="another directory group")
     s = sub.add_parser("bridges", help="show or set Tor bridges, for networks that block Tor")
     s.add_argument("mode", nargs="?", choices=["off", "obfs4", "snowflake", "custom"])
     s.add_argument("--line", action="append", help="a bridge line (custom; repeat for more)")

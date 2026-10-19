@@ -34,6 +34,36 @@ When you answer a gatewayed post from Unseenet, your answer goes to the
 gateway as a submission, and the gateway sends it on to the other network
 under the gateway's name.
 
+## Bring your room to Unseenet
+
+If you moderate a public, unencrypted Matrix room, you can have it gatewayed
+without asking anyone first:
+
+1. **Find a gateway.** `unseenet gateways --network matrix` lists the gateways
+   that announced themselves in the directory `unseenet.gateways`: their
+   name, the account to invite, what they do and who runs them. The
+   project's own is `@gateway:unseenet.org`. The list is not a
+   recommendation; anybody can run a gateway.
+2. **Invite its account** to your room. Your invitation is the room's consent.
+3. **Its operator decides.** The gateway sends its operator a request, and
+   joins the room when it is approved. The group appears as `matrix.<server>.<room>`, for example
+   `matrix.matrix-org.unseenet-lounge`. If it is declined, the invitation is
+   declined with the operator's reason.
+
+To stop, kick the gateway's account. Spaces, private and encrypted rooms are
+never gatewayed.
+
+### More than one gateway
+
+A room can invite several gateways, so it does not depend on one host
+([UN-RFC 0038](spec/un-rfc-0038.md)). The first gateway creates the group. A
+second one asks the group's owner to join. Once the owner approves, both
+are listed in the group, and they take turns: messages are carried once,
+by whichever gateway's turn it is. If one stops, the others go on. A group
+stays active while at least one of its gateways announces it in the
+directory. A group that no gateway announces any more stops, and its posts
+expire as usual.
+
 ## Unseenet groups on another network: portals
 
 A **portal** goes the other way: an Unseenet group, say `dk.snak`, gets a
