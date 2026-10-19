@@ -21,7 +21,7 @@ that network, so you can always see where a group comes from:
 | Usenet | `usenet.*`, e.g. `usenet.comp.misc` | [UN-RFC 0024](spec/un-rfc-0024.md) | import, in the lab |
 | Nostr groups (NIP-29) | `nostr.*` | [UN-RFC 0026](spec/un-rfc-0026.md) | import, export and portals, in the lab |
 | FidoNet | `fido.*` | - | planned |
-| Matrix | `matrix.*` | - | planned ([#116](https://github.com/unseenet/unseenet/issues/116)) |
+| Matrix rooms (public, unencrypted) | `matrix.*`, e.g. `matrix.matrix-org.python` | [UN-RFC 0037](spec/un-rfc-0037.md) (draft) | import and export, tested against Synapse |
 
 Each gatewayed group is an ordinary **moderated** group whose moderator is
 the gateway, so nodes and clients carry it without knowing anything about
