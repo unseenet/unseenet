@@ -238,7 +238,10 @@ connected node is complete for a day when, in addition,
 - a reconciliation with a listed node that day shows that it lacks at
   most 0.1% of that node's items, or 100 items, whichever is more.
 
-The allowance covers manifests still on their way. Where a node lacks
+An item counts as lacking only if it is lacking in two reconciliations
+at least 6 hours apart, so that a node a little behind is not called
+incomplete; the checker needs to keep only the differences between the
+two. The allowance covers the rest of what is still on its way. Where a node lacks
 items, the checker can name the ranges, so the note to the operator of
 UN-RFC 0021 section 7 says what is missing without a list of groups.
 This is how the rule that the project's nodes exchange all groups,
@@ -260,7 +263,12 @@ Such a node:
   and those of the keys they ask for;
 - when a client asks for a key-bound group it does not hold, SHOULD
   fetch its manifest from a peer at once (with the batch lookup of
-  unseenet #218 where the peer has it) and answer when it has it;
+  unseenet #218 where the peer has it) and hold the answer while it
+  does, for up to 10 seconds; only then does it answer `411`. An
+  immediate `411` would tell the client the person has no profile or
+  inbox, which is wrong - and over Tor a few seconds hardly show;
+- remembers for some minutes that a group was not found at its peers,
+  so that asking for random keys cannot make it flood them;
 - reconciles only the ranges it carries;
 - is not complete in the sense of section 7, and so cannot be on the
   project's list of nodes (UN-RFC 0010).
@@ -362,11 +370,8 @@ identities, not of every key ever seen.
 
 # 12. Open Issues
 
-- Whether a partial node should answer a missing key-bound group at
-  once with `411` and fetch it in the background, or hold the answer
-  for a few seconds while it fetches (section 8).
-- Whether the completeness allowance of section 7 should be measured
-  twice, some hours apart, to tell a lagging node from a missing one.
+- Whether the allowance of section 7 (0.1% or 100 items) can be smaller
+  once the double measurement has run on the real network.
 
 # 13. Changes to Other Documents
 
