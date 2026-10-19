@@ -94,7 +94,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
-    assert setup["names_group"] in owned and len(owned) == 16
+    assert setup["names_group"] in owned and len(owned) == 17
     news = v.data["groups"][f"alt.news.wikipedia@{setup['project'].fingerprint}"]["manifest"]
     assert (news["type"], news["comments"], news["comment_days"]) == ("channel", "open", 14)
     assert news["posters"] == ["ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza"]
@@ -103,11 +103,13 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     talk = f"unseenet@{setup['project'].fingerprint}"
     assert v.data["groups"][nodes]["manifest"]["view"] == "data"
     assert "view" not in v.data["groups"][talk]["manifest"]          # threads, the default
-    assert v.data["groups"][talk]["manifest"]["portals"][0]["source"] == "#unseenet:unseenet.org"
-    assert "portals" not in v.data["groups"][nodes]["manifest"]       # none, left out
+    chat = v.data["groups"][f"unseenet.chat@{setup['project'].fingerprint}"]["manifest"]
+    assert chat["portals"][0]["source"] == "#unseenet:unseenet.org"
+    assert chat["kinds"] == ["chat"] and chat["view"] == "chat"
+    assert "portals" not in v.data["groups"][talk]["manifest"]        # none, left out
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
-                if e.get("owner")}) == 16
+                if e.get("owner")}) == 17
 
     async def as_published_before(gid, change):
         """Put a newer manifest on the node, as an older script would have made it."""
