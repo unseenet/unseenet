@@ -297,11 +297,11 @@ one person on their first visit.
 
 ## 7.5 Running It Yourself
 
-The signed web client release is a zip that can be checked and opened
-locally, pointed at any web gateway. A person who does this has the
-same trust in the code as with the portable client, and only the
-gateway's view of their address remains. Someone who can do this can
-usually run the portable client, which is better.
+The signed web client release includes the client as a single file,
+`unseenet-web.html` (section 8.7), that is checked once and opened from
+disk. A person who does this has the same trust in the code as with
+the portable client, and only the gateway's view of their address
+remains.
 
 ## 7.6 Watching from Outside
 
@@ -389,6 +389,44 @@ Always Free instance) in one command: Tor, the gateway, a TLS server
 with a free certificate, memory-only storage, logging off, an onion
 address, and the request to be listed.
 
+## 8.7 A List in a File
+
+A government or a provider can block `unseenet.net` and every listed
+gateway it knows of. A file on the user's own computer cannot be
+blocked, and can be passed on by mail, chat or stick. The project
+therefore publishes, with every release of the web client, two files
+meant to be saved and shared:
+
+- **`unseenet-gateways.html`**, the jump page: one self-contained page
+  with the signed list of web gateways built in, both open-web and
+  onion addresses. It shows the list, checks which gateways answer, and
+  has a button that opens a random one that does. Opening a gateway
+  this way loads the code that gateway serves, so section 7 applies.
+- **`unseenet-web.html`**, the client in a file: the whole web client
+  and the list in one page, opened from disk. It needs no gateway to
+  serve it anything, only one to carry ONNTP, so neither blocked
+  domains nor changed pages (section 7.1) matter while the file itself
+  is genuine. It is the better choice whenever someone can keep a file.
+
+Both files:
+
+- MUST contain the project's public key and show its fingerprint, so a
+  user can compare it with one they got elsewhere (the documentation,
+  a friend, a printed note). Each list entry is checked against that
+  key.
+- SHOULD, when opened, fetch the newest signed list from the gateways
+  they reach (the bootstrap file of section 8.2), keep only entries
+  whose signature is good, and offer to save an updated copy of
+  themselves. A list in a file is otherwise only as fresh as the day it
+  was saved.
+- MUST work when opened from disk (`file://`). Web gateways therefore
+  MUST accept WebSocket connections whose `Origin` is `null`, and MUST
+  serve the bootstrap file with `Access-Control-Allow-Origin: *`.
+
+A copy from a stranger may have been changed, list, key and all. The
+safest copy is the one in the signed release zip, checked as in
+section 7.2. The files SHOULD say this on their first screen.
+
 # 9. Security and Privacy Considerations
 
 - **The gateway links address and identity.** It sees when an address
@@ -402,7 +440,9 @@ address, and the request to be listed.
   with access to all pages can read it. Users SHOULD use a browser
   profile without extensions, or a private window.
 - **Blocking.** One domain is easy to block; the onion address, the
-  other listed gateways and the bootstrap of section 8.2 remain.
+  other listed gateways, the bootstrap of section 8.2 and the files of
+  section 8.7 remain. Blocking every listed gateway is possible for a
+  determined state; gateways it does not know of, and Tor, are not.
 - **Network.** Nodes see the gateway's Tor circuits, nothing more. A
   gateway with very many users becomes something an observer can watch
   to learn who uses Unseenet at all, not what they do in it.
