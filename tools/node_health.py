@@ -3,7 +3,9 @@
 
 Each listed node is reached over Tor and must report its node key. It must
 also be connected to the other listed nodes and carry their groups, checked
-with daily canary posts (UN-RFC 0021, tools/canary.py). A node that fails is
+with daily canary posts (UN-RFC 0021, tools/canary.py), and hold their
+key-bound groups, checked by reconciliation (UN-RFC 0040 section 7,
+tools/key_bound_check.py). A node that fails is
 noted in tools/node-health.json with the day it first failed:
 
 - after WARN_DAYS its operator gets a note (on the issue that listed it, or a
@@ -47,16 +49,16 @@ def _problems(problems: list[str]) -> str:
     return "Problems found today:\n\n" + "\n".join(f"- {p}" for p in problems)
 
 
-async def check_all(nodes, today: date, posted_yesterday: set[str]):
-    """Reach every node, then read and post canaries.
+async def check_all(nodes, today: date, posted_yesterday: set[str], kb_before: dict):
+    """Reach every node, read and post canaries, compare key-bound state.
 
     Returns ({address: reach problems}, {address: connection problems},
-    node keys whose canary was posted today).
+    node keys whose canary was posted today, {node key: key-bound record}).
     """
     from unseenet.core.tor import TorProcess
     import canary
     import node_request
-    results, connection, posted = {}, {}, set()
+    results, connection, posted, records = {}, {}, set(), {}
     with tempfile.TemporaryDirectory(prefix="unseenet-health-") as tmp:
         tor = TorProcess(Path(tmp), TorProcess.find_binary())
         await tor.start(timeout=180)
@@ -75,9 +77,75 @@ async def check_all(nodes, today: date, posted_yesterday: set[str]):
                 connection, posted = await check_canaries(
                     [n for n in nodes if not results.get(n.address) and n.node_key],
                     tor.socks_port, key, today, posted_yesterday)
+            kb_problems, records = await check_key_bound(
+                [n for n in nodes if not results.get(n.address) and n.node_key],
+                tor.socks_port, today, kb_before)
+            for address, problems in kb_problems.items():
+                if problems:
+                    connection[address] = list(connection.get(address, [])) + problems
         finally:
             await tor.stop()
-    return results, connection, posted
+    return results, connection, posted, records
+
+
+async def check_key_bound(nodes, socks_port: int, today: date, before: dict):
+    """UN-RFC 0040 section 7: each node against the listed node with the most
+    key-bound items. Returns ({address: problems}, {node key: record for tomorrow})."""
+    import canary
+    import key_bound_check as kb
+    from unseenet.core.reconcile import FULL
+    errors = (OSError, ConnectionError, asyncio.TimeoutError, ValueError)
+    problems: dict[str, list[str]] = {n.address: [] for n in nodes}
+    records: dict[str, dict] = {}
+    counts, able = {}, []
+    for n in nodes:
+        try:
+            client = await canary._connect(n.address, socks_port)
+        except errors as exc:
+            print(f"{n.name}: could not compare key-bound groups ({exc})")
+            continue
+        try:
+            if client.capability("UNSEENET-RECONCILE") is None:
+                problems[n.address].append(
+                    "does not reconcile key-bound groups (UNSEENET-RECONCILE, UN-RFC 0040): update the node")
+                continue
+            whole = await kb.Side(client).describe([(0, FULL)])
+            counts[n.node_key] = whole[(0, FULL)].count
+            able.append(n)
+        except errors as exc:
+            print(f"{n.name}: could not count its key-bound groups ({exc})")
+        finally:
+            try:
+                await client.quit()
+            except errors:
+                pass
+    for n in able:
+        others = [m for m in able if m is not n]
+        if not others:
+            break
+        ref = max(others, key=lambda m: (counts[m.node_key], m.node_key))
+        try:
+            mine = await canary._connect(n.address, socks_port)
+            theirs = await canary._connect(ref.address, socks_port)
+            try:
+                comparison = await kb.compare(mine, theirs)
+            finally:
+                for c in (mine, theirs):
+                    try:
+                        await c.quit()
+                    except errors:
+                        pass
+        except errors as exc:
+            print(f"{n.name}: could not compare key-bound groups with {ref.name} ({exc})")
+            continue
+        print(f"{n.name}: {comparison.node_count} key-bound groups, lacks "
+              f"{comparison.lacking_count} of {ref.name}'s {comparison.reference_count}"
+              + ("" if comparison.finished else f" (at least; {comparison.error})"))
+        problem = kb.verdict(ref.name, comparison, before.get(n.node_key))
+        if problem:
+            problems[n.address].append(problem)
+        records[n.node_key] = kb.record(comparison, ref.name, today.isoformat())
+    return problems, records
 
 
 async def check_canaries(nodes, socks_port: int, key, today: date, posted_yesterday: set[str]):
@@ -126,8 +194,23 @@ def posted_yesterday(health: dict, today: date) -> set[str]:
     return set(c.get("posted", []))
 
 
+def key_bound_before(health: dict, today: date) -> dict:
+    """The previous check's key-bound records (UN-RFC 0040 section 7), if it was
+    at least 6 hours ago and not more than 2 days."""
+    out = {}
+    for key, rec in (health.get("key_bound") or {}).items():
+        try:
+            days = (today - date.fromisoformat(rec.get("date", ""))).days
+        except ValueError:
+            continue
+        if 1 <= days <= 2:
+            out[key] = rec
+    return out
+
+
 def update(results: dict[str, list[str]], today: date,
-           connection: dict[str, list[str]] | None = None, posted: set[str] | None = None) -> dict:
+           connection: dict[str, list[str]] | None = None, posted: set[str] | None = None,
+           key_bound: dict[str, dict] | None = None) -> dict:
     """Apply one day's results to nodes.json and node-health.json; return the actions.
 
     ``results`` are reachability problems, ``connection`` canary problems
@@ -142,6 +225,9 @@ def update(results: dict[str, list[str]], today: date,
         return actions
     if posted is not None:
         health["canaries"] = {"date": today.isoformat(), "posted": sorted(posted)}
+        actions["changed"] = True
+    if key_bound:                    # what each node lacked today, for tomorrow (UN-RFC 0040, 7)
+        health["key_bound"] = key_bound
         actions["changed"] = True
     connection = connection or {}
 
@@ -224,12 +310,14 @@ def main() -> None:
         results = given.get("reach", given)
         connection, posted = given.get("connection", {}), given.get("posted")
         posted = set(posted) if posted is not None else None
+        key_bound = given.get("key_bound")
     else:
-        results, connection, posted = asyncio.run(
-            check_all(nodes, today, posted_yesterday(load_health(), today)))
+        health = load_health()
+        results, connection, posted, key_bound = asyncio.run(check_all(
+            nodes, today, posted_yesterday(health, today), key_bound_before(health, today)))
         if not posted:
             posted = None                   # no key, or nothing taken: keep yesterday's record
-    actions = update(results, today, connection, posted)
+    actions = update(results, today, connection, posted, key_bound)
     args.actions.write_text(json.dumps(actions, indent=2))
     for line in actions["summary"] or ["All nodes answered."]:
         print(line)

@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+**All nodes must be updated** (step 4 of #217). Nodes now leave
+key-bound groups out of their listings, so a node from before 0.4.0 can no
+longer catch up on inboxes and profiles from an updated one, and is judged
+incomplete by the daily check.
+
 ### Fixed
 
 - A connection closed for being idle no longer logs "Unhandled exception
@@ -14,6 +19,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- Key-bound groups (`inbox@`, `profile@`, `avatar@`, `names@`) are no
+  longer listed: not in `LIST ACTIVE` or `LIST NEWSGROUPS`, and not in
+  part 1 of `NEWNEWS` (UN-RFC 0040 sections 3 and 5). They are still
+  reached by Group ID, and part 2 of `NEWNEWS` still has what arrived in
+  them; nodes keep them in step with `XUN-RECONCILE`. Listings stay the
+  size of the ordinary groups, not of the number of people.
+- Manifests of key-bound groups have a size limit: 16 KiB for `inbox@`,
+  10 KiB for `profile@`, 12 KiB for `avatar@`, 64 KiB for `names@`
+  (UN-RFC 0040 section 9; refused with `441 size`). That is about 100
+  bans in an inbox; every manifest in the network today is far below.
+- The daily node check also compares each node's key-bound groups with
+  the listed node that has the most (UN-RFC 0040 section 7): a node must
+  advertise `UNSEENET-RECONCILE`, and may lack at most 0.1% of them, or
+  100 - counting only what it lacked the day before too.
+- The terminal client no longer says your inbox is "(not on your nodes)"
+  because it is not listed.
 - Node health no longer counts key-bound groups (`inbox@`, `profile@`,
   `avatar@`, `names@`) when it decides whether a listed node is complete,
   first step of #217 (UN-RFC 0040 section 7). Nodes that still list them

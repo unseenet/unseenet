@@ -10,7 +10,8 @@ from pathlib import Path
 from .reconcile import FULL, MOD, item_hash, item_key, item_value
 from . import crypto
 from .article import Article, parse_date
-from .groups import MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound, stored_expires
+from .groups import (KEY_BOUND_NAMES, MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound,
+                     stored_expires)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -306,12 +307,17 @@ class Store:
                          self._expires_at(m.group_id, json.dumps(m.raw), m.message_id))
         self.db.commit()
 
-    def groups(self) -> list[tuple[str, int, int, str]]:
-        """(group_id, high, low, description) for carried groups."""
+    def groups(self, ordinary: bool = False) -> list[tuple[str, int, int, str]]:
+        """(group_id, high, low, description) for carried groups; with ``ordinary``,
+        without key-bound groups (UN-RFC 0040 section 3: not listed)."""
+        sql = "SELECT group_id, high, manifest FROM groups WHERE serial > 0"
+        if ordinary:
+            sql += "".join(f" AND group_id NOT GLOB '{n}@*'" for n in KEY_BOUND_NAMES)
         out = []
-        for gid, high, manifest in list(self.db.execute(
-                "SELECT group_id, high, manifest FROM groups WHERE serial > 0 ORDER BY group_id")):
+        for gid, high, manifest in list(self.db.execute(sql + " ORDER BY group_id")):
             if self.expired(gid):             # UN-RFC 0029 section 5: not offered
+                continue
+            if ordinary and is_key_bound(gid):
                 continue
             nums = self.numbers(gid)
             data = json.loads(manifest)

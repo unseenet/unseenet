@@ -35,7 +35,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
+from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs, is_key_bound,
                            personal_inbox_id, short_group_id, split_group_id)
 from . import session as _session_module
 from . import naming
@@ -1895,7 +1895,8 @@ class UnseenetApp(App):
                 g = available[gid]
             else:
                 g = GroupInfo(gid, entry.get("title", ""))
-                if available is not None:
+                # key-bound groups (your inbox) are never listed (UN-RFC 0040 section 3)
+                if available is not None and not is_key_bound(gid):
                     g.description = "(not on your nodes)"
             g.subscribed = True
             g.type = entry.get("type") or g.type
