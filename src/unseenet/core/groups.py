@@ -171,6 +171,11 @@ def _comments(data: dict) -> tuple[str, int | None]:
 # --- key-bound groups (UN-RFC 0029) --------------------------------------
 
 KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar")   # UN-RFC 0029 section 2
+# UN-RFC 0040 section 9: the largest manifest article of each key-bound group, in
+# octets (feed@, attest@ and site@ for when they become key-bound groups).
+KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 1024,
+                          "avatar": 12 * 1024, "names": 64 * 1024, "attest": 64 * 1024,
+                          "site": 64 * 1024}
 MAX_LIFETIME = timedelta(days=730)       # expires at most this long after Date (section 3)
 RENEW_WHEN_LEFT = timedelta(days=545)    # renew once less than this remains (section 4)
 RENEW_WINDOW = timedelta(days=30)        # at a random moment within this (section 4)

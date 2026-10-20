@@ -96,6 +96,14 @@ project requires that a listed node is **connected**
   listed nodes carry, except groups you leave out openly with
   [`excludes`](configuration.md#excludes-groups-you-leave-out). The
   project's groups (`unseenet*`) cannot be left out.
+- **It holds everyone's inbox and profile.** Inboxes, profiles and
+  pictures are *key-bound groups*: there is one or more per person, so
+  nodes do not list them, and compare them with each other instead
+  ([UN-RFC 0040](../spec/un-rfc-0040.md)). Your node must run a version
+  that can (it then advertises `UNSEENET-RECONCILE`), and may lack at
+  most 0.1% of the key-bound groups of the listed node that has the most,
+  or 100, whichever is more. A node that peers with listed nodes does this
+  by itself: it compares with each peer once a day and fetches what it lacks.
 
 When the other checks pass, the request check posts a small **canary**
 post to your node and one to a listed node, and waits up to an hour for
@@ -104,6 +112,9 @@ each to show up on the other side.
 Listed nodes are checked **every day**: reached over Tor, and checked with
 a new canary for each node, read on all the others the next day. A canary
 counts as having got out when more than half of the listed nodes have it.
+The check also compares your node's key-bound groups with those of the
+listed node that has the most; a group counts as missing only if it was
+missing the day before too, so a node a little behind is not judged.
 If your node is not reachable, not connected or misses groups for 3 days,
 you get a note on your request saying what is wrong; after 10 days it is
 taken off the list. Ask again when it is fixed.

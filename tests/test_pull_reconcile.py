@@ -6,7 +6,7 @@ import pytest
 
 from unseenet.core import crypto
 from unseenet.core.article import ArticleError
-from unseenet.core.groups import inbox_article, is_key_bound, make_manifest
+from unseenet.core.groups import inbox_article, make_manifest
 from unseenet.core.store import Store
 from unseenet.node import pulling
 from unseenet.node.pulling import Puller
@@ -23,13 +23,6 @@ def make_node(name, **kw) -> Node:
 async def serve(node):
     server = await node.serve("127.0.0.1", 0)
     return server, f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
-
-
-def as_after_0040(node: Node) -> None:
-    """Key-bound groups out of LIST and NEWNEWS part 1, as UN-RFC 0040 sections 3 and 5
-    say (step 4 of #217); part 2 unchanged."""
-    groups = node.store.groups
-    node.store.groups = lambda: [g for g in groups() if not is_key_bound(g[0])]
 
 
 def inbox_with_old_manifest(a: Node):
@@ -49,7 +42,6 @@ def inbox_with_old_manifest(a: Node):
 
 async def test_new_node_reconciles_before_newnews():
     a = make_node("a")
-    as_after_0040(a)
     m, msg = inbox_with_old_manifest(a)
     server, addr = await serve(a)
     try:
@@ -88,7 +80,6 @@ async def test_without_reconcile_the_manifest_is_fetched_by_group(monkeypatch):
     """A peer that cannot reconcile: an article in a key-bound group we hold no
     manifest for makes us fetch the group's manifests from it, then take it."""
     a = make_node("a")
-    as_after_0040(a)
     m, msg = inbox_with_old_manifest(a)
     capability = pulling.Client.capability
     monkeypatch.setattr(pulling.Client, "capability",

@@ -19,8 +19,8 @@ from ..core import crypto, profiles, reconcile
 from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import message_kind, parse_supersedes
-from ..core.groups import (INBOX_SCHEME, Manifest, check_permitted, is_key_bound,
-                           parse_key_update, split_group_id)
+from ..core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
+                           is_key_bound, parse_key_update, split_group_id)
 from ..core.store import Store
 from ..nntp import (MANIFESTS_ANSWER_BYTES, MANIFESTS_MAX, MAX_LINE, RECONCILE_MAX_BYTES,
                     dot_stuff, read_block)
@@ -235,6 +235,10 @@ class Node:
         now = now or datetime.now(timezone.utc)
         ctl = art.control
         is_manifest = ctl == ["manifest"]
+        if is_manifest and is_key_bound(art.group):
+            limit = KEY_BOUND_MANIFEST_MAX.get(art.group.split("@")[0])
+            if limit is not None and len(raw) > limit:     # UN-RFC 0040 section 9
+                raise ArticleError("size", f"key-bound manifest larger than {limit} octets")
         if self.config.excludes and wildmat(self.config.excludes, art.group):
             raise ArticleError("group", "excluded by this node")
         removed = self.store.tombstone(art.group)
@@ -756,7 +760,7 @@ class Session:
     async def cmd_list_active(self, args):
         pattern = args[0] if args else "*"
         self.send("215 list follows")
-        for gid, high, low, _ in self.node.store.groups():
+        for gid, high, low, _ in self.node.store.groups(ordinary=True):   # UN-RFC 0040, 3
             if wildmat(pattern, gid):
                 self.send(f"{gid} {high} {low} y")
         self.send(".")
@@ -764,7 +768,7 @@ class Session:
     async def cmd_list_newsgroups(self, args):
         pattern = args[0] if args else "*"
         self.send("215 descriptions follow")
-        for gid, _, _, desc in self.node.store.groups():
+        for gid, _, _, desc in self.node.store.groups(ordinary=True):
             if wildmat(pattern, gid):
                 self.send(f"{gid}\t{desc}")
         self.send(".")
@@ -1030,7 +1034,9 @@ class Session:
         listed: set[str] = set()
         # UN-RFC 0017: first the state of every matching group, whatever its age, so
         # that a node catching up can accept what follows; then what arrived since.
-        for gid, *_ in store.groups():
+        # Key-bound groups are not in part 1 (UN-RFC 0040 section 5): their state is
+        # reconciled, and what changes still comes in part 2.
+        for gid, *_ in store.groups(ordinary=True):
             if wildmat(pattern, gid):
                 for msgid in store.state_ids(gid):
                     if msgid not in listed:
