@@ -26,6 +26,8 @@ from importlib import resources
 # ph5fc5hop5232qsz is part of their IDs.
 PROJECT_KEY = "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya"
 NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
+# Known web entrances (UN-RFC 0043 section 8.1), for web clients and the jump page.
+ENTRANCES_GROUP = "unseenet.entrances@ph5fc5hop5232qsz"
 ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
 # Daily canary posts that check listed nodes are connected (UN-RFC 0021).
 CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
@@ -34,6 +36,7 @@ CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
 # has read the manifests.
 DATA_GROUPS = frozenset({
     NODES_GROUP,
+    ENTRANCES_GROUP,
     CANARY_GROUP,
     "unseenet.hierarchies@ph5fc5hop5232qsz",
     "unseenet.checkgroups@ph5fc5hop5232qsz",
@@ -79,6 +82,38 @@ def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
     if not nodes:
         raise ValueError("the list has no usable nodes")
     return str(data.get("updated", ""))[:32], nodes
+
+
+_ONION = re.compile(r"^[a-z2-7]{56}\.onion$")
+MAX_ENTRANCES = 200
+
+
+def parse_entrance_list(text: str) -> tuple[str, list[dict]]:
+    """(updated, entrances) from a list of web entrances (UN-RFC 0043 section 8.1).
+    Each entrance has an https ``url``, an ``onion`` address, or both. Raises
+    ValueError if the list is malformed or has no usable entrance."""
+    data = json.loads(text)
+    if not isinstance(data, dict) or data.get("v") != 1 or not isinstance(data.get("entrances"), list):
+        raise ValueError("not a version 1 entrance list")
+    out = []
+    for item in data["entrances"][:MAX_ENTRANCES]:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        onion = str(item.get("onion", "")).strip().lower()
+        if url and not re.match(r"^https://[^/\s]+/?$", url):
+            url = ""
+        if onion and not _ONION.match(onion):
+            onion = ""
+        if not (url or onion):
+            continue
+        out.append({"name": str(item.get("name", url or onion))[:64], "url": url, "onion": onion,
+                    "operator": str(item.get("operator", ""))[:80],
+                    "contact": str(item.get("contact", ""))[:120],
+                    "description": str(item.get("description", ""))[:200]})
+    if not out:
+        raise ValueError("the list has no usable entrances")
+    return str(data.get("updated", ""))[:32], out
 
 
 def builtin_list() -> tuple[str, list[KnownNode]]:

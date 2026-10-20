@@ -326,8 +326,24 @@ may ask to be listed (a GitHub issue, as for nodes). The project lists
 an entrance only when its operator promises section 5 and outside
 watching (section 7.6) has found it serving the signed release.
 
-The list says who is known, not who is safe. No one can see whether a
+The list says who is known, not who is safe. No one can see whether an
 entrance keeps logs.
+
+Each post is one complete list, as for node lists (UN-RFC 0010
+section 3); the newest valid post counts. The list is a JSON object
+`{"v": 1, "updated": "...", "entrances": [...]}`, at most 200 entries:
+
+| Field         | Req.        | Meaning                                          |
+|---------------|-------------|--------------------------------------------------|
+| `url`         | one of both | The entrance on the open web: `https://host/`    |
+| `onion`       | one of both | Its onion address, `<56 base32>.onion`           |
+| `name`        | no          | A short label, at most 64 characters             |
+| `operator`    | no          | The operator's identity key or name (UN-RFC 0019)|
+| `contact`     | no          | How to reach the operator, at most 120 characters|
+| `description` | no          | At most 200 characters, shown to users           |
+
+Clients ignore entries with neither a valid `url` nor a valid `onion`,
+and unknown fields.
 
 ## 8.2 Bootstrap
 
