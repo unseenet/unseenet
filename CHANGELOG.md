@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- A connection closed for being idle no longer logs "Unhandled exception
+  in client_connected_cb" with a traceback.
+
 ### Changed
 
 - Node health no longer counts key-bound groups (`inbox@`, `profile@`,

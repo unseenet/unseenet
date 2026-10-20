@@ -606,14 +606,16 @@ class Node:
         self.stats.session_opened()
         try:
             await session.run()
-        except (ConnectionError, asyncio.IncompleteReadError):
-            pass
+        except (ConnectionError, asyncio.IncompleteReadError, TimeoutError):
+            pass        # gone, cut off, or idle for longer than the session allows
         finally:
             self.stats.session_closed(was_peer=session.peer is not None)
             writer.close()
 
 
 class Session:
+    IDLE_SECONDS = 600.0       # a connection silent this long is closed
+
     def __init__(self, node: Node, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self.node, self.reader, self.writer = node, reader, writer
         self.group: str | None = None
@@ -632,7 +634,7 @@ class Session:
         self.send(f"200 Unseenet node {__version__} ready (posting ok)")
         while True:
             await self.writer.drain()
-            raw = await asyncio.wait_for(self.reader.readline(), timeout=600)
+            raw = await asyncio.wait_for(self.reader.readline(), timeout=self.IDLE_SECONDS)
             if not raw:
                 return
             if len(raw) > MAX_LINE:
