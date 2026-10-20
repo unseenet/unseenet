@@ -60,7 +60,7 @@ who needs to be hidden.
 | The gateway learns your IP address | (no gateway) | **Yes** | No |
 | You must trust code served to you | Once, on download, signed | **Every load** (section 7) | **Every load** (section 7) |
 | Keys stay on your stick or in memory | Yes | In the browser (section 6) | In the browser (section 6) |
-| The access point can be blocked | Hard (Tor, bridges) | **Easy** (one domain) | Hard |
+| The access point can be blocked | Hard (Tor, bridges) | **Each gateway easily**, many gateways less so (section 8) | Hard |
 
 Everything below the network layer is unchanged: a post from a web
 client is an ordinary signed article, and nodes cannot tell it from any
@@ -218,6 +218,19 @@ content that posts link to (UN-RFC 0027 attachments come through the
 gateway like everything else). Links in posts follow the graphical
 client's rules.
 
+## 6.5 New Users
+
+A web client MUST be able to make a new vault and a new identity on the
+spot, so a newcomer can read and post within minutes. It makes the keys
+in the browser, as any client does (UN-RFC 0003), pays the cost of a new
+key (UN-RFC 0025) in the browser, and then offers the vault file for
+download with a plain explanation: this file and its passphrase are the
+identity, and nobody can restore them if both are lost.
+
+A web client SHOULD suggest a separate identity for anything the user
+may later want to keep hidden, and MAY offer to move the vault to a
+stick with the portable client.
+
 # 7. Trusting the Code
 
 ## 7.1 The Problem
@@ -262,6 +275,16 @@ fetch the service worker's own script again from time to time, so a
 server can replace the loader. The loader MUST therefore warn when its
 own script has changed. It is a tripwire, not a guarantee.
 
+### 7.3.1 Asking More Than One Source
+
+A single source of checksums can lie, but several independent ones are
+unlikely to lie together. The loader SHOULD fetch the signed checksums
+from at least two sources run by different people, for example
+`unseenet.announce` through two different web gateways from the list in
+section 8.1, and the project's release page. It runs the application
+only when every source it reached names the same version and checksums,
+and warns plainly when they disagree.
+
 ## 7.4 A Verifier Outside the Page
 
 The project SHOULD publish a browser extension, itself signed and
@@ -289,18 +312,82 @@ compare it with the signed checksums, reporting any difference in
 changes the page for everyone. It cannot catch one that changes it for
 a single visitor, which is why section 7.4 exists.
 
-# 8. The Project's Own Web Gateway (Informative)
+# 8. Finding and Switching Web Gateways
 
-The project intends to run a web gateway and web client at
-`unseenet.net`, kept apart from `unseenet.org`, so that the
-documentation and the real clients live on one name and the less hidden
-access on another. It would follow section 5 in full: DNS straight to
-the gateway with no proxying, memory-only storage, no logs, an onion
-address beside it. Its configuration would be public.
+## 8.1 The List of Known Web Gateways
 
-Anyone may run a web gateway. A web client SHOULD let the user pick
-another one, and the project SHOULD list known web gateways like known
-nodes, so that blocking or pressuring one name does not cut people off.
+Known web gateways are listed like known nodes (UN-RFC 0010), in a
+project group of their own, `unseenet.webgateways`. Each entry is the
+gateway's information from section 4.3 plus its open-web and onion
+addresses, signed by a key the project key lists as a poster. Anyone
+may ask to be listed (a GitHub issue, as for nodes). The project lists
+a gateway only when its operator promises section 5 and outside
+watching (section 7.6) has found it serving the signed release.
+
+The list says who is known, not who is safe. No one can see whether a
+gateway keeps logs.
+
+## 8.2 Bootstrap
+
+A web client needs a first gateway before it can read the list from the
+network. It finds one by, in order:
+
+1. the list built into the loader at release time;
+2. the bootstrap file `https://<any listed gateway>/.well-known/unseenet-gateways.json`,
+   a copy of `unseenet.webgateways` with each entry's signature, which
+   every listed gateway SHOULD serve;
+3. the same file from the project's own bootstrap at `unseenet.net`.
+
+The web client MUST check every entry's signature against the project
+key whatever served it, so that a bootstrap source can withhold
+gateways but not add one. Once connected, it reads
+`unseenet.webgateways` from the network and keeps the list in memory
+(or in the vault, when one is open).
+
+## 8.3 Staying on One, Moving When Needed
+
+A web client SHOULD keep using one gateway for a whole session and
+pick it at random from the list when the session starts. It moves to
+another listed gateway:
+
+- when the gateway cannot be reached or stops answering;
+- when the user asks;
+- when a post it sent has not come back through a second gateway
+  within a reasonable time (section 8.4).
+
+It MUST NOT change gateway on a timer or after every post. Every
+gateway a visitor uses learns their address and, once they post, their
+key. Moving often spreads that knowledge to more operators without
+hiding anything from any of them: the chance that one of them records
+it only grows.
+
+## 8.4 Checking for Dropped Posts
+
+A gateway cannot change a signed post, but it can drop one. After
+posting, a web client SHOULD check that the article reached the
+network by asking for its Message-ID through another listed gateway,
+connecting to a different node. If the article is missing, it says so
+and offers to send it again through the other gateway. This second
+gateway sees the visitor's address too, so the check SHOULD be one the
+user can turn off.
+
+## 8.5 The Project's Own Web Gateway (Informative)
+
+The project intends to run a web gateway, the web client and the
+bootstrap file at `unseenet.net`, kept apart from `unseenet.org`, so
+that the documentation and the real clients live on one name and the
+less hidden access on another. It would follow section 5 in full: DNS
+straight to the gateway with no proxying, memory-only storage, no logs,
+an onion address beside it. Its configuration would be public.
+
+## 8.6 Making It Easy to Run One (Informative)
+
+More gateways run by more people make the list harder to block or
+pressure. The project intends to publish a package that sets up a web
+gateway on a small free virtual machine (for example an Oracle Cloud
+Always Free instance) in one command: Tor, the gateway, a TLS server
+with a free certificate, memory-only storage, logging off, an onion
+address, and the request to be listed.
 
 # 9. Security and Privacy Considerations
 
@@ -314,8 +401,8 @@ nodes, so that blocking or pressuring one name does not cut people off.
 - **The browser** holds decrypted content in memory, and extensions
   with access to all pages can read it. Users SHOULD use a browser
   profile without extensions, or a private window.
-- **Blocking.** One domain is easy to block; the onion address and
-  other gateways remain.
+- **Blocking.** One domain is easy to block; the onion address, the
+  other listed gateways and the bootstrap of section 8.2 remain.
 - **Network.** Nodes see the gateway's Tor circuits, nothing more. A
   gateway with very many users becomes something an observer can watch
   to learn who uses Unseenet at all, not what they do in it.
@@ -334,24 +421,30 @@ nodes, so that blocking or pressuring one name does not cut people off.
   Because it is still the difference between an honest operator who is
   served a demand and has nothing to hand over, and one who does. The
   document is honest that it is a promise (section 5).
+- **Why not change gateway every few minutes?** It feels safer, but a
+  gateway learns the same thing in one minute as in an hour: who you
+  are and that you use Unseenet. Every extra gateway is one more
+  operator who could record it. Where several gateways do help is in
+  agreeing on the code (section 7.3.1), in getting around one that is
+  down or blocked (section 8.3), and in noticing one that drops posts
+  (section 8.4).
 - **Why hidden-only identities?** People will open their real vault on
   the open web out of habit. The flag makes the safe choice the
   default where it matters most.
 
 # 11. Open Questions
 
-1. Should web gateways be listed in their own group
-   (`unseenet.webgateways`) or as a field on known-node entries?
-2. Should the browser extension of section 7.4 be required before a
+1. Should the browser extension of section 7.4 be required before a
    web client offers to open a vault that holds anything but public,
    low-stakes identities?
-3. Should a web client be able to make a new identity and vault on the
-   spot, so a newcomer can try posting in minutes?
+2. Should the check for dropped posts (section 8.4) be on by default?
 
 # 12. Changes to Other Documents
 
 - **UN-RFC 0007** section 2.1: identity entries may carry `hidden_only`
   (section 6.3).
+- **UN-RFC 0010**: web gateways are listed like known nodes, in their
+  own group `unseenet.webgateways` (section 8.1).
 - **UN-RFC 0000** section 6: 0043 is added to the index.
 
 # Copyright Notice
