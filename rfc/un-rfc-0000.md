@@ -149,7 +149,7 @@ The protocol is designed to be extended without breaking old software:
 | 0040 | Key-bound Groups at Scale                     | Standards Track |
 | 0041 | Fetching Many Manifests at Once               | Standards Track |
 | 0042 | Editing Posts (Supersedes)                    | Standards Track |
-| 0043 | Web Gateways and Clients on the Open Web      | Standards Track |
+| 0043 | Web Entrances and Clients on the Open Web     | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

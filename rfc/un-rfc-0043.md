@@ -5,7 +5,7 @@ Category: Standards Track
 Status: Draft
 Updates: 0000, 0007
 
-             Unseenet: Web Gateways and Clients on the Open Web
+             Unseenet: Web Entrances and Clients on the Open Web
 ```
 
 # Abstract
@@ -15,12 +15,12 @@ they have seen what a network is like. This document lets them reach
 Unseenet from an ordinary browser on the open web. A **web client** is
 a page that does all the work with keys in the browser: it opens the
 vault, signs, encrypts, decrypts and pays proof-of-work. A **web
-gateway** is a server that passes the browser's ONNTP session to a node
+entrance** is a server that passes the browser's ONNTP session to a node
 over Tor and does nothing else. It never sees a passphrase, a private
 key or the plaintext of a closed group.
 
 This access is less hidden than the real clients, and the document says
-so plainly: the gateway sees the visitor's IP address, and the visitor
+so plainly: the entrance sees the visitor's IP address, and the visitor
 must trust the code the page is served with. What does not change is
 what makes Unseenet worth using: groups and nodes cannot be removed by
 anyone, and no one can delete or change someone else's signed post.
@@ -31,10 +31,10 @@ The portable and bootable clients (UN-RFC 0001) hide who talks to whom.
 They also ask a lot of a newcomer: download, unzip or flash, start. A
 person who just wants to look will go back to Discord instead.
 
-Old Usenet had web gateways, and many people only ever knew it through
+Old Usenet had web entrances, and many people only ever knew it through
 one. That was also a lesson: when the convenient way becomes the only
 way most people know, its operator holds the network in practice. This
-document therefore keeps the web gateway as thin as possible, makes it
+document therefore keeps the web entrance as thin as possible, makes it
 replaceable, and keeps the real clients the documented path for anyone
 who needs to be hidden.
 
@@ -43,10 +43,12 @@ who needs to be hidden.
 - **Open-web access**: using Unseenet from a browser without Tor.
 - **Web client**: the code a browser runs to use Unseenet: the same
   user interface as the graphical client (`unseenet-gui`), with a
-  transport that talks to a web gateway instead of a local Tor.
-- **Web gateway**: a server that accepts WebSocket connections from web
+  transport that talks to a web entrance instead of a local Tor.
+- **Web entrance**: a server that accepts WebSocket connections from web
   clients and carries each one, byte for byte, to an onion service node
-  over Tor.
+  over Tor. Not to be confused with a **gateway** (UN-RFC 0023), which
+  carries posts between Unseenet and another network; a web entrance
+  only lets a browser into Unseenet itself.
 - **Hidden-only identity**: an identity in a vault marked so that web
   clients refuse to use it (section 6.3).
 
@@ -57,33 +59,33 @@ who needs to be hidden.
 | Groups and nodes can be removed by someone | No | No | No |
 | Others can delete or change your signed posts | No | No | No |
 | Nodes learn your IP address | No | No | No |
-| The gateway learns your IP address | (no gateway) | **Yes** | No |
+| The entrance learns your IP address | (no entrance) | **Yes** | No |
 | You must trust code served to you | Once, on download, signed | **Every load** (section 7) | **Every load** (section 7) |
 | Keys stay on your stick or in memory | Yes | In the browser (section 6) | In the browser (section 6) |
-| The access point can be blocked | Hard (Tor, bridges) | **Each gateway easily**, many gateways less so (section 8) | Hard |
+| The access point can be blocked | Hard (Tor, bridges) | **Each entrance easily**, many entrances less so (section 8) | Hard |
 
 Everything below the network layer is unchanged: a post from a web
 client is an ordinary signed article, and nodes cannot tell it from any
 other.
 
-# 4. The Web Gateway Protocol
+# 4. The Web Entrance Protocol
 
 ## 4.1 One Tunnel per Connection
 
-A web client opens a WebSocket over TLS to the gateway:
+A web client opens a WebSocket over TLS to the entrance:
 
 ```
-wss://gateway.example/onntp?node=<56-character v3 onion address>
+wss://entrance.example/onntp?node=<56-character v3 onion address>
 ```
 
-The gateway opens a connection over Tor to that onion address on the
+The entrance opens a connection over Tor to that onion address on the
 ONNTP port (UN-RFC 0005) and copies bytes in both directions until
 either side closes. Each WebSocket binary message carries an arbitrary
 run of bytes; the ONNTP line protocol is unchanged and runs inside. The
 web client speaks to the node exactly as a portable client would,
 including node authentication where the node uses it.
 
-A web gateway:
+A web entrance:
 
 - MUST connect only to v3 onion addresses, and only on the ONNTP port.
   It MUST NOT reach any address on the open web, so that it cannot be
@@ -95,27 +97,27 @@ A web gateway:
   coming from the web.
 - MUST give each WebSocket connection its own Tor circuit (for example
   with SOCKS isolation and random credentials per connection), so that
-  a node cannot link two sessions through the gateway's circuits.
-- MUST NOT cache articles, groups or answers. A gateway that caches is
+  a node cannot link two sessions through the entrance's circuits.
+- MUST NOT cache articles, groups or answers. An entrance that caches is
   a node, and should be run as one.
 
 ## 4.2 Limits
 
-A gateway MAY limit connections per visitor and in total. It MUST do
+An entrance MAY limit connections per visitor and in total. It MUST do
 this without storing addresses: counters are kept in memory only, keyed
 by an HMAC of the address under a key made at start and never written
 down, and dropped after at most one hour.
 
-## 4.3 Gateway Information
+## 4.3 Entrance Information
 
-A gateway SHOULD answer `GET /.well-known/unseenet-gateway` with a JSON
+An entrance SHOULD answer `GET /.well-known/unseenet-entrance` with a JSON
 object:
 
 ```json
 {
   "operator": "@lorensen",
   "contact": "inbox:<identity fingerprint>",
-  "onion": "<the gateway's own onion address, if it has one>",
+  "onion": "<the entrance's own onion address, if it has one>",
   "nodes": "known",
   "statement": "memory only, no logs, no third-party proxy"
 }
@@ -125,35 +127,35 @@ object:
 shows this information on its About page. It is a promise, not proof
 (section 5).
 
-# 5. Operating a Web Gateway
+# 5. Operating a Web Entrance
 
-A web gateway sees every visitor's IP address and when they are
+A web entrance sees every visitor's IP address and when they are
 online. Nothing in this protocol can stop an operator from recording
 that. The obligations below are what an operator promises, and the
-reason the gateway is kept so thin is that there is little else to
+reason the entrance is kept so thin is that there is little else to
 promise.
 
-An operator of a web gateway:
+An operator of a web entrance:
 
-- MUST run the gateway so that nothing about visitors is written to
+- MUST run the entrance so that nothing about visitors is written to
   disk: no access logs, no connection logs, no error logs naming
   addresses, no core dumps. The RECOMMENDED setup is a host or
   container whose writable storage is in memory only (tmpfs) and whose
-  logging is turned off at every layer: reverse proxy, gateway, Tor,
+  logging is turned off at every layer: reverse proxy, entrance, Tor,
   system journal.
-- MUST NOT put the gateway behind a service that ends TLS on someone
+- MUST NOT put the entrance behind a service that ends TLS on someone
   else's machine (a CDN or a proxying DNS service). That party would
-  see every address and the whole ONNTP stream. DNS for the gateway's
-  name MUST point straight at the gateway.
+  see every address and the whole ONNTP stream. DNS for the entrance's
+  name MUST point straight at the entrance.
 - MUST NOT add analytics, trackers or content from third parties to
   the page.
-- SHOULD also offer the gateway and the page as an onion service, for
+- SHOULD also offer the entrance and the page as an onion service, for
   visitors who use Tor Browser.
-- SHOULD publish the gateway's configuration, so others can see what it
+- SHOULD publish the entrance's configuration, so others can see what it
   runs.
 
-A web client MUST treat the gateway as able to see the visitor's
-address whatever the gateway says about itself.
+A web client MUST treat the entrance as able to see the visitor's
+address whatever the entrance says about itself.
 
 # 6. The Web Client
 
@@ -162,12 +164,12 @@ address whatever the gateway says about itself.
 A web client on the open web MUST show, at all times and on every
 screen, that it is on the open web: a bar that cannot be hidden, in a
 colour that differs from the graphical client's, with a short text such
-as "Open web - the gateway can see your IP address". The bar links to a
+as "Open web - the entrance can see your IP address". The bar links to a
 page that explains, without technical words, what this means and how to
 get the real client.
 
 When the page was loaded over an onion service, the bar says so instead
-("Tor Browser - the gateway cannot see your address, but you trust the
+("Tor Browser - the entrance cannot see your address, but you trust the
 code it serves").
 
 The About page (the "About Unseenet" every client has) MUST include the
@@ -182,7 +184,7 @@ All work with secrets happens in the browser:
   and, when saving, writes the file back or offers it for download.
   The payload is kept in memory as in UN-RFC 0007 section 2.2.
 - A web client MUST NOT send a passphrase, a private key, a group key
-  or decrypted content to the gateway or anywhere else.
+  or decrypted content to the entrance or anywhere else.
 - A web client MUST NOT store a vault in the browser (IndexedDB, local
   storage, the cache) unless the user turns this on, with a warning
   that anyone using the browser later can try passphrases against it.
@@ -215,7 +217,7 @@ The page MUST load nothing from outside its own origin: no fonts,
 scripts, images or styles from third parties. It MUST set a Content
 Security Policy that forbids it, and MUST NOT load images or other
 content that posts link to (UN-RFC 0027 attachments come through the
-gateway like everything else). Links in posts follow the graphical
+entrance like everything else). Links in posts follow the graphical
 client's rules.
 
 ## 6.5 New Users
@@ -256,8 +258,8 @@ consists of, signed (`SHA256SUMS.txt.sig`) with the project key for
 stable releases and the release key for development builds, exactly as
 for stick updates. The project announces each stable release in
 `unseenet.announce` with the same checksums, so they can be read from
-inside the network, through Tor, signed by a key the gateway does not
-have. A gateway can withhold that announcement but cannot forge it.
+inside the network, through Tor, signed by a key the entrance does not
+have. An entrance can withhold that announcement but cannot forge it.
 
 ## 7.3 A Pinned Loader
 
@@ -265,7 +267,7 @@ The page SHOULD consist of a small loader, installed on the first
 visit as a service worker, with the project's public keys built in.
 After that the loader fetches the application files, checks them
 against signed checksums (from the release or from `unseenet.announce`
-through the gateway), and runs them only if they match a version no
+through the entrance), and runs them only if they match a version no
 older than the last one it ran. It refuses, with a clear warning, if
 the signature is wrong or the version goes back.
 
@@ -280,7 +282,7 @@ own script has changed. It is a tripwire, not a guarantee.
 A single source of checksums can lie, but several independent ones are
 unlikely to lie together. The loader SHOULD fetch the signed checksums
 from at least two sources run by different people, for example
-`unseenet.announce` through two different web gateways from the list in
+`unseenet.announce` through two different web entrances from the list in
 section 8.1, and the project's release page. It runs the application
 only when every source it reached names the same version and checksums,
 and warns plainly when they disagree.
@@ -291,7 +293,7 @@ The project SHOULD publish a browser extension, itself signed and
 installed from the browser's store, that checks every file the page
 loads against the signed checksums and shows plainly whether the page
 is a signed release. Because the extension does not come from the
-gateway, a changed page cannot switch it off. This is the only
+entrance, a changed page cannot switch it off. This is the only
 protection that holds against a server that serves a changed page to
 one person on their first visit.
 
@@ -300,110 +302,110 @@ one person on their first visit.
 The signed web client release includes the client as a single file,
 `unseenet-web.html` (section 8.7), that is checked once and opened from
 disk. A person who does this has the same trust in the code as with
-the portable client, and only the gateway's view of their address
+the portable client, and only the entrance's view of their address
 remains.
 
 ## 7.6 Watching from Outside
 
 Real clients and the project's monitoring SHOULD regularly fetch the
-page from each known web gateway, over Tor and over the open web, and
+page from each known web entrance, over Tor and over the open web, and
 compare it with the signed checksums, reporting any difference in
-`unseenet.announce` or the statistics site. This catches a gateway that
+`unseenet.announce` or the statistics site. This catches an entrance that
 changes the page for everyone. It cannot catch one that changes it for
 a single visitor, which is why section 7.4 exists.
 
-# 8. Finding and Switching Web Gateways
+# 8. Finding and Switching Web Entrances
 
-## 8.1 The List of Known Web Gateways
+## 8.1 The List of Known Web Entrances
 
-Known web gateways are listed like known nodes (UN-RFC 0010), in a
-project group of their own, `unseenet.webgateways`. Each entry is the
-gateway's information from section 4.3 plus its open-web and onion
+Known web entrances are listed like known nodes (UN-RFC 0010), in a
+project group of their own, `unseenet.entrances`. Each entry is the
+entrance's information from section 4.3 plus its open-web and onion
 addresses, signed by a key the project key lists as a poster. Anyone
 may ask to be listed (a GitHub issue, as for nodes). The project lists
-a gateway only when its operator promises section 5 and outside
+an entrance only when its operator promises section 5 and outside
 watching (section 7.6) has found it serving the signed release.
 
 The list says who is known, not who is safe. No one can see whether a
-gateway keeps logs.
+entrance keeps logs.
 
 ## 8.2 Bootstrap
 
-A web client needs a first gateway before it can read the list from the
+A web client needs a first entrance before it can read the list from the
 network. It finds one by, in order:
 
 1. the list built into the loader at release time;
-2. the bootstrap file `https://<any listed gateway>/.well-known/unseenet-gateways.json`,
-   a copy of `unseenet.webgateways` with each entry's signature, which
-   every listed gateway SHOULD serve;
+2. the bootstrap file `https://<any listed entrance>/.well-known/unseenet-entrances.json`,
+   a copy of `unseenet.entrances` with each entry's signature, which
+   every listed entrance SHOULD serve;
 3. the same file from the project's own bootstrap at `unseenet.net`.
 
 The web client MUST check every entry's signature against the project
 key whatever served it, so that a bootstrap source can withhold
-gateways but not add one. Once connected, it reads
-`unseenet.webgateways` from the network and keeps the list in memory
+entrances but not add one. Once connected, it reads
+`unseenet.entrances` from the network and keeps the list in memory
 (or in the vault, when one is open).
 
 ## 8.3 Staying on One, Moving When Needed
 
-A web client SHOULD keep using one gateway for a whole session and
+A web client SHOULD keep using one entrance for a whole session and
 pick it at random from the list when the session starts. It moves to
-another listed gateway:
+another listed entrance:
 
-- when the gateway cannot be reached or stops answering;
+- when the entrance cannot be reached or stops answering;
 - when the user asks;
-- when a post it sent has not come back through a second gateway
+- when a post it sent has not come back through a second entrance
   within a reasonable time (section 8.4).
 
-It MUST NOT change gateway on a timer or after every post. Every
-gateway a visitor uses learns their address and, once they post, their
+It MUST NOT change entrance on a timer or after every post. Every
+entrance a visitor uses learns their address and, once they post, their
 key. Moving often spreads that knowledge to more operators without
 hiding anything from any of them: the chance that one of them records
 it only grows.
 
 ## 8.4 Checking for Dropped Posts
 
-A gateway cannot change a signed post, but it can drop one. After
+An entrance cannot change a signed post, but it can drop one. After
 posting, a web client SHOULD check that the article reached the
-network by asking for its Message-ID through another listed gateway,
+network by asking for its Message-ID through another listed entrance,
 connecting to a different node. If the article is missing, it says so
-and offers to send it again through the other gateway. This second
-gateway sees the visitor's address too, so the check SHOULD be one the
+and offers to send it again through the other entrance. This second
+entrance sees the visitor's address too, so the check SHOULD be one the
 user can turn off.
 
-## 8.5 The Project's Own Web Gateway (Informative)
+## 8.5 The Project's Own Web Entrance (Informative)
 
-The project intends to run a web gateway, the web client and the
+The project intends to run a web entrance, the web client and the
 bootstrap file at `unseenet.net`, kept apart from `unseenet.org`, so
 that the documentation and the real clients live on one name and the
 less hidden access on another. It would follow section 5 in full: DNS
-straight to the gateway with no proxying, memory-only storage, no logs,
+straight to the entrance with no proxying, memory-only storage, no logs,
 an onion address beside it. Its configuration would be public.
 
 ## 8.6 Making It Easy to Run One (Informative)
 
-More gateways run by more people make the list harder to block or
+More entrances run by more people make the list harder to block or
 pressure. The project intends to publish a package that sets up a web
-gateway on a small free virtual machine (for example an Oracle Cloud
-Always Free instance) in one command: Tor, the gateway, a TLS server
+entrance on a small free virtual machine (for example an Oracle Cloud
+Always Free instance) in one command: Tor, the entrance, a TLS server
 with a free certificate, memory-only storage, logging off, an onion
 address, and the request to be listed.
 
 ## 8.7 A List in a File
 
 A government or a provider can block `unseenet.net` and every listed
-gateway it knows of. A file on the user's own computer cannot be
+entrance it knows of. A file on the user's own computer cannot be
 blocked, and can be passed on by mail, chat or stick. The project
 therefore publishes, with every release of the web client, two files
 meant to be saved and shared:
 
-- **`unseenet-gateways.html`**, the jump page: one self-contained page
-  with the signed list of web gateways built in, both open-web and
-  onion addresses. It shows the list, checks which gateways answer, and
-  has a button that opens a random one that does. Opening a gateway
-  this way loads the code that gateway serves, so section 7 applies.
+- **`unseenet-entrances.html`**, the jump page: one self-contained page
+  with the signed list of web entrances built in, both open-web and
+  onion addresses. It shows the list, checks which entrances answer, and
+  has a button that opens a random one that does. Opening an entrance
+  this way loads the code that entrance serves, so section 7 applies.
 - **`unseenet-web.html`**, the client in a file: the whole web client
-  and the list in one page, opened from disk. It needs no gateway to
+  and the list in one page, opened from disk. It needs no entrance to
   serve it anything, only one to carry ONNTP, so neither blocked
   domains nor changed pages (section 7.1) matter while the file itself
   is genuine. It is the better choice whenever someone can keep a file.
@@ -414,12 +416,12 @@ Both files:
   user can compare it with one they got elsewhere (the documentation,
   a friend, a printed note). Each list entry is checked against that
   key.
-- SHOULD, when opened, fetch the newest signed list from the gateways
+- SHOULD, when opened, fetch the newest signed list from the entrances
   they reach (the bootstrap file of section 8.2), keep only entries
   whose signature is good, and offer to save an updated copy of
   themselves. A list in a file is otherwise only as fresh as the day it
   was saved.
-- MUST work when opened from disk (`file://`). Web gateways therefore
+- MUST work when opened from disk (`file://`). Web entrances therefore
   MUST accept WebSocket connections whose `Origin` is `null`, and MUST
   serve the bootstrap file with `Access-Control-Allow-Origin: *`.
 
@@ -429,10 +431,10 @@ section 7.2. The files SHOULD say this on their first screen.
 
 # 9. Security and Privacy Considerations
 
-- **The gateway links address and identity.** It sees when an address
+- **The entrance links address and identity.** It sees when an address
   is online and, since posts are signed, which key posts from it. Treat
   every open-web post as tied to the poster's address for anyone who
-  can see the gateway: its operator, its hosting provider, or someone
+  can see the entrance: its operator, its hosting provider, or someone
   who compels either.
 - **Served code** (section 7). The real risk for anyone a powerful
   adversary is interested in.
@@ -440,18 +442,18 @@ section 7.2. The files SHOULD say this on their first screen.
   with access to all pages can read it. Users SHOULD use a browser
   profile without extensions, or a private window.
 - **Blocking.** One domain is easy to block; the onion address, the
-  other listed gateways, the bootstrap of section 8.2 and the files of
-  section 8.7 remain. Blocking every listed gateway is possible for a
-  determined state; gateways it does not know of, and Tor, are not.
-- **Network.** Nodes see the gateway's Tor circuits, nothing more. A
-  gateway with very many users becomes something an observer can watch
+  other listed entrances, the bootstrap of section 8.2 and the files of
+  section 8.7 remain. Blocking every listed entrance is possible for a
+  determined state; entrances it does not know of, and Tor, are not.
+- **Network.** Nodes see the entrance's Tor circuits, nothing more. A
+  entrance with very many users becomes something an observer can watch
   to learn who uses Unseenet at all, not what they do in it.
 - **No mark on articles.** Marking open-web posts would tell everyone
   which posts are easier to trace, and help no one.
 
 # 10. Rationale
 
-- **Why a dumb tunnel?** A gateway that understood ONNTP would be
+- **Why a dumb tunnel?** An entrance that understood ONNTP would be
   tempted to cache, index and filter, and then it would be a central
   service. A tunnel can be replaced by any other tunnel.
 - **Why not run Tor in the browser?** Browsers cannot open raw
@@ -461,10 +463,10 @@ section 7.2. The files SHOULD say this on their first screen.
   Because it is still the difference between an honest operator who is
   served a demand and has nothing to hand over, and one who does. The
   document is honest that it is a promise (section 5).
-- **Why not change gateway every few minutes?** It feels safer, but a
-  gateway learns the same thing in one minute as in an hour: who you
-  are and that you use Unseenet. Every extra gateway is one more
-  operator who could record it. Where several gateways do help is in
+- **Why not change entrance every few minutes?** It feels safer, but a
+  entrance learns the same thing in one minute as in an hour: who you
+  are and that you use Unseenet. Every extra entrance is one more
+  operator who could record it. Where several entrances do help is in
   agreeing on the code (section 7.3.1), in getting around one that is
   down or blocked (section 8.3), and in noticing one that drops posts
   (section 8.4).
@@ -483,8 +485,8 @@ section 7.2. The files SHOULD say this on their first screen.
 
 - **UN-RFC 0007** section 2.1: identity entries may carry `hidden_only`
   (section 6.3).
-- **UN-RFC 0010**: web gateways are listed like known nodes, in their
-  own group `unseenet.webgateways` (section 8.1).
+- **UN-RFC 0010**: web entrances are listed like known nodes, in their
+  own group `unseenet.entrances` (section 8.1).
 - **UN-RFC 0000** section 6: 0043 is added to the index.
 
 # Copyright Notice
