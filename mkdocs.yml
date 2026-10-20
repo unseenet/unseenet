@@ -145,6 +145,7 @@ nav:
       - "0041 Many manifests at once": spec/un-rfc-0041.md
       - "0042 Editing posts": spec/un-rfc-0042.md
       - "0043 Web entrances": spec/un-rfc-0043.md
+      - "0044 Your state in the network": spec/un-rfc-0044.md
       - "0045 Spam reports": spec/un-rfc-0045.md
       - "0046 The local client API": spec/un-rfc-0046.md
       - "0047 Team inboxes": spec/un-rfc-0047.md
