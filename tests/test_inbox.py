@@ -180,7 +180,8 @@ async def test_contacts_and_conversation(tmp_path, monkeypatch):
 
     # sent copies survive a restart, encrypted on disk
     await a.close()
-    assert b"Svar" not in (tmp_path / "andreas.vault.sent").read_bytes()
+    assert not (tmp_path / "andreas.vault.sent").exists()        # one file: the vault
+    assert b"Svar" not in (tmp_path / "andreas.vault").read_bytes()
     again = Session(Vault.open(tmp_path / "andreas.vault", "pw", **KDF), status=lambda *_: None)
     again.load_offline()
     assert [m.body for m in again.conversation(b_key)] == ["Første\n", "Svar\n"]
