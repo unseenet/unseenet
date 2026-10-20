@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "updated": "2026-10-20",
+  "entrances": [
+    {
+      "name": "unseenet-entrance-test",
+      "onion": "lil2rstbv5aq3lgyxh43l6hijvsb5n4hljvurk6n6diuq4hdik2maoid.onion",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "Project test entrance, Denmark - onion only for now (Tor Browser), pre-alpha"
+    }
+  ]
+}

@@ -10,6 +10,7 @@
     {"group": "unseenet.announce@ph5fc5hop5232qsz", "note": "releases and news"},
     {"group": "unseenet.admin@ph5fc5hop5232qsz", "note": "hierarchy requests and name disputes"},
     {"group": "unseenet.nodes@ph5fc5hop5232qsz", "note": "data: the node list"},
+    {"group": "unseenet.entrances@ph5fc5hop5232qsz", "note": "data: the list of web entrances"},
     {"group": "unseenet.hierarchies@ph5fc5hop5232qsz", "note": "data: the root list"},
     {"group": "unseenet.checkgroups@ph5fc5hop5232qsz", "note": "data: this list"},
     {"group": "unseenet.names@ph5fc5hop5232qsz", "note": "data: name certificates"},

@@ -3,6 +3,8 @@ name: announce
 #   - unseenet.announce: release notes after a successful release
 #   - unseenet.nodes: the known-node list (src/unseenet/nodes.json) when it
 #     changes, and every month so it never expires on the nodes
+#   - unseenet.entrances: the list of web entrances (src/unseenet/entrances.json),
+#     the same way (UN-RFC 0043 section 8.1)
 #   - unseenet.hierarchies: the root list (src/unseenet/hierarchies.json), and
 #     unseenet.checkgroups: the project's groups (src/unseenet/checkgroups.json),
 #     the same way (UN-RFC 0018)
@@ -15,7 +17,7 @@ on:
     types: [completed]
   push:
     branches: [main]
-    paths: ["src/unseenet/nodes.json", "src/unseenet/hierarchies.json", "src/unseenet/checkgroups.json"]
+    paths: ["src/unseenet/nodes.json", "src/unseenet/entrances.json", "src/unseenet/hierarchies.json", "src/unseenet/checkgroups.json"]
   schedule:
     - cron: "23 5 1 * *"
   workflow_dispatch:
@@ -23,7 +25,7 @@ on:
       what:
         description: "nodes, hierarchies, checkgroups, release (give the tag) or message"
         type: choice
-        options: [nodes, hierarchies, checkgroups, release, message]
+        options: [nodes, entrances, hierarchies, checkgroups, release, message]
         default: nodes
       tag:
         description: "release: the tag, e.g. v0.2.0"
@@ -72,8 +74,9 @@ jobs:
             release) python tools/announce.py release "$TAG" ;;
             message) printf '%s\n' "$BODY" > body.txt
                      python tools/announce.py message --subject "$SUBJECT" --body-file body.txt ;;
-            nodes|hierarchies|checkgroups) python tools/announce.py "$WHAT" ;;
+            nodes|entrances|hierarchies|checkgroups) python tools/announce.py "$WHAT" ;;
             *)       python tools/announce.py nodes
+                     python tools/announce.py entrances
                      python tools/announce.py hierarchies
                      python tools/announce.py checkgroups ;;
           esac

@@ -56,6 +56,11 @@ NODES = """The list of known Unseenet nodes, for clients to read. Each post is o
 complete list as JSON (UN-RFC 0010); the newest one counts. Only the project
 posts here. To have a node listed, use the "Add my node" form on GitHub."""
 
+ENTRANCES = """The list of known web entrances (UN-RFC 0043 section 8.1), for web
+clients and the jump page to read. Each post is one complete list as JSON;
+the newest one counts. Only the project posts here. To have an entrance
+listed, open an issue in unseenet/unseenet-entrance."""
+
 HIERARCHIES = """The project's root list of hierarchies (UN-RFC 0018), for clients and
 nodes to read. Each post is one complete list as JSON; the newest one counts.
 It is kept in the project's repository and changed by pull request. To ask
@@ -129,6 +134,9 @@ GROUPS = (
      "github_poster", 20),
     ("unseenet.nodes", "channel", "data", "Known Unseenet nodes (for clients)",
      "The signed list of known nodes that clients read (UN-RFC 0010).", NODES, "github_poster", 20),
+    ("unseenet.entrances", "channel", "data", "Known web entrances (for web clients)",
+     "The signed list of web entrances that web clients read (UN-RFC 0043).", ENTRANCES,
+     "github_poster", 20),
     ("unseenet.hierarchies", "channel", "data", "Hierarchies: the project's root list",
      "The signed list of hierarchies and their maintainers (UN-RFC 0018).", HIERARCHIES,
      "github_poster", 20),

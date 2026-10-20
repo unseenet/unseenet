@@ -41,7 +41,7 @@ from unseenet.core import crypto  # noqa: E402
 from unseenet.core.poster import Poster  # noqa: E402
 from unseenet.hierarchies import (CHECKGROUPS_GROUP, HIERARCHIES_GROUP,  # noqa: E402
                                   parse_hierarchy_list, parse_root_list)
-from unseenet.known_nodes import ANNOUNCE_GROUP, NODES_GROUP, parse_node_list  # noqa: E402
+from unseenet.known_nodes import ANNOUNCE_GROUP, ENTRANCES_GROUP, NODES_GROUP, parse_entrance_list, parse_node_list  # noqa: E402
 
 FROM = "Unseenet project"
 REPO = "https://github.com/unseenet/unseenet"
@@ -88,6 +88,12 @@ def nodes_post() -> tuple[str, str]:
     return f"Known nodes, {updated} ({len(nodes)})", text if text.endswith("\n") else text + "\n"
 
 
+def entrances_post() -> tuple[str, str]:
+    text = (ROOT / "src" / "unseenet" / "entrances.json").read_text()
+    updated, entrances = parse_entrance_list(text)   # never post a list clients would reject
+    return f"Known web entrances, {updated} ({len(entrances)})", text if text.endswith("\n") else text + "\n"
+
+
 def hierarchies_post() -> tuple[str, str]:
     text = (ROOT / "src" / "unseenet" / "hierarchies.json").read_text()
     updated, entries = parse_root_list(text, strict=True)   # never post a list with mistakes
@@ -119,7 +125,7 @@ async def post_everywhere(group: str, subject: str, body: str, key: crypto.Ident
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("what", choices=["nodes", "hierarchies", "checkgroups", "release", "message"])
+    p.add_argument("what", choices=["nodes", "entrances", "hierarchies", "checkgroups", "release", "message"])
     p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0")
     p.add_argument("--subject")
     p.add_argument("--body-file", type=Path)
@@ -128,6 +134,8 @@ def main() -> None:
 
     if args.what == "nodes":
         group, (subject, body) = NODES_GROUP, nodes_post()
+    elif args.what == "entrances":
+        group, (subject, body) = ENTRANCES_GROUP, entrances_post()
     elif args.what == "hierarchies":
         group, (subject, body) = HIERARCHIES_GROUP, hierarchies_post()
     elif args.what == "checkgroups":
