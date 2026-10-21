@@ -158,6 +158,29 @@ a group with the session, not with code of your own (#139):
 
 How a row is drawn (icons, colours, indentation) is the client's choice.
 
+### Services: gateways, bots, registrars
+
+A service posts through `Session` too, so key ripening (UN-RFC 0025),
+postage and retries are the same code everywhere:
+
+- `Session.from_key(identity, state_path)` is a session for a key without
+  a vault. The key stays in memory; the state file (nodes, groups, the
+  ripening chain) holds nothing secret.
+- `Session.post_article(art)` posts an article built and signed elsewhere,
+  such as a gateway's imports with their own headers. It ripens first where
+  the node asks for it, sets `Key-Ripening`, and sends the key's chain to a
+  node that lacks it.
+- `ClientRuntime(session, ripen_to=SERVICE_RIPEN_TO)` ripens on in the
+  background to level 3 (no surcharge), in a low-priority thread, and
+  publishes `ripe@` at each level.
+- At setup: `unseenet ripen --key-file KEY --to 0 --node HOST --publish`
+  (7-11 minutes to level 0). Computing needs only the public key, so it can
+  run on a faster machine; only `--publish` signs.
+
+A key kept offline (a gateway's group key, the project key) only signs
+manifests now and then: ripen it to level 0 once; the tool that brings it
+online for a change publishes `ripe@` first.
+
 ## Design Decisions (so far)
 
 Each decision lists where it is specified and the reasoning. Changing one

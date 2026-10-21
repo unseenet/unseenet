@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 
 from ..nntp import NNTPError
@@ -31,6 +32,8 @@ from .session import GroupInfo, Session, SessionError
 log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
+RIPEN_TO = 4                  # ripen keys up to this level while running (UN-RFC 0025, 7)
+SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
 WATCH_RETRY_SECONDS = 15      # reconnect a push connection after this pause
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,
                   asyncio.IncompleteReadError, asyncio.TimeoutError)
@@ -49,8 +52,10 @@ class ClientRuntime:
     """Keeps a session's groups up to date. See the module docstring for the order."""
 
     def __init__(self, session: Session, *, refresh_seconds: float = REFRESH_SECONDS,
-                 watch_retry: float = WATCH_RETRY_SECONDS):
+                 watch_retry: float = WATCH_RETRY_SECONDS, ripen_to: int | None = RIPEN_TO):
         self.session = session
+        self.ripen_to = ripen_to                      # None: don't ripen in the background
+        self._run_file = None                         # removing it stops a segment at once
         self.refresh_seconds = refresh_seconds
         self.watch_retry = watch_retry
         self.inbox_ready = False
@@ -172,6 +177,45 @@ class ClientRuntime:
         except NETWORK_ERRORS:
             pass
 
+    async def ripen(self) -> None:
+        """Ripen the identity's key on, segment by segment, up to ``ripen_to``,
+        publishing ripe@ at each new level (UN-RFC 0025 sections 3.2, 7). A restart
+        loses at most the segment being computed. ``stop()`` ends it at once."""
+        from ..core import ripening as rp
+        s = self.session
+        if self.ripen_to is None or not rp.available() or not s.has_identity():
+            return
+        if not await s.node_wants_ripening():
+            return                              # "-": no node of ours asks for it; spare the CPU
+        import tempfile
+        from pathlib import Path
+        fd, path = tempfile.mkstemp(prefix="unseenet-ripening-")
+        os.close(fd)
+        self._run_file = Path(path)
+        try:
+            while True:
+                lv = s.ripening().level
+                if lv is not None and lv >= self.ripen_to:
+                    break
+                if not await s.ripen_segment(run_file=self._run_file):
+                    break                                  # stopped, or at the top
+                if s.ripening().level != s.published_level():
+                    try:
+                        await s.publish_ripening()         # a new level: tell the nodes
+                    except NETWORK_ERRORS as exc:
+                        log.info("ripe@ not published now (%s); again at the next level", exc)
+        finally:
+            self._stop_ripening()
+
+    def stop_ripening(self) -> None:
+        """Stop the segment being computed within a second (its run file goes)."""
+        self._stop_ripening()
+
+    def _stop_ripening(self) -> None:
+        if self._run_file is not None:
+            self._run_file.unlink(missing_ok=True)
+            self._run_file = None
+
     # --- or let it run on its own ---
     async def start(self) -> int:
         """Run every step by itself until ``stop()``. Returns the saved posts loaded."""
@@ -180,6 +224,7 @@ class ClientRuntime:
         return loaded
 
     async def stop(self) -> None:
+        self._stop_ripening()                          # before cancelling: frees its thread
         tasks = list(self._tasks)
         for task in tasks:
             task.cancel()
@@ -197,6 +242,7 @@ class ClientRuntime:
                 if not self._background_started:
                     self._background_started = True
                     self._spawn(self.maintain())
+                    self._spawn(self.ripen())
             await asyncio.sleep(self.refresh_seconds)
 
     def _spawn(self, coro) -> asyncio.Task:
