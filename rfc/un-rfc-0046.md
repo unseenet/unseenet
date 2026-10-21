@@ -16,8 +16,10 @@ an Android app around the same core, a screen-reader client, a script -
 should not have to implement any of that again, and should never hold a
 key. This document defines a small HTTP and WebSocket API that such a
 program offers to its own front end on the same computer: unlock, the
-groups and their posts, writing, and an event stream. It also defines how
-the API keeps everything else on the machine out.
+groups and their posts, writing, people, the groups you run, your names
+and profile, and an event stream; and the same for a bot or gateway that
+runs without a person. It also defines how the API keeps everything else
+on the machine out.
 
 # 1. Motivation
 
@@ -84,6 +86,25 @@ end out of band, in one of two ways:
 
 A front end opened as a page by the runtime itself MAY get the token in
 the URL fragment (`#t=<token>`), which browsers do not send to servers.
+
+## 3.2 Service Mode
+
+A program that runs unattended - a bot, a gateway, a helper behind a
+node - uses the same API with its own runtime (`unseenet serve`). It has
+no vault to unlock and no person to set up: it starts with a key file
+
+```
+unseenet serve --key-file <file> [--node <address>] [--state <file>]
+```
+
+and is unlocked from the start (`setup` false, `unlocked` true, section
+4.1). Its state file keeps its ripening chain (UN-RFC 0025) and what it
+has read, so a restart neither ripens again nor answers twice.
+`POST /api/unlock` and `/api/setup` answer `400` in service mode.
+
+Everything else is the same, and section 4.9 adds what only a program
+needs. The security rules of section 3 apply unchanged: a service's front
+end is the program on the same machine that drives it.
 
 # 4. Requests and Answers
 
@@ -176,6 +197,87 @@ portals (UN-RFC 0023 section 3.5) before it sends: a group with a portal
 answers `400` with the warning until the post carries
 `"publish_outside_tor": true`.
 
+## 4.5 Your Own Posts
+
+- `POST /api/groups/<id>/edit` `{"id": "<Message-ID>", "subject": "...", "body": "..."}`:
+  a new version of your own post or chat line (UN-RFC 0042); answers
+  `{"job": "<id>"}`.
+- `POST /api/groups/<id>/withdraw` `{"id": "<Message-ID>"}`: your own
+  post, or one in a group you own or moderate (UN-RFC 0004 section 7).
+- `POST /api/groups/<id>/mentioned` `{"subject": "...", "body": "..."}`:
+  who a post would tell (UN-RFC 0032), before it is sent:
+  `{"may": true, "names": [...], "max": 10}`.
+
+## 4.6 People and Safety
+
+- `POST /api/contacts` `{"key": "...", "name": "..."}` adds or renames a
+  contact, `{"key": "...", "remove": true}` removes one.
+- `GET /api/ignore` lists the keys you ignore; `POST /api/ignore`
+  `{"key": "...", "label": "...", "on": true}` ignores one or stops.
+- `GET /api/groups/<id>/report?id=<Message-ID>` lists who a post can be
+  reported to (owner, moderators, the hierarchy's maintainer, the node's
+  operator, and spam report issuers, UN-RFC 0045); `POST` it `{"id": "...", "targets": [<index>, ...], "note":
+  "...", "anonymous": false}` answers `{"sent": <n>}`.
+- `POST /api/groups/<id>/block` `{"key": "...", "reason": "..."}`: a
+  hierarchy maintainer's block (UN-RFC 0018 section 5.4); answers
+  `{"hierarchy": "<name>"}`.
+
+## 4.7 Groups You Run
+
+Each answers `{"ok": true}` unless said otherwise, and `400` when you may
+not (you do not own or moderate the group).
+
+- `POST /api/groups` `{"name": "...", "type": "open" | "moderated" |
+  "channel" | "closed", "title": "...", "description": "...", "view":
+  "threads" | "chat", "kinds": "both" | "post" | "chat", "fast": false}`
+  creates a group you own; answers `{"id": "<group ID>"}`.
+- `POST /api/groups/<id>/settings` with the manifest fields to change
+  (`title`, `description`, `rules`, `rules_type`, `view`, `kinds`,
+  `min_pow`, `min_ripe`, `low_latency`, `comments`): a new manifest
+  (UN-RFC 0004, 0014).
+- `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
+  removes the group from the whole network (UN-RFC 0013). Final.
+- `POST /api/groups/<id>/invite` `{"key": "..."}` and
+  `POST /api/groups/<id>/members/remove` `{"key": "..."}` (closed groups;
+  removing answers `{"epoch": <n>}`, UN-RFC 0004 section 6).
+- `POST /api/groups/<id>/role` `{"role": "moderators" | "posters", "key": "...", "on": true}`.
+- `POST /api/groups/<id>/ban` `{"key": "...", "on": true, "reason": "..."}`.
+- `GET /api/moderation` lists posts waiting for you to approve (UN-RFC 0004
+  section 5); `POST` it `{"id": "...", "approve": true, "reason": "..."}`.
+
+## 4.8 Who You Are
+
+- `GET /api/profile?key=<key>` (yours without `key`): a public profile
+  (UN-RFC 0022) or `null`; `POST /api/profile` with a profile object
+  publishes yours, `null` removes it. A program's profile says
+  `"bot": true` (UN-RFC 0030 section 6).
+- `GET /api/names` lists your names, waiting claims and the names you give
+  under yours (UN-RFC 0019); `POST /api/names` `{"action": "claim" |
+  "renew" | "give" | "revoke" | "approve" | "refuse", ...}` answers
+  `{"text": "<what happened, for people>"}`.
+- `GET /api/settings` and `POST /api/settings` with any of:
+  `signature` (a template), `markdown` (true or false, UN-RFC 0031),
+  `notices` (`{"send": true, "receive": true}`, UN-RFC 0032),
+  `private_min_ripe` (a level or null, UN-RFC 0025 section 3.5),
+  `show_blocked` (true or false: show posts a hierarchy blocked,
+  UN-RFC 0018).
+
+## 4.9 Articles from a Program
+
+For a service (section 3.2), such as a gateway, that builds what it posts:
+
+- `POST /api/articles` `{"group": "...", "kind": "post" | "chat",
+  "subject": "...", "body": "...", "from": "...", "references": [...],
+  "content_type": "...", "headers": [["X-Gateway", "usenet"], ...]}`
+  answers `{"job": "<id>"}`. The runtime builds, signs with its key,
+  adds postage and `Key-Ripening`, and posts it (`Session.post_article`
+  with `sign_with`). `headers` may only add headers this document's runtime
+  may not set itself: names starting with `X-`, or those another UN-RFC
+  gives a program (`Gateway-*`, UN-RFC 0023). Anything else is `400`.
+- `POST /api/groups/<id>/manifest` with a whole manifest object posts a
+  new version of a group the key owns (a gatewayed group, a bot's channel),
+  for what section 4.7 does not cover.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,
@@ -199,6 +301,20 @@ A runtime MAY offer more, under `/x/<name>/` (for example unseenet-gui's
 owner tools or a bootable machine's Wi-Fi and power settings, `/x/gui/`),
 with the same security rules. Paths under `/api/` are this document's.
 
+## 6.1 Not in This API
+
+Running a node or a web entrance, and having it join the network, is not
+a client's work: a node asks the hierarchy to list it in its own way
+(UN-RFC 0010 and 0021 for nodes, UN-RFC 0038 for gateways, UN-RFC 0043
+for web entrances), and its
+operator configures it in `node.toml`. A program that does that work for
+an operator MAY use this API for the client part (posting the request
+as the operator's key, section 4.9) and does the rest itself.
+
+What only one front end on one kind of machine needs - Wi-Fi, power,
+the keyboard layout, installing an update of a bootable image - stays
+an extension (`/x/gui/` in unseenet-gui).
+
 # 7. Rationale
 
 **Why HTTP and a WebSocket.** Every language and every browser speaks
@@ -206,9 +322,18 @@ them, so a front end can be a page, a native app or a script. A local
 socket file would keep out other users without a token, but a browser
 cannot open one.
 
-**Why so little.** What every front end needs is small; what a graphical
-client on a bootable machine needs (Wi-Fi, power, updates) is not for
-everyone. Extensions keep the core subset stable.
+**Why this much.** A front end that can read and post but not report a
+post, ignore a person, edit what it wrote or run its own group would
+send people back to another client for half of what they do, and each
+such front end would invent its own extension for it. So everything a
+client of this project offers a person is here; only what depends on one
+kind of machine is left to extensions.
+
+**Why services use it too.** A bot or gateway posts the same way a person
+does - postage, ripening, signatures - and the project wants one code
+path for that (`Session`). Giving them the same API, without unlock and
+with prebuilt articles, means a bot in any language gets ripening and
+postage right without reimplementing UN-RFC 0025.
 
 **Why jobs.** Postage takes seconds on an old laptop and a new key
 ripens for minutes before its first post (UN-RFC 0025). A request that
