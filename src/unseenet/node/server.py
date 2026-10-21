@@ -20,7 +20,8 @@ from ..core.groups import split_group_id
 from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ..core.groups import message_kind, parse_supersedes
 from ..core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
-                           is_key_bound, parse_key_update, split_group_id)
+                           is_key_bound, make_group_id, parse_key_update, split_group_id)
+from ..core import ripening as rp
 from ..core.store import Store
 from ..nntp import (MANIFESTS_ANSWER_BYTES, MANIFESTS_MAX, MAX_LINE, RECONCILE_MAX_BYTES,
                     dot_stuff, read_block)
@@ -48,6 +49,8 @@ class NodeConfig:
     name: str = "unseenet"              # how this node introduces itself to peers
     max_size: int = MAX_SIZE
     min_pow: int = 18
+    # UN-RFC 0025 section 5: the lowest level accepted; None is "-" (no ripening needed)
+    min_ripe: int | None = field(default_factory=lambda: rp.DEFAULT_MIN_RIPE)
     retention_days: int = 90
     new_groups: str = "accept"            # "accept" | "trusted" | "manual"
     trusted_owners: list[str] = field(default_factory=list)
@@ -92,6 +95,8 @@ class Node:
         # showed we lack, since when; and the peers to reconcile with soon.
         self._kb_waiting: dict[str, float] = {}
         self.reconcile_wanted: set[str] = set()
+        # UN-RFC 0025 section 3.4: each key's chain and how many segments are verified
+        self._ripe_cache: dict[bytes, tuple[rp.Chain, int]] = {}
 
     def watch(self, pattern: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -261,9 +266,8 @@ class Node:
             if parse_date(art["Date"]) < now - timedelta(days=retention):
                 raise ArticleError("date", "older than retention")
 
-        required = self.config.min_pow
-        if manifest is not None and not is_manifest:
-            required = max(required, manifest.min_pow)
+        group_pow = manifest.min_pow if manifest is not None and not is_manifest else 0
+        required = self._required_pow(art, manifest, group_pow, source, from_peer)
         if art.proven_pow() < required:
             raise ArticleError("postage", f"need {required} bits")
 
@@ -286,6 +290,111 @@ class Node:
         self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
         return art
+
+    # --- key ripening (UN-RFC 0025) ---
+    def _required_pow(self, art: Article, manifest: Manifest | None, group_pow: int,
+                      source: str | None, from_peer: bool) -> int:
+        """The postage this article needs, with its author's ripening (section 5).
+
+        Postage is checked first against the least any level could need, so a
+        flood of bogus proofs costs the sender postage before it costs us work
+        (section 3.4). Sealed inbox articles are signed by one-time keys that
+        cannot ripen (UN-RFC 0009): they pay as an unripe key where "-" is
+        allowed (section 3.5)."""
+        base = max(self.config.min_pow, group_pow)
+        least = max(rp.FLOOR_POW, base + min(s for _, _, s in rp.LEVELS))
+        if art.proven_pow() < least:
+            raise ArticleError("postage", f"need {least} bits")
+        group_min = rp.parse_min(manifest.raw.get("min_ripe")) if manifest is not None else 0
+        minimums = [self.config.min_ripe, group_min]
+        if self._sealed_inbox(art) or None in minimums:      # "-" somewhere: no proof needed
+            lv = self._ripening_level(art, source, from_peer, required=False)
+            return rp.required_pow(self.config.min_pow, group_pow, lv, allow_unripe=True)
+        lv = self._ripening_level(art, source, from_peer, required=True)
+        for minimum in minimums:
+            if not rp.meets(lv, minimum):
+                raise ArticleError("ripening", f"level {minimum} needed, the key is at level "
+                                   + ("-" if lv is None else str(lv)))
+        return rp.required_pow(self.config.min_pow, group_pow, lv)
+
+    @staticmethod
+    def _sealed_inbox(art: Article) -> bool:
+        return (art.get("Encrypted", "").strip() == INBOX_SCHEME
+                and art.group.split("@", 1)[0] == "inbox")
+
+    def _ripening_level(self, art: Article, source: str | None, from_peer: bool,
+                        required: bool) -> int | None:
+        """The level the article's Key-Ripening header shows (section 3.4)."""
+        value = art.get("Key-Ripening")
+        if not value:
+            if required:
+                raise ArticleError("ripening", "unknown: no Key-Ripening header")
+            return None
+        try:
+            t, y = rp.parse_header(value)
+        except rp.RipeningError as exc:
+            raise ArticleError("syntax", str(exc)) from exc
+        pk = art.author_key
+        chain = self._own_chain(art) if self._is_ripe_group(art) else self._chain(pk)
+        if chain is None or chain.points().get(t) != y:
+            if not required:
+                return None                    # it may name a point we don't hold yet
+            ripe = make_group_id(rp.GROUP_NAME, pk)
+            if from_peer and self.store.manifest(ripe) is None:
+                self._wait_for_manifest(ripe, source)     # the peer sends ripe@ first
+            raise ArticleError("ripening", "unknown: post your ripe@ manifest first")
+        return rp.level(t)
+
+    def _is_ripe_group(self, art: Article) -> bool:
+        return art.control == ["manifest"] and self._group_name(art.group) == rp.GROUP_NAME
+
+    def _chain(self, pk: bytes) -> rp.Chain | None:
+        """The verified chain of a key, from its ripe@ manifest; cached with how far
+        it has been verified, so a new version costs only its new segments."""
+        m = self.store.manifest(make_group_id(rp.GROUP_NAME, pk))
+        if m is None or "ripening" not in m.raw:
+            return None
+        return self._verified(pk, m.raw["ripening"])
+
+    def _own_chain(self, art: Article) -> rp.Chain | None:
+        """A ripe@ manifest names a point on the chain it carries itself."""
+        try:
+            data = Manifest.from_article(art).raw
+        except ArticleError:
+            return None
+        return self._verified(art.author_key, data.get("ripening")) if data.get("ripening") else None
+
+    def _verified(self, pk: bytes, obj) -> rp.Chain:
+        try:
+            chain = rp.Chain.from_manifest(obj)
+        except rp.RipeningError as exc:
+            raise ArticleError("syntax", str(exc)) from exc
+        known, done = self._ripe_cache.get(pk, (None, 0))
+        already = done if known is not None and chain.extends(known) and done <= len(known.segments) else 0
+        try:
+            if not rp.available():
+                raise ArticleError("ripening", "this node cannot verify ripening")
+            n = rp.verify(pk, chain, already=min(already, len(chain.segments)))
+        except rp.RipeningError as exc:
+            raise ArticleError("ripening", str(exc)) from exc
+        if len(self._ripe_cache) > 100_000:
+            self._ripe_cache.clear()
+        self._ripe_cache[pk] = (chain, n)
+        return chain
+
+    def _check_ripe_manifest(self, m: Manifest, current: Manifest | None) -> None:
+        """A new version of ripe@ must hold a valid chain that extends the old (3.3)."""
+        if m.name != rp.GROUP_NAME:
+            if "ripening" in m.raw:
+                raise ArticleError("syntax", "ripening belongs in a ripe@ group")
+            return
+        if "ripening" not in m.raw:
+            raise ArticleError("syntax", "a ripe@ manifest needs a ripening chain")
+        chain = self._verified(m.owner, m.raw["ripening"])
+        if current is not None and "ripening" in current.raw:
+            old = rp.Chain.from_manifest(current.raw["ripening"])
+            if not chain.extends(old):
+                raise ArticleError("ripening", "does not extend the chain this node holds")
 
     def _accept_rmgroup(self, art: Article, manifest: Manifest | None, raw: bytes,
                         source: str | None, from_peer: bool) -> Article:
@@ -330,6 +439,7 @@ class Node:
         if m.expired():
             raise ArticleError("group", "key-bound group has expired")
         self._check_profile_content(m)
+        self._check_ripe_manifest(m, current)
         self.store.add(art, raw)
         if m.supersedes(current):
             self.store.set_manifest(m)
@@ -342,7 +452,10 @@ class Node:
             return ""
 
     def _is_profile_group(self, group_id: str) -> bool:
-        return self._group_name(group_id) in (profiles.PROFILE_NAME, profiles.AVATAR_NAME)
+        """Groups every key may have, accepted whatever new_groups says: profiles,
+        pictures (UN-RFC 0022 section 10) and ripening (UN-RFC 0025 section 3.3)."""
+        return self._group_name(group_id) in (profiles.PROFILE_NAME, profiles.AVATAR_NAME,
+                                              rp.GROUP_NAME)
 
     def _check_profile_group(self, group_id: str) -> None:
         """UN-RFC 0022 section 10: the operator decides whether profiles and pictures
@@ -552,9 +665,16 @@ class Node:
         lo, hi = self.config.forward_delay
         if manifest is not None and manifest.low_latency:
             lo = hi = 0.0                # chat groups: no random delay (UN-RFC 0008, 3.2)
+        ripe = None
+        if art.get("Key-Ripening") and not self._is_ripe_group(art):
+            m = self.store.manifest(make_group_id(rp.GROUP_NAME, art.author_key))
+            ripe = m.message_id if m is not None else None
         for peer in self.config.peers:
             if peer.name != source and wildmat(peer.groups, art.group):
-                self.store.enqueue(peer.name, art.message_id, time.time() + random.uniform(lo, hi))
+                at = time.time() + random.uniform(lo, hi)
+                if ripe:                       # first, so the peer can check the article
+                    self.store.enqueue(peer.name, ripe, at - 0.001)
+                self.store.enqueue(peer.name, art.message_id, at)
         for event in self._listeners:
             event.set()
 
@@ -586,6 +706,7 @@ class Node:
         info = {"v": 1, "name": cfg.name, "software": f"unseenet {__version__}",
                 "node_key": self.key.key_text,
                 "policy": {"new_groups": cfg.new_groups, "min_pow": cfg.min_pow,
+                           "min_ripe": "-" if cfg.min_ripe is None else cfg.min_ripe,
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,
                            "archive": False, "honours_blocks": cfg.honour_blocks,
                            "profiles": cfg.profiles, "avatars": cfg.avatars,
@@ -675,6 +796,7 @@ class Session:
                     "LIST ACTIVE NEWSGROUPS OVERVIEW.FMT HEADERS", "NEWNEWS", "OVER MSGID", "HDR",
                     "UNSEENET 1",
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
+                    "UNSEENET-MINRIPE " + ("-" if cfg.min_ripe is None else str(cfg.min_ripe)),
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
                     "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}"):
             self.send(cap)

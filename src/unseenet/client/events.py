@@ -114,3 +114,11 @@ class ReleaseOffer(Event):
     """A newer signed release of Unseenet is in the network (#264)."""
     version: str
     name = "release-offer"
+@dataclass(frozen=True)
+class Ripening(Event):
+    """A segment of key ripening is done (UN-RFC 0025): show the level and the way on."""
+    key: str
+    t: int
+    level: int | None                # None is "-": the key cannot post yet
+    next_at: int | None              # iterations of the next level; None at the top
+    name = "ripening"

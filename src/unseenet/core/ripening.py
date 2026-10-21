@@ -30,7 +30,9 @@ GROUP_NAME = "ripe"                               # ripe@<fp>, a key-bound group
 # level: iterations at least, postage surcharge in bits (section 4)
 LEVELS = ((0, 1 << 26, 6), (1, 1 << 29, 4), (2, 1 << 32, 2), (3, 1 << 35, 0), (4, 1 << 37, -2))
 TOP = LEVELS[-1][1]
-FLOOR_POW = 12                                    # section 5
+_REAL_LEVELS = LEVELS
+FLOOR_POW = _REAL_FLOOR = 12                      # section 5
+DEFAULT_MIN_RIPE: int | None = 0                  # a node's UNSEENET-MINRIPE unless configured
 
 _HEADER_RE = re.compile(r"^vdf-cg1;\s*t=(\d+);\s*y=([A-Za-z0-9_-]+)$")
 
@@ -69,6 +71,18 @@ def discriminant(public_key: bytes) -> str:
 
 
 # --- levels and postage (sections 4, 5) ---
+def scale_for_tests(shift: int, rules: bool = True) -> None:
+    """For tests only: divide every threshold by 2^shift, so keys ripen in
+    milliseconds. Without ``rules``, ripening costs and requires nothing (no
+    surcharge, no floor, nodes default to "-"), for tests of other things."""
+    global LEVELS, TOP, FIRST_SEGMENT, FLOOR_POW, DEFAULT_MIN_RIPE
+    LEVELS = tuple((lv, max(1, th >> shift), s if rules else 0) for lv, th, s in _REAL_LEVELS)
+    TOP = LEVELS[-1][1]
+    FIRST_SEGMENT = max(1, (1 << 24) >> shift)
+    FLOOR_POW = _REAL_FLOOR if rules else 0
+    DEFAULT_MIN_RIPE = 0 if rules else None
+
+
 def level(t: int) -> int | None:
     """The level of *t* iterations; None is level "-" (below level 0)."""
     found = None

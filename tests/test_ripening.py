@@ -7,7 +7,7 @@ from unseenet.core import ripening as rp
 chiavdf = pytest.importorskip("chiavdf")
 
 
-def test_levels_surcharges_and_postage():
+def test_levels_surcharges_and_postage(real_ripening):
     assert rp.level(0) is None and rp.level(2**26 - 1) is None
     assert [rp.level(2**e) for e in (26, 29, 32, 35, 37, 40)] == [0, 1, 2, 3, 4, 4]
     assert rp.required_pow(18, 20, 0) == 26           # section 5: brand-new key, open group
@@ -20,7 +20,7 @@ def test_levels_surcharges_and_postage():
         rp.parse_min(9)
 
 
-def test_the_recommended_segments_reach_level_4_within_the_limit():
+def test_the_recommended_segments_reach_level_4_within_the_limit(real_ripening):
     t, lengths = 0, []
     while (n := rp.next_segment_length(t)):
         lengths.append(n)
