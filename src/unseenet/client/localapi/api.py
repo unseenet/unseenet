@@ -22,11 +22,14 @@ from ... import __version__
 from ... import names as nm
 from ...core import about as about_text
 from ...core import crypto
+from ...core import markup
 from ...core import ripening as rp
-from ...core.groups import KIND_CHAT, KIND_POST, group_refs, manifest_article, personal_inbox_id
+from ...core.groups import (KIND_CHAT, KIND_POST, group_refs, manifest_article, message_kind,
+                            personal_inbox_id)
 from ...core.vault import Vault, VaultError
 from .. import events as ev
 from .. import naming
+from ..grouptree import group_tree
 from ..runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime
 from ..session import MAX_MENTION_NOTICES, GroupInfo, Message, Session, SessionError
 from ..threads import CONTACT, FOR_YOU
@@ -254,11 +257,26 @@ class LocalAPI:
                    "name": s.contact_name(k) or s.identity_label(k),
                    "unread": s.unread_from(k, KIND_CHAT)} for k in s.chat_partners()]
         c = s.for_you_counts()
+        tops: dict[str, list[dict]] = {}
+        for g in sorted(groups, key=lambda g: g["label"]):
+            tops.setdefault(g["hierarchy"], []).append(g)
         return {"groups": groups, "people": people,
+                "hierarchies": [{"name": h, "tree": self._tree(h, gs)}
+                                for h, gs in sorted(tops.items())],
                 "inbox": {"id": s.my_inbox if ready else None,
                           "unread": s.unread_private_posts() if ready else 0},
                 "for_you": {"id": FOR_YOU, "replies": c.replies, "mentions": c.mentions},
                 "moderation": len(s.submissions())}
+
+    @staticmethod
+    def _tree(top: str, groups: list[dict]) -> dict:
+        """The TUI's group tree (client.grouptree): under ``alt.*`` names without
+        ``alt.``, a shared part of a name as a folder. Groups by ID."""
+        def walk(node) -> dict:
+            return {"label": node.label, "path": node.path, "own": node.own_label,
+                    "groups": [g["id"] for g in node.items],
+                    "children": [walk(c) for c in node.children]}
+        return walk(group_tree(top, [(g["label"], g) for g in groups]))
 
     def _head(self, s: Session, gid: str) -> dict:
         if gid.startswith(CONTACT):
@@ -284,6 +302,8 @@ class LocalAPI:
         data = s.manifest_data(gid)
         out = {**s.group_info(gid).to_dict(), "may_post": s.may_post(gid),
                "rules": data.get("rules", ""), "rules_type": data.get("rules_type"),
+               "rules_tree": markup.manifest_text(data.get("rules", ""), data.get("rules_type"))
+               if data.get("rules") else [],
                "portals": [{"network": n, "source": src} for n, src in s.group_portals(gid)],
                "portal_warning": s.portal_warning(gid)}
         if out["owner"] or s.moderates(gid):
@@ -325,7 +345,20 @@ class LocalAPI:
             who, key = s.identity_label(m.sender_key, m.from_name), m.sender_key
         else:
             who, key = s.identity_label(m.author_key, m.from_name), m.author_key
-        return {"message": m.to_dict(), "depth": depth, "read": s.is_read(m),
+        d = m.to_dict()
+        notice = None
+        if s.is_notice(m) and m.mention_group and "@" in m.mention_group:
+            name, fp = m.mention_group.rsplit("@", 1)
+            notice = {"group": m.mention_group, "id": m.mention_of,
+                      "label": s.group_label(m.mention_group), "ref": f"#{name}@{fp}",
+                      "followed": m.mention_group in s.data["subscribed"]}
+        return {"message": d, "depth": depth, "read": s.is_read(m),
+                # the text as a safe tree, Markdown or plain (UN-RFC 0031): draw this,
+                # never the text as HTML
+                "tree": markup.body(d["text"], m.content_type, m.kind) if m.readable else [],
+                "groups": [r.text for r in group_refs(f"{m.subject}\n{d['text']}")]
+                if m.readable else [],
+                "notice": notice,
                 "for_me": s.for_me(m, mine, patterns), "who": who, "who_key": key,
                 "contact": bool(key and s.contact_name(key)),
                 "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m)}
@@ -683,6 +716,8 @@ class LocalAPI:
                         "who": s.identity_label(key, art.get("From", "")), "key": key,
                         "content_type": art.get("Content-Type", ""),
                         "body": "" if art.get("Encrypted") else art.body,
+                        "tree": [] if art.get("Encrypted") else markup.body(
+                            art.body, art.get("Content-Type", ""), message_kind(art)),
                         "date": m.date.isoformat() if m.date else None})
         return {"waiting": out}
 
@@ -704,9 +739,15 @@ class LocalAPI:
     async def profile(self, key: str | None = None) -> dict:
         s = self._ready()
         if not key or key == s.identity().key_text:
-            return {"key": s.identity().key_text, "profile": s.my_profile()}
+            return self._profile(s.identity().key_text, s.my_profile())
         p = await s.profile_of(_key(key))
-        return {"key": key, "profile": None if p is None else (p.raw or {"about": p.about})}
+        return self._profile(key, None if p is None else (p.raw or {"about": p.about}))
+
+    @staticmethod
+    def _profile(key: str, obj: dict | None) -> dict:
+        tree = markup.manifest_text(obj.get("about", ""), obj.get("about_type")) \
+            if obj and obj.get("about") else []
+        return {"key": key, "profile": obj, "about_tree": tree}
 
     async def publish_profile(self, profile) -> dict:
         s = self._ready()
@@ -715,7 +756,7 @@ class LocalAPI:
         if self.service and isinstance(profile, dict):
             profile = {**profile, "bot": True}             # a program says so (UN-RFC 0030, 6)
         await s.publish_profile(profile)
-        return {"key": s.identity().key_text, "profile": s.my_profile()}
+        return self._profile(s.identity().key_text, s.my_profile())
 
     async def names(self) -> dict:
         s = self._ready()
@@ -780,7 +821,6 @@ class LocalAPI:
         return {"text": text}
 
     def settings(self) -> dict:
-        from ...core import markup
         s = self._ready()
         return {"signature": s.signature_template(), "signature_preview": s.signature(),
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),

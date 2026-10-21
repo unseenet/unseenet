@@ -158,6 +158,7 @@ is true while the identity or the node is still missing.
  "people": [{"id": "contact:<key>", "key": "...", "name": "...", "contact": true,
              "unread": 0}, ...],
  "inbox": {"id": "inbox@<fp>", "unread": 0},
+ "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
  "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
  "moderation": 0}
 ```
@@ -166,6 +167,10 @@ is true while the identity or the node is still missing.
 (`Session.subscribed_groups()`), with their counts. `people` are its chats
 (UN-RFC 0028 section 6.2); `inbox.id` is null until the inbox is set up,
 and `moderation` counts the posts waiting for you to approve (section 4.7).
+`hierarchies` lays the groups out as every client of this project does: a
+folder is `{"label", "path", "own", "groups": [<group ID>, ...],
+"children": [<folder>, ...]}`, names under `alt.` without it and a shared
+part of names as a folder.
 Besides real group IDs, two pseudo IDs work
 wherever a group ID does: `contact:<key>` (the chat with one person) and
 `for-you:` (replies and mentions from all groups).
@@ -176,15 +181,22 @@ wherever a group ID does: `contact:<key>` (the chat with one person) and
 {"group": <GroupInfo dict>,
  "rows": [{"message": <Message dict>, "depth": 0, "read": true, "for_me": null,
            "who": "...", "who_key": "...", "contact": false,
-           "may_edit": false, "may_withdraw": false}, ...]}
+           "may_edit": false, "may_withdraw": false,
+           "tree": [...], "groups": ["#name@fp", ...], "notice": null}, ...]}
 ```
 
 `rows` are in the order to show them (`Session.threads()`): threads
 newest first for a group read as threads, every line in order for one
 read as a chat. `for_me` is `"reply"`, `"mention"` or null. `who` is how
 the runtime names the author (a contact's name, a verified name, UN-RFC
-0019), so that every front end names people alike. The group adds
-`may_post`, and for a real group `rules`, `rules_type`, `portals`,
+0019), so that every front end names people alike. `tree` is the text
+rendered for showing (UN-RFC 0031): Markdown or plain by the post's
+`Content-Type`, as nodes `{"t": "p" | "text" | "strong" | ..., "c": [...],
+"v": "..."}` in which HTML is always text. A front end MUST draw the tree,
+or the plain text, and MUST NOT put a post's text into a page as HTML.
+`groups` are the `#group` references in it; `notice` is set for a mention
+notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
+`may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
 `portal_warning`, and for its owner or a moderator `roles` (section 4.7).
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
@@ -268,12 +280,12 @@ not (you do not own or moderate the group).
 - `POST /api/groups/<id>/ban` `{"key": "...", "on": true, "reason": "..."}`.
 - `GET /api/moderation` lists posts waiting for you to approve (UN-RFC 0004
   section 5) as `{"waiting": [{"id", "group", "subject", "who", "key",
-  "body", ...}, ...]}`; `POST` it `{"id": "...", "approve": true, "reason": "..."}`.
+  "body", "tree", ...}, ...]}`; `POST` it `{"id": "...", "approve": true, "reason": "..."}`.
 
 ## 4.8 Who You Are
 
 - `GET /api/profile?key=<key>` (yours without `key`): a public profile
-  (UN-RFC 0022) or `null`; `POST /api/profile` with a profile object
+  (UN-RFC 0022) or `null`, as `{"key", "profile", "about_tree"}`; `POST /api/profile` with a profile object
   publishes yours, `null` removes it. A program's profile says
   `"bot": true` (UN-RFC 0030 section 6).
 - `GET /api/names` lists your names, waiting claims and the names you give
@@ -376,6 +388,10 @@ waited would time out; a job answers at once and tells how far it is.
 - **The front end itself** is trusted to show what the person sees, not
   with keys: a compromised front end can post as the person while the
   vault is unlocked, but cannot take the keys away.
+- **Posts are hostile text.** Anyone can post anything. Rendering in the
+  runtime, to a tree in which HTML is only ever text, means no front end
+  has to get Markdown or escaping right on its own; with the CSP, a post
+  can neither run a script nor load anything from outside.
 - **Logs.** A runtime MUST NOT log the token, the passphrase or bodies of
   private posts.
 

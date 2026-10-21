@@ -124,7 +124,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
     other.new_identity("sonia", "Sonia")
     other.add_node(addr)
     g = await other.create_group("dk.snak", "open", min_pow=10)
-    await other.post(g, "Hej", "Første\n")
+    await other.post(g, "Hej", "Første **fed** <script>alert(1)</script>\n")
 
     api = LocalAPI(tmp_path / "me.vault", refresh_seconds=3600)
     async with Running(api) as r:
@@ -145,6 +145,12 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert view["group"]["label"] == "dk.snak"
         [row] = view["rows"]
         assert row["message"]["subject"] == "Hej" and row["who"] and row["depth"] == 0
+        # Markdown as a tree; HTML in a post stays text, never markup (UN-RFC 0031)
+        [para] = row["tree"]
+        assert [n["t"] for n in para["c"]] == ["text", "strong", "text"]
+        assert para["c"][2]["v"] == " <script>alert(1)</script>"
+        [dk] = [h for h in listing["hierarchies"] if h["name"] == "dk"]
+        assert g in json.dumps(dk["tree"])
 
         status, body = await r.post(f"/api/groups/{_gid(g)}/post", {"kind": "post", "body": "x"})
         assert status == 400 and "subject" in body["error"]
