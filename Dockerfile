@@ -6,7 +6,10 @@
 #
 # No port to publish: the node is reached over Tor only. See docs/node/docker.md.
 FROM docker.io/library/alpine:3.24 AS build
-RUN apk add --no-cache python3 py3-pip
+# chiavdf (key ripening, UN-RFC 0025) has no musl wheels: built here, without its
+# timelord client (BUILD_VDF_CLIENT=N, no boost needed)
+RUN apk add --no-cache python3 py3-pip python3-dev cmake make g++ gmp-dev git
+ENV BUILD_VDF_CLIENT=N
 COPY pyproject.toml README.md LICENSE NOTICE /src/
 COPY src /src/src
 RUN python3 -m venv /opt/unseenet \
@@ -14,7 +17,7 @@ RUN python3 -m venv /opt/unseenet \
  && find /opt/unseenet -name __pycache__ -type d -prune -exec rm -rf {} +
 
 FROM docker.io/library/alpine:3.24
-RUN apk add --no-cache python3 tor su-exec tini \
+RUN apk add --no-cache python3 tor su-exec tini gmp libgmpxx libstdc++ \
  && addgroup -S -g 10001 unseenet \
  && adduser -S -D -H -u 10001 -G unseenet -h /data unseenet \
  && mkdir -p /data && chown unseenet:unseenet /data && chmod 700 /data

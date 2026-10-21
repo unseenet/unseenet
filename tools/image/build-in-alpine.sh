@@ -34,11 +34,15 @@ FIRMWARE="linux-firmware-intel linux-firmware-ath9k_htc linux-firmware-ath10k
 
 # What the running system has (installed at boot from the image's own repository).
 PACKAGES="alpine-base busybox-openrc busybox-mdev-openrc openrc kbd-bkeymaps
-  python3 ca-certificates-bundle tor iwd dbus dhcpcd util-linux-misc blkid dosfstools ncurses-terminfo-base"
+  python3 ca-certificates-bundle tor iwd dbus dhcpcd util-linux-misc blkid dosfstools ncurses-terminfo-base
+  gmp libgmpxx libstdc++"
 
 log "tools"
 apk add --no-cache -q --no-scripts abuild apk-tools mkinitfs squashfs-tools syslinux grub-efi grub \
     mtools dosfstools sfdisk python3 py3-pip linux-lts kmod xz zip unzip $FIRMWARE >/dev/null
+# chiavdf (key ripening, UN-RFC 0025) has no musl wheels: build it, without its timelord
+apk add --no-cache -q python3-dev cmake make g++ gmp-dev git >/dev/null
+export BUILD_VDF_CLIENT=N
 
 rm -rf "$W" && mkdir -p "$TREE/boot" "$TREE/apks/$ARCH" "$OVL" "$OUT"
 KVER=$(ls /lib/modules | head -1)
