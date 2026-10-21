@@ -140,6 +140,12 @@ a group with the session, not with code of your own (#139):
   one documented shape (`DICT_VERSION`, now 1): dates as ISO 8601, the body
   also split into `text` and `signature`. Send these to a front end, an MCP
   tool or a bot instead of making your own.
+- `Session.on(callback)` gives typed events (`unseenet.client.events`):
+  `Status` (the old status line), `GroupUpdated`, `GroupsChanged`,
+  `PowProgress` (draw its `fraction`; postage can take seconds on an old
+  laptop), `NodeState` and `TorState` (bootstrap percent). Each has
+  `to_dict()`. Callbacks run on the event loop; `Session.on()` returns a
+  function that stops them. The `status=` callback still works.
 
 How a row is drawn (icons, colours, indentation) is the client's choice.
 
