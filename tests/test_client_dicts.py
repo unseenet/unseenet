@@ -67,3 +67,14 @@ def test_subscribed_groups_says_what_your_nodes_do_not_carry(session):
     assert listed[G].listed is True and listed[G].description == "listed"
     assert listed[H].listed is False
     assert listed[session.my_inbox].listed is True       # key-bound: never listed (UN-RFC 0040)
+
+
+def test_group_info_for_a_group_you_do_not_follow(session):
+    other = "dk.andet@cccccccccccccccc"
+    session.data["groups"][other] = {"type": "public", "keys": {}, "manifest": {"title": "Andet", "view": "chat"}}
+    before = dict(session.data["groups"])
+    g = session.group_info(other)
+    assert not g.subscribed and g.title == "Andet" and g.view == "chat" and g.unread == 0
+    assert session.group_info(G).subscribed
+    session.group_info("dk.ukendt@dddddddddddddddd")       # nothing stored for it
+    assert session.data["groups"] == before

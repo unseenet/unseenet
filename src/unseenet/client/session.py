@@ -2650,26 +2650,32 @@ class Session:
         (UN-RFC 0040 section 3). ``counts`` fills in unread posts, replies and
         mentions; leave it off when the client counts in its own time.
         """
-        out = []
-        for gid in self.data["subscribed"]:
-            entry = self.group_entry(gid)
-            data = self.manifest_data(gid)
-            g = available[gid] if available is not None and gid in available \
-                else GroupInfo(gid, entry.get("title", ""))
-            g.subscribed = True
-            g.type = entry.get("type") or g.type or data.get("type")
-            g.title = data.get("title") or entry.get("title", "")
-            g.owner = bool(entry.get("owner"))
-            g.view, g.owner_view = self.view_of(gid), data.get("view", "threads")
-            g.kinds = tuple(self.group_kinds(gid))
-            g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
-            if available is not None:
-                g.listed = gid in available or is_key_bound(gid)
-            if counts:
-                c = self.for_you_counts(gid)
-                g.unread, g.replies, g.mentions = self.unread_count(gid), c.replies, c.mentions
-            out.append(g)
-        return out
+        return [self.group_info(gid, available, counts=counts)
+                for gid in self.data["subscribed"]]
+
+    def group_info(self, group_id: str, available: dict[str, GroupInfo] | None = None, *,
+                   counts: bool = True) -> GroupInfo:
+        """One group as every client shows it, followed or not (a group being
+        browsed, say): type, title, view, what it takes, and with ``counts`` the
+        unread posts, replies and mentions. ``available`` as for
+        ``subscribed_groups()``. Nothing is stored for a group you don't follow."""
+        entry = self.data["groups"].get(group_id, {})
+        data = self.manifest_data(group_id)
+        g = available[group_id] if available is not None and group_id in available \
+            else GroupInfo(group_id, entry.get("title", "") or data.get("description", ""))
+        g.subscribed = group_id in self.data["subscribed"]
+        g.type = entry.get("type") or g.type or data.get("type")
+        g.title = data.get("title") or entry.get("title", "")
+        g.owner = bool(entry.get("owner"))
+        g.view, g.owner_view = self.view_of(group_id), data.get("view", "threads")
+        g.kinds = tuple(self.group_kinds(group_id))
+        g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
+        if available is not None:
+            g.listed = group_id in available or is_key_bound(group_id)
+        if counts:
+            c = self.for_you_counts(group_id)
+            g.unread, g.replies, g.mentions = self.unread_count(group_id), c.replies, c.mentions
+        return g
 
     def threads(self, group_id: str) -> list[tuple["Message", int]]:
         """A group's posts as every client shows them: ``(message, depth)`` rows.
