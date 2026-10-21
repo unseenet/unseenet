@@ -2,6 +2,7 @@
 import asyncio
 import json
 import stat
+import sys
 
 import pytest
 
@@ -112,7 +113,8 @@ async def test_api_file_is_private_and_goes_away(tmp_path):
     async with Running(api, api_file=f) as r:
         line = f.read_text().strip()
         assert line == f"UNSEENET-API 1 http://127.0.0.1:{r.port}/ {r.token}"
-        assert stat.S_IMODE(f.stat().st_mode) == 0o600
+        if sys.platform != "win32":          # no POSIX modes: the user's own folder protects it
+            assert stat.S_IMODE(f.stat().st_mode) == 0o600
     assert not f.exists()
 
 
@@ -243,7 +245,6 @@ async def test_a_service_posts_articles_with_its_own_headers(tmp_path):
 
 
 async def test_unseenet_serve_announces_itself(tmp_path):
-    import sys
     key = tmp_path / "bot.key"
     key.write_text(crypto.Identity.generate().seed.hex() + "\n")
     proc = await asyncio.create_subprocess_exec(
