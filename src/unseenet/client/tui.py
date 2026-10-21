@@ -20,7 +20,7 @@ from pathlib import Path
 from textual import on, work
 from textual.message import Message as Message_
 from textual.worker import Worker, WorkerState
-from textual.app import App, ComposeResult, SystemCommand
+from textual.app import App, ComposeResult, ScreenStackError, SystemCommand
 from textual.binding import Binding
 from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -1671,6 +1671,13 @@ class BrowseDialog(Dialog):
 class UnseenetApp(App):
     TITLE = "unseenet"
     CSS = CSS + console_css()
+
+    def refresh_bindings(self) -> None:
+        """An event handled while the app closes may find no screen left (#137)."""
+        try:
+            super().refresh_bindings()
+        except ScreenStackError:
+            pass
     BINDINGS = [
         # chat: the input line takes the letters; Esc leaves it, Enter goes back
         # (first, so the footer always has room for them)
@@ -2545,20 +2552,23 @@ class UnseenetApp(App):
     @on(DataTable.RowHighlighted, "#threads")
     def _row(self, event: DataTable.RowHighlighted) -> None:
         msg = self.messages.get(event.row_key.value)
-        if msg is None:
+        if msg is None or not self.screen_stack:      # the app is closing (#137)
             return
         self.current_message = msg
         self.refresh_bindings()
         head, body = self.article(msg)
-        self.query_one("#article-head", Static).update(head)
-        self.query_one("#article-body", Static).update(body)
+        # not there in the chat view, or while the app closes (#137)
+        for widget in self.query("#article-head"):
+            widget.update(head)
+        for widget in self.query("#article-body"):
+            widget.update(body)
         if isinstance(self.screen, ReadScreen):
             self.screen.show(msg)
         if not self.session.is_read(msg):
             self.session.mark_read(msg, save=False)
             self._save_soon()
-            table = self.query_one("#threads", DataTable)
-            table.update_cell(msg.message_id, "flag", " ")
+            for table in self.query("#threads"):
+                table.update_cell(msg.message_id, "flag", " ")
             self._render_title()
 
     @work(exclusive=True, group="save", exit_on_error=False)

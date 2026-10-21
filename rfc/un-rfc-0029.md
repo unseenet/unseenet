@@ -86,6 +86,30 @@ manifest with a higher `serial`, a new `Date` and a new `expires`.
 An identity whose client runs at least once a year and a half therefore
 never loses anything.
 
+## 4.1 A New Identity's First Lifetime
+
+Many people open a client a few times to look around before they settle
+on one identity, and each time the client makes an inbox (section 6).
+So that these do not stay on every full node for two years, a client
+SHOULD give a new identity's key-bound groups a short first lifetime:
+
+- When it first posts them, `expires` is 60 days after `Date`.
+- It counts, where it keeps the identity's keys, the different days it
+  was opened with that identity. The identity is **in use** from the
+  third such day, or at its first real use: a post, a chat, a private
+  post, a contact added, a group created, a profile or picture
+  published. Following groups is not use.
+- Once the identity is in use, the client renews all its key-bound
+  groups at once, with the full lifetime, and from then on as above.
+- Until then it renews them when fewer than 30 days remain, again for
+  60 days - not by the 545-day rule, which would give a first lifetime
+  the full one at the next start.
+
+An identity whose key-bound groups already have a longer lifetime is in
+use. A visitor who never comes back is removed from the nodes about
+90 days after the last visit (60 days, and section 5). Nodes see nothing
+of this: every `expires` is within section 3.
+
 # 5. Expiry
 
 When the current time passes the `expires` of a key-bound group's
