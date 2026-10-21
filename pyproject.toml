@@ -17,6 +17,9 @@ dependencies = [
     "python-socks[asyncio]>=2.4",
     "certifi",                      # HTTPS for updates where the system has no certificates
     "markdown-it-py>=3",            # Markdown (UN-RFC 0031); pure Python, Textual uses it too
+    # key ripening (UN-RFC 0025): only where chiavdf has wheels; elsewhere
+    # core.ripening.available() is False (Intel Macs, Android, Pyodide: unseenet-gui#31)
+    "chiavdf>=1.1; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or sys_platform == 'win32' or (sys_platform == 'darwin' and platform_machine == 'arm64')",
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
