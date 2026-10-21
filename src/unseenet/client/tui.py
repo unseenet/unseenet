@@ -2552,7 +2552,7 @@ class UnseenetApp(App):
     @on(DataTable.RowHighlighted, "#threads")
     def _row(self, event: DataTable.RowHighlighted) -> None:
         msg = self.messages.get(event.row_key.value)
-        if msg is None:
+        if msg is None or not self.screen_stack:      # the app is closing (#137)
             return
         self.current_message = msg
         self.refresh_bindings()
