@@ -67,3 +67,12 @@ def test_set_view_refuses_what_no_client_can_show(session):
         session.set_view(G, "gallery")
     with pytest.raises(SessionError):
         session.set_view(FOR_YOU, "chat")
+
+
+def test_a_contacts_chat_leaves_out_ignored_keys(session):
+    """threads() of a contact's chat goes through visible(), like every other view."""
+    other = "ed25519:" + "a" * 52
+    got = []
+    session.visible = lambda msgs: got.append(list(msgs)) or []
+    assert session.threads(CONTACT + other) == []
+    assert got, "visible() was not asked"

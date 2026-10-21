@@ -2680,8 +2680,9 @@ class Session:
         """
         if group_id == FOR_YOU:
             return [(m, 0) for m in self.for_you(unread_only=False)[:200]]
-        if group_id.startswith(CONTACT):
-            return [(m, 0) for m in self.conversation(group_id[len(CONTACT):], KIND_CHAT)]
+        if group_id.startswith(CONTACT):          # as everywhere: ignores, filters (0025, 3.5)
+            return [(m, 0) for m in self.visible(self.conversation(group_id[len(CONTACT):],
+                                                                   KIND_CHAT))]
         if group_id == self.my_inbox:
             return threaded(self.visible(self.private_posts()))   # what you sent, too
         msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
