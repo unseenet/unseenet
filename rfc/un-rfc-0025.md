@@ -160,7 +160,7 @@ has a segment that ends at exactly `(t, y)`. The level is the level of
   bogus articles costs the sender postage before it costs the node work;
 - verifies a chain once and keeps the verified prefix, so a new version
   costs only its new segments;
-- answers `441 ripening unknown` when it holds no `ripe@` manifest for
+- answers `441 ripening: unknown` when it holds no `ripe@` manifest for
   the key, or one without `(t, y)`. A client that gets this answer posts
   its `ripe@` manifest and then the article again;
 - before it forwards an article to a peer (UN-RFC 0005 section 5.2),
@@ -170,6 +170,24 @@ has a segment that ends at exactly `(t, y)`. The level is the level of
 A client publishes a new version of its `ripe@` manifest at least at
 every level boundary, and uses the newest `(t, y)` it has published in
 its articles.
+
+## 3.5 Sealed Private Posts
+
+A sealed post to an inbox (UN-RFC 0009) is signed by a fresh one-time
+key, so that nodes do not learn who writes to whom. A one-time key
+cannot ripen. A node therefore:
+
+- does not require `Key-Ripening` on an article with `Encrypted:
+  sealedbox` in an `inbox@` group, and
+- prices it as an unripe key where level `-` is allowed: the node's or
+  the inbox's minimum postage plus the surcharge of level 0 (section 5).
+
+The sender's client SHOULD put its own `Key-Ripening` header in the
+**inner** article, next to `Sender-Key`. Only the recipient sees it. The
+recipient's client MAY check it against the sender's `ripe@` chain and
+hide posts from unripe or unknown senders. That is a local choice
+(section 6), like any filter on the inner article, and it tells the node
+nothing.
 
 # 4. Levels
 
@@ -306,6 +324,12 @@ every evening needs segments. A chain of dozens of segments is too large
 for every article, chat lines included, so it is published once, where
 profiles are (UN-RFC 0022), and articles point into it. Nodes then verify
 a key once, not every article.
+
+**Why private posts are exempt at the node.** Requiring ripening on
+the outer article would make the sender's key visible to nodes, and with
+it who writes to whom, which UN-RFC 0009 exists to hide. The level 0
+surcharge keeps sealed posts as expensive as posts from a brand-new key,
+and the inner header lets the recipient judge the sender.
 
 **Transition.** None: while Unseenet is pre-alpha there is no backwards
 compatibility. Existing keys ripen once to level 0 before they post
