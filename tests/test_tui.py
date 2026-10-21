@@ -740,10 +740,16 @@ async def test_tui_sent_private_messages_and_full_screen(tmp_path, monkeypatch):
         assert first.subject in str(app.screen.query_one("#read-head").render())
         await pilot.press("n")
         await pilot.pause(0.3)
-        assert app.screen.msg is not first and app.current_message is app.screen.msg
+        # by Message-ID: a refresh of the list may hand out fresh objects (#137)
+        assert app.screen.msg.message_id != first.message_id
+        assert app.current_message.message_id == app.screen.msg.message_id
         await pilot.press("p")
         await pilot.pause(0.3)
-        assert app.screen.msg is first
+        assert app.screen.msg.message_id == first.message_id
+        # a refresh while reading: the screen follows the fresh object, same place
+        app._render_threads()
+        await pilot.pause(0.1)
+        assert app.screen.msg is app.messages[first.message_id]
         await pilot.press("escape")
         await pilot.pause(0.2)
         assert not isinstance(app.screen, ReadScreen) and app.is_running
