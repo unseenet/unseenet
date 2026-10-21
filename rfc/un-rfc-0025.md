@@ -149,7 +149,7 @@ to the required headers of UN-RFC 0002 section 2). It lies outside the
 canonical form, like `Proof-Of-Work`, so it does not change the
 signature or the Message-ID, and a node forwards it unchanged. It names
 the end of a segment in the author's chain: `t` is the sum of the
-segments up to and including it, `y` its end form. It is about 150
+segments up to and including it, `y` its end form. It is about 175
 characters, also on a chat line.
 
 A node accepts the header when the chain it holds for the author's key
