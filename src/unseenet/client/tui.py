@@ -20,7 +20,7 @@ from pathlib import Path
 from textual import on, work
 from textual.message import Message as Message_
 from textual.worker import Worker, WorkerState
-from textual.app import App, ComposeResult, SystemCommand
+from textual.app import App, ComposeResult, ScreenStackError, SystemCommand
 from textual.binding import Binding
 from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -1671,6 +1671,13 @@ class BrowseDialog(Dialog):
 class UnseenetApp(App):
     TITLE = "unseenet"
     CSS = CSS + console_css()
+
+    def refresh_bindings(self) -> None:
+        """An event handled while the app closes may find no screen left (#137)."""
+        try:
+            super().refresh_bindings()
+        except ScreenStackError:
+            pass
     BINDINGS = [
         # chat: the input line takes the letters; Esc leaves it, Enter goes back
         # (first, so the footer always has room for them)
