@@ -80,3 +80,37 @@ class TorState(Event):
     progress: int
     summary: str = ""
     name = "tor-state"
+
+
+# --- from the client runtime (client/runtime.py) ---
+
+@dataclass(frozen=True)
+class InboxReady(Event):
+    """Your personal inbox exists on your node and is followed: private posts can come."""
+    group_id: str
+    name = "inbox-ready"
+
+
+@dataclass(frozen=True)
+class Refreshed(Event):
+    """A round of fetching every group you follow is done.
+
+    ``error`` is set when the node list could not be read at all: the client
+    shows what is saved and tries again at the next round."""
+    available: int = 0               # groups on your nodes
+    subscribed: int = 0
+    unreachable: tuple[str, ...] = ()
+    replies: int = 0                 # unread replies to you, in all groups
+    mentions: int = 0                # unread posts naming you
+    error: str | None = None
+    name = "refreshed"
+
+    def to_dict(self) -> dict:
+        return {**super().to_dict(), "unreachable": list(self.unreachable)}
+
+
+@dataclass(frozen=True)
+class ReleaseOffer(Event):
+    """A newer signed release of Unseenet is in the network (#264)."""
+    version: str
+    name = "release-offer"

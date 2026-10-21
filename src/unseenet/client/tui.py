@@ -53,6 +53,8 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
 REPO_URL, DOCS_URL = about.REPO_URL, about.DOCS_URL
 from .threads import CONTACT, FOR_YOU   # the session's pseudo groups (#139)
+from .runtime import ClientRuntime
+from . import events as ev
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
 
 
@@ -1865,7 +1867,8 @@ class UnseenetApp(App):
                 s.add_node(result["node"])
                 for backup in result.get("backups", []):    # read from if the first is down
                     s.add_node(backup)
-        s.subscribe_starter_groups()
+        self.runtime = ClientRuntime(s)          # startup, refresh and push (#139)
+        s.on(self._on_event)
         self._update_subtitle()
         await self.show_offline()
         self.refresh_groups()
@@ -1873,33 +1876,25 @@ class UnseenetApp(App):
 
     @work(group="known-nodes", exclusive=True, exit_on_error=False)
     async def update_known_nodes(self) -> None:
-        """Read the signed node list (UN-RFC 0010) in the background; quiet on failure."""
-        try:
-            await self.session.refresh_known_nodes()
-        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
-            pass
-        try:                                    # a newer release (#264)
-            offer = await self.session.refresh_releases()
-            if offer and offer["version"] != getattr(self, "_offered", None):
-                self._offered = offer["version"]
-                root = portable_root()
-                how = ("Update Unseenet in the menu (Ctrl+P)"
-                       if root is not None and not (root / "README-graphical.txt").exists()
-                       else "see unseenet.org")
-                self.notify(f"Unseenet {offer['version']} is ready: {how}.", timeout=20)
-        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
-            pass
-        try:                                    # inbox, profile...: renew when due (UN-RFC 0029)
-            await self.session.renew_key_bound()
-        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
-            pass
-        try:                                    # names of groups and people (UN-RFC 0018, 0019)
-            if await self.session.refresh_naming():
-                await self._render_groups()
-                if self.current_group:
-                    self._render_threads()
-        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
-            pass
+        """Node list, releases, renewals and names in the background (#139); quiet on failure."""
+        done = await self.runtime.maintain()
+        if done.release:                        # a newer release (#264)
+            root = portable_root()
+            how = ("Update Unseenet in the menu (Ctrl+P)"
+                   if root is not None and not (root / "README-graphical.txt").exists()
+                   else "see unseenet.org")
+            self.notify(f"Unseenet {done.release} is ready: {how}.", timeout=20)
+        if done.names:                          # names of groups and people (UN-RFC 0018, 0019)
+            await self._render_groups()
+            if self.current_group:
+                self._render_threads()
+
+    def _on_event(self, event: ev.Event) -> None:
+        """The session's events this client acts on at once; the rest it reads itself."""
+        if isinstance(event, ev.InboxReady):
+            self._inbox_ready = True
+            self._start_watches()
+            self.update_known_nodes()
 
     def _update_subtitle(self) -> None:
         s = self.session
@@ -1917,7 +1912,7 @@ class UnseenetApp(App):
 
     async def show_offline(self) -> None:
         """Show what is in the encrypted local cache before any network access."""
-        loaded = self.session.load_offline()
+        loaded = self.runtime.open()            # starter groups, then the offline cache
         self.groups = self._groups_from_vault()
         await self._render_groups()
         if self.groups:
@@ -1928,28 +1923,15 @@ class UnseenetApp(App):
     @work(exclusive=True, group="groups", exit_on_error=False)
     async def refresh_groups(self) -> None:
         s = self.session
-        try:
-            available = {g.group_id: g for g in await s.list_groups()}
-        except (SessionError, OSError, ConnectionError) as exc:
-            self.set_status(f"Offline ({exc}) - showing saved posts")
+        if set(s.data["subscribed"]) != set(self.groups):    # just followed or left one:
+            self.groups = self._groups_from_vault()          # show it now, not after the round
+            await self._render_groups()
+        result = await self.runtime.refresh()   # inbox once, then every group (#139)
+        if result.error:
+            self.set_status(f"Offline ({result.error}) - showing saved posts")
             return
-        if not self._inbox_ready:
-            try:
-                await s.ensure_inbox()
-                self._inbox_ready = True
-                self._start_watches()
-                self.update_known_nodes()
-                available = {g.group_id: g for g in await s.list_groups()}
-            except (SessionError, OSError, ConnectionError) as exc:
-                self.set_status(f"Could not set up your inbox: {exc}")
-        groups = self._groups_from_vault(available)
+        groups = self._groups_from_vault(self.runtime.available)
         self.groups = groups
-        for gid in groups:
-            try:
-                await s.fetch_group(gid)
-                groups[gid].type = s.group_entry(gid).get("type")
-            except (SessionError, OSError, ConnectionError):
-                pass
         before = getattr(self, "_for_you_seen", None)
         now = s.for_you_counts()
         await self._render_groups()
@@ -1966,7 +1948,7 @@ class UnseenetApp(App):
                 "No groups yet - press g to browse the node's groups, or Ctrl+P to create one")
         where = f"{len(s.nodes)} nodes" if len(s.nodes) > 1 else "node"
         down = f" - not reachable: {', '.join(node_label(n) for n in s.unreachable)}" if s.unreachable else ""
-        self.set_status(f"{len(available)} groups on {where}, {len(groups)} subscribed{down}")
+        self.set_status(f"{result.available} groups on {where}, {len(groups)} subscribed{down}")
 
     async def _render_groups(self) -> None:
         tree = self.query_one("#groups", Tree)
@@ -3298,16 +3280,8 @@ class UnseenetApp(App):
     @work(group="watch", exit_on_error=False)
     async def watch_loop(self, node: str) -> None:
         """Keep a second connection to a node open so new posts show up at once."""
-        async def on_new(gid: str, message_id: str) -> None:
-            if self.session.node_for(gid) == node:     # read from this node
-                await self._on_push(gid, message_id)
-        while node in self.session.nodes and node in self._watching:
-            try:
-                if await self.session.watch(on_new, node=node) is False:
-                    return                         # the node cannot push; polling only
-            except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError):
-                pass
-            await asyncio.sleep(15)                # reconnect after a pause
+        await self.runtime.watch_node(node, self._on_push,           # (#139)
+                                      keep_going=lambda: node in self._watching)
 
     async def _on_push(self, gid: str, message_id: str) -> None:
         s = self.session
