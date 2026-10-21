@@ -679,6 +679,43 @@ async def ripen_command(args) -> None:
     await s.close()
 
 
+async def serve_command(args) -> None:
+    """unseenet serve: the local client API (UN-RFC 0046). With ``--key-file`` it
+    runs as a service (section 3.2), unlocked from the start; otherwise the front
+    end unlocks the vault through it. The first line on standard output is
+    ``UNSEENET-API 1 <url> <token>`` (section 3.1)."""
+    try:
+        from .client.localapi import server
+    except ImportError:
+        sys.exit("the local API needs aiohttp (pip install unseenet[api])")
+    from .client.localapi import LocalAPI
+    from .client.session import Session
+    api_file = Path(args.api_file) if args.api_file else None
+    if args.key_file:
+        from .core.poster import PosterError, load_key
+        try:
+            ident = load_key(key_file=args.key_file)
+        except PosterError as exc:
+            sys.exit(str(exc))
+        s = Session.from_key(ident, args.state or f"{args.key_file}.state.json",
+                             status=lambda *_: None)
+        for address in args.node or []:
+            s.add_node(address)
+        if not s.node:
+            sys.exit("a service needs a node: --node <address>")
+        api = LocalAPI(session=s, service=True)
+        await api.start()
+    else:
+        if args.node:
+            sys.exit("--node is for a service; a person chooses a node when setting up")
+        api = LocalAPI(Path(args.vault))
+        api_file = api_file or Path(f"{args.vault}.api")
+
+    def ready(port: int, token: str) -> None:
+        print(server.announce_line(port, token), flush=True)
+    await server.serve(api, port=args.port, on_ready=ready, api_file=api_file)
+
+
 def _ripen_public(args) -> None:
     """Ripen from the public key alone, on any machine: the secret is not needed to
     compute, only to publish. The state file is then copied next to the key file,
@@ -792,8 +829,21 @@ def client_main(argv=None) -> None:
     s.add_argument("--node", action="append", help="a node to publish to (with --publish)")
     s.add_argument("--publish", action="store_true", help="post the ripe@ manifest when done")
 
+    s = sub.add_parser("serve", help="offer the local client API (UN-RFC 0046) to a front end "
+                                     "or a program on this computer")
+    s.add_argument("--key-file", help="run as a service with this key (a bot, a gateway): "
+                                      "no vault, no unlock")
+    s.add_argument("--state", help="where a service keeps its state (default: next to the key)")
+    s.add_argument("--node", action="append", help="a node to use (a service needs one)")
+    s.add_argument("--port", type=int, default=0, help="the port on 127.0.0.1 (default: random)")
+    s.add_argument("--api-file", help="also write the address and token to this file (mode "
+                                      "0600); default for a vault: <vault>.api")
+
     args = p.parse_args(argv)
     if args.cmd == "ripen":
         asyncio.run(ripen_command(args))
+        return
+    if args.cmd == "serve":
+        asyncio.run(serve_command(args))
         return
     asyncio.run(client_command(args))

@@ -187,6 +187,32 @@ A key kept offline (a gateway's group key, the project key) only signs
 manifests now and then: ripen it to level 0 once; the tool that brings it
 online for a change publishes `ripe@` first.
 
+### A front end or a program in another language: the local API
+
+`unseenet serve` (needs `pip install unseenet[api]`) offers everything above
+over HTTP and a WebSocket on 127.0.0.1, as UN-RFC 0046 describes: the
+groups and their rows, writing as jobs with progress, people, the groups
+you run, names, profile and settings. A front end never holds a key.
+
+```
+$ unseenet --vault me.vault serve              # a person's client: unlock through it
+UNSEENET-API 1 http://127.0.0.1:41817/ 3q2-...
+
+$ unseenet serve --key-file bot.key --node xyz.onion    # a bot: unlocked at once
+```
+
+The first line gives the address and the token; send the token in
+`X-Unseenet-Token` (or, for `/api/events`, as the subprotocol
+`unseenet-token.<token>`). For a vault the same line is in `<vault>.api`,
+readable only by you, while it runs. A service posts what it builds with
+`POST /api/articles`, adding its own `X-` or `Gateway-*` headers; postage
+and ripening are done for it.
+
+In Python, `unseenet.client.localapi.LocalAPI` is the same without the web
+server, and `server.make_app(api, token, page=..., extensions=...)` lets a
+graphical client serve its own page and add routes under `/x/<name>/`, as
+unseenet-gui does.
+
 ## Design Decisions (so far)
 
 Each decision lists where it is specified and the reasoning. Changing one
