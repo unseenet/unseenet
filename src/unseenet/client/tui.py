@@ -2333,6 +2333,23 @@ class UnseenetApp(App):
         else:
             self.notify("The post is not there any more - perhaps it was withdrawn", timeout=8)
 
+    def action_toggle_private_ripe(self) -> None:
+        """Hide private posts from strangers whose key is younger than level 1 (about
+        an hour of ripening). Local only: nodes know nothing of it (UN-RFC 0025, 3.5)."""
+        s = self.session
+        hide = s.private_min_ripe() is None
+        s.set_private_min_ripe(1 if hide else None)
+        self.notify("Private posts from brand-new keys are hidden; contacts always come "
+                    "through" if hide else "All private posts are shown again", timeout=6)
+        self.run_worker(self._recheck_private(), group="private-ripe", exclusive=True,
+                        exit_on_error=False)
+
+    async def _recheck_private(self) -> None:
+        await self.session.check_private_senders()
+        if self.current_group == self.session.my_inbox or (self.current_group or "").startswith(CONTACT):
+            self._render_threads()
+        await self._render_groups()
+
     def action_toggle_markdown(self) -> None:
         """Send what you write as Markdown (the default) or as plain text (UN-RFC 0031)."""
         on = self.session.text_type() != markup.MARKDOWN_TYPE
@@ -3336,6 +3353,11 @@ class UnseenetApp(App):
              "to anyone by their key  [m]", self.action_message),
             ("Contacts", "Your address book: chat, write a private post, rename, remove  [c]",
              self.action_contacts),
+            ("Private posts from new keys",
+             ("Hidden: only contacts and keys ripened an hour or more reach you - show all"
+              if self.session.private_min_ripe() is not None else
+              "Shown - hide those from keys made minutes ago (contacts always come through)"),
+             self.action_toggle_private_ripe),
             ("Chat with someone", "A private chat with someone by their key (the author of the "
              "selected post is filled in)", self.action_chat_with),
             ("Browse groups", "See all groups on the node, subscribe or unsubscribe  [g]",

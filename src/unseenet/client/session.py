@@ -167,6 +167,7 @@ class Message:
     supersedes: list[str] = field(default_factory=list)   # an edit: earlier versions (0042)
     edited: datetime | None = None        # shown version is an edit, made then (0042, 4.2)
     versions: list[str] = field(default_factory=list)     # earlier versions this one replaced
+    sender_ripening: str | None = None    # a private post: the sender's Key-Ripening (0025, 3.5)
 
     @property
     def author_fp(self) -> str:
@@ -284,6 +285,8 @@ class Session:
         self.status = status            # callback for progress messages (one line of text)
         self._listeners: list = []      # typed events (unseenet #139): Session.on()
         self._ripe_locks: dict[str, asyncio.Lock] = {}   # one ripening per identity
+        self._sender_chains: dict[str, tuple] = {}       # senders' verified chains (0025, 3.5)
+        self._sender_levels: dict[str, int | None] = {}  # private post -> its sender's level
         self.tor: TorProcess | None = None
         self._tor_lock = asyncio.Lock()   # one Tor per session, however many connect at once
         self._checked_socks: Socks | None = None        # an existing Tor that answered
@@ -416,6 +419,69 @@ class Session:
         """Does this node ask for ripening (UNSEENET-MINRIPE other than "-")?"""
         value = await self.node_min_ripe(node)
         return value is not None and value != "-"
+
+    def _with_inner_ripening(self, extra):
+        """A private post carries the sender's Key-Ripening inside the sealed box,
+        for the recipient only (UN-RFC 0025 section 3.5)."""
+        header = self.ripening_header() if self.has_identity() else None
+        return list(extra or []) + ([("Key-Ripening", header)] if header else [])
+
+    def private_min_ripe(self) -> int | None:
+        """Hide private posts from senders below this level; None shows them all."""
+        return self.data.get("private_min_ripe")
+
+    def set_private_min_ripe(self, level: int | None) -> None:
+        if level is not None:
+            rp.parse_min(level)                       # 0-4, or raises
+        self.data["private_min_ripe"] = level
+        self.save()
+
+    async def sender_level(self, msg: "Message") -> int | None:
+        """The level a private post's sender has, checked against the sender's own
+        ripe@ chain (UN-RFC 0025 section 3.5); None if unripe or not shown."""
+        if not msg.sender_key or not msg.sender_ripening or not rp.available():
+            return None
+        try:
+            t, y = rp.parse_header(msg.sender_ripening)
+            pk = crypto.key_from_text(msg.sender_key)
+        except (rp.RipeningError, crypto.CryptoError, ValueError):
+            return None
+        known, done = self._sender_chains.get(msg.sender_key, (None, 0))
+        if known is None or known.points().get(t) != y:
+            m = await self.fetch_manifest(make_group_id(rp.GROUP_NAME, pk))
+            if m is None or "ripening" not in m.raw:
+                return None
+            try:
+                chain = rp.Chain.from_manifest(m.raw["ripening"])
+                already = done if known is not None and chain.extends(known) else 0
+                done = rp.verify(pk, chain, already=already)
+            except rp.RipeningError:
+                return None
+            self._sender_chains[msg.sender_key] = (chain, done)
+            known = chain
+        return rp.level(t) if known.points().get(t) == y else None
+
+    async def check_private_senders(self) -> None:
+        """Learn the senders' levels for the private posts the setting may hide."""
+        if self.private_min_ripe() is None:
+            return
+        for m in self.cache.get(self.my_inbox, {}).values():
+            if m.sender_key and m.message_id not in self._sender_levels:
+                try:
+                    self._sender_levels[m.message_id] = await self.sender_level(m)
+                except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                    pass                                   # again at the next fetch
+
+    def sender_shown(self, msg: "Message") -> bool:
+        """With the setting on, a private post from someone who is not a contact is
+        shown only when its sender is known to be ripe enough. A local choice: the
+        node knows nothing of it (UN-RFC 0025 sections 3.5, 6)."""
+        minimum = self.private_min_ripe()
+        if minimum is None or not msg.private or msg.to_key or not msg.sender_key:
+            return True
+        if self.contact_name(msg.sender_key) or self._identity_named_by(msg.sender_key):
+            return True
+        return rp.meets(self._sender_levels.get(msg.message_id), minimum)
 
     async def ripen_segment(self, name: str | None = None, run_file=None) -> bool:
         """Compute this identity's next segment (section 3.2) in a worker thread and
@@ -2000,12 +2066,13 @@ class Session:
             owner_key = owner_key or owner_from_manifest
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
+        inner = extra if anonymous else self._with_inner_ripening(extra)
         art = await self._post_with_postage(group_id, lambda bits: inbox_article(
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, content_type=content_type, kind=kind, pow_bits=bits,
-            extra=extra))
+            extra=inner))
         msgid = art.message_id
         if not remember:
             return msgid
@@ -2264,7 +2331,7 @@ class Session:
                     inbox, owner, from_name=self.display_name(), subject=title, body=body,
                     sender=self.identity(), reply_inbox=self.my_inbox,
                     content_type=MENTION_TYPE + "; charset=utf-8", kind=KIND_POST,
-                    pow_bits=bits, extra=extra))
+                    pow_bits=bits, extra=self._with_inner_ripening(extra)))
             except (SessionError, OSError, ConnectionError, crypto.CryptoError, ValueError):
                 continue
             built.append(art)
@@ -2460,8 +2527,11 @@ class Session:
 
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown), and
-        show only the newest version of an edited post (UN-RFC 0042)."""
+        show only the newest version of an edited post (UN-RFC 0042). With
+        private_min_ripe set, private posts from unripe strangers are left out too."""
         msgs = resolve_edits(msgs)
+        if self.private_min_ripe() is not None:
+            msgs = [m for m in msgs if self.sender_shown(m)]
         groups = {m.group for m in msgs}
         banned = {gid: {k for k, _ in self.banned(gid)} for gid in groups}
         if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
@@ -2860,6 +2930,7 @@ class Session:
             self.save_offline()
             self.emit(ev.GroupUpdated(group_id, new))        # new posts, not control articles
         if group_id == self.my_inbox:
+            await self.check_private_senders()     # UN-RFC 0025, section 3.5 (if wanted)
             await self.check_notices()             # UN-RFC 0032, section 5
         if group_id == self.my_inbox:
             self._schedule_notice_posting()        # approved notices still to go (4.3)
@@ -3110,6 +3181,7 @@ class Session:
         else:
             msg.sender_key = crypto.key_to_text(sender)
             msg.author_key = msg.sender_key          # show the real sender, not the one-time key
+            msg.sender_ripening = (inner.get("Key-Ripening") or "").strip() or None
             msg.from_name = inner.get("From", "")
             naming.note_certificate(self, msg.sender_key, inner.get(names.HEADER))
 
