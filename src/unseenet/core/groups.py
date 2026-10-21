@@ -179,6 +179,10 @@ KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 
 MAX_LIFETIME = timedelta(days=730)       # expires at most this long after Date (section 3)
 RENEW_WHEN_LEFT = timedelta(days=545)    # renew once less than this remains (section 4)
 RENEW_WINDOW = timedelta(days=30)        # at a random moment within this (section 4)
+# Section 4: a new identity's key-bound groups live this long until it is in use,
+# renewed when fewer than FIRST_RENEW_WHEN_LEFT remain (unseenet #270).
+FIRST_LIFETIME = timedelta(days=60)
+FIRST_RENEW_WHEN_LEFT = timedelta(days=30)
 REMOVE_AFTER = timedelta(days=30)        # nodes remove expired groups within this (section 5)
 
 
@@ -324,7 +328,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   rules: str = "", view: str | None = None, low_latency: bool = False,
                   kinds: list[str] | None = None, comments: str | None = None,
                   comment_days: int | None = None, pow_bits: int = 18,
-                  rules_type: str | None = None) -> Article:
+                  rules_type: str | None = None, lifetime: timedelta | None = None) -> Article:
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -358,7 +362,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["comments"] = comments
     if comment_days is not None:
         data["comment_days"] = comment_days
-    return manifest_article(owner, group_id, data, pow_bits)
+    return manifest_article(owner, group_id, data, pow_bits, lifetime=lifetime)
 
 
 MAX_RULES = 8192
@@ -366,11 +370,12 @@ VIEWS = ("threads", "chat", "data")      # UN-RFC 0008 section 3.1
 
 
 def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18,
-                     now: datetime | None = None) -> Article:
+                     now: datetime | None = None, lifetime: timedelta | None = None) -> Article:
     """Sign a manifest from its JSON fields (used for new and updated manifests).
 
-    A key-bound group's manifest gets a fresh ``expires``, the longest UN-RFC 0029
-    allows, so every new manifest of such a group is also its renewal."""
+    A key-bound group's manifest gets a fresh ``expires``, ``lifetime`` from now -
+    by default the longest UN-RFC 0029 allows - so every new manifest of such a
+    group is also its renewal."""
     if len(data.get("rules", "")) > MAX_RULES:
         raise ValueError(f"rules are limited to {MAX_RULES} characters")
     if "rules_type" in data and (not isinstance(data["rules_type"], str)
@@ -382,7 +387,8 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
     _comments(data)                                        # UN-RFC 0030, 3
     now = now or datetime.now(timezone.utc)
     if is_key_bound(group_id):
-        data["expires"] = format_expires(parse_date(format_date(now)) + MAX_LIFETIME)
+        life = min(lifetime or MAX_LIFETIME, MAX_LIFETIME)
+        data["expires"] = format_expires(parse_date(format_date(now)) + life)
     art = new_article(group_id, None, canonical_json(data), now=now,
                       extra=[("Control", "manifest"), ("Content-Type", "application/json")])
     return art.finalize(owner, pow_bits)

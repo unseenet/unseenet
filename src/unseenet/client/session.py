@@ -7,6 +7,7 @@ encrypted vault (UN-RFC 0007); articles are cached in memory only.
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import re
 import base64
@@ -14,7 +15,7 @@ import json
 import textwrap
 from dataclasses import dataclass, field, replace
 from typing import NamedTuple
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from ..core import crypto
@@ -26,7 +27,8 @@ from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_R
                            make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
 from ..core.groups import _comments  # UN-RFC 0030 field check
-from ..core.groups import RENEW_WHEN_LEFT, RENEW_WINDOW, is_key_bound, stored_expires
+from ..core.groups import (FIRST_LIFETIME, FIRST_RENEW_WHEN_LEFT, MAX_LIFETIME, RENEW_WHEN_LEFT,
+                           RENEW_WINDOW, is_key_bound, stored_expires)
 from ..core import profiles as prof
 from ..core.tor import (BRIDGE_MODES, Socks, TorError, TorProcess, bridges_for, check_socks,
                         existing_tor, parse_socks)
@@ -43,6 +45,8 @@ MAX_SIG_LINES = 4               # the old netiquette limit
 DEFAULT_SIGNATURE = "{name}  ·  {key}"   # until you set your own; empty means none
 CACHE_SIDECAR = "cache"
 SENT_SIDECAR = "sent"           # copies of private messages you sent (they are sealed to others)
+
+log = logging.getLogger(__name__)
 
 
 class ForYouCount(NamedTuple):
@@ -836,6 +840,7 @@ class Session:
                            rules_type: str | None = None) -> str:
         owner = self.identity()
         node = node or self.node
+        self.mark_in_use()               # making a group is using the identity (#270)
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90
         art = make_manifest(owner, name, gtype, title=title, description=description,
@@ -951,6 +956,7 @@ class Session:
         return [(personal_inbox_id(crypto.key_from_text(k)), crypto.key_from_text(k)) for k in keys]
 
     async def _submit(self, group_id: str, subject: str, build) -> str:
+        self.mark_in_use()               # writing anything is using the identity (#270)
         bits = await self.required_pow(group_id)
         loop = asyncio.get_running_loop()
         art = await loop.run_in_executor(None, lambda: build(bits))
@@ -1296,7 +1302,9 @@ class Session:
         return personal_inbox_id(self.identity().public_key)
 
     async def ensure_inbox(self) -> str:
-        """Make sure this identity's personal inbox exists on the node and is subscribed."""
+        """Make sure this identity's personal inbox exists on the node and is subscribed,
+        and renew its key-bound groups if due (every client opens with this)."""
+        self.note_opened()
         gid = self.my_inbox
         entry = self.group_entry(gid)
         entry.setdefault("node", self.node)
@@ -1312,14 +1320,77 @@ class Session:
                 serial = int(self.manifest_data(gid).get("serial", 0)) + 1
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
                                     min_pow=DEFAULT_POW, serial=serial,
-                                    pow_bits=await self.required_pow(gid))
+                                    pow_bits=await self.required_pow(gid),
+                                    lifetime=self.key_bound_lifetime())
                 await self._post_article(art)
                 entry["manifest"] = json.loads(art.body)
             entry.update({"type": "inbox", "owner": True})
         if gid not in self.data["subscribed"]:
             self.data["subscribed"].insert(0, gid)
         self.save()
+        try:
+            await self.renew_key_bound()
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            log.warning("could not renew key-bound groups: %s", exc)
         return gid
+
+    # --- a new identity's first lifetime (UN-RFC 0029 section 4, unseenet #270) ---
+    IN_USE_DAYS = 3                 # opened on this many different days: in use
+
+    def _ident_entry(self, name: str | None = None) -> dict:
+        return self.data["identities"][name or self.default_identity_name()]
+
+    def in_use(self, name: str | None = None, now: datetime | None = None) -> bool:
+        """Has this identity been used, so that its key-bound groups get the full
+        lifetime? Until then a visitor's inbox lives FIRST_LIFETIME."""
+        entry = self._ident_entry(name)
+        if entry.get("in_use"):
+            return True
+        dates = [stored_expires(self.manifest_data(g)) for g in self.key_bound_groups(name)]
+        now = now or datetime.now(timezone.utc)
+        # already has a long lifetime, or is from before UN-RFC 0029: in use
+        if any(d is None or d - now > FIRST_LIFETIME + timedelta(days=1) for d in dates):
+            entry["in_use"] = True
+            entry.pop("days_opened", None)
+            self.save()
+            return True
+        return False
+
+    def key_bound_lifetime(self, name: str | None = None) -> timedelta:
+        return MAX_LIFETIME if self.in_use(name) else FIRST_LIFETIME
+
+    def note_opened(self, today: date | None = None) -> None:
+        """Count a day this identity was opened; on IN_USE_DAYS different days it is in use."""
+        try:
+            entry = self._ident_entry()
+        except SessionError:
+            return
+        if entry.get("in_use"):
+            return
+        day = (today or datetime.now(timezone.utc).date()).isoformat()
+        days = entry.setdefault("days_opened", [])
+        if day in days:
+            return
+        days.append(day)
+        del days[:-self.IN_USE_DAYS]
+        if len(days) >= self.IN_USE_DAYS:
+            self.mark_in_use()
+        else:
+            self.save()
+
+    def mark_in_use(self, name: str | None = None) -> None:
+        """The identity is used (posted, wrote, added a contact, made a group, ...):
+        its key-bound groups are renewed with the full lifetime at the next renewal,
+        which comes at once since a first lifetime is short."""
+        try:
+            entry = self._ident_entry(name)
+        except SessionError:
+            return
+        if entry.get("in_use"):
+            return
+        entry["in_use"] = True
+        entry.pop("days_opened", None)
+        self.save()
 
     async def inbox_owner(self, group_id: str) -> bytes:
         """The owner key of an inbox, from its manifest on the node."""
@@ -1511,6 +1582,7 @@ class Session:
     async def _publish_key_bound(self, group_id: str, make) -> dict:
         """Post a new manifest of one of our own key-bound groups, with a serial above
         any we used (UN-RFC 0029 section 8), and keep it so it is renewed."""
+        self.mark_in_use()               # a profile or picture is using the identity
         entry = self.group_entry(group_id)
         serial = int(self.manifest_data(group_id).get("serial", 0)) + 1
         art = make(serial, await self.required_pow(None))
@@ -1575,10 +1647,13 @@ class Session:
         now = now or datetime.now(timezone.utc)
         rng = rng or random.SystemRandom()
         renewed: list[str] = []
+        self.note_opened(now.date())
         for name, ident_entry in self.data["identities"].items():
             groups = self.key_bound_groups(name)
             expiry = self.key_bound_expiry(name)
-            if not groups or expiry is None or expiry - now >= RENEW_WHEN_LEFT:
+            in_use = self.in_use(name, now)
+            when_left = RENEW_WHEN_LEFT if in_use else FIRST_RENEW_WHEN_LEFT
+            if not groups or expiry is None or expiry - now >= when_left:
                 ident_entry.pop("renew_at", None)
                 continue
             urgent = expiry - now < RENEW_WINDOW * 2
@@ -1594,7 +1669,8 @@ class Session:
             for gid in groups:
                 data = self.manifest_data(gid)
                 data["serial"] = int(data.get("serial", 1)) + 1     # the vault remembers it
-                art = manifest_article(owner, gid, data, await self.required_pow(None), now=now)
+                art = manifest_article(owner, gid, data, await self.required_pow(None), now=now,
+                                       lifetime=MAX_LIFETIME if in_use else FIRST_LIFETIME)
                 await self._post_article(art)
                 self.group_entry(gid)["manifest"] = data
                 renewed.append(gid)
@@ -1666,6 +1742,7 @@ class Session:
         if key_text == self.identity().key_text:
             raise SessionError("that is your own key")
         self.data["contacts"][key_text] = {"name": name.strip()}
+        self.mark_in_use()
         self.save()
 
     def remove_contact(self, key_text: str) -> None:

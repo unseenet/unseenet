@@ -36,6 +36,14 @@ incomplete by the daily check.
 
 ### Changed
 
+- A new identity's inbox lives 60 days until the identity is used, not two
+  years (#270, UN-RFC 0029 section 4.1): it is in use from the third day it
+  is opened, or at the first post, chat, contact, group or profile, and then
+  renewed for the full lifetime. Someone who opened the client once to look
+  around is gone from the nodes after about 90 days. Every client now renews
+  key-bound groups when it opens (`Session.ensure_inbox`); the graphical
+  client did not before.
+
 - Key-bound groups (`inbox@`, `profile@`, `avatar@`, `names@`) are no
   longer listed: not in `LIST ACTIVE` or `LIST NEWSGROUPS`, and not in
   part 1 of `NEWNEWS` (UN-RFC 0040 sections 3 and 5). They are still
