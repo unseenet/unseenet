@@ -2557,15 +2557,18 @@ class UnseenetApp(App):
         self.current_message = msg
         self.refresh_bindings()
         head, body = self.article(msg)
-        self.query_one("#article-head", Static).update(head)
-        self.query_one("#article-body", Static).update(body)
+        # not there in the chat view, or while the app closes (#137)
+        for widget in self.query("#article-head"):
+            widget.update(head)
+        for widget in self.query("#article-body"):
+            widget.update(body)
         if isinstance(self.screen, ReadScreen):
             self.screen.show(msg)
         if not self.session.is_read(msg):
             self.session.mark_read(msg, save=False)
             self._save_soon()
-            table = self.query_one("#threads", DataTable)
-            table.update_cell(msg.message_id, "flag", " ")
+            for table in self.query("#threads"):
+                table.update_cell(msg.message_id, "flag", " ")
             self._render_title()
 
     @work(exclusive=True, group="save", exit_on_error=False)
