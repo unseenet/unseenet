@@ -229,6 +229,25 @@ class App:
     def __init__(self, vault: Vault):
         self.vault = vault
         self.tor: TorProcess | None = None
+        self._session = None
+
+    @property
+    def session(self):
+        """Posting goes through Session (#287): postage, key ripening (UN-RFC 0025)
+        and its header are the same code as in every client."""
+        if self._session is None:
+            from .client.session import Session
+            self._session = Session(self.vault, status=lambda m: print(m, file=sys.stderr))
+        return self._session
+
+    async def bits(self, group_id: str | None, ident: crypto.Identity) -> int:
+        """The postage a post by ``ident`` needs, after ripening it where the node
+        asks for it (UN-RFC 0025: a new key ripens for a few minutes first)."""
+        s = self.session
+        name = s._identity_named_by(ident.public_key)
+        if name is not None and await s.node_wants_ripening():
+            await s.ensure_ripe(name)
+        return await s.postage_for(group_id)
 
     @property
     def data(self) -> dict:
@@ -283,10 +302,11 @@ class App:
             await client.quit()
 
     async def post(self, art: Article) -> None:
-        async with self.connect() as c:
-            code, text = await c.post(art.to_bytes())
-        if code != 240:
-            sys.exit(f"Rejected: {code} {text}")
+        from .client.session import SessionError
+        try:
+            await self.session.post_article(art)
+        except SessionError as exc:
+            sys.exit(f"Rejected: {exc}")
         print(f"Posted {art.message_id}")
 
 
@@ -307,6 +327,8 @@ async def client_command(args) -> None:
     try:
         await COMMANDS[args.cmd](app, args)
     finally:
+        if app._session is not None:
+            await app._session.close()
         if app.tor:
             await app.tor.stop()
 
@@ -388,7 +410,7 @@ async def c_group_remove(app: App, args) -> None:
     reason = (args.reason or "Removed by its owner.").rstrip("\n") + "\n"
     for gid, _, ident in plan:
         art = new_article(gid, None, reason, extra=[("Control", "rmgroup")])
-        art.finalize(ident, DEFAULT_POW)
+        art.finalize(ident, await app.bits(None, ident))
         await app.post(art)
         if gid in app.data.get("subscribed", []):
             app.data["subscribed"].remove(gid)
@@ -409,7 +431,7 @@ async def c_withdraw(app: App, args) -> None:
         if input(f"Withdraw {mid} from {args.group}? [y/N] ").strip().lower() not in ("y", "yes"):
             sys.exit("Not withdrawn.")
     art = new_article(args.group, None, "", extra=[("Control", f"cancel {mid}")])
-    art.finalize(ident, DEFAULT_POW)
+    art.finalize(ident, await app.bits(args.group, ident))
     await app.post(art)
     print(f"Withdrawn {mid}")
 
@@ -421,13 +443,14 @@ async def c_group_create(app: App, args) -> None:
                         local=args.local, retention_days=30 if args.type == "inbox" else 90,
                         comments=args.comments if args.type == "channel" else None,
                         comment_days=args.comment_days if args.type == "channel" else None,
-                        pow_bits=DEFAULT_POW)
+                        pow_bits=await app.bits(None, owner))
     await app.post(art)
     group_id = art.group
     entry = {"type": args.type, "owner": True, "keys": {}}
     if args.type == "closed":
         keys = crypto.GroupKeys.generate()
-        await app.post(make_key_update(owner, group_id, 1, keys, [], pow_bits=DEFAULT_POW))
+        await app.post(make_key_update(owner, group_id, 1, keys, [],
+                                       pow_bits=await app.bits(group_id, owner)))
         entry["keys"]["1"] = keys.secret.hex()
     app.data["groups"][group_id] = entry
     app.vault.save()
@@ -442,8 +465,8 @@ async def c_invite(app: App, args) -> None:
     epoch = max(int(e) for e in entry["keys"])
     keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
     member = crypto.key_from_text(args.key)
-    await app.post(make_key_update(owner, args.group, epoch, keys, [member],
-                                   grant_only=True, pow_bits=DEFAULT_POW))
+    await app.post(make_key_update(owner, args.group, epoch, keys, [member], grant_only=True,
+                                   pow_bits=await app.bits(args.group, owner)))
     print(f"Invite sent. Share this with the new member:\n  unseenet:join?g={args.group}"
           f"&n={app.data['nodes'][0]}")
 
@@ -461,10 +484,11 @@ async def c_post(app: App, args) -> None:
         epoch = max(int(e) for e in entry["keys"])
         keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
         art = encrypted_article(args.group, epoch, keys, author, from_name=app.display_name(args.identity),
-                                subject=args.subject, body=body, pow_bits=DEFAULT_POW)
+                                subject=args.subject, body=body,
+                                pow_bits=await app.bits(args.group, author))
     else:
         art = new_article(args.group, args.subject, body, from_name=app.display_name(args.identity))
-        art.finalize(author, DEFAULT_POW)
+        art.finalize(author, await app.bits(args.group, author))
     await app.post(art)
 
 

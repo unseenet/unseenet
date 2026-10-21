@@ -5,6 +5,12 @@ from unseenet.core import ripening
 
 
 @pytest.fixture(autouse=True)
+def state_dir(tmp_path, monkeypatch):
+    """Keys' state files (core/poster.py) go to the test's own folder, never ~/.unseenet."""
+    monkeypatch.setenv("UNSEENET_STATE_DIR", str(tmp_path / "keys"))
+
+
+@pytest.fixture(autouse=True)
 def fast_ripening():
     """Key ripening (UN-RFC 0025) for tests of other things: thresholds divided by
     2^16 (level 0 at 1024 iterations), and no surcharge, floor or requirement, so
