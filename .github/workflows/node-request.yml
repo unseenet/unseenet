@@ -50,6 +50,7 @@ jobs:
           # signs the canaries (UN-RFC 0021); only our own code reads it, the
           # issue text is parsed as data
           UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
         run: >
           python tools/node_request.py check --event "$GITHUB_EVENT_PATH"
           --comments comments.json --report report.md
@@ -102,6 +103,7 @@ jobs:
         if: steps.add.outcome == 'success'
         env:
           UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
         run: python tools/announce.py nodes
       - env:
           GH_TOKEN: ${{ github.token }}

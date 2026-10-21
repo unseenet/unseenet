@@ -39,13 +39,13 @@ async def setup(tmp_path, monkeypatch):
     v.data["github_poster"] = {"seed": poster.seed.hex(), "key": poster.key_text}
     v.save()
 
-    async def post_local(raws, addresses=None):
-        c = await Client.connect(addr)
-        for raw in raws:
-            code, text = await c.post(raw)
-            assert code == 240, text
-        await c.quit()
-        return 1
+    real_post_everywhere = owner_mod.post_everywhere
+
+    async def post_local(raws, addresses=None, session=None, others=()):
+        # the tools' real posting, through Session (#287), to the local node
+        took = await real_post_everywhere(raws, [addr], session=session, others=others)
+        assert took == 1, "the local node did not take every article"
+        return took
 
     monkeypatch.setattr(owner_mod, "VAULT", vault_path)
     monkeypatch.setattr(owner_mod, "POW_BITS", 8)

@@ -50,7 +50,8 @@ def main() -> None:
         if version != tag[1:]:
             sys.exit(f"{update.SUMS} lists {name}, not version {tag[1:]}")
         print(f"{tag}: {len(update.parse_sums(sums))} files, update zip {name}")
-        identity = open_owner_session().identity()
+        s = open_owner_session()
+        identity = s.identity()
         sig = update.signature_text(sums, identity)
         update.check_signature(sums, sig, "stable")      # the key sticks trust
         (d / update.SIG).write_text(sig)
@@ -61,7 +62,7 @@ def main() -> None:
         subject, body = update.release_post(sums, sig, "stable")
         art = new_article(RELEASES_GROUP, subject, body, from_name="Unseenet project")
         art = art.finalize(identity, _owner.POW_BITS)
-        if asyncio.run(post_everywhere([art.to_bytes()])) == 0:
+        if asyncio.run(post_everywhere([art], session=s)) == 0:
             print("No node took the post in unseenet.releases: run this again later.")
         else:
             print("Posted in unseenet.releases: clients will offer the update.")

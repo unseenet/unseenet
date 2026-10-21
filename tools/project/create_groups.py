@@ -294,7 +294,7 @@ async def main() -> None:
     if not todo or dry:
         print("Nothing to do." if not todo else "--dry-run: nothing posted or stored.")
         return
-    if await post_everywhere([a.to_bytes() for a, _, _ in todo]) == 0:
+    if await post_everywhere([a for a, _, _ in todo], session=s) == 0:
         sys.exit("No node took the manifests; nothing stored. Try again later.")
     for art, gtype, new in todo:
         entry = s.group_entry(art.group)

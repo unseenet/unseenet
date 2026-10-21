@@ -32,6 +32,38 @@ POW_BITS = 22                               # postage on the project's manifests
 FP = "ph5fc5hop5232qsz"                     # the project key's fingerprint
 
 
+async def _post_with_session(s: Session, arts: list[Article], addresses: list[str],
+                             others=()) -> int:
+    from unseenet.client.session import SessionError
+    from unseenet.core import crypto
+    signers = {s.identity().key_text: (s, s.identity())}
+    for ident in others:                     # their own session each: their own ripening
+        state = VAULT.parent / "keys" / f"{crypto.fingerprint(ident.public_key)}.state.json"
+        signers[ident.key_text] = (Session.from_key(ident, state, status=lambda *_: None), ident)
+    ok = 0
+    for address in addresses:
+        took = 0
+        for art in arts:
+            who, key = signers.get(crypto.key_to_text(art.author_key), (None, None))
+            if who is None:
+                print(f"  {art.message_id}: signed by a key not given here; skipped", flush=True)
+                continue
+            try:
+                await who.post_article(art, node=address, sign_with=key)
+                took += 1
+                print(f"  {address[:16]}...: 240 {art.message_id}", flush=True)
+            except SessionError as exc:
+                took += "duplicate" in str(exc)
+                print(f"  {address[:16]}...: {exc}", flush=True)
+            except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as exc:
+                print(f"  {address[:16]}...: not reached ({exc})", flush=True)
+                break
+        ok += took == len(arts)
+    for who, _ in signers.values():
+        await who.close()
+    return ok
+
+
 def open_owner_session(path: Path = VAULT, project_key: str | None = None) -> Session:
     """Ask for the passphrase and open the owner vault; check it holds the project key."""
     project_key = project_key or PROJECT_KEY
@@ -109,13 +141,24 @@ async def fetch_manifests(group_ids: list[str], addresses: list[str] | None = No
     return best
 
 
-async def post_everywhere(raws: list[bytes], addresses: list[str] | None = None) -> int:
+async def post_everywhere(raws: list, addresses: list[str] | None = None,
+                          session: Session | None = None, others=()) -> int:
     """Post every article to every node that answers, over Tor.
+
+    With ``session`` (the owner session), ``raws`` are Articles, posted through
+    ``Session.post_article`` and signed with the project key: postage and key
+    ripening (UN-RFC 0025) are then the same code as everywhere (#287). Without
+    it, raw signed articles are posted as they are (nodes from before 0025 only).
+    ``others``: further keys (e.g. the registrar's claim inbox key) whose articles
+    are among ``raws``; each posts through a session of its own, with its own
+    ripening kept in ~/.unseenet/keys.
 
     Returns how many nodes took all of them; the nodes replicate to each other
     anyway, so one node being down does not matter.
     """
     addresses = addresses or [n.address for n in builtin_list()[1]]
+    if session is not None:
+        return await _post_with_session(session, raws, addresses, others)
     ok = 0
     with tempfile.TemporaryDirectory(prefix="unseenet-owner-") as tmp:
         tor = TorProcess(Path(tmp), TorProcess.find_binary())

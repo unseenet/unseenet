@@ -129,3 +129,69 @@ async def test_ripening_from_the_public_key_alone(tmp_path, monkeypatch, capsys)
     assert node.store.manifest(s.ripe_group()) is not None
     await s.close()
     server.close()
+
+
+async def test_poster_ripens_and_posts_through_session(tmp_path, monkeypatch):
+    """core.poster.Poster (the bots' API) posts through Session.post_article (#287)."""
+    from unseenet.core.poster import Poster
+    node, server, addr = await _node()
+    key = crypto.Identity.generate()
+    async with Poster(key, [addr], from_name="Bot", tor="none", state=tmp_path / "bot.json") as p:
+        gid = make_group_id("alt.bot", key.public_key)
+        data = {"v": 1, "name": "alt.bot", "type": "channel", "owner": key.key_text,
+                "serial": 1, "min_pow": 0}
+        await p._session.post_article(manifest_article(key, gid, data, 0), node=addr,
+                                      sign_with=key)
+        result = await p.post(gid, "Nyhed", "i dag\n")
+    assert result.ok and result.accepted == [addr]
+    assert "Key-Ripening" in node.store.get(result.message_id).decode()
+    # the chain is kept: a second run does not ripen again
+    async with Poster(key, [addr], tor="none", state=tmp_path / "bot.json") as p:
+        assert p._session.ripening().level == 0 and p._session.published_level() == 0
+    server.close()
+
+
+async def test_the_cli_posts_through_session(tmp_path, monkeypatch, capsys):
+    from unseenet.cli import App, c_group_create, c_post
+    from unseenet.core.vault import Vault
+    node, server, addr = await _node()
+    vault = Vault.open(tmp_path / "me.vault", "pw", ops=1, mem=8192 * 1024)
+    s = Session(vault, status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.add_node(addr)
+    app = App(vault)
+    await c_group_create(app, argparse.Namespace(
+        identity=None, name="dk.cli", type="open", title=None, description=None, min_pow=8,
+        local=False, comments=None, comment_days=None))
+    gid = next(g for g in vault.data["groups"] if g.startswith("dk.cli@"))
+    await c_post(app, argparse.Namespace(identity=None, group=gid, subject="Hej", body="cli\n",
+                                         publish_outside_tor=False))
+    posted = capsys.readouterr().out.strip().splitlines()[-1].split()[-1]
+    assert "Key-Ripening" in node.store.get(posted).decode()
+    await app._session.close()
+    server.close()
+
+
+async def test_owner_tools_post_other_keys_through_their_own_session(tmp_path, monkeypatch):
+    """tools/project/_owner.py: the project key and e.g. the registrar's claim inbox
+    key each post with their own ripening."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools" / "project"))
+    import _owner
+    from unseenet.core.groups import make_manifest
+    from unseenet.core.vault import Vault
+    monkeypatch.setattr(_owner, "VAULT", tmp_path / "owner.vault")
+    node, server, addr = await _node()
+    vault = Vault.open(tmp_path / "owner.vault", "pw", ops=1, mem=8192 * 1024)
+    s = Session(vault, status=lambda *_: None)
+    s.new_identity("project", "Project")
+    other = crypto.Identity.generate()
+    arts = [make_manifest(s.identity(), "unseenet.test", "channel", pow_bits=0),
+            make_manifest(other, "inbox", "inbox", pow_bits=0)]
+    assert await _owner.post_everywhere(arts, [addr], session=s, others=[other]) == 1
+    for art in arts:
+        stored = node.store.get(art.message_id).decode()
+        assert "Key-Ripening" in stored
+    assert (tmp_path / "keys" / f"{crypto.fingerprint(other.public_key)}.state.json").exists()
+    server.close()

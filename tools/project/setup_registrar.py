@@ -75,12 +75,12 @@ async def main() -> None:
     raws = []
     if not s.data["registrar_inbox"].get("posted"):
         raws.append(make_manifest(inbox, "inbox", "inbox", min_pow=CLAIM_POW, retention_days=30,
-                                  pow_bits=_owner.POW_BITS).to_bytes())
+                                  pow_bits=_owner.POW_BITS))
         print(f"claim inbox {claims}: will create, min_pow {CLAIM_POW}")
     data = dict(current)
     if data.get("posters") != posters or data.get("claims") != claims:
         data.update({"serial": int(current["serial"]) + 1, "posters": posters, "claims": claims})
-        raws.append(manifest_article(owner, NAMES_GROUP, data, pow_bits=_owner.POW_BITS).to_bytes())
+        raws.append(manifest_article(owner, NAMES_GROUP, data, pow_bits=_owner.POW_BITS))
         print(f"{NAMES_GROUP}: manifest serial {data['serial']}, claims {claims}")
         for k in posters:
             print(f"  registrar key {k}")
@@ -93,7 +93,7 @@ async def main() -> None:
         print("--dry-run: nothing posted or stored.")
         return
     s.save()                                    # the inbox key, before anything can fail
-    if await post_everywhere(raws) == 0:
+    if await post_everywhere(raws, session=s, others=[inbox]) == 0:
         sys.exit("No node took the manifests. Run this again later; the inbox key is kept.")
     s.data["registrar_inbox"]["posted"] = True
     entry["manifest"] = data

@@ -9,11 +9,16 @@
 A :class:`Poster` never prompts. It takes a key (see :func:`load_key`), the
 nodes to post to (the built-in list of known nodes by default, UN-RFC 0010),
 and a Tor: its own, one that is already running, or none for nodes on the
-local network. It builds, signs and adds postage (UN-RFC 0006), says what
-kind of message it is (UN-RFC 0028), posts the same article to every node
-that answers, adds postage if a node asks for more, and tries again later
-when a node says "later" - e.g. a comment that arrived before its thread
-(UN-RFC 0030 section 4.1).
+local network. It builds the article, says what kind of message it is
+(UN-RFC 0028), posts the same article to every node that answers, and tries
+again later when a node says "later" - e.g. a comment that arrived before its
+thread (UN-RFC 0030 section 4.1).
+
+Posting itself goes through ``Session.post_article`` (#287), so postage, key
+ripening (UN-RFC 0025: the key ripens to level 0 before its first post where
+a node asks for it) and Key-Ripening are the same code as in every client.
+The ripening chain is kept in ``state`` (by default under ``~/.unseenet/keys``):
+it holds nothing secret, and without it a key would ripen again on each run.
 """
 
 from __future__ import annotations
@@ -107,8 +112,10 @@ class Poster:
     def __init__(self, key: crypto.Identity, nodes: list[str] | None = None, *,
                  from_name: str = "Unseenet bot", tor: str | int = "auto", tor_binary: str | None = None,
                  connect_timeout: float = 120.0, later_attempts: int = 3,
-                 later_pause: float = 60.0, log=None):
+                 later_pause: float = 60.0, log=None, state: str | Path | None = None):
         self.key = key
+        self.state = Path(state) if state else default_state_path(key)
+        self._session = None
         self.nodes = list(nodes) if nodes is not None else known_node_addresses()
         self.from_name = from_name
         self.tor, self.tor_binary = tor, tor_binary
@@ -128,6 +135,18 @@ class Poster:
         await self.stop()
 
     async def start(self) -> None:
+        await self._start_tor()
+        from ..client.session import Session
+        s = Session.from_key(self.key, self.state, name="poster", display=self.from_name,
+                             status=self.log)
+        for address in self.nodes:
+            if address not in s.nodes:
+                s.add_node(address)
+        if self.socks_port is not None:          # the same Tor for posting as for reading
+            await s.set_tor(f"127.0.0.1:{self.socks_port}")
+        self._session = s
+
+    async def _start_tor(self) -> None:
         mode = self.tor
         if isinstance(mode, int):
             self.socks_port = mode
@@ -149,6 +168,9 @@ class Poster:
         self.socks_port = self._tor.socks_port
 
     async def stop(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
         if self._tor is not None:
             await self._tor.stop()
             self._tor = None
@@ -178,51 +200,47 @@ class Poster:
         return await self.post_article(self.build(group, subject, body, **kw))
 
     async def post_article(self, art: Article, bits: int = 0) -> PostResult:
-        """Sign ``art`` and post it to every node. Signing is deterministic, so
-        adding postage for a node that asks for more keeps the Message-ID."""
-        art.finalize(self.key, bits)
+        """Sign ``art`` and post it to every node, through ``Session.post_article``.
+        Signing is deterministic, so adding postage for a node that asks for more
+        keeps the Message-ID. ``bits`` is ignored: each node's need is asked."""
+        if self._session is None:
+            raise PosterError("use the Poster in 'async with' (or call start() first)")
+        art.finalize(self.key, 0)                # the Message-ID, before any node
         result = PostResult(art.message_id)
         for address in self.nodes:
-            bits = await self._post_to(address, art, bits, result)
+            await self._post_to(address, art, result)
         return result
 
-    async def _post_to(self, address: str, art: Article, bits: int, result: PostResult) -> int:
-        loop = asyncio.get_running_loop()
+    async def _post_to(self, address: str, art: Article, result: PostResult) -> None:
+        from ..client.session import SessionError
         for attempt in range(1, self.later_attempts + 1):
             try:
-                client = await self._connect(address)
-            except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as exc:
+                await asyncio.wait_for(
+                    self._session.post_article(art, node=address, sign_with=self.key),
+                    self.connect_timeout + 600)   # ripening to level 0 takes minutes
+            except SessionError as exc:
+                text = str(exc).removeprefix("rejected by node: ")
+                if text.startswith("duplicate"):
+                    break
+                if text.startswith("later") and attempt < self.later_attempts:
+                    self.log(f"{address}: later ({text}); trying again")
+                    await asyncio.sleep(self.later_pause * attempt)
+                    continue
+                if text == str(exc):             # not a node's answer: we never got there
+                    result.unreachable[address] = text
+                    self.log(f"{address}: not reached ({text})")
+                else:
+                    result.refused[address] = f"441 {text}"
+                    self.log(f"{address}: refused 441 {text}")
+                return
+            except (OSError, ConnectionError, asyncio.TimeoutError, asyncio.IncompleteReadError,
+                    ValueError) as exc:
                 result.unreachable[address] = str(exc) or type(exc).__name__
                 self.log(f"{address}: not reached ({exc})")
-                return bits
-            try:
-                value = client.capability("UNSEENET-MINPOW")
-                need = int(value) if value and value.strip().isdigit() else DEFAULT_NODE_POW
-                for _ in range(2):                    # once more if it asks for more postage
-                    if need > bits:
-                        bits = min(need, MAX_POW)
-                        await loop.run_in_executor(None, art.finalize, self.key, bits)
-                    code, text = await client.post(art.to_bytes())
-                    need = _needed_bits(text) if code == 441 else 0
-                    if not need or need <= bits or need > MAX_POW:
-                        break
-            except (OSError, ConnectionError, asyncio.TimeoutError, ValueError) as exc:
-                result.unreachable[address] = str(exc) or type(exc).__name__
-                return bits
-            finally:
-                await _quit(client)
-            if code == 240 or text.startswith("duplicate"):
-                result.accepted.append(address)
-                self.log(f"{address}: posted")
-                return bits
-            if text.startswith("later") and attempt < self.later_attempts:
-                self.log(f"{address}: later ({text}); trying again")
-                await asyncio.sleep(self.later_pause * attempt)
-                continue
-            result.refused[address] = f"{code} {text}"
-            self.log(f"{address}: refused {code} {text}")
-            return bits
-        return bits
+                return
+            break
+        result.accepted.append(address)
+        self.log(f"{address}: posted")
 
     async def _connect(self, address: str):
         from ..nntp import Client
@@ -281,6 +299,13 @@ class Poster:
                     roots.append((f[4], f[1]))
             return roots[::-1][:limit]
         return []
+
+
+def default_state_path(key: crypto.Identity) -> Path:
+    """Where a key's ripening chain is kept when the caller doesn't say: one file
+    per key, public data only (``client/headless.py``)."""
+    base = os.environ.get("UNSEENET_STATE_DIR") or (Path.home() / ".unseenet" / "keys")
+    return Path(base) / f"{crypto.fingerprint(key.public_key)}.state.json"
 
 
 def _is_onion(address: str) -> bool:

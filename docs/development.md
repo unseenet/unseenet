@@ -169,7 +169,13 @@ postage and retries are the same code everywhere:
 - `Session.post_article(art)` posts an article built and signed elsewhere,
   such as a gateway's imports with their own headers. It ripens first where
   the node asks for it, sets `Key-Ripening`, and sends the key's chain to a
-  node that lacks it.
+  node that lacks it. With `sign_with=identity` it signs the article itself,
+  with the postage that node and group need for the key's level
+  (`Session.postage_for()`), and once more if the node asks for more. Use
+  that rather than a fixed number of bits.
+- `core.poster.Poster`, the bots' API, posts through these, keeping the
+  key's chain in `state=` (default `~/.unseenet/keys/<fp>.state.json`, or
+  `UNSEENET_STATE_DIR`).
 - `ClientRuntime(session, ripen_to=SERVICE_RIPEN_TO)` ripens on in the
   background to level 3 (no surcharge), in a low-priority thread, and
   publishes `ripe@` at each level.

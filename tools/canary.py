@@ -199,14 +199,24 @@ async def read_node(address: str, socks_port: int, poster: bytes, day: date) -> 
 
 async def post_canary(address: str, socks_port: int, key: crypto.Identity, node_name: str,
                       node_key: str, day: date) -> str | None:
-    """Post today's canary to this node alone. None if it took it, else the problem."""
-    client = await _connect(address, socks_port)
+    """Post today's canary to this node alone. None if it took it, else the problem.
+
+    Through Session.post_article (#287): postage and key ripening (UN-RFC 0025)
+    as everywhere. The key's chain is read from UNSEENET_STATE_DIR (tools/ripening
+    in CI), so CI never ripens it again."""
+    from unseenet.client.session import Session, SessionError
+    from unseenet.core.poster import default_state_path
+    s = Session.from_key(key, default_state_path(key), status=lambda *_: None)
+    await s.set_tor(f"127.0.0.1:{socks_port}")
+    art = new_article(CANARY_GROUP, f"canary {node_name} {day.isoformat()}",
+                      canary_body(node_key, day), from_name=FROM)
     try:
-        bits = max(GROUP_MIN_POW, int(client.capability("UNSEENET-MINPOW") or 0))
-        code, text = await client.post(canary_article(key, node_name, node_key, day, bits))
+        await s.post_article(art, node=address, sign_with=key)
+    except SessionError as exc:
+        return f"It refused the canary post: {exc}"
     finally:
-        await client.quit()
-    return None if code == 240 else f"It refused the canary post: {code} {text}"
+        await s.close()
+    return None
 
 
 async def request_check(new, listed, socks_port: int, key: crypto.Identity, today: date,

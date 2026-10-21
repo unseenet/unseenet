@@ -124,6 +124,12 @@ def resolve_edits(msgs: list[Message]) -> list[Message]:
             out[i] = replace(m, references=refs)
     return out
 
+def _needed_bits(text: str) -> int:
+    """N from a node's "postage: need N bits", 0 if it says something else."""
+    m = re.search(r"need (\d+) bits", text)
+    return int(m.group(1)) if m else 0
+
+
 class SessionError(RuntimeError):
     pass
 
@@ -536,9 +542,10 @@ class Session:
         threading.Thread(target=run, name="ripening", daemon=True).start()
         return await done
 
-    async def ensure_ripe(self, name: str | None = None) -> None:
+    async def ensure_ripe(self, name: str | None = None, node: str | None = None) -> None:
         """Before posting: ripen to level 0 if needed, and publish ripe@ when its chain
-        has reached a level nodes don't know yet (sections 3.3, 7)."""
+        has reached a level nodes don't know yet (sections 3.3, 7). ``node``: publish
+        there (the node about to be posted to); otherwise to all our nodes."""
         name = name or self.default_identity_name()
         lock = self._ripe_locks.setdefault(name, asyncio.Lock())
         async with lock:
@@ -549,7 +556,7 @@ class Session:
                 if not await self.ripen_segment(name):
                     raise SessionError("ripening stopped before the key could post")
             if rp.level(self.ripening(name).t) != self.published_level(name):
-                await self.publish_ripening(name)
+                await self.publish_ripening(name, node)
 
     async def publish_ripening(self, name: str | None = None, node: str | None = None) -> None:
         """Post this identity's ripe@ manifest with its whole chain (section 3.3)."""
@@ -563,11 +570,12 @@ class Session:
         data = {"v": 1, "name": rp.GROUP_NAME, "type": "channel", "owner": owner.key_text,
                 "serial": int(self.manifest_data(gid).get("serial", 0)) + 1, "min_pow": 0,
                 "retention_days": 7, "view": "data", "ripening": chain.to_manifest()}
-        art = await self._compute(
-            lambda: manifest_article(owner, gid, data, self._ripe_pow(chain)))
+        targets = [node] if node else self.nodes or [self.node]
+        bits = await self._ripe_pow(chain, next((t for t in targets if t), None))
+        art = await self._compute(lambda: manifest_article(owner, gid, data, bits))
         art.set("Key-Ripening", chain.header())
         sent, problems = 0, []
-        for target in ([node] if node else self.nodes or [self.node]):   # every node of ours
+        for target in targets:                                           # every node of ours
             if await self.node_min_ripe(target) is None:
                 continue                   # knows nothing of ripening (or down): not for it
             try:
@@ -590,15 +598,15 @@ class Session:
         self._ripening_entry(name)["published"] = chain.t
         self.save()
 
-    def _ripe_pow(self, chain: rp.Chain) -> int:
-        """Postage for a ripe@ manifest: the node minimum with the chain's own level."""
-        node_pow = DEFAULT_POW
+    async def _ripe_pow(self, chain: rp.Chain, node: str | None) -> int:
+        """Postage for a ripe@ manifest: that node's minimum with the chain's own level."""
+        async def minimum(c: Client) -> int:
+            value = c.capability("UNSEENET-MINPOW")
+            return int(value) if value and value.strip().isdigit() else DEFAULT_POW
         try:
-            client = self._clients.get(self.node)
-            value = client.capability("UNSEENET-MINPOW") if client else None
-            node_pow = int(value) if value and value.strip().isdigit() else DEFAULT_POW
-        except (AttributeError, ValueError):
-            pass
+            node_pow = await self._call(minimum, node)
+        except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
+            node_pow = DEFAULT_POW
         return rp.required_pow(node_pow, 0, chain.level, allow_unripe=True)
 
     def default_identity_name(self) -> str:
@@ -3255,12 +3263,54 @@ class Session:
             await self.publish_ripening(name, node)    # this node lacks our chain: send it
             return await self._send_article(art, node)
 
-    async def post_article(self, art: Article, node: str | None = None) -> str:
-        """Post an article built and signed elsewhere (a gateway's imports, a
-        registrar's answers), as everything else is posted: ripening first where
-        the node asks for it, Key-Ripening set, our chain sent to a node that
-        lacks it. Returns the Message-ID; raises SessionError if refused."""
-        return await self._post_article(art, node)
+    async def post_article(self, art: Article, node: str | None = None,
+                           sign_with: crypto.Identity | None = None) -> str:
+        """Post an article built elsewhere (a gateway's imports, a registrar's
+        answers, a bot's posts), as everything else is posted: ripening first where
+        the node asks for it, Key-Ripening set, our chain sent to a node that lacks
+        it. Returns the Message-ID; raises SessionError if refused.
+
+        With ``sign_with``, the article is signed here with the postage this node
+        and group need for that key's level (UN-RFC 0025 section 5), and once more
+        if the node asks for more. Without it, it must be signed already."""
+        if sign_with is None:
+            return await self._post_article(art, node)
+        target = node or self.node_for(art.group)
+        name = self._identity_named_by(sign_with.public_key)
+        if name is not None and await self.node_wants_ripening(target):
+            await self.ensure_ripe(name, target)   # the level decides the postage
+        bits = await self.postage_for(art, target)
+        for attempt in (1, 2):
+            if (not art.get("Signature") or art.proven_pow() < bits
+                    or art.author_key != sign_with.public_key):
+                await self._compute(lambda: art.finalize(sign_with, bits))
+            try:
+                return await self._post_article(art, node)
+            except SessionError as exc:
+                need = _needed_bits(str(exc))
+                if attempt == 2 or need <= bits:
+                    raise
+                bits = need                        # the node wants more: once more
+        raise AssertionError("unreachable")
+
+    async def postage_for(self, art, node: str | None = None) -> int:
+        """The postage for an article (or a group ID) on this node: a manifest or a
+        removal pays only the node's minimum; anything else the group's too, which
+        is learned from the network if we don't have it, rather than guessed high
+        (a guess of 20 bits plus a surcharge is a minute of work in Python)."""
+        if isinstance(art, Article):
+            control = (art.get("Control") or "").split()[:1]
+            group = None if control in (["manifest"], ["rmgroup"]) else art.group
+        else:
+            group = art
+        if group and not self.manifest_data(group):
+            try:
+                m = await self.fetch_manifest(group, node=node)
+            except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                m = None
+            if m is not None:
+                self.group_entry(group)["manifest"] = dict(m.raw)
+        return await self.required_pow(group, node=node)
 
     async def _send_article(self, art: Article, node: str | None = None) -> str:
         raw = art.to_bytes()
