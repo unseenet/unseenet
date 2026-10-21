@@ -15,7 +15,8 @@ MIN_ACCEPT_SIZE = 32768
 
 # Headers outside the canonical form (UN-RFC 0002, section 3, step 1)
 EXCLUDED = {"message-id", "signature", "proof-of-work", "member-signature",
-            "approved-by", "approval"}
+            "approved-by", "approval",
+            "key-ripening"}            # UN-RFC 0025 section 3.4: outside the canonical form
 REQUIRED = ["unseenet-version", "message-id", "newsgroups", "date",
             "author-key", "signature", "proof-of-work"]
 REQUIRED_PLAIN = ["from", "subject"]

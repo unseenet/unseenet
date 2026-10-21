@@ -31,6 +31,15 @@ from .nntp import Client, NNTPError
 DEFAULT_POW = 20
 
 
+def _min_ripe(path, value):
+    """node.toml ``min_ripe``: a level 0-4 or "-" for none (UN-RFC 0025 section 5)."""
+    from .core import ripening
+    try:
+        return ripening.parse_min(str(value))
+    except (ValueError, ripening.RipeningError):
+        sys.exit(f"{path}: min_ripe must be a level 0-4 or \"-\", not {value!r}")
+
+
 def _passphrase(prompt: str, env: str) -> str:
     return os.environ.get(env) or getpass.getpass(prompt)
 
@@ -66,6 +75,7 @@ def load_node_config(path: Path | None):
     return NodeConfig(name=node.get("name", "unseenet"),
                       max_size=node.get("max_size", 65536),
                       min_pow=node.get("min_pow", 18),
+                      min_ripe=_min_ripe(path, node.get("min_ripe", 0)),
                       retention_days=node.get("retention_days", 90),
                       new_groups=node.get("new_groups", "accept"),
                       trusted_owners=node.get("trusted_owners", []),
