@@ -11,7 +11,7 @@ project of their own.
 | Key | Kept | Can |
 |-----|------|-----|
 | **Project key** `ed25519:det5dxev...` (fingerprint `ph5fc5hop5232qsz`) | Only in the maintainer's encrypted owner vault, offline backups | Change the project's groups: who may post, the registrar's keys, the claim inbox |
-| **GitHub poster** | Repository secret `UNSEENET_ANNOUNCE_SEED`, and the owner vault | Post in `unseenet.announce`, `unseenet.nodes`, `unseenet.hierarchies`, `unseenet.checkgroups` |
+| **GitHub poster** | Repository secret `UNSEENET_ANNOUNCE_SEED` of unseenet and unseenet-entrance, and the owner vault | Post in `unseenet.announce`, `unseenet.nodes`, `unseenet.entrances`, `unseenet.releases`, `unseenet.hierarchies`, `unseenet.checkgroups` |
 | **Release key** `ed25519:clbv6765...` | Repository secret `UNSEENET_RELEASE_KEY` only | Sign the checksums of development builds, which sticks accept only on the development channel |
 | **Registrar keys**, one per replica | On each replica's machine, in its vault | Sign name certificates in `unseenet.names` |
 | **Registrar inbox key** | The owner vault and every replica's vault | Open claims; nothing else |
@@ -47,6 +47,7 @@ the command line.
 | `change_passphrase.py` | Encrypts the owner vault again under a new passphrase, checks that it opens, and keeps the old file until you delete it. |
 | `create_groups.py` | Lists every group the project owns, with its type, posters, view and rules. Creates those that do not exist yet, and gives existing ones a new manifest when their view, title, description, rules or `min_pow` differ from the list. |
 | `sign_release.py vX.Y.Z` | Signs a release's `SHA256SUMS.txt` with the project key and uploads `SHA256SUMS.txt.sig`, so [sticks](../bootable.md#updating) will update to it. Run it when the release's workflows are done. |
+| `share_poster.py REPO` | Puts the GitHub poster key into another of the project's repositories as a secret (unseenet-entrance, which posts new versions of the web client). |
 | `new_release_key.py` | Makes a new release key for development builds and puts it straight into the repository secret (never in a file); prints the public key to pin in `src/unseenet/update.py`. |
 | `setup_registrar.py` | Creates the registrar's inbox key and claim inbox, and sets which replicas' keys may issue names (`--add`, `--remove`). |
 
@@ -63,6 +64,8 @@ project's list.
 | `unseenet.help` | open | anyone: questions; the help bot answers from the docs ([unseenet-helpbot](https://github.com/unseenet/unseenet-helpbot)) |
 | `unseenet.announce` | channel | the GitHub poster: releases and news |
 | `unseenet.nodes` | channel | the GitHub poster: the node list ([UN-RFC 0010](../spec/un-rfc-0010.md)) |
+| `unseenet.entrances` | channel | the GitHub poster: the list of web entrances (UN-RFC 0043 section 8.1) |
+| `unseenet.releases` | channel | the GitHub poster: signed versions of the web client, which apps and entrances update to (UN-RFC 0043 section 7.3) |
 | `unseenet.hierarchies` | channel | the GitHub poster: the root list ([UN-RFC 0018](../spec/un-rfc-0018.md)) |
 | `unseenet.checkgroups` | channel | the GitHub poster: the groups of `unseenet.*` (UN-RFC 0018 section 5) |
 | `unseenet.canary` | channel | the GitHub poster: daily connection checks ([UN-RFC 0021](../spec/un-rfc-0021.md)) |

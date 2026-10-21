@@ -17,6 +17,14 @@ incomplete by the daily check.
 - A connection closed for being idle no longer logs "Unhandled exception
   in client_connected_cb" with a traceback.
 
+### Added
+
+- The project channel `unseenet.releases`, where new versions of the web
+  client are posted with the SHA-256 of every file, for the web app and
+  for entrances to update from (UN-RFC 0043 sections 7.2 and 7.3).
+  `tools/project/share_poster.py` gives unseenet-entrance's CI the
+  GitHub poster key, so it can post them.
+
 ### Changed
 
 - Key-bound groups (`inbox@`, `profile@`, `avatar@`, `names@`) are no

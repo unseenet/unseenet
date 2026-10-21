@@ -29,6 +29,8 @@ NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
 # Known web entrances (UN-RFC 0043 section 8.1), for web clients and the jump page.
 ENTRANCES_GROUP = "unseenet.entrances@ph5fc5hop5232qsz"
 ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
+# Signed versions of programs that update through the network (UN-RFC 0043 7.3).
+RELEASES_GROUP = "unseenet.releases@ph5fc5hop5232qsz"
 # Daily canary posts that check listed nodes are connected (UN-RFC 0021).
 CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
 # The project's groups for programs, not people (UN-RFC 0008 section 3.1.1). Their
@@ -37,6 +39,7 @@ CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
 DATA_GROUPS = frozenset({
     NODES_GROUP,
     ENTRANCES_GROUP,
+    RELEASES_GROUP,
     CANARY_GROUP,
     "unseenet.hierarchies@ph5fc5hop5232qsz",
     "unseenet.checkgroups@ph5fc5hop5232qsz",
