@@ -40,6 +40,7 @@ src/unseenet/
     pulling.py          catch-up: XUN-RECONCILE, then NEWNEWS/ARTICLE  0017, 0040 §6
   client/
     session.py          vault, persistent node connection, reading/posting, read marks
+    threads.py          threads and the contact:/for-you: pseudo groups, for every client
     tui.py              `unseenet-tui` (Textual)
   known_nodes.py        the shipped node list and its parser      0010
   nodes.json            the project's node list (posted to unseenet.nodes)
@@ -116,6 +117,23 @@ made-up content:
   `boot-poster.png` (needs QEMU and ffmpeg; KVM is faster but not needed).
 
 Make them again when the client or the boot menu changes noticeably.
+
+## Building another client
+
+Every client (the TUI, unseenet-gui, unseenet-mcp, bots) is built on
+`unseenet.client.session.Session`, so they all show the same thing. Lay out
+a group with the session, not with code of your own (#139):
+
+- `Session.threads(group_id)` gives `(message, depth)` rows: threads newest
+  first for a post view, the conversation oldest first for `contact:<key>`,
+  and replies to you and mentions for `for-you:`.
+- `Session.view_of(group_id)` says `threads`, `chat` or `data`: your own
+  choice, else the group owner's, else threads. `Session.set_view()` changes
+  it (`None` goes back to the owner's).
+- `Session.send_chat(group_id, text)` sends a chat line to a group or to
+  `contact:<key>`. Ask about portals first, as for `Session.post()`.
+
+How a row is drawn (icons, colours, indentation) is the client's choice.
 
 ## Design Decisions (so far)
 
