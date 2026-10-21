@@ -12,6 +12,9 @@
         post that version's CHANGELOG section to unseenet.announce
     python tools/announce.py message --subject "..." --body-file text.txt
         post anything to unseenet.announce
+    python tools/announce.py client-release dev SHA256SUMS.txt SHA256SUMS.txt.sig
+        post a build's signed checksums to unseenet.releases, where clients learn
+        that it exists (#264); the signature is checked first
     --dry-run  build and sign the article, print it, post nothing
 
 The signing key comes from the environment, as a hex seed:
@@ -41,7 +44,7 @@ from unseenet.core import crypto  # noqa: E402
 from unseenet.core.poster import Poster  # noqa: E402
 from unseenet.hierarchies import (CHECKGROUPS_GROUP, HIERARCHIES_GROUP,  # noqa: E402
                                   parse_hierarchy_list, parse_root_list)
-from unseenet.known_nodes import ANNOUNCE_GROUP, ENTRANCES_GROUP, NODES_GROUP, parse_entrance_list, parse_node_list  # noqa: E402
+from unseenet.known_nodes import ANNOUNCE_GROUP, ENTRANCES_GROUP, NODES_GROUP, RELEASES_GROUP, parse_entrance_list, parse_node_list  # noqa: E402
 
 FROM = "Unseenet project"
 REPO = "https://github.com/unseenet/unseenet"
@@ -125,8 +128,10 @@ async def post_everywhere(group: str, subject: str, body: str, key: crypto.Ident
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("what", choices=["nodes", "entrances", "hierarchies", "checkgroups", "release", "message"])
-    p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0")
+    p.add_argument("what", choices=["nodes", "entrances", "hierarchies", "checkgroups", "release", "message",
+                                    "client-release"])
+    p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0; client-release: the channel")
+    p.add_argument("files", nargs="*", type=Path, help="client-release: SHA256SUMS.txt and its .sig")
     p.add_argument("--subject")
     p.add_argument("--body-file", type=Path)
     p.add_argument("--dry-run", action="store_true")
@@ -144,6 +149,12 @@ def main() -> None:
         if not args.tag:
             sys.exit("release needs the tag")
         group, (subject, body) = ANNOUNCE_GROUP, release_post(args.tag)
+    elif args.what == "client-release":
+        from unseenet import update
+        if args.tag not in ("stable", "dev") or len(args.files) != 2:
+            sys.exit("client-release needs the channel, SHA256SUMS.txt and SHA256SUMS.txt.sig")
+        group = RELEASES_GROUP
+        subject, body = update.release_post(args.files[0].read_bytes(), args.files[1].read_text(), args.tag)
     else:
         if not (args.subject and args.body_file):
             sys.exit("message needs --subject and --body-file")

@@ -4,6 +4,12 @@ A portable folder, a USB stick and a bootable stick all update themselves to
 the newest release, over Tor, and **keep `data/`**: your vault, the offline
 cache, a node's data and your settings. Nothing needs to be copied off first.
 
+The client tells you when there is something newer: the terminal client says
+*Unseenet X is ready*, the graphical client shows it in the status bar, with
+an **Update** button on a stick or portable folder. It learns this from the
+project channel `unseenet.releases`, inside the network, so it does not need
+GitHub to know.
+
 ## Bootable (USB, SSD etc.) · Terminal
 
 Boot the stick and choose **Update** in the menu, then one of:
@@ -63,6 +69,16 @@ Put the three files in one folder (for a bootable stick: in the stick's
 root) and choose the zip in the boot menu, or run `unseenet update --zip
 <the zip>`. Where Tor is blocked, this is also the way to update: the
 updater uses Tor without bridges.
+
+## When GitHub is blocked
+
+The updater looks for the newest signed checksums both on GitHub and in
+`unseenet.releases`, and takes the zip from GitHub or from any **mirror**
+that has that version: web entrances whose operator chose to mirror the
+releases, found in the signed list of entrances and reached over Tor at their
+onion address. A mirror cannot change anything - the zip must match the signed
+checksum, or the next source is tried - so you do not need to trust it. To run
+a mirror, see [unseenet-entrance](https://github.com/unseenet/unseenet-entrance#a-mirror-of-the-releases).
 
 ## Why it can be trusted
 

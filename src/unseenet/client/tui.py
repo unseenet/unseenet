@@ -1869,6 +1869,15 @@ class UnseenetApp(App):
             await self.session.refresh_known_nodes()
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
             pass
+        try:                                    # a newer release (#264)
+            offer = await self.session.refresh_releases()
+            if offer and offer["version"] != getattr(self, "_offered", None):
+                self._offered = offer["version"]
+                how = ("Update Unseenet in the menu (Ctrl+P)" if portable_root() is not None
+                       else "see unseenet.org")
+                self.notify(f"Unseenet {offer['version']} is ready: {how}.", timeout=20)
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
+            pass
         try:                                    # inbox, profile...: renew when due (UN-RFC 0029)
             await self.session.renew_key_bound()
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError):
@@ -2806,6 +2815,9 @@ class UnseenetApp(App):
             return
         cmd = ([sys.executable, "update"] if getattr(sys, "frozen", False)
                else [sys.executable, "-m", "unseenet.update"]) + ["--media", str(root), "--pause"]
+        from .. import __version__
+        if ".dev" in __version__:          # a development build follows development builds
+            cmd += ["--channel", "dev"]
         with self.suspend():
             code = subprocess.run(cmd).returncode
         if code == 0:                    # the files under this program are new: start again

@@ -19,6 +19,15 @@ incomplete by the daily check.
 
 ### Added
 
+- Clients say when a newer release is ready (the terminal client in a
+  notice, the graphical client in the status bar, with an Update button on
+  a stick or portable folder). They learn it from `unseenet.releases`,
+  where each release's signed `SHA256SUMS.txt` is posted - by CI for
+  development builds, by `sign_release.py` for releases (#264).
+- `unseenet update` finds the newest signed checksums on GitHub *and* in
+  the network, and takes the zip from GitHub or any mirror that has it -
+  web entrances can mirror the releases - over Tor. Only a zip that
+  matches the signed checksum is used (#264).
 - The project channel `unseenet.releases`, where new versions of the web
   client are posted with the SHA-256 of every file, for the web app and
   for entrances to update from (UN-RFC 0043 sections 7.2 and 7.3).

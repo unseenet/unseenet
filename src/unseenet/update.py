@@ -7,6 +7,12 @@ The stick is one FAT partition of ordinary files (tools/image). An update
 replaces the system files with those of a newer release's update zip,
 ``unseenet-<version>-x86_64-update.zip``, and never touches ``data/``.
 
+Where from: the newest signed checksums are looked for on GitHub *and* in the
+project channel ``unseenet.releases``, and the zip is taken from GitHub or any
+mirror that has that version - web entrances can be mirrors, found in the signed
+list of entrances and reached over Tor (#264). Only files that match the signed
+checksums are used, so where they came from does not matter.
+
 Trust: a release's ``SHA256SUMS.txt`` is signed (``SHA256SUMS.txt.sig``) and the
 zip must match its checksum. The *stable* channel accepts only the project key,
 used by the maintainer from the owner vault (tools/project/sign_release.py);
@@ -27,7 +33,9 @@ import argparse
 import asyncio
 import hashlib
 import http.client
+import json
 import os
+import random
 import re
 import shutil
 import socket
@@ -42,7 +50,7 @@ from urllib.parse import urlsplit
 
 from . import __version__
 from .core import crypto
-from .known_nodes import PROJECT_KEY
+from .known_nodes import ENTRANCES_GROUP, PROJECT_KEY, RELEASES_GROUP
 
 PURPOSE_RELEASE = crypto.PURPOSE_RELEASE
 # CI signs development builds with this key (GitHub secret UNSEENET_RELEASE_KEY).
@@ -200,9 +208,24 @@ class _Conn(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
 
 
-def release_url(channel: str, name: str) -> str:
+class _OnionConn(http.client.HTTPConnection):
+    """Plain HTTP to an onion address: Tor already encrypts and authenticates it."""
+    def __init__(self, host: str, socks_port: int):
+        super().__init__(host, timeout=120)
+        self.socks_port = socks_port
+
+    def connect(self) -> None:
+        from python_socks.sync import Proxy
+        proxy = Proxy.from_url(f"socks5://127.0.0.1:{self.socks_port}", rdns=True)
+        self.sock = proxy.connect(self.host, self.port or 80, timeout=120)
+        self.sock.settimeout(120)
+
+
+def release_url(channel: str, name: str, version: str | None = None) -> str:
     if channel == "dev":
         return f"{REPO}/releases/download/dev/{name}"
+    if version:
+        return f"{REPO}/releases/download/v{version}/{name}"
     return f"{REPO}/releases/latest/download/{name}"
 
 
@@ -211,9 +234,10 @@ def fetch(url: str, socks_port: int | None, dest: Path | None = None,
     """GET ``url`` over HTTPS, following GitHub's redirects; into ``dest`` if given."""
     for _ in range(6):
         u = urlsplit(url)
-        if u.scheme != "https" or not u.hostname:
+        onion = u.scheme == "http" and (u.hostname or "").endswith(".onion") and socks_port
+        if not onion and (u.scheme != "https" or not u.hostname):
             raise UpdateError(f"refusing a non-HTTPS address: {url}")
-        conn = _Conn(u.hostname, socks_port)
+        conn = _OnionConn(u.hostname, socks_port) if onion else _Conn(u.hostname, socks_port)
         try:
             conn.request("GET", (u.path or "/") + (f"?{u.query}" if u.query else ""),
                          headers={"User-Agent": f"unseenet-update/{__version__}"})
@@ -455,6 +479,97 @@ def check_release(sums: bytes, sig: str, channel: str, what: str = "x86_64-updat
     return Release(channel, version, name, table[name], signer)
 
 
+# ----------------------------------------------------------------------
+# Through the network (#264): the checksums in unseenet.releases, and mirrors
+# ----------------------------------------------------------------------
+_POST_HEAD = re.compile(r"^Unseenet (?P<version>[0-9][0-9A-Za-z.+]*), (?P<channel>stable|dev)$")
+MIRROR_PATH = "mirror/{channel}/{name}"         # on an entrance that mirrors releases
+
+
+def release_post(sums: bytes, sig: str, channel: str) -> tuple[str, str]:
+    """(subject, body) of the post in unseenet.releases that carries a release's
+    checksums and their signature, unchanged. Only one that checks out is made."""
+    rel = check_release(sums, sig, channel, "linux-x86_64")
+    return (f"Unseenet {rel.version}",
+            f"Unseenet {rel.version}, {channel}\n\n{SUMS}:\n{sums.decode()}\n{SIG}:\n{sig}")
+
+
+def parse_release_post(body: str) -> tuple[str, bytes, str] | None:
+    """(channel, sums, sig) from such a post; None for anything else. Nothing in it is
+    trusted until check_release() has checked the signature."""
+    lines = body.replace("\r\n", "\n").split("\n")
+    m = _POST_HEAD.match(lines[0]) if lines else None
+    if not m or f"{SUMS}:" not in lines or f"{SIG}:" not in lines:
+        return None
+    i, j = lines.index(f"{SUMS}:"), lines.index(f"{SIG}:")
+    if j < i:
+        return None
+    sums = "\n".join(lines[i + 1:j]).strip("\n") + "\n"
+    sig = "\n".join(lines[j + 1:]).strip("\n") + "\n"
+    return m.group("channel"), sums.encode(), sig
+
+
+async def _newest_bodies(c, group: str, n: int) -> list[str]:
+    from .core.article import Article
+    try:
+        _, low, high = await c.group(group)
+    except Exception:                     # noqa: BLE001  the node does not carry it
+        return []
+    out = []
+    for num in range(high, max(low, high - n + 1) - 1, -1):
+        raw = await c.article(str(num))
+        if raw:
+            try:
+                out.append(Article.from_bytes(raw).body)
+            except ValueError:
+                pass
+    return out
+
+
+async def from_network(socks_port: int) -> tuple[list[str], list[str]]:
+    """The newest posts in unseenet.releases, and the onion addresses in the newest
+    lists of entrances, from the first known node that answers."""
+    from .known_nodes import builtin_list, parse_entrance_list
+    from .nntp import Client
+    nodes = [n.address for n in builtin_list()[1]]
+    for address in random.sample(nodes, len(nodes)):
+        try:
+            c = await asyncio.wait_for(Client.connect(address, socks_port), 120)
+        except Exception:                 # noqa: BLE001  the next node
+            continue
+        try:
+            releases = await _newest_bodies(c, RELEASES_GROUP, 30)
+            onions = []
+            for body in await _newest_bodies(c, ENTRANCES_GROUP, 3):
+                try:
+                    onions += [e["onion"] for e in parse_entrance_list(body)[1] if e["onion"]]
+                except ValueError:
+                    continue
+            return releases, list(dict.fromkeys(onions))
+        except Exception:                 # noqa: BLE001  the next node
+            continue
+        finally:
+            try:
+                await c.quit()
+            except Exception:             # noqa: BLE001
+                pass
+    return [], []
+
+
+def mirrors_with(onions: list[str], channel: str, version: str, socks_port: int) -> list[str]:
+    """Base addresses of the entrances that mirror this version (they say so in
+    /.well-known/unseenet-entrance), in random order."""
+    out = []
+    for onion in random.sample(onions, len(onions)):
+        try:
+            info = json.loads(fetch(f"http://{onion}/.well-known/unseenet-entrance", socks_port))
+            if (info.get("mirror") or {}).get(channel) == version:
+                out.append(f"http://{onion}/")
+        except (UpdateError, ValueError, AttributeError):
+            continue
+    return out
+
+
 def find_stick() -> Path | None:
     from .portable import portable_root
     root = portable_root()
@@ -511,10 +626,32 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         if rel.zip_name != args.zip.name:
             raise UpdateError(f"{SUMS} is for {rel.zip_name}, not {args.zip.name}")
     else:
-        print(f"Looking for the newest {args.channel} release ...")
-        sums = fetch(release_url(args.channel, SUMS), socks_port)
-        sig = fetch(release_url(args.channel, SIG), socks_port).decode("utf-8", "replace")
-        rel = check_release(sums, sig, args.channel, what)
+        print(f"Looking for the newest {args.channel} release (GitHub and the network) ...")
+        found: list[Release] = []
+        problems: list[str] = []
+        try:
+            sums = fetch(release_url(args.channel, SUMS), socks_port)
+            sig = fetch(release_url(args.channel, SIG), socks_port).decode("utf-8", "replace")
+            found.append(check_release(sums, sig, args.channel, what))
+        except UpdateError as exc:
+            problems.append(f"GitHub: {exc}")
+        onions: list[str] = []
+        if socks_port:
+            bodies, onions = asyncio.run(from_network(socks_port))
+            for body in bodies:
+                post = parse_release_post(body)
+                if post and post[0] == args.channel:
+                    try:
+                        found.append(check_release(post[1], post[2], args.channel, what))
+                    except UpdateError:
+                        continue                 # not signed by a key this channel trusts
+            if not bodies:
+                problems.append("the network: no node answered, or no release is posted yet")
+        if not found:
+            raise UpdateError("no signed release found - " + "; ".join(problems or ["nowhere"]))
+        for problem in problems:
+            print(f"  ({problem})")
+        rel = max(found, key=lambda r: version_key(r.version))
     who = "the project key" if rel.signed_by == PROJECT_KEY else "the release key (development)"
     print(f"Newest: Unseenet {rel.version}, signed by {who}")
     if version_key(rel.version) <= version_key(current) and not args.force and not left:
@@ -528,9 +665,24 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
     with tempfile.TemporaryDirectory(prefix="unseenet-update-") as tmp:
         zip_path = args.zip or Path(tmp) / rel.zip_name
         if not args.zip:
-            print(f"Downloading {rel.zip_name} ...")
-            fetch(release_url(args.channel, rel.zip_name), socks_port, zip_path, _progress)
-            print()
+            sources = [release_url(args.channel, rel.zip_name, rel.version)]
+            if socks_port and onions:
+                sources += [base + MIRROR_PATH.format(channel=args.channel, name=rel.zip_name)
+                            for base in mirrors_with(onions, args.channel, rel.version, socks_port)]
+            for url in sources:
+                print(f"Downloading {rel.zip_name} from {urlsplit(url).hostname} ...")
+                try:
+                    fetch(url, socks_port, zip_path, _progress)
+                    print()
+                except UpdateError as exc:
+                    print(f"\n  {exc}")
+                    continue
+                if sha256_file(zip_path) == rel.sha256:
+                    break
+                print("  it does not match the signed checksum: trying the next source")
+            else:
+                raise UpdateError(f"{rel.zip_name} could not be fetched from any source; "
+                                  "nothing was changed")
         if sha256_file(zip_path) != rel.sha256:
             raise UpdateError(f"{zip_path.name} does not match its checksum; nothing was changed")
         _remount_rw(media)
