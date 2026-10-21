@@ -52,8 +52,7 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
 
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
 REPO_URL, DOCS_URL = about.REPO_URL, about.DOCS_URL
-CONTACT = "contact:"          # tree data prefix for a contact's conversation
-FOR_YOU = "for-you:"          # replies to you and mentions, from all groups (#109)
+from .threads import CONTACT, FOR_YOU   # the session's pseudo groups (#139)
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
 
 
@@ -2184,42 +2183,11 @@ class UnseenetApp(App):
                 and not isinstance(self.screen, ModalScreen):
             self.action_group_info(first_time=True)
 
-    # --- threads ---
-    def _threaded(self, msgs: list[Message]) -> list[tuple[Message, int]]:
-        """Threads, newest first; ``msgs`` is in the order the messages came."""
-        pos = {m.message_id: i for i, m in enumerate(msgs)}
-        by_id = {m.message_id: m for m in msgs}
-        threads: dict[str, list[Message]] = {}
-        run = None             # consecutive chat lines stay together, not a thread each (UN-RFC 0028)
-        for m in msgs:
-            root = next((r for r in m.references if r in by_id), None)
-            if root is None and m.kind == KIND_CHAT and not m.private:
-                root = run = run or m.message_id
-            else:
-                run = None
-            root = root or m.message_id
-            threads.setdefault(root, []).append(m)
-        out = []
-        for root, items in sorted(threads.items(),
-                                  key=lambda kv: max(pos[x.message_id] for x in kv[1]), reverse=True):
-            for m in sorted(items, key=lambda x: pos[x.message_id]):
-                depth = 0 if m.message_id == root else min(len(m.references), 4)
-                out.append((m, depth))
-        return out
-
     def _render_threads(self) -> None:
         gid = self.current_group
         s = self.session
         mine, patterns = s.my_message_ids(), s._mention_patterns()
-        if gid == FOR_YOU:
-            rows = [(m, 0) for m in s.for_you(unread_only=False)[:200]]   # newest first
-        elif gid and gid.startswith(CONTACT):
-            rows = [(m, 0) for m in s.conversation(gid[len(CONTACT):], KIND_CHAT)]   # oldest first
-        elif gid == s.my_inbox:
-            rows = self._threaded(s.visible(s.private_posts()))   # what you sent, too (UN-RFC 0028)
-        else:
-            msgs = sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number)
-            rows = self._threaded(s.visible(msgs))      # replies to ignored people stay
+        rows = s.threads(gid) if gid else []     # the same rows in every client (#139)
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
@@ -2263,14 +2231,7 @@ class UnseenetApp(App):
 
     # --- chat view (UN-RFC 0008 section 5) ---
     def view_of(self, gid: str | None) -> str:
-        if not gid or gid == self.session.my_inbox or gid == FOR_YOU:
-            return "threads"
-        views = self.session.data.setdefault("views", {})
-        if gid in views:
-            return views[gid]
-        if gid.startswith(CONTACT):
-            return "chat"
-        return self.session.manifest_data(gid).get("view", "threads")
+        return self.session.view_of(gid)
 
     def _apply_view(self, mode: str) -> None:
         chat = mode == "chat"
@@ -2389,8 +2350,7 @@ class UnseenetApp(App):
                         severity="warning")
             return
         new = "threads" if self.view_of(gid) == "chat" else "chat"
-        self.session.data.setdefault("views", {})[gid] = new
-        self.session.save()
+        self.session.set_view(gid, new)
         self._render_threads()
         self._focus_view(gid)
 
@@ -2404,20 +2364,16 @@ class UnseenetApp(App):
 
     @work(group="post", exit_on_error=False)
     async def send_chat(self, gid: str, text: str) -> None:
-        subject = text.split("\n", 1)[0][:60] + ("…" if len(text) > 60 else "")
         self.set_status("Sending (computing postage) ...")
         try:
             if gid.startswith(CONTACT):
-                key = gid[len(CONTACT):]
-                owner = crypto.key_from_text(key)
-                await self.session.send_private(personal_inbox_id(owner), "", text, owner_key=owner,
-                                                kind=KIND_CHAT)
+                await self.session.send_chat(gid, text)
             else:
                 if not await self._accept_portals(gid):
                     self.query_one("#chat-input", Input).value = text
                     self.set_status("")
                     return
-                msgid = await self.session.post(gid, "", text, kind=KIND_CHAT)   # UN-RFC 0028
+                msgid = await self.session.send_chat(gid, text)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
                 if self.session.notice_settings()["send"] and self.session.may_notify(gid):

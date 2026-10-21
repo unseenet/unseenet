@@ -1,0 +1,51 @@
+"""Threads and views: how a client lays out a group, the same in every client.
+
+Moved here from the TUI (unseenet #139), which every other client had to copy.
+The pure part (``threaded``) needs no session; ``Session.threads()`` and
+``Session.view_of()`` use it with the session's own state.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from ..core.groups import KIND_CHAT
+
+if TYPE_CHECKING:
+    from .session import Message
+
+# Pseudo group IDs a client can show next to real groups.
+CONTACT = "contact:"     # + a key: the chat with one person (UN-RFC 0028, 6.2)
+FOR_YOU = "for-you:"     # replies to you and posts naming you, from all groups (#109)
+
+MAX_DEPTH = 4            # deeper replies are drawn at this depth
+
+
+def threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
+    """Threads newest first, each thread in the order its posts came.
+
+    ``msgs`` is in the order the messages came. A reply goes under the first
+    post it references that is in ``msgs``; a reply to a post we don't have
+    starts a thread of its own. Consecutive chat lines in a post group stay
+    together as one run rather than a thread each (UN-RFC 0028). Each row is
+    ``(message, depth)``, depth 0 for a thread's first post.
+    """
+    pos = {m.message_id: i for i, m in enumerate(msgs)}
+    by_id = {m.message_id: m for m in msgs}
+    threads: dict[str, list[Message]] = {}
+    run = None
+    for m in msgs:
+        root = next((r for r in m.references if r in by_id), None)
+        if root is None and m.kind == KIND_CHAT and not m.private:
+            root = run = run or m.message_id
+        else:
+            run = None
+        root = root or m.message_id
+        threads.setdefault(root, []).append(m)
+    out = []
+    for root, items in sorted(threads.items(),
+                              key=lambda kv: max(pos[x.message_id] for x in kv[1]), reverse=True):
+        for m in sorted(items, key=lambda x: pos[x.message_id]):
+            depth = 0 if m.message_id == root else min(len(m.references), MAX_DEPTH)
+            out.append((m, depth))
+    return out

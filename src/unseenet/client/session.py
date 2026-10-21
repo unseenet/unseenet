@@ -36,6 +36,7 @@ from ..core.vault import Vault
 from ..nntp import Client, NNTPError
 from .. import names
 from . import naming
+from .threads import CONTACT, FOR_YOU, threaded
 
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
@@ -2270,6 +2271,61 @@ class Session:
         if self.is_notice(m) or m.content_type.startswith(NOTICES_TYPE):
             return False
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
+
+    # --- how a client lays out a group (unseenet #139) ---
+    def threads(self, group_id: str) -> list[tuple["Message", int]]:
+        """A group's posts as every client shows them: ``(message, depth)`` rows.
+
+        Threads newest first for a post view; oldest first, flat, for a chat
+        view and a contact's chat; newest first, flat, for "For you". People
+        you ignore are left out and an edited post shows its newest version.
+        """
+        if group_id == FOR_YOU:
+            return [(m, 0) for m in self.for_you(unread_only=False)[:200]]
+        if group_id.startswith(CONTACT):
+            return [(m, 0) for m in self.conversation(group_id[len(CONTACT):], KIND_CHAT)]
+        if group_id == self.my_inbox:
+            return threaded(self.visible(self.private_posts()))   # what you sent, too
+        msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
+        return threaded(self.visible(msgs))        # replies to ignored people stay
+
+    def view_of(self, group_id: str | None) -> str:
+        """``"threads"``, ``"chat"`` or ``"data"``: your own choice for the group,
+        else its owner's (UN-RFC 0008 section 3.1), else threads. Private posts
+        and "For you" are always threads, a contact's chat always starts as chat."""
+        if not group_id or group_id == self.my_inbox or group_id == FOR_YOU:
+            return "threads"
+        views = self.data.get("views", {})
+        if group_id in views:
+            return views[group_id]
+        if group_id.startswith(CONTACT):
+            return "chat"
+        return self.manifest_data(group_id).get("view", "threads")
+
+    def set_view(self, group_id: str, view: str, *, save: bool = True) -> None:
+        """Remember how you want to see a group; ``None`` goes back to the owner's."""
+        if view is not None and view not in VIEWS:
+            raise ValueError(f"unknown view {view!r}, expected one of {', '.join(VIEWS)}")
+        if group_id == self.my_inbox or group_id == FOR_YOU:
+            raise SessionError("private posts and \"For you\" are always shown as threads")
+        views = self.data.setdefault("views", {})
+        if view is None:
+            views.pop(group_id, None)
+        else:
+            views[group_id] = view
+        if save:
+            self.save()
+
+    async def send_chat(self, group_id: str, text: str) -> str:
+        """Send a chat line (UN-RFC 0028): to a group, or to one person when
+        ``group_id`` is ``contact:<key>``. No subject and no signature, unlike
+        a post. Returns the Message-ID. Portals and mention notices are the
+        client's to ask about first, as for ``post()``."""
+        if group_id.startswith(CONTACT):
+            owner = crypto.key_from_text(group_id[len(CONTACT):])
+            return await self.send_private(personal_inbox_id(owner), "", text,
+                                           owner_key=owner, kind=KIND_CHAT)
+        return await self.post(group_id, "", text, kind=KIND_CHAT)
 
     def private_posts(self) -> list["Message"]:
         """What the "Private posts" view shows (UN-RFC 0028 section 6.2), oldest first."""
