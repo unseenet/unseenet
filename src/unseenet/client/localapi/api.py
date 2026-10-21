@@ -251,7 +251,7 @@ class LocalAPI:
         rt = self.runtime
         ready = bool(rt and rt.inbox_ready)
         available = rt.available if rt and rt.available else None
-        groups = [g.to_dict() for g in s.subscribed_groups(available)
+        groups = [self._group(s, g) for g in s.subscribed_groups(available)
                   if g.group_id != s.my_inbox and not s.is_data_group(g.group_id)]
         people = [{"id": CONTACT + k, "key": k, "contact": bool(s.contact_name(k)),
                    "name": s.contact_name(k) or s.identity_label(k),
@@ -266,7 +266,20 @@ class LocalAPI:
                 "inbox": {"id": s.my_inbox if ready else None,
                           "unread": s.unread_private_posts() if ready else 0},
                 "for_you": {"id": FOR_YOU, "replies": c.replies, "mentions": c.mentions},
-                "moderation": len(s.submissions())}
+                "moderation": len(s.submissions()), "name_requests": self._name_requests(s)}
+
+    @staticmethod
+    def _group(s: Session, g: GroupInfo, also: set | frozenset = frozenset()) -> dict:
+        """A GroupInfo dict with ``shown``: the name as people should see it, the
+        fingerprint left out only where the hierarchy lists it (UN-RFC 0018)."""
+        return {**g.to_dict(), "shown": s.group_label(g.group_id, also)}
+
+    @staticmethod
+    def _name_requests(s: Session) -> int:
+        try:
+            return len(naming.name_requests(s))
+        except Exception:  # noqa: BLE001 - name lists not read yet
+            return 0
 
     @staticmethod
     def _tree(top: str, groups: list[dict]) -> dict:
@@ -300,7 +313,7 @@ class LocalAPI:
         if gid not in s.data["groups"] and gid not in s.data["subscribed"]:
             raise NotFound("no such group")
         data = s.manifest_data(gid)
-        out = {**s.group_info(gid).to_dict(), "may_post": s.may_post(gid),
+        out = {**self._group(s, s.group_info(gid)), "may_post": s.may_post(gid),
                "rules": data.get("rules", ""), "rules_type": data.get("rules_type"),
                "rules_tree": markup.manifest_text(data.get("rules", ""), data.get("rules_type"))
                if data.get("rules") else [],
@@ -320,10 +333,19 @@ class LocalAPI:
                "posters": people(data.get("posters", [])),
                "banned": [{"key": k, "label": s.identity_label(k), "reason": r}
                           for k, r in s.banned(gid)],
-               "moderates": s.moderates(gid)}
+               "moderates": s.moderates(gid), "maintainer": LocalAPI._maintains(s, gid)}
         if s.group_entry(gid).get("owner") and data.get("type") == "closed":
             out["members"] = people(s.members(gid))
         return out
+
+    @staticmethod
+    def _maintains(s: Session, gid: str) -> bool:
+        """You maintain a hierarchy this group is in: you may block people in all of it."""
+        me = s.identity().key_text
+        try:
+            return any(h.maintainer == me for h in naming.governing(s, gid))
+        except Exception:  # noqa: BLE001 - lists not read yet
+            return False
 
     def group(self, gid: str) -> dict:
         s = self._ready()
@@ -335,10 +357,12 @@ class LocalAPI:
         else:
             rows = s.threads(gid)
         mine, patterns = s.my_message_ids(), s._mention_patterns()
-        return {"group": head, "rows": [self._row(s, m, d, mine, patterns) for m, d in rows]}
+        keys = {s.identity(n).key_text for n in s.data["identities"]}
+        return {"group": head,
+                "rows": [self._row(s, m, d, mine, patterns, keys) for m, d in rows]}
 
     @staticmethod
-    def _row(s: Session, m: Message, depth: int, mine: set, patterns) -> dict:
+    def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:
         if m.to_key:
             who, key = "You → " + s.identity_label(m.to_key), m.to_key
         elif m.private and m.sender_key:
@@ -353,6 +377,7 @@ class LocalAPI:
                       "label": s.group_label(m.mention_group), "ref": f"#{name}@{fp}",
                       "followed": m.mention_group in s.data["subscribed"]}
         return {"message": d, "depth": depth, "read": s.is_read(m),
+                "mine": m.author_key in keys or bool(m.to_key),
                 # the text as a safe tree, Markdown or plain (UN-RFC 0031): draw this,
                 # never the text as HTML
                 "tree": markup.body(d["text"], m.content_type, m.kind) if m.readable else [],
@@ -405,7 +430,7 @@ class LocalAPI:
         s = self._ready()
         found = await s.list_groups(pattern or "*")
         avail = {g.group_id: g for g in found}
-        return {"groups": [s.group_info(g.group_id, avail, counts=False).to_dict()
+        return {"groups": [self._group(s, s.group_info(g.group_id, avail, counts=False))
                            for g in found]}
 
     def refresh(self) -> dict:
@@ -431,8 +456,8 @@ class LocalAPI:
             return {"groups": []}
         found = await s.find_group_ref(refs[0])
         also = {g.group_id for g in found}
-        return {"groups": [{**s.group_info(g.group_id, {g.group_id: g}, counts=False).to_dict(),
-                            "label": s.group_label(g.group_id, also),
+        return {"groups": [{**self._group(s, s.group_info(g.group_id, {g.group_id: g},
+                                                          counts=False), also),
                             "warning": naming.group_warning(s, g.group_id, also)}
                            for g in found]}
 

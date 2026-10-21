@@ -142,7 +142,8 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert [x["id"] for x in listing["groups"] if x["id"] == g] == [g]
         assert all(x["v"] == 1 for x in listing["groups"])
         _, view = await r.get(f"/api/groups/{_gid(g)}")
-        assert view["group"]["label"] == "dk.snak"
+        assert view["group"]["label"] == "dk.snak" and view["group"]["shown"].startswith("dk.snak")
+        assert listing["name_requests"] == 0
         [row] = view["rows"]
         assert row["message"]["subject"] == "Hej" and row["who"] and row["depth"] == 0
         # Markdown as a tree; HTML in a post stays text, never markup (UN-RFC 0031)
@@ -163,7 +164,8 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert done["state"] == "reached", done
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         reply = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
-        assert reply["depth"] == 1 and reply["may_edit"] and reply["may_withdraw"]
+        assert reply["depth"] == 1 and reply["may_edit"] and reply["may_withdraw"] and reply["mine"]
+        assert not [x for x in view["rows"] if x["message"]["subject"] == "Hej"][0]["mine"]
 
         # edit it, then withdraw it
         status, job = await r.post(f"/api/groups/{_gid(g)}/edit",
@@ -205,7 +207,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
                              {"owner": "someone"}))[0] == 400
         _, view = await r.get(f"/api/groups/{_gid(made['id'])}")
         assert view["group"]["owner"] and view["group"]["kinds"] == ["post"]
-        assert "roles" in view["group"]
+        assert view["group"]["roles"]["maintainer"] is False
         assert (await r.get("/api/groups/nonsense@0000"))[0] == 404
         await ws.close()
     await other.close()

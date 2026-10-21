@@ -160,13 +160,17 @@ is true while the identity or the node is still missing.
  "inbox": {"id": "inbox@<fp>", "unread": 0},
  "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
  "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
- "moderation": 0}
+ "moderation": 0, "name_requests": 0}
 ```
 
 `groups` are the groups the identity follows, in its order
 (`Session.subscribed_groups()`), with their counts. `people` are its chats
 (UN-RFC 0028 section 6.2); `inbox.id` is null until the inbox is set up,
-and `moderation` counts the posts waiting for you to approve (section 4.7).
+`moderation` counts the posts waiting for you to approve (section 4.7) and
+`name_requests` the people asking for a name under yours (section 4.8).
+Every group here and elsewhere also has `shown`: its name as people should
+see it, without the fingerprint only where the hierarchy lists the name
+(UN-RFC 0018). A front end shows `shown`, not `label`.
 `hierarchies` lays the groups out as every client of this project does: a
 folder is `{"label", "path", "own", "groups": [<group ID>, ...],
 "children": [<folder>, ...]}`, names under `alt.` without it and a shared
@@ -181,7 +185,7 @@ wherever a group ID does: `contact:<key>` (the chat with one person) and
 {"group": <GroupInfo dict>,
  "rows": [{"message": <Message dict>, "depth": 0, "read": true, "for_me": null,
            "who": "...", "who_key": "...", "contact": false,
-           "may_edit": false, "may_withdraw": false,
+           "mine": false, "may_edit": false, "may_withdraw": false,
            "tree": [...], "groups": ["#name@fp", ...], "notice": null}, ...]}
 ```
 
@@ -197,7 +201,10 @@ or the plain text, and MUST NOT put a post's text into a page as HTML.
 `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
-`portal_warning`, and for its owner or a moderator `roles` (section 4.7).
+`portal_warning`, and for its owner or a moderator `roles` (section 4.7):
+`{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
+closed group's owner, `members`; `maintainer` is true when you maintain a
+hierarchy the group is in, so you may block people there (section 4.6).
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | null}`:
