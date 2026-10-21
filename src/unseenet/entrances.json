@@ -4,10 +4,17 @@
   "entrances": [
     {
       "name": "unseenet-entrance-1",
-      "url": "https://129.151.209.26/",
+      "url": "https://entrance.unseenet.net/",
       "onion": "qtxtye5sz4reskzdvnf3ih5oqyfvs5e22o3kcny3q3iy4bhr3ni437ad.onion",
       "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
       "description": "Project entrance, Oracle Cloud, Sweden - pre-alpha, run by the Unseenet project"
+    },
+    {
+      "name": "unseenet-entrance-1-ip",
+      "url": "https://129.151.209.26/",
+      "onion": "qtxtye5sz4reskzdvnf3ih5oqyfvs5e22o3kcny3q3iy4bhr3ni437ad.onion",
+      "operator": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
+      "description": "The same entrance by its IP address, for when the name is blocked"
     },
     {
       "name": "unseenet-entrance-test",
