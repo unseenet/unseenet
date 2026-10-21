@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0025                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0002, 0004, 0005, 0006
+Updates: 0002, 0004, 0005, 0006, 0029, 0040
 
                  Unseenet: Key Ripening and Standing
 ```
@@ -17,9 +17,9 @@ decide who may post. A key **ripens** by a verifiable delay function
 (VDF) computed over its own public key: a sequential computation that
 takes real time on any computer, cannot be sped up by running it on
 many machines, and can be checked by anyone in milliseconds. The proof
-travels in the article, so every node computes the same standing from
-the article alone, with no register, no clock and no third party. Riper
-keys pay less postage. Anything that lowers the price of posting must be
+is published by the key itself, in a key-bound group of its own, so every
+node computes the same standing with no register, no clock and no third
+party. Riper keys pay less postage. Anything that lowers the price of posting must be
 verifiable from the article; anything that raises it is a local choice.
 
 # 1. Motivation
@@ -82,30 +82,94 @@ normative reference for these two steps.
 Because `D` is derived from `pk`, a proof belongs to one key and cannot
 be moved to another.
 
-## 3.2 Header
+## 3.2 Segments
+
+A key ripens in **segments**, so that the work survives a restart: a
+Wesolowski proof covers one computation from a start form to an end form
+and cannot be continued or merged with another. Segment *i* starts at
+`x_i` and runs `t_i` iterations:
 
 ```
-Key-Ripening: vdf-cg1; t=<iterations>; y=<b64>; pi=<b64>
+x_1     = x                          (the generator, section 3.1)
+y_i     = x_i^(2^t_i)
+pi_i    = Wesolowski proof that y_i = x_i^(2^t_i)
+x_(i+1) = y_i
+```
+
+The key's ripening is the **chain** of its segments, and its *t* is the
+sum of their `t_i`. Each segment is verified on its own, about 4 ms
+(section 4.1); `y_i` and `pi_i` are 100 octets each.
+
+A chain has at most 64 segments. A client SHOULD choose segment lengths
+so that a restart loses little and the chain stays short: 2^24
+iterations until level 0, then the largest power of two that is at most
+half the *t* so far, at most 2^32, and never past the threshold of the
+next level (section 4). This reaches level 4 in 48 segments, and a
+client that stops loses at most the segment it was computing: about 2
+minutes before level 0, and at the top about 7 hours on a fast desktop
+or 12 on an ARM server. A client keeps the start form of its current
+segment in the vault (UN-RFC 0007) and starts that segment again after a
+restart.
+
+## 3.3 The Ripening Group
+
+A key publishes its chain in the manifest (UN-RFC 0004) of the
+key-bound group (UN-RFC 0029)
+
+```
+ripe@<fingerprint of the key>
+```
+
+with this object:
+
+```
+"ripening": {
+  "alg": "vdf-cg1",
+  "segments": [ {"t": <t_1>, "y": "<b64>", "pi": "<b64>"}, ... ]
+}
+```
+
+A new version of the manifest MUST contain the chain of the version
+before it as a prefix: a key's *t* only grows. A node MUST reject a
+version that does not extend the chain it holds (`441 ripening does not
+extend`), MUST refuse a chain of more than 64 segments, and refuses the
+manifest article above 24 KiB (UN-RFC 0040 section 9).
+
+The group is renewed and expires like the key's other key-bound groups
+(UN-RFC 0029). It carries no articles of its own.
+
+## 3.4 Header
+
+```
+Key-Ripening: vdf-cg1; t=<iterations>; y=<b64>
 ```
 
 `Key-Ripening` is a REQUIRED header from this document on (it is added
 to the required headers of UN-RFC 0002 section 2). It lies outside the
 canonical form, like `Proof-Of-Work`, so it does not change the
-signature or the Message-ID, and a node forwards it unchanged.
+signature or the Message-ID, and a node forwards it unchanged. It names
+the end of a segment in the author's chain: `t` is the sum of the
+segments up to and including it, `y` its end form. It is about 175
+characters, also on a chat line.
 
-`y` and `pi` are compressed forms of 100 octets each, so the header is
-about 290 characters.
+A node accepts the header when the chain it holds for the author's key
+has a segment that ends at exactly `(t, y)`. The level is the level of
+`t`. A node:
 
-A node verifies the header by checking `pi` for `x`, `y` and `t`. One
-verification costs about 4 ms on a current desktop core (section 4.1),
-independent of `t`. A node MUST check postage (UN-RFC 0006) before the
-ripening proof, so that a flood of articles with bogus proofs costs the
-sender postage before it costs the node a verification. Nodes SHOULD
-cache the result per `(pk, t, y)`.
+- MUST check postage (UN-RFC 0006) before ripening, so that a flood of
+  bogus articles costs the sender postage before it costs the node work;
+- verifies a chain once and keeps the verified prefix, so a new version
+  costs only its new segments;
+- answers `441 ripening unknown` when it holds no `ripe@` manifest for
+  the key, or one without `(t, y)`. A client that gets this answer posts
+  its `ripe@` manifest and then the article again;
+- before it forwards an article to a peer (UN-RFC 0005 section 5.2),
+  offers the peer the author's current `ripe@` manifest article first.
+  A peer that has it already declines it as usual.
 
-A client keeps the VDF state for each of its keys and SHOULD publish a
-new proof at least at every level boundary. The client MAY continue the
-computation for as long as the key is in use; `t` only grows.
+A client publishes a new version of its `ripe@` manifest at least at
+every level boundary, and uses the newest `(t, y)` it has published in
+its articles.
 
 # 4. Levels
 
@@ -200,8 +264,12 @@ node's local choices can post through another node or run their own.
 # 7. Clients
 
 - A client SHOULD start ripening a key as soon as it is created, run it
-  while the client is open, keep the state in the encrypted vault
-  (UN-RFC 0007), and resume after a restart.
+  while the client is open, keep the chain and the start of its current
+  segment in the encrypted vault (UN-RFC 0007), and go on after a
+  restart (section 3.2).
+- A browser client (UN-RFC 0043) ripens in the browser, with a
+  WebAssembly build of the VDF. Nobody else ripens keys for it, so
+  ripening stays a matter of one's own computer and time.
 - A client SHOULD show the level and the time to the next level, and say
   plainly why a fresh key cannot post at once.
 - A user who wants a one-off identity can still have one: it costs about
@@ -231,6 +299,17 @@ Each of them creates an authority. Whoever runs the service, or the
 nodes whose attestation counts, could be pressured to refuse keys.
 Ripening needs only the key holder's own computer and time. Vouching may
 come later as an optional shortcut, but never as the only way in.
+
+**Why a chain in a group of its own.** A Wesolowski proof cannot be
+continued, so a key that ripens for days on a laptop that is switched off
+every evening needs segments. A chain of dozens of segments is too large
+for every article, chat lines included, so it is published once, where
+profiles are (UN-RFC 0022), and articles point into it. Nodes then verify
+a key once, not every article.
+
+**Transition.** None: while Unseenet is pre-alpha there is no backwards
+compatibility. Existing keys ripen once to level 0 before they post
+again.
 
 **Why levels and not a continuous formula.** Levels are easy to
 advertise, to explain to users and to change by a later document.
@@ -263,10 +342,9 @@ advertise, to explain to users and to change by a later document.
 - Write out the discriminant derivation and form encoding normatively,
   so implementations do not depend on `chiavdf`.
 - `chiavdf` publishes wheels for Linux x86-64 and ARM64, Windows and
-  macOS on Apple Silicon (an older version there). A client on Android
-  needs its own build or a verifier of its own.
-- Transition: during pre-alpha, should nodes accept articles without
-  `Key-Ripening` at level `-` for a fixed period?
+  macOS on Apple Silicon (an older version there), but not for Intel
+  Macs or Android, and it does not run in Pyodide. The browser client and
+  an Android client need their own builds (WebAssembly, NDK).
 - Whether proofs for long-lived keys should be refreshed periodically.
 
 # Copyright Notice
