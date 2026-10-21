@@ -605,6 +605,91 @@ async def c_gateways(app: App, args) -> None:
         print()
 
 
+async def ripen_command(args) -> None:
+    """unseenet ripen: ripen a key (UN-RFC 0025) up to a level, e.g. when setting up
+    a gateway or a bot. Needs only the key's public half to compute; ``--publish``
+    signs and posts its ripe@ manifest. A stopped run goes on where it was."""
+    import time
+    from .client.session import Session, SessionError
+    from .core import ripening as rp
+    if not rp.available():
+        sys.exit("key ripening needs chiavdf (pip install chiavdf)")
+    if getattr(args, "public_key", None):
+        return _ripen_public(args)
+    if args.key_file:
+        from .core.poster import PosterError, load_key
+        try:
+            ident = load_key(key_file=args.key_file)
+        except PosterError as exc:
+            sys.exit(str(exc))
+        state = args.state or f"{args.key_file}.state.json"
+        s = Session.from_key(ident, state, status=lambda *_: None)
+    else:
+        passphrase = _passphrase("Vault passphrase: ", "UNSEENET_PASSPHRASE")
+        try:
+            s = Session(Vault.open(Path(args.vault), passphrase, **_kdf()), status=lambda *_: None)
+        except VaultError as exc:
+            sys.exit(str(exc))
+    for address in args.node or []:
+        s.add_node(address)
+    name = args.identity
+    start, t0 = time.monotonic(), s.ripening(name).t
+    print(f"{s.identity(name).key_text}: level {_lv(s.ripening(name).level)}, t = {t0:,}")
+    while True:
+        chain = s.ripening(name)
+        if chain.level is not None and chain.level >= args.to:
+            break
+        if not await s.ripen_segment(name):
+            break
+        chain = s.ripening(name)
+        rate = (chain.t - t0) / max(1e-9, time.monotonic() - start)
+        nxt = rp.next_threshold(chain.t)
+        eta = f", next level in about {(nxt - chain.t) / rate / 60:.0f} min" if nxt else ""
+        print(f"  level {_lv(chain.level)}, t = {chain.t:,} ({rate:,.0f}/s){eta}", flush=True)
+    if args.publish:
+        try:
+            await s.publish_ripening(name)
+        except (SessionError, OSError, ConnectionError) as exc:
+            sys.exit(f"could not publish ripe@: {exc}")
+        print(f"published {s.ripe_group(name)}")
+    await s.close()
+
+
+def _ripen_public(args) -> None:
+    """Ripen from the public key alone, on any machine: the secret is not needed to
+    compute, only to publish. The state file is then copied next to the key file,
+    where ``Session.from_key`` (and ``unseenet ripen --key-file --publish``) find it."""
+    import json
+    from .client.headless import STATE_VERSION
+    from .core import ripening as rp
+    try:
+        pk = crypto.key_from_text(args.public_key)
+    except crypto.CryptoError as exc:
+        sys.exit(f"not a key: {exc}")
+    text = crypto.key_to_text(pk)
+    path = Path(args.state or f"{crypto.fingerprint(pk)}.state.json")
+    state = json.loads(path.read_text()) if path.exists() else {"v": STATE_VERSION, "data": {}}
+    data = state["data"]
+    if data.setdefault("key", text) != text:
+        sys.exit(f"{path} belongs to another key ({data['key']})")
+    entry = data.setdefault("ripening", {}).setdefault(text, {"segments": [], "published": 0})
+    while True:
+        chain = rp.Chain([rp.Segment.from_dict(s) for s in entry["segments"]])
+        if chain.level is not None and chain.level >= args.to:
+            break
+        length = rp.next_segment_length(chain.t)
+        if not length:
+            break
+        entry["segments"].append(rp.prove_segment(pk, chain.end, length).to_dict())
+        path.write_text(json.dumps(state, separators=(",", ":")))   # a stop loses one segment
+        print(f"  level {_lv(rp.level(chain.t + length))}, t = {chain.t + length:,}", flush=True)
+    print(f"{path}: copy it next to the key file as <key file>.state.json")
+
+
+def _lv(level) -> str:
+    return "-" if level is None else str(level)
+
+
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
@@ -672,5 +757,19 @@ def client_main(argv=None) -> None:
                    help="auto: Tails' Tor on Tails, else our own; own: always our own; "
                         "HOST:PORT: the SOCKS port of a running Tor, e.g. 127.0.0.1:9050")
 
+    s = sub.add_parser("ripen", help="ripen a key so it can post, e.g. a gateway's or a bot's "
+                                     "(UN-RFC 0025)")
+    s.add_argument("--to", type=int, default=0, choices=range(5),
+                   help="the level to reach (default 0: enough to post; 3: no surcharge)")
+    s.add_argument("--key-file", help="a file with the key's seed in hex, instead of the vault")
+    s.add_argument("--public-key", help="ripen from the public key alone (ed25519:...), on any "
+                                       "machine; publish later with --key-file")
+    s.add_argument("--state", help="where the chain is kept for --key-file (default: next to it)")
+    s.add_argument("--node", action="append", help="a node to publish to (with --publish)")
+    s.add_argument("--publish", action="store_true", help="post the ripe@ manifest when done")
+
     args = p.parse_args(argv)
+    if args.cmd == "ripen":
+        asyncio.run(ripen_command(args))
+        return
     asyncio.run(client_command(args))

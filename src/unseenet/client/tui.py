@@ -1895,11 +1895,24 @@ class UnseenetApp(App):
             self._inbox_ready = True
             self._start_watches()
             self.update_known_nodes()
+            self.ripen_on()
+        elif isinstance(event, ev.Ripening) and event.level is not None:
+            self._update_subtitle()
+
+    @work(group="ripening", exclusive=True, exit_on_error=False)
+    async def ripen_on(self) -> None:
+        """Ripen the key further while the client is open (UN-RFC 0025 section 7)."""
+        try:
+            await self.runtime.ripen()
+        except (SessionError, OSError, ValueError) as exc:
+            self.set_status(f"Ripening stopped: {exc}")
 
     def _update_subtitle(self) -> None:
         s = self.session
         more = f"  (+{len(s.nodes) - 1} more)" if len(s.nodes) > 1 else ""
-        self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node}{more}")
+        lv = s.ripening().level                   # UN-RFC 0025 section 7: show the level
+        ripe = f"  -  key level {lv}" if lv is not None else ""
+        self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node}{more}{ripe}")
 
     # --- groups ---
     def _groups_from_vault(self, available: dict[str, GroupInfo] | None = None) -> dict[str, GroupInfo]:
@@ -4070,6 +4083,8 @@ class UnseenetApp(App):
             self.refresh_groups()
 
     async def action_quit(self) -> None:
+        if getattr(self, "runtime", None) is not None:
+            self.runtime.stop_ripening()           # a segment must not keep us open
         if self.session:
             self.session.save()
             await self.session.close()
