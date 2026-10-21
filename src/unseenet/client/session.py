@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import re
 import base64
@@ -313,6 +314,14 @@ class Session:
     def data(self) -> dict:
         return self.vault.data
 
+    @classmethod
+    def from_key(cls, identity: crypto.Identity, state_path, *, name: str = "service",
+                 display: str | None = None, status=print) -> "Session":
+        """A session for a service with only a key: a gateway, a bot, a registrar
+        (client/headless.py). Everything but the key is kept in ``state_path``."""
+        from .headless import KeyStore
+        return cls(KeyStore(identity, state_path, name, display), status=status)
+
     def save(self) -> None:
         self.vault.save()
 
@@ -417,9 +426,8 @@ class Session:
         if not length:
             return False
         pk = self.identity(name).public_key
-        loop = asyncio.get_running_loop()
-        seg = await loop.run_in_executor(
-            None, lambda: rp.prove_segment(pk, chain.end, length, run_file))
+        seg = await self._in_ripening_thread(
+            lambda: rp.prove_segment(pk, chain.end, length, run_file))
         if seg is None:
             return False
         entry = self._ripening_entry(name)
@@ -431,6 +439,36 @@ class Session:
         self.emit(ev.Ripening(self.identity(name).key_text, t, rp.level(t),
                               rp.next_threshold(t)))
         return True
+
+    @staticmethod
+    async def _in_ripening_thread(fn):
+        """Run one segment in a thread of its own, at low priority where the system
+        allows it, so it never holds up postage (UN-RFC 0025, 7). A daemon thread:
+        a program that closes is never kept waiting for a segment of hours."""
+        import threading
+        loop = asyncio.get_running_loop()
+        done = loop.create_future()
+
+        def deliver(setter, value) -> None:
+            if not done.done():
+                setter(value)
+
+        def run() -> None:
+            try:
+                os.nice(10)             # this thread only, on Linux
+            except (AttributeError, OSError):
+                pass                    # Windows: no nice
+            try:
+                result = fn()
+                call = (deliver, done.set_result, result)
+            except BaseException as exc:  # noqa: BLE001 - handed to the waiting task
+                call = (deliver, done.set_exception, exc)
+            try:
+                loop.call_soon_threadsafe(*call)
+            except RuntimeError:        # the loop is gone: the program has closed
+                pass
+        threading.Thread(target=run, name="ripening", daemon=True).start()
+        return await done
 
     async def ensure_ripe(self, name: str | None = None) -> None:
         """Before posting: ripen to level 0 if needed, and publish ripe@ when its chain
@@ -3143,6 +3181,13 @@ class Session:
                 raise
             await self.publish_ripening(name, node)    # this node lacks our chain: send it
             return await self._send_article(art, node)
+
+    async def post_article(self, art: Article, node: str | None = None) -> str:
+        """Post an article built and signed elsewhere (a gateway's imports, a
+        registrar's answers), as everything else is posted: ripening first where
+        the node asks for it, Key-Ripening set, our chain sent to a node that
+        lacks it. Returns the Message-ID; raises SessionError if refused."""
+        return await self._post_article(art, node)
 
     async def _send_article(self, art: Article, node: str | None = None) -> str:
         raw = art.to_bytes()
