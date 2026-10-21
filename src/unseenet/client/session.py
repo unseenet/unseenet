@@ -3360,8 +3360,13 @@ class Session:
     async def post(self, group_id: str, subject: str, body: str,
                    references: list[str] | None = None, kind: str = KIND_POST,
                    content_type: str | None = None,
-                   supersedes: list[str] | None = None) -> str:
-        """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028)."""
+                   supersedes: list[str] | None = None,
+                   extra: list[tuple[str, str]] | None = None,
+                   from_name: str | None = None) -> str:
+        """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
+
+        ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
+        UN-RFC 0046 section 4.9); ``from_name`` replaces your display name."""
         if self.portal_warning(group_id):
             # Clients ask first (portal_warning / accept_portals); this is the safety net.
             raise SessionError("this group has a portal: its posts are also published outside "
@@ -3373,6 +3378,8 @@ class Session:
             raise SessionError("a post needs a subject")
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
+        edit_header += list(extra or [])
+        shown = from_name or self.display_name()
         author = self.identity()
         entry = self.group_entry(group_id)
         cert = None
@@ -3384,7 +3391,7 @@ class Session:
 
             def build(bits):                       # postage is CPU work: runs in a thread
                 return encrypted_article(
-                    group_id, epoch, keys, author, from_name=self.display_name(),
+                    group_id, epoch, keys, author, from_name=shown,
                     subject=subject, body=body, references=references, kind=kind,
                     content_type=content_type, pow_bits=bits, extra=edit_header)
         else:
@@ -3393,7 +3400,7 @@ class Session:
             def build(bits):
                 # a chat line has an empty subject; the kind is a header (UN-RFC 0028, 3.2-3.3)
                 art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
-                                  from_name=self.display_name(), references=references,
+                                  from_name=shown, references=references,
                                   extra=[("Content-Type", content_type), ("Message-Kind", kind)]
                                   + ([cert] if cert else []) + edit_header)
                 return art.finalize(author, bits)

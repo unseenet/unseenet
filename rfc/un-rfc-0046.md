@@ -76,13 +76,15 @@ and `Origin` checks are what keep web pages out. Both are needed.
 ## 3.1 Handing the Address to the Front End
 
 Whatever starts the runtime gives the address and the token to its front
-end out of band, in one of two ways:
+end out of band, in one of two ways (the reference implementation,
+`unseenet serve`, does both for a vault and the first for a service):
 
 - on standard output, as one line:
   `UNSEENET-API 1 http://127.0.0.1:<port>/ <token>`; or
-- in a file only the user can read (mode `0600`), next to the vault,
-  named `<vault file>.api`, holding that same line, removed when the
-  runtime stops.
+- in a file only the user can read (mode `0600`; on Windows, in a folder
+  only the user can read, as the vault is), next to the vault, named
+  `<vault file>.api`, holding that same line, removed when the runtime
+  stops.
 
 A front end opened as a page by the runtime itself MAY get the token in
 the URL fragment (`#t=<token>`), which browsers do not send to servers.
@@ -118,6 +120,7 @@ path is percent-encoded. Errors are `{"error": "<text for people>"}` with:
 | 403    | Wrong `Host` or `Origin`                                    |
 | 404    | No such group                                               |
 | 409    | Locked: unlock first (or set up, section 4.2)               |
+| 502    | The node or Tor could not be reached                        |
 
 Messages and groups have the core's dict form, version 1
 (`Message.to_dict()`, `GroupInfo.to_dict()`, field `v`). A front end MUST
@@ -152,14 +155,27 @@ is true while the identity or the node is still missing.
 
 ```
 {"groups": [<GroupInfo dict>, ...],
- "people": [{"id": "contact:<key>", "key": "...", "name": "...", "unread": 0}, ...],
+ "people": [{"id": "contact:<key>", "key": "...", "name": "...", "contact": true,
+             "unread": 0}, ...],
  "inbox": {"id": "inbox@<fp>", "unread": 0},
- "for_you": {"replies": 0, "mentions": 0}}
+ "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
+ "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
+ "moderation": 0, "name_requests": 0}
 ```
 
 `groups` are the groups the identity follows, in its order
 (`Session.subscribed_groups()`), with their counts. `people` are its chats
-(UN-RFC 0028 section 6.2). Besides real group IDs, two pseudo IDs work
+(UN-RFC 0028 section 6.2); `inbox.id` is null until the inbox is set up,
+`moderation` counts the posts waiting for you to approve (section 4.7) and
+`name_requests` the people asking for a name under yours (section 4.8).
+Every group here and elsewhere also has `shown`: its name as people should
+see it, without the fingerprint only where the hierarchy lists the name
+(UN-RFC 0018). A front end shows `shown`, not `label`.
+`hierarchies` lays the groups out as every client of this project does: a
+folder is `{"label", "path", "own", "groups": [<group ID>, ...],
+"children": [<folder>, ...]}`, names under `alt.` without it and a shared
+part of names as a folder.
+Besides real group IDs, two pseudo IDs work
 wherever a group ID does: `contact:<key>` (the chat with one person) and
 `for-you:` (replies and mentions from all groups).
 
@@ -167,12 +183,28 @@ wherever a group ID does: `contact:<key>` (the chat with one person) and
 
 ```
 {"group": <GroupInfo dict>,
- "rows": [{"message": <Message dict>, "depth": 0, "read": true, "for_me": null}, ...]}
+ "rows": [{"message": <Message dict>, "depth": 0, "read": true, "for_me": null,
+           "who": "...", "who_key": "...", "contact": false,
+           "mine": false, "may_edit": false, "may_withdraw": false,
+           "tree": [...], "groups": ["#name@fp", ...], "notice": null}, ...]}
 ```
 
 `rows` are in the order to show them (`Session.threads()`): threads
 newest first for a group read as threads, every line in order for one
-read as a chat. `for_me` is `"reply"`, `"mention"` or null.
+read as a chat. `for_me` is `"reply"`, `"mention"` or null. `who` is how
+the runtime names the author (a contact's name, a verified name, UN-RFC
+0019), so that every front end names people alike. `tree` is the text
+rendered for showing (UN-RFC 0031): Markdown or plain by the post's
+`Content-Type`, as nodes `{"t": "p" | "text" | "strong" | ..., "c": [...],
+"v": "..."}` in which HTML is always text. A front end MUST draw the tree,
+or the plain text, and MUST NOT put a post's text into a page as HTML.
+`groups` are the `#group` references in it; `notice` is set for a mention
+notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
+`may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
+`portal_warning`, and for its owner or a moderator `roles` (section 4.7):
+`{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
+closed group's owner, `members`; `maintainer` is true when you maintain a
+hierarchy the group is in, so you may block people there (section 4.6).
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | null}`:
@@ -180,6 +212,12 @@ read as a chat. `for_me` is `"reply"`, `"mention"` or null.
 - `POST /api/subscribe` `{"id": "<group ID>", "on": true}`.
 - `GET /api/browse?pattern=<wildmat>`: `{"groups": [<GroupInfo dict>, ...]}`,
   what the node lists.
+- `GET /api/known-nodes`: `{"nodes": [{"address", "name", "description",
+  "operator"}, ...]}` (UN-RFC 0010), for choosing a node.
+- `GET /api/group-ref?ref=<#name@fp or #name>`: `{"groups": [...]}`, what a
+  `#group` reference in a post can mean, each with a `warning` for people
+  where the name is not the hierarchy's (UN-RFC 0018).
+- `GET /api/about`: what Unseenet is, in plain words, also while locked.
 - `POST /api/refresh`: fetch every group now.
 
 ## 4.4 Writing
@@ -187,7 +225,9 @@ read as a chat. `for_me` is `"reply"`, `"mention"` or null.
 - `POST /api/groups/<id>/post`
   `{"kind": "post" | "chat", "subject": "...", "body": "...", "references": [...]}`
   answers `{"job": "<job ID>"}` at once. A post needs a subject; a chat
-  line has none (UN-RFC 0028).
+  line has none (UN-RFC 0028). A post gets your signature unless
+  `"signature": false`; `"notify"` true or false overrides your setting for
+  mention notices (UN-RFC 0032). To `contact:<key>` it is a private post.
 - `POST /api/private`
   `{"key": "ed25519:...", "kind": "post" | "chat", "subject": "...", "body": "...", "reply_to": <Message-ID or null>}`
   answers `{"job": "<job ID>"}`.
@@ -212,11 +252,13 @@ answers `400` with the warning until the post carries
 
 - `POST /api/contacts` `{"key": "...", "name": "..."}` adds or renames a
   contact, `{"key": "...", "remove": true}` removes one.
-- `GET /api/ignore` lists the keys you ignore; `POST /api/ignore`
+- `GET /api/ignore` lists the keys you ignore (`{"ignored": [{"key",
+  "label"}, ...]}`); `POST /api/ignore`
   `{"key": "...", "label": "...", "on": true}` ignores one or stops.
 - `GET /api/groups/<id>/report?id=<Message-ID>` lists who a post can be
   reported to (owner, moderators, the hierarchy's maintainer, the node's
-  operator, and spam report issuers, UN-RFC 0045); `POST` it `{"id": "...", "targets": [<index>, ...], "note":
+  operator, and spam report issuers, UN-RFC 0045) as `{"targets": [{"i":
+  0, "who": "..."}, ...]}`; `POST` it `{"id": "...", "targets": [<index>, ...], "note":
   "...", "anonymous": false}` answers `{"sent": <n>}`.
 - `POST /api/groups/<id>/block` `{"key": "...", "reason": "..."}`: a
   hierarchy maintainer's block (UN-RFC 0018 section 5.4); answers
@@ -232,9 +274,10 @@ not (you do not own or moderate the group).
   "threads" | "chat", "kinds": "both" | "post" | "chat", "fast": false}`
   creates a group you own; answers `{"id": "<group ID>"}`.
 - `POST /api/groups/<id>/settings` with the manifest fields to change
-  (`title`, `description`, `rules`, `rules_type`, `view`, `kinds`,
-  `min_pow`, `min_ripe`, `low_latency`, `comments`): a new manifest
-  (UN-RFC 0004, 0014).
+  (`title`, `description`, `rules`, `rules_type`, `view`, `kinds` as for
+  creating, `min_pow`, `low_latency`, `retention_days`, `comments`,
+  `comment_days`): a new manifest (UN-RFC 0004, 0014, 0030). Any other field
+  is `400`.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
 - `POST /api/groups/<id>/invite` `{"key": "..."}` and
@@ -243,12 +286,13 @@ not (you do not own or moderate the group).
 - `POST /api/groups/<id>/role` `{"role": "moderators" | "posters", "key": "...", "on": true}`.
 - `POST /api/groups/<id>/ban` `{"key": "...", "on": true, "reason": "..."}`.
 - `GET /api/moderation` lists posts waiting for you to approve (UN-RFC 0004
-  section 5); `POST` it `{"id": "...", "approve": true, "reason": "..."}`.
+  section 5) as `{"waiting": [{"id", "group", "subject", "who", "key",
+  "body", "tree", ...}, ...]}`; `POST` it `{"id": "...", "approve": true, "reason": "..."}`.
 
 ## 4.8 Who You Are
 
 - `GET /api/profile?key=<key>` (yours without `key`): a public profile
-  (UN-RFC 0022) or `null`; `POST /api/profile` with a profile object
+  (UN-RFC 0022) or `null`, as `{"key", "profile", "about_tree"}`; `POST /api/profile` with a profile object
   publishes yours, `null` removes it. A program's profile says
   `"bot": true` (UN-RFC 0030 section 6).
 - `GET /api/names` lists your names, waiting claims and the names you give
@@ -260,7 +304,8 @@ not (you do not own or moderate the group).
   `notices` (`{"send": true, "receive": true}`, UN-RFC 0032),
   `private_min_ripe` (a level or null, UN-RFC 0025 section 3.5),
   `show_blocked` (true or false: show posts a hierarchy blocked,
-  UN-RFC 0018).
+  UN-RFC 0018). Both answer all settings, with `signature_preview` (the
+  template filled in). An unknown setting is `400`.
 
 ## 4.9 Articles from a Program
 
@@ -276,7 +321,8 @@ For a service (section 3.2), such as a gateway, that builds what it posts:
   gives a program (`Gateway-*`, UN-RFC 0023). Anything else is `400`.
 - `POST /api/groups/<id>/manifest` with a whole manifest object posts a
   new version of a group the key owns (a gatewayed group, a bot's channel),
-  for what section 4.7 does not cover.
+  for what section 4.7 does not cover. `type`, `owner`, `name` and `local`
+  cannot change; the runtime sets `serial`.
 
 # 5. Events
 
@@ -349,6 +395,10 @@ waited would time out; a job answers at once and tells how far it is.
 - **The front end itself** is trusted to show what the person sees, not
   with keys: a compromised front end can post as the person while the
   vault is unlocked, but cannot take the keys away.
+- **Posts are hostile text.** Anyone can post anything. Rendering in the
+  runtime, to a tree in which HTML is only ever text, means no front end
+  has to get Markdown or escaping right on its own; with the CSP, a post
+  can neither run a script nor load anything from outside.
 - **Logs.** A runtime MUST NOT log the token, the passphrase or bodies of
   private posts.
 
