@@ -473,8 +473,9 @@ directions, in order. ++n++ there writes them a post instead.
   can call themselves "Sonia", but only the real one shows as
   **Sonia √** in your client - everywhere, also in public groups.
 - Messages you send are sealed to the recipient, so not even you could
-  read them on the node afterwards. The client keeps its own copy, in an
-  encrypted file next to your vault (`unseenet.vault.sent`).
+  read them on the node afterwards. The client keeps its own copy in your
+  vault, so the vault file alone carries everything you need - in the
+  terminal client, the graphical client and on the web.
 - Rename or remove contacts from the command palette (++ctrl+p++).
 
 ## Your profile

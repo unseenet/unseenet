@@ -44,7 +44,7 @@ SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3)
 MAX_SIG_LINES = 4               # the old netiquette limit
 DEFAULT_SIGNATURE = "{name}  ·  {key}"   # until you set your own; empty means none
 CACHE_SIDECAR = "cache"
-SENT_SIDECAR = "sent"           # copies of private messages you sent (they are sealed to others)
+SENT_SIDECAR = "sent"           # where older vaults kept copies of private posts you sent
 
 log = logging.getLogger(__name__)
 
@@ -2298,15 +2298,29 @@ class Session:
         return contacts + others
 
     def _load_sent(self) -> list[dict]:
+        """Copies of private posts you sent (they are sealed to others, so only these
+        copies let you read them again). They are kept in the vault itself, so the one
+        file is your whole identity in every client - terminal, graphical, web.
+        Older vaults kept them in a sidecar file; they move into the vault here."""
+        sent = self.data.get("sent")
+        if isinstance(sent, list):
+            return sent
         try:
             payload = self.vault.read_sidecar(SENT_SIDECAR)
-        except Exception:  # noqa: BLE001
-            return []
-        return json.loads(payload).get("sent", []) if payload else []
+        except Exception:  # noqa: BLE001  damaged: nothing to move
+            payload = None
+        self.data["sent"] = json.loads(payload).get("sent", []) if payload else []
+        if payload:
+            self.save()
+            try:
+                self.vault.sidecar_path(SENT_SIDECAR).unlink()
+            except OSError:
+                pass
+        return self.data["sent"]
 
     def _remember_sent(self, entry: dict) -> None:
         self.sent.append(entry)
-        self.vault.write_sidecar(SENT_SIDECAR, json.dumps({"v": 1, "sent": self.sent}).encode())
+        self.save()
 
     # --- reporting a post (#74): private messages to those who can act on it ---
     async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:
