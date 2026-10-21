@@ -146,6 +146,15 @@ a group with the session, not with code of your own (#139):
   laptop), `NodeState` and `TorState` (bootstrap percent). Each has
   `to_dict()`. Callbacks run on the event loop; `Session.on()` returns a
   function that stops them. The `status=` callback still works.
+- `ClientRuntime(session)` (`unseenet.client.runtime`) does what every client
+  does after unlocking, in the order that matters: starter groups, the
+  offline cache, the inbox once, one push connection per node, the node
+  list, releases, renewals and names in the background, and every group
+  fetched, again each minute as a fallback for push. `await rt.start()` and
+  `await rt.stop()` run it on its own (bots, MCP, the graphical client); or
+  call `open()`, `refresh()`, `maintain()` and `watch_node()` from your own
+  scheduler, as the TUI does. It adds the events `InboxReady`, `Refreshed`
+  and `ReleaseOffer`.
 
 How a row is drawn (icons, colours, indentation) is the client's choice.
 

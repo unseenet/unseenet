@@ -2650,13 +2650,14 @@ class Session:
                 break
             else:
                 raise first
-        changed = False
+        changed, new = False, 0
         for n, raw in fetched:
             raw = strip_reader_headers(raw)
             msg = self._parse(n, raw, group_id, entry, me)
             if msg is None:
                 changed = True     # control article updated group state
                 continue
+            new += n not in cache
             cache[n] = msg
             raws[n] = raw
         if high > self._high.get(group_id, 0):
@@ -2667,7 +2668,7 @@ class Session:
             self.save()
         if fetched or changed:
             self.save_offline()
-            self.emit(ev.GroupUpdated(group_id, len(fetched)))
+            self.emit(ev.GroupUpdated(group_id, new))        # new posts, not control articles
         if group_id == self.my_inbox:
             await self.check_notices()             # UN-RFC 0032, section 5
         if group_id == self.my_inbox:
