@@ -1,7 +1,7 @@
 {
   "v": 1,
   "hierarchy": "unseenet",
-  "updated": "2026-10-19",
+  "updated": "2026-10-21",
   "groups": [
     {"group": "unseenet@ph5fc5hop5232qsz", "note": "talk about Unseenet"},
     {"group": "unseenet.chat@ph5fc5hop5232qsz", "note": "chat, also the Matrix room #unseenet:unseenet.org"},
@@ -11,6 +11,7 @@
     {"group": "unseenet.admin@ph5fc5hop5232qsz", "note": "hierarchy requests and name disputes"},
     {"group": "unseenet.nodes@ph5fc5hop5232qsz", "note": "data: the node list"},
     {"group": "unseenet.entrances@ph5fc5hop5232qsz", "note": "data: the list of web entrances"},
+    {"group": "unseenet.releases@ph5fc5hop5232qsz", "note": "data: signed versions of the web client"},
     {"group": "unseenet.hierarchies@ph5fc5hop5232qsz", "note": "data: the root list"},
     {"group": "unseenet.checkgroups@ph5fc5hop5232qsz", "note": "data: this list"},
     {"group": "unseenet.names@ph5fc5hop5232qsz", "note": "data: name certificates"},

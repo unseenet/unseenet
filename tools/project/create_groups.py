@@ -23,7 +23,8 @@ never needs the project key itself:
 - github_poster: the GitHub Actions key (repository secret
   UNSEENET_ANNOUNCE_SEED), which posts releases, the node list, the root list
   and the project's hierarchy list (tools/announce.py), and the daily canaries
-  (tools/node_health.py);
+  (tools/node_health.py); unseenet-entrance's CI has it too, for new versions
+  of the web client in unseenet.releases (share_poster.py);
 - registrar keys: see setup_registrar.py;
 - bot keys, written here as public keys: the bots of unseenet/unseenet-bots,
   which run on unseenet-node3 as the user `bots` with their keys in
@@ -60,6 +61,12 @@ ENTRANCES = """The list of known web entrances (UN-RFC 0043 section 8.1), for we
 clients and the jump page to read. Each post is one complete list as JSON;
 the newest one counts. Only the project posts here. To have an entrance
 listed, open an issue in unseenet/unseenet-entrance."""
+
+RELEASES = """New versions of programs that update themselves through the network, for
+them to read: first the web client (UN-RFC 0043 sections 7.2 and 7.3). Each
+post names one version and the SHA-256 of every one of its files; programs
+check what they download against it, wherever it came from. Only the project
+posts here. The newest version counts; nothing ever goes back to an older one."""
 
 HIERARCHIES = """The project's root list of hierarchies (UN-RFC 0018), for clients and
 nodes to read. Each post is one complete list as JSON; the newest one counts.
@@ -137,6 +144,9 @@ GROUPS = (
     ("unseenet.entrances", "channel", "data", "Known web entrances (for web clients)",
      "The signed list of web entrances that web clients read (UN-RFC 0043).", ENTRANCES,
      "github_poster", 20),
+    ("unseenet.releases", "channel", "data", "New versions, for programs that update themselves",
+     "Signed versions of the web client that apps and entrances update to (UN-RFC 0043 7.3).",
+     RELEASES, "github_poster", 20),
     ("unseenet.hierarchies", "channel", "data", "Hierarchies: the project's root list",
      "The signed list of hierarchies and their maintainers (UN-RFC 0018).", HIERARCHIES,
      "github_poster", 20),

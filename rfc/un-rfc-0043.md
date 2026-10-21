@@ -252,40 +252,80 @@ give three such places, from weakest to strongest.
 
 ## 7.2 Signed Releases
 
-Every release of the web client is built reproducibly and published
-like the other releases: a `SHA256SUMS.txt` over every file the page
-consists of, signed (`SHA256SUMS.txt.sig`) with the project key for
-stable releases and the release key for development builds, exactly as
-for stick updates. The project announces each stable release in
-`unseenet.announce` with the same checksums, so they can be read from
-inside the network, through Tor, signed by a key the entrance does not
-have. An entrance can withhold that announcement but cannot forge it.
+The web client is built once, reproducibly, by the project, and every
+entrance serves that build instead of one of its own: the same sources
+give the same files, byte for byte. A build is published in two ways:
+
+- as a release of the entrance software: a zip of the files, and the
+  same list as below;
+- in the project's channel `unseenet.releases`, as one post per version
+  whose body names the version and gives the SHA-256 of every file:
+
+```
+Unseenet web client 20261021.1145
+
+Built from unseenet 1a2b3c4, unseenet-gui 5d6e7f8, unseenet-entrance 9a0b1c2.
+
+<sha256>  index.html
+<sha256>  pyodide/pyodide.asm.wasm
+...
+<sha256>  unseenet-web-20261021.1145.zip
+```
+
+A version is a number of dot-separated parts, compared part by part
+(the build's date and time). The post is signed by a poster the project
+key lists in the group's manifest, or by the project key itself, so it
+can be read from inside the network, through Tor or through any
+entrance, and checked by a key no entrance has. An entrance can
+withhold a post but cannot forge one.
+
+Entrances fetch the group's manifest and newest posts, about once an
+hour, and serve them unchanged, as for the list of entrances (section
+8.2), at `/.well-known/unseenet-releases.json`. They say which version
+they serve in `/.well-known/unseenet-entrance` (`"web"`), and serve
+their files to any origin (CORS), so that an app installed from one
+entrance can update from another.
 
 ## 7.3 A Pinned Loader
 
-The page SHOULD consist of a small loader, installed on the first
-visit as a service worker, with the project's public keys built in.
-After that the loader fetches the application files, checks them
-against signed checksums (from the release or from `unseenet.announce`
-through the entrance), and runs them only if they match a version no
-older than the last one it ran. It refuses, with a clear warning, if
-the signature is wrong or the version goes back.
+The page SHOULD keep itself on the device (a service worker and the
+browser's cache) with the project's public key built in. It then runs
+only what it keeps, and keeps only files whose SHA-256 a valid post in
+`unseenet.releases` gives, for a version no older than the one it runs:
+
+- When it finds a newer valid post, it says so and offers to update.
+  It does not update silently: whoever holds a key that may post can
+  otherwise reach every app at once.
+- Updating downloads the files from any entrance that serves that
+  version, its own or one from the list in section 8.1, checks every
+  file, and switches only when all of them match. Files that did not
+  change are taken from the version it has.
+- It never goes back to an older version, whatever an entrance says.
+
+An entrance MAY update the web client it serves by itself, in the same
+way and with the same checks (from the release, or file by file from
+other entrances). It MUST NOT update its own server software without
+its operator having turned that on.
 
 This protects every visit after the first against a server that changes
 the application. It does not protect the first visit, and browsers
-fetch the service worker's own script again from time to time, so a
-server can replace the loader. The loader MUST therefore warn when its
-own script has changed. It is a tripwire, not a guarantee.
+fetch the service worker's own script again from its address from time
+to time, so whoever controls that address can replace the loader. The
+loader therefore compares the service worker the entrance serves with
+the signed one and MUST warn when they differ. It is a tripwire, not a
+guarantee.
+
+A build that is not signed (an entrance that builds its own, for
+testing) is kept and run as it is, and the page says that it is not a
+signed release.
 
 ### 7.3.1 Asking More Than One Source
 
-A single source of checksums can lie, but several independent ones are
-unlikely to lie together. The loader SHOULD fetch the signed checksums
-from at least two sources run by different people, for example
-`unseenet.announce` through two different web entrances from the list in
-section 8.1, and the project's release page. It runs the application
-only when every source it reached names the same version and checksums,
-and warns plainly when they disagree.
+Every post is signed, so sources cannot disagree about what a version
+is, only about which is the newest. The loader SHOULD ask for the
+signed posts from its own entrance and from at least one other from the
+list in section 8.1, and take the newest valid version any of them has.
+Holding an update back then needs every entrance asked to do it.
 
 ## 7.4 A Verifier Outside the Page
 
