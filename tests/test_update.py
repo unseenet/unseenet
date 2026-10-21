@@ -310,3 +310,12 @@ def test_offline_zip_must_be_for_this_kind(keys, tmp_path, capsys):
         update.main(["--media", str(media), "--zip", str(z), "--yes"])
     assert exit_.value.code == 0
     assert (media / "windows-x86_64/unseenet.exe").read_text() == "new exe"
+
+
+def test_a_graphical_stick_is_not_updated_with_these_releases(tmp_path, capsys):
+    """unseenet-gui's builds carry the graphical client: unseenet's zips would remove it."""
+    media = stick(tmp_path, OLD)
+    (media / "README-graphical.txt").write_text("graphical")
+    with pytest.raises(SystemExit) as exit_:
+        update.main(["--media", str(media), "--yes", "--no-tor"])
+    assert exit_.value.code == 2 and "graphical client" in capsys.readouterr().err

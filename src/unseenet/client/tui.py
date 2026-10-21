@@ -1873,7 +1873,9 @@ class UnseenetApp(App):
             offer = await self.session.refresh_releases()
             if offer and offer["version"] != getattr(self, "_offered", None):
                 self._offered = offer["version"]
-                how = ("Update Unseenet in the menu (Ctrl+P)" if portable_root() is not None
+                root = portable_root()
+                how = ("Update Unseenet in the menu (Ctrl+P)"
+                       if root is not None and not (root / "README-graphical.txt").exists()
                        else "see unseenet.org")
                 self.notify(f"Unseenet {offer['version']} is ready: {how}.", timeout=20)
         except (SessionError, OSError, ConnectionError, NNTPError, ValueError):

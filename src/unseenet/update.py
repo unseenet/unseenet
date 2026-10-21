@@ -602,8 +602,16 @@ def _ask(question: str, yes: bool) -> bool:
         return False
 
 
+GRAPHICAL = "README-graphical.txt"      # a folder or stick of unseenet-gui's builds
+
+
 def run(args: argparse.Namespace, socks_port: int | None) -> int:
     media: Path = args.media
+    if (media / GRAPHICAL).exists():
+        # its builds have the graphical client too: this release's zips would remove it
+        raise UpdateError("this is a stick or folder of the graphical client (unseenet-gui); "
+                          "it cannot be updated with unseenet's own releases yet - "
+                          "download the new one from github.com/unseenet/unseenet-gui")
     current = stick_version(media)
     what = stick_kind(media)
     print(f"This stick: Unseenet {current}  ({media})")
