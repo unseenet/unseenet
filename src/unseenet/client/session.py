@@ -390,16 +390,23 @@ class Session:
         y = self.ripening(name).points().get(t) if t else None
         return rp.format_header(t, y) if y else None
 
-    async def node_wants_ripening(self, node: str | None = None) -> bool:
-        """Does this node ask for ripening (UNSEENET-MINRIPE other than "-")? Nodes
-        that don't say are older: assume they do, the answer will tell."""
+    async def node_min_ripe(self, node: str | None = None) -> str | None:
+        """The node's UNSEENET-MINRIPE: a level, "-", or None for a node that knows
+        nothing of ripening (before UN-RFC 0025). Such a node puts Key-Ripening in
+        the canonical form, so it must never get the header: the signature would
+        not match. Unreachable now: None, so nothing is computed for it."""
         async def minimum(c: Client):
             return c.capability("UNSEENET-MINRIPE")
         try:
             value = await self._call(minimum, node or self.node)
         except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
-            return True
-        return (value or "0").strip() != "-"
+            return None
+        return value.strip() if value else None
+
+    async def node_wants_ripening(self, node: str | None = None) -> bool:
+        """Does this node ask for ripening (UNSEENET-MINRIPE other than "-")?"""
+        value = await self.node_min_ripe(node)
+        return value is not None and value != "-"
 
     async def ripen_segment(self, name: str | None = None, run_file=None) -> bool:
         """Compute this identity's next segment (section 3.2) in a worker thread and
@@ -457,6 +464,8 @@ class Session:
         art.set("Key-Ripening", chain.header())
         sent, problems = 0, []
         for target in ([node] if node else self.nodes or [self.node]):   # every node of ours
+            if await self.node_min_ripe(target) is None:
+                continue                   # knows nothing of ripening (or down): not for it
             try:
                 await self._send_article(art, target)
                 sent += 1
@@ -467,6 +476,8 @@ class Session:
                     problems.append(exc)
             except (OSError, ConnectionError, asyncio.IncompleteReadError) as exc:
                 problems.append(exc)       # down now: it gets the chain when it asks (3.4)
+        if not sent and not problems:
+            return                         # no node of ours knows ripening yet
         if not sent:
             raise problems[0] if isinstance(problems[0], SessionError) \
                 else SessionError(f"could not publish your ripening: {problems[0]}")
@@ -1422,13 +1433,14 @@ class Session:
     async def required_pow(self, group_id: str | None, group_min: int | None = None,
                            node: str | None = None) -> int:
         """Postage to attach: max(node minimum, group minimum) - UN-RFC 0008 section 4."""
-        async def node_min(c: Client) -> int:
+        async def node_min(c: Client) -> tuple[int, bool]:
             value = c.capability("UNSEENET-MINPOW")
-            return int(value) if value and value.strip().isdigit() else DEFAULT_POW
+            ripening = c.capability("UNSEENET-MINRIPE") is not None
+            return (int(value) if value and value.strip().isdigit() else DEFAULT_POW), ripening
         try:
-            node_pow = await self._call(node_min, node or self.node_for(group_id))
+            node_pow, ripening = await self._call(node_min, node or self.node_for(group_id))
         except (OSError, ConnectionError, SessionError):
-            node_pow = DEFAULT_POW
+            node_pow, ripening = DEFAULT_POW, True
         if group_min is None and group_id:
             manifest = self.manifest_data(group_id)
             # A group joined before manifests were kept has none cached yet; the
@@ -1438,6 +1450,8 @@ class Session:
         # post to someone's inbox is signed by a one-time key: it pays as unripe (3.5).
         sealed = bool(group_id) and group_id.split("@", 1)[0] == INBOX_NAME \
             and group_id != self.my_inbox
+        if not ripening:                         # a node from before UN-RFC 0025
+            return max(node_pow, group_min or 0)
         lv = None if sealed or not self.has_identity() else self.published_level()
         return rp.required_pow(node_pow, group_min or 0, lv, allow_unripe=True)
 
@@ -3105,13 +3119,19 @@ class Session:
     # ------------------------------------------------------------------
     async def _post_article(self, art: Article, node: str | None = None) -> str:
         name = self._identity_named_by(art.author_key)
-        if name is not None and art.group == self.ripe_group(name):
+        # a node from before UN-RFC 0025 gets no header: it would break the signature
+        minimum = await self.node_min_ripe(node or self.node_for(art.group)) \
+            if name is not None else None
+        if minimum is None:
+            art.remove("Key-Ripening")
+        elif art.group == self.ripe_group(name):
             if not art.get("Key-Ripening"):            # e.g. a renewal: name its own chain's end
                 obj = json.loads(art.body).get("ripening")
                 if obj:
                     art.set("Key-Ripening", rp.Chain.from_manifest(obj).header())
-        elif name is not None and await self.node_wants_ripening(node or self.node_for(art.group)):
-            await self.ensure_ripe(name)               # level 0 and ripe@ first (UN-RFC 0025)
+        else:
+            if minimum != "-":
+                await self.ensure_ripe(name)           # level 0 and ripe@ first (UN-RFC 0025)
             header = self.ripening_header(name)
             if header:                                 # outside the canonical form: signing holds
                 art.set("Key-Ripening", header)

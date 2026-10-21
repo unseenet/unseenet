@@ -177,3 +177,26 @@ async def test_forwarding_offers_ripe_first(tmp_path, monkeypatch):
 def test_min_ripe_is_advertised_and_dash_means_none():
     assert NodeConfig().min_ripe == 0
     assert NodeConfig(min_ripe=None).min_ripe is None
+
+
+async def test_a_node_from_before_ripening_gets_no_header(tmp_path, monkeypatch):
+    """A 0.3 node puts Key-Ripening in the canonical form, so a client must not send
+    it there (the signature would not match), nor ripen or pay a surcharge for it."""
+    import unseenet.node.server as srv
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    original = srv.Session.send
+
+    def without_minripe(self, line):
+        if not line.startswith("UNSEENET-MINRIPE"):
+            original(self, line)
+    monkeypatch.setattr(srv.Session, "send", without_minripe)
+    rp.scale_for_tests(16, rules=False)              # a 0.3 node: no surcharge, no floor
+    node, server, addr = await _node(min_ripe=None)
+    s = _session(tmp_path, "andreas", addr)
+    gid = await s.create_group("dk.snak", "open", min_pow=8)
+    msgid = await s.post(gid, "Hej", "gammel node\n")
+    assert "Key-Ripening" not in node.store.get(msgid).decode()
+    assert s.ripening().t == 0 and node.store.manifest(s.ripe_group()) is None
+    assert await s.required_pow(gid) == 8                     # no surcharge either
+    await s.close()
+    server.close()
