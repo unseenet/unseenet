@@ -1151,12 +1151,15 @@ class ReadScreen(Screen):
         self.show(self.msg)
         self.query_one("#read-scroll").focus()
 
-    def show(self, msg: Message) -> None:
+    def show(self, msg: Message, *, keep_place: bool = False) -> None:
+        """Show msg; keep_place when the same post was only refreshed (#137),
+        so a reader in the middle of a long post isn't sent back to the top."""
         self.msg = msg
         head, body = self.app.article(msg)
         self.query_one("#read-head", Static).update(head)
         self.query_one("#read-body", Static).update(body)
-        self.query_one("#read-scroll").scroll_home(animate=False)
+        if not keep_place:
+            self.query_one("#read-scroll").scroll_home(animate=False)
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -2216,6 +2219,13 @@ class UnseenetApp(App):
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
+        # the rows are fresh objects; an open read screen follows them, so it
+        # shows an edited post and steps n/p from the right place (#137)
+        for screen in self.screen_stack:
+            if isinstance(screen, ReadScreen):
+                fresh = self.messages.get(screen.msg.message_id)
+                if fresh is not None and fresh is not screen.msg:
+                    screen.show(fresh, keep_place=True)
         mode = self.view_of(gid)
         self._apply_view(mode)
         self._update_chat_input(gid)
