@@ -37,6 +37,8 @@ from ..nntp import Client, NNTPError
 from .. import names
 from . import naming
 from .threads import CONTACT, FOR_YOU, threaded
+from . import events as ev
+from ..core import pow as postage
 
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
@@ -277,7 +279,8 @@ def strip_reader_headers(raw: bytes) -> bytes:
 class Session:
     def __init__(self, vault: Vault, status=print):
         self.vault = vault
-        self.status = status            # callback for progress messages
+        self.status = status            # callback for progress messages (one line of text)
+        self._listeners: list = []      # typed events (unseenet #139): Session.on()
         self.tor: TorProcess | None = None
         self._tor_lock = asyncio.Lock()   # one Tor per session, however many connect at once
         self._checked_socks: Socks | None = None        # an existing Tor that answered
@@ -313,6 +316,42 @@ class Session:
 
     def has_identity(self) -> bool:
         return bool(self.data["identities"])
+
+    # --- events (unseenet #139) ---
+    def on(self, callback):
+        """Call ``callback(event)`` for every event (``client.events``); returns a
+        function that stops it. Callbacks run on the event loop and must not block."""
+        self._listeners.append(callback)
+
+        def off() -> None:
+            if callback in self._listeners:
+                self._listeners.remove(callback)
+        return off
+
+    def emit(self, event: ev.Event) -> None:
+        for callback in list(self._listeners):
+            try:
+                callback(event)
+            except Exception:  # noqa: BLE001 - a client's bug must not stop the session
+                log.exception("event callback failed for %s", event.name)
+
+    def say(self, text: str) -> None:
+        """A status line: to the old ``status`` callback and as a ``Status`` event."""
+        self.status(text)
+        self.emit(ev.Status(text))
+
+    async def _compute(self, fn):
+        """Run ``fn`` (building and stamping an article) in a worker thread,
+        reporting postage progress as ``PowProgress`` events."""
+        loop = asyncio.get_running_loop()
+
+        def progress(attempts: int, expected: int, done: bool) -> None:
+            loop.call_soon_threadsafe(self.emit, ev.PowProgress(attempts, expected, done))
+
+        def run():
+            with postage.reporting(progress):
+                return fn()
+        return await loop.run_in_executor(None, run)
 
     def default_identity_name(self) -> str:
         ids = self.data["identities"]
@@ -587,13 +626,18 @@ class Session:
         address = address or self.node
         if not address:
             raise SessionError("no node configured")
-        status = (lambda *_: None) if quiet else self.status
+        status = (lambda *_: None) if quiet else self.say
         socks = None
         if address.split(":")[0].endswith(".onion"):
             socks = await self._ensure_tor(status)
         status(f"Connecting to {address} ...")
-        client = await Client.connect(address, socks)
-        await client.fetch_capabilities()
+        try:
+            client = await Client.connect(address, socks)
+            await client.fetch_capabilities()
+        except (OSError, ConnectionError, NNTPError, asyncio.TimeoutError) as exc:
+            self.emit(ev.NodeState(address, False, str(exc) or type(exc).__name__))
+            raise
+        self.emit(ev.NodeState(address, True))
         status(f"Connected to {address}")
         return client
 
@@ -639,7 +683,7 @@ class Session:
                 tor = TorProcess(tor_dir, binary, bridges=bridges)
                 status("Starting Tor" + (" with bridges" if bridges else "") + " ...")
                 try:
-                    await tor.start()
+                    await tor.start(progress=lambda p, s: self.emit(ev.TorState(p, s)))
                 except TorError as exc:
                     await tor.stop()
                     hint = ("" if bridges else
@@ -842,11 +886,14 @@ class Session:
             self.pin_group(group_id, node)
         elif on and self.node:
             self.group_entry(group_id).setdefault("node", self.node)
+        changed = (on and group_id not in subs) or (not on and group_id in subs)
         if on and group_id not in subs:
             subs.append(group_id)
         elif not on and group_id in subs:
             subs.remove(group_id)
         self.save()
+        if changed:
+            self.emit(ev.GroupsChanged())
 
     async def peek_group(self, group_id: str, node: str | None = None,
                          max_heads: int = 300) -> tuple[dict, int]:
@@ -1021,8 +1068,7 @@ class Session:
     async def _submit(self, group_id: str, subject: str, build) -> str:
         self.mark_in_use()               # writing anything is using the identity (#270)
         bits = await self.required_pow(group_id)
-        loop = asyncio.get_running_loop()
-        art = await loop.run_in_executor(None, lambda: build(bits))
+        art = await self._compute(lambda: build(bits))
         raw = art.to_bytes().decode("utf-8")
         delivered, errors = 0, []
         for inbox, owner_key in self.submission_targets(group_id):
@@ -1261,8 +1307,7 @@ class Session:
         """Build with ``build(bits)`` and post; if the node asks for more postage
         ("need N bits"), rebuild once with N and post again. Returns the posted article."""
         bits = await self.required_pow(group_id)
-        loop = asyncio.get_running_loop()
-        art = await loop.run_in_executor(None, lambda: build(bits))
+        art = await self._compute(lambda: build(bits))
         try:
             await self._post_article(art)
             return art
@@ -1271,8 +1316,8 @@ class Session:
             if not m or int(m.group(1)) <= bits or int(m.group(1)) > 28:
                 raise
             need = int(m.group(1))
-        self.status(f"Node wants {need} bits of postage, computing again ...")
-        art = await loop.run_in_executor(None, lambda: build(need))
+        self.say(f"Node wants {need} bits of postage, computing again ...")
+        art = await self._compute(lambda: build(need))
         await self._post_article(art)
         entry = self.data["groups"].get(group_id)
         if entry is not None:                      # remember it for next time
@@ -1291,8 +1336,7 @@ class Session:
         art = new_article(group_id, None, reason or "Removed by its owner.\n",
                           extra=[("Control", "rmgroup")])
         bits = await self.required_pow(None)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, lambda: art.finalize(self.identity(), bits))
+        await self._compute(lambda: art.finalize(self.identity(), bits))
         await self._post_article(art)
         self.forget_group(group_id)
 
@@ -1304,6 +1348,7 @@ class Session:
             store.pop(group_id, None)
         self.save()
         self.save_offline()
+        self.emit(ev.GroupsChanged())
 
     async def invite(self, group_id: str, member_key: str) -> None:
         entry = self.data["groups"].get(group_id)
@@ -2025,7 +2070,7 @@ class Session:
                 if not self.manifest_data(inbox):
                     await self.inbox_owner(inbox)               # learns its postage
                 bits = await self.required_pow(inbox)
-                art = await loop.run_in_executor(None, lambda: inbox_article(
+                art = await self._compute(lambda: inbox_article(
                     inbox, owner, from_name=self.display_name(), subject=title, body=body,
                     sender=self.identity(), reply_inbox=self.my_inbox,
                     content_type=MENTION_TYPE + "; charset=utf-8", kind=KIND_POST,
@@ -2598,7 +2643,7 @@ class Session:
                     fetched, high = await self._call(reader(0), other)
                 except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
                     continue
-                self.status(f"{short_group_id(group_id)} is now read from {other}")
+                self.say(f"{short_group_id(group_id)} is now read from {other}")
                 self.pin_group(group_id, other)
                 cache = self.cache.setdefault(group_id, {})
                 raws = self._raw.setdefault(group_id, {})
@@ -2622,6 +2667,7 @@ class Session:
             self.save()
         if fetched or changed:
             self.save_offline()
+            self.emit(ev.GroupUpdated(group_id, len(fetched)))
         if group_id == self.my_inbox:
             await self.check_notices()             # UN-RFC 0032, section 5
         if group_id == self.my_inbox:

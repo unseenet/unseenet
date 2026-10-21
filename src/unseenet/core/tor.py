@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -170,6 +171,13 @@ class TorControl:
         self.writer.close()
 
 
+def bootstrap_progress(phase: str) -> tuple[int, str]:
+    """(percent, summary) from a ``status/bootstrap-phase`` answer."""
+    m = re.search(r"PROGRESS=(\d+)", phase)
+    summary = re.search(r'SUMMARY="([^"]*)"', phase)
+    return (int(m.group(1)) if m else 0, summary.group(1) if summary else "")
+
+
 @dataclass
 class TorProcess:
     """A private tor process with its data on a directory we control (e.g. the USB stick)."""
@@ -224,7 +232,9 @@ class TorProcess:
             lines += [f"Bridge {b.strip()}" for b in self.bridges if b.strip()]
         return "\n".join(lines) + "\n"
 
-    async def start(self, timeout: float = 120) -> None:
+    async def start(self, timeout: float = 120, progress=None) -> None:
+        """Start Tor and wait until it has bootstrapped. ``progress(percent, summary)``
+        is called as the bootstrap goes (unseenet #139)."""
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         port_file = self.data_dir / "control_port"
         port_file.unlink(missing_ok=True)
@@ -270,8 +280,14 @@ class TorProcess:
         await self.control.authenticate_cookie(self.data_dir / "control_auth_cookie")
         socks = (await self.control.command("GETINFO net/listeners/socks"))[0]
         self.socks_port = int(socks.split("=", 1)[1].strip('"').rsplit(":", 1)[1])
+        last = None
         while True:
             status = (await self.control.command("GETINFO status/bootstrap-phase"))[0]
+            if progress is not None:
+                step = bootstrap_progress(status)
+                if step != last:
+                    progress(*step)
+                    last = step
             if "PROGRESS=100" in status:
                 return
             if loop.time() > deadline:

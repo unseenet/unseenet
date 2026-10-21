@@ -233,7 +233,7 @@ async def test_one_tor_for_concurrent_connections(tmp_path, monkeypatch):
             self.socks_port = 9050 + len(started)
             self.running = False
 
-        async def start(self):
+        async def start(self, progress=None):
             started.append(self)
             await asyncio.sleep(0.05)
             self.running = True
