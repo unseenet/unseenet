@@ -303,6 +303,7 @@ larger than:
 | `feed@`      | 8 KiB                    | Settings (UN-RFC 0034)                        |
 | `profile@`   | 10 KiB                   | Follows from the profile's 8192 octets (UN-RFC 0022 section 4.4) |
 | `avatar@`    | 12 KiB                   | Follows from the picture's 8192 octets (UN-RFC 0022 section 8.1) |
+| `ripe@`      | 24 KiB                   | 64 segments of 208 octets in base64 (UN-RFC 0025 section 3.3) |
 | `names@`     | 64 KiB                   | Issuers only (UN-RFC 0019)                    |
 | `attest@`    | 64 KiB                   | Issuers only; revocations are sharded (UN-RFC 0036 section 7) |
 | `site@`      | 64 KiB                   | Only where the operator carries sites (UN-RFC 0035) |
@@ -323,8 +324,8 @@ constraint: about 100 bans. Banning single keys does not stop spam from
 throwaway keys anyway; key ripening and spam reports do (unseenet #121,
 #122).
 
-So an ordinary person costs every full node at most 46 KiB of state
-(inbox, feed, profile, picture), and typically 1.5 to 6.5 KiB; an
+So an ordinary person costs every full node at most 70 KiB of state
+(inbox, feed, profile, picture, ripening), and typically 1.5 to 22 KiB; an
 issuer or a site owner at most 192 KiB more. Articles posted in key-bound groups are
 not state: they are limited by size, postage and retention like every
 article. A key-bound group that is not renewed expires (UN-RFC 0029

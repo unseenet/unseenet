@@ -47,6 +47,7 @@ from the key of its owner alone. They are:
 | `names@<fp>`          | Revocation list of an issuer of sub-names | UN-RFC 0019 section 6.6 |
 | `profile@<fp>`        | Public profile                   | UN-RFC 0022 section 5.1 |
 | `avatar@<fp>`         | Public picture                   | UN-RFC 0022 section 8.2 |
+| `ripe@<fp>`           | Key ripening chain               | UN-RFC 0025 section 3.3 |
 
 where `<fp>` is the fingerprint of the owner's key (UN-RFC 0003
 section 2). A later document that reserves a group name for a key adds
