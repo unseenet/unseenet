@@ -692,7 +692,12 @@ makes mass spam expensive. The client computes it in the background.
 - Back it up. If you lose it, you lose your identity and your keys to
   closed groups.
 - The vault and its cache are normal files, so they can live on a USB stick
-  together with the program.
+  together with the program. A copy of the vault on another device is the
+  same identity: it opens with the same passphrase and holds the same keys.
+- **Change passphrase** in the command palette (Ctrl+P) gives the vault a
+  new passphrase. Only that one file changes: copies of it on other devices,
+  sticks or backups still open with the old passphrase. If you change it
+  because the old one may be known, replace or delete those copies too.
 
 ## Reading offline
 

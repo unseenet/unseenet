@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import atexit
 import errno
+import glob
+import hmac
 import json
 import os
 import socket
@@ -260,9 +262,56 @@ class Vault:
             payload = json.dumps(self.data).encode()
             self._atomic_write(self.path, _pack(self._key, self._salt, self._ops, self._mem, payload))
 
+    # --- changing the passphrase ------------------------------------------------
+    def check_passphrase(self, passphrase: str) -> bool:
+        """Does ``passphrase`` open this vault? (Runs the slow key derivation.)"""
+        return hmac.compare_digest(_key(passphrase, self._salt, self._ops, self._mem), self._key)
+
+    def change_passphrase(self, old: str, new: str, *, ops: int | None = None,
+                          mem: int | None = None) -> None:
+        """Encrypt the vault and its sidecar files again under ``new``.
+
+        ``old`` must be the current passphrase, so an unlocked, unattended
+        program is not enough to change it. A fresh salt is used. Only this
+        file changes: copies of the vault elsewhere (other devices, sticks,
+        backups) still open with the old passphrase.
+        """
+        if not self.check_passphrase(old):
+            raise VaultError("wrong passphrase")
+        side = {n: self.read_sidecar(n) for n in self.sidecar_names()}
+        ops = self._ops if ops is None else ops
+        mem = self._mem if mem is None else mem
+        salt = os.urandom(16)
+        key = _key(new, salt, ops, mem)
+        with self._lock:
+            self._key, self._salt, self._ops, self._mem = key, salt, ops, mem
+        # The vault first: it is what matters. A sidecar left under the old key
+        # by a crash here is only a cache, and the client starts it over.
+        self.save()
+        for name, payload in side.items():
+            if payload is not None:
+                self.write_sidecar(name, payload)
+
     # --- sidecar files: other data encrypted with the same key -----------------
     def sidecar_path(self, name: str) -> Path:
         return self.path.with_name(f"{self.path.name}.{name}")
+
+    def sidecar_names(self) -> list[str]:
+        """The sidecar files beside this vault: ``<vault>.<name>`` that start with the
+        sidecar magic. The lock file, backups and anything else beside it are not."""
+        prefix = self.path.name + "."
+        names = []
+        for p in sorted(self.path.parent.glob(glob.escape(prefix) + "*")):
+            name = p.name[len(prefix):]
+            if ".old-" in name or not p.is_file():
+                continue
+            try:
+                with open(p, "rb") as f:
+                    if f.read(len(SIDECAR_MAGIC)) == SIDECAR_MAGIC:
+                        names.append(name)
+            except OSError:
+                continue
+        return names
 
     def write_sidecar(self, name: str, payload: bytes) -> None:
         """Encrypt ``payload`` with the vault key into ``<vault>.<name>``."""

@@ -16,6 +16,7 @@ passphrase. Delete them when you have opened the vault with the new one.
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import shutil
 import sys
@@ -25,17 +26,11 @@ from pathlib import Path
 import nacl.pwhash
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from unseenet.core.vault import Vault, VaultError, _key  # noqa: E402
+from unseenet.core.vault import Vault, VaultError  # noqa: E402
 
 OPS = nacl.pwhash.argon2id.OPSLIMIT_SENSITIVE
 MEM = nacl.pwhash.argon2id.MEMLIMIT_SENSITIVE
 MIN_LENGTH = 16
-
-
-def sidecars(path: Path) -> list[str]:
-    prefix = path.name + "."
-    return sorted(p.name[len(prefix):] for p in path.parent.glob(prefix + "*")
-                  if ".old-" not in p.name)
 
 
 def main() -> None:
@@ -43,11 +38,13 @@ def main() -> None:
     if not path.exists():
         sys.exit(f"{path} does not exist")
 
+    current = getpass.getpass(f"Current passphrase for {path}: ")
     try:
-        old = Vault.open(path, getpass.getpass(f"Current passphrase for {path}: "))
+        old = Vault.open(path, current)
     except VaultError as exc:
         sys.exit(f"Cannot open the vault: {exc}")
-    names = sidecars(path)
+    names = old.sidecar_names()          # not the .lock file beside it, nor old backups
+    data = json.loads(json.dumps(old.data))
     side = {n: old.read_sidecar(n) for n in names}
 
     print(f"\nChoose a new passphrase: at least {MIN_LENGTH} characters. A few random\n"
@@ -71,15 +68,11 @@ def main() -> None:
         backups.append(b)
 
     print("Encrypting with the new passphrase (this takes a few seconds) ...", flush=True)
-    salt = os.urandom(16)
-    nv = Vault(path, _key(new, salt, OPS, MEM), salt, OPS, MEM, old.data)
-    for n, payload in side.items():
-        nv.write_sidecar(n, payload)
-    nv.save()
+    old.change_passphrase(current, new, ops=OPS, mem=MEM)
 
     print("Checking that the new passphrase opens it ...", flush=True)
     check = Vault.open(path, new)
-    if check.data != old.data or any(check.read_sidecar(n) != side[n] for n in names):
+    if check.data != data or any(check.read_sidecar(n) != side[n] for n in names):
         for b in backups:                       # put the old files back
             os.replace(b, b.with_name(b.name.rsplit(".old-", 1)[0]))
         sys.exit("The check FAILED; the old vault has been put back, nothing changed.")
@@ -90,7 +83,8 @@ def main() -> None:
         print(f"  {b}")
     print("Delete them once you have opened the vault with the new passphrase:")
     print("  rm " + " ".join(str(b) for b in backups))
-    print("\nThen copy the new vault to your two USB sticks.")
+    print("\nThen copy the new vault to your two USB sticks. Copies made before now"
+          "\n(sticks, ~/Unseenet/backup) still open with the OLD passphrase - replace them.")
 
 
 if __name__ == "__main__":

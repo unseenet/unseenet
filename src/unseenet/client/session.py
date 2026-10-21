@@ -339,6 +339,13 @@ class Session:
     def save(self) -> None:
         self.vault.save()
 
+    def change_passphrase(self, old: str, new: str) -> None:
+        """A new passphrase for the vault file (slow: runs the key derivation twice).
+
+        Only this file changes; copies of it elsewhere still open with the old one.
+        Raises VaultError if ``old`` is wrong."""
+        self.vault.change_passphrase(old, new)
+
     def has_identity(self) -> bool:
         return bool(self.data["identities"])
 
