@@ -200,3 +200,36 @@ async def test_a_node_from_before_ripening_gets_no_header(tmp_path, monkeypatch)
     assert await s.required_pow(gid) == 8                     # no surcharge either
     await s.close()
     server.close()
+
+
+async def test_private_posts_carry_the_senders_ripening_inside(tmp_path, monkeypatch):
+    """Section 3.5: the sender's Key-Ripening travels in the sealed box; the recipient
+    can check it and, if it wants, hide posts from unripe strangers."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    a, b = _session(tmp_path, "andreas", addr), _session(tmp_path, "sonia", addr)
+    stranger = _session(tmp_path, "fremmed", addr)
+    for s in (a, b, stranger):
+        await s.ensure_inbox()                          # ripens to level 0 and publishes
+    while a.ripening().level < 2:
+        assert await a.ripen_segment()
+    await a.publish_ripening()
+    outer = await a.send_private(b.my_inbox, "Hej", "fra en moden nøgle\\n",
+                                 owner_key=b.identity().public_key)
+    assert "Key-Ripening" not in node.store.get(outer).decode()   # the node sees none
+    await stranger.send_private(b.my_inbox, "Køb", "spam\\n", owner_key=b.identity().public_key)
+    await b.fetch_group(b.my_inbox)
+    got = {m.subject: m for m in b.private_messages()}
+    assert got["Hej"].sender_ripening and await b.sender_level(got["Hej"]) == 2
+    assert await b.sender_level(got["Køb"]) == 0
+    shown = lambda: {m.subject for m, _ in b.threads(b.my_inbox)}     # what clients show
+    assert shown() >= {"Hej", "Køb"}                                   # setting off: all shown
+
+    b.set_private_min_ripe(1)
+    await b.check_private_senders()
+    assert shown() == {"Hej"}                                          # the stranger is hidden
+    b.add_contact(stranger.identity().key_text, "Fremmed")
+    assert "Køb" in shown()                                            # contacts always come
+    for s in (a, b, stranger):
+        await s.close()
+    server.close()
