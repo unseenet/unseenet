@@ -16,7 +16,10 @@ a tree, one post at a time below it, ++up++ ++down++ through the thread,
 the post quoted and your signature below. Chat groups are chats. The
 group's owner decides which a group is, and ++v++ shows it the other way.
 
-## Two ways to run it
+## Three ways to run it
+
+Portable and bootable, below - or **on the web**, in any browser, also on a
+phone or a tablet, with nothing to install: see [On the web](web.md).
 
 Both are built from every change and self-tested; the newest are the
 [development pre-release](https://github.com/unseenet/unseenet-gui/releases/tag/dev).
@@ -44,10 +47,11 @@ vault. Do not run both on the same vault at the same time.
 
 ## How it works
 
-The graphical client draws its window with web technology, but it is not a
-website. It runs on your own computer, nothing
-is hosted anywhere, and on Linux the window it opens in your browser only
-talks to the program on your own machine.
+The graphical client draws its window with web technology, but the portable
+and the bootable one are not a website. They run on your own computer,
+nothing is hosted anywhere, and on Linux the window it opens in your browser
+only talks to the program on your own machine. (On the web the same program
+runs inside the browser instead; see [On the web](web.md).)
 
 ```
  window ──HTTP/WebSocket──▶ unseenet-gui ──▶ unseenet core ──Tor──▶ nodes

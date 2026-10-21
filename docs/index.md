@@ -79,13 +79,15 @@ protect anyone yet.
   <div class="un-web__text">
     <p class="un-web__kicker">Preview</p>
     <h2 id="web-teaser" class="un-web__title">Prefer a mouse? There's a graphical client too.</h2>
-    <p>The graphical client is Unseenet in a window on your own computer: the same groups, keys and vault,
+    <p>The graphical client is Unseenet in a window: the same groups, keys and vault,
     with threads you can click through and chat that looks like chat. It comes
-    as a <strong>Portable</strong> (Linux, macOS, Windows) and a
-    <strong>Bootable</strong> that starts full screen.</p>
+    as a <strong>Portable</strong> (Linux, macOS, Windows), a
+    <strong>Bootable</strong> that starts full screen - and <strong>on the web</strong>:
+    open <a href="https://entrance.unseenet.net/">entrance.unseenet.net</a> in any browser,
+    also on a phone or a tablet, with nothing to install.</p>
     <p class="un-web__note">It is newer than the terminal client and only has
     development builds so far.</p>
-    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/tag/dev">Development builds</a></p>
+    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="web/">On the web</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/tag/dev">Development builds</a></p>
   </div>
   <div class="un-web__shots">
     <img class="un-web__main" src="img/web-threads.png" width="1280" height="800" loading="lazy"
@@ -210,7 +212,7 @@ Pick what you want to do. Each path lists the pages in the order to read them.
   <p class="un-path__lede">Get Unseenet running and join the conversation. Tor is included.</p>
   <ol class="un-path__steps">
     <li><span class="un-path__pick">Terminal:</span> <a href="portable/">Portable</a> <span class="un-or">or</span> <a href="bootable/">Bootable</a><br>
-        <span class="un-path__pick">Graphical</span> <span class="un-or">(preview)</span><span class="un-path__pick">:</span> <a href="graphical/#two-ways-to-run-it">Portable <span class="un-or">or</span> Bootable</a></li>
+        <span class="un-path__pick">Graphical</span> <span class="un-or">(preview)</span><span class="un-path__pick">:</span> <a href="graphical/#three-ways-to-run-it">Portable <span class="un-or">or</span> Bootable</a> <span class="un-or">or</span> <a href="web/">on the web</a> <span class="un-or">(phones, tablets too)</span></li>
     <li><a href="client/#first-start">First start</a>: your vault, a name, a node</li>
     <li>Using it: <a href="client/">the terminal client</a> <span class="un-or">or</span> <a href="graphical/">the graphical client</a></li>
     <li><a href="updating/">Updating</a></li>
