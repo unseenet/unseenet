@@ -139,6 +139,7 @@ nav:
       - "0041 Many manifests at once": spec/un-rfc-0041.md
       - "0042 Editing posts": spec/un-rfc-0042.md
       - "0043 Web entrances": spec/un-rfc-0043.md
+      - "0045 Spam reports": spec/un-rfc-0045.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
