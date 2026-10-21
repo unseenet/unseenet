@@ -95,11 +95,36 @@ A web entrance:
 - MUST NOT read, parse, change or add to the ONNTP stream. It MUST NOT
   add headers to articles; there is no field that marks an article as
   coming from the web.
-- MUST give each WebSocket connection its own Tor circuit (for example
-  with SOCKS isolation and random credentials per connection), so that
-  a node cannot link two sessions through the entrance's circuits.
+- MUST keep the Tor circuits of different web-client sessions apart, so
+  that a node cannot link two sessions through the entrance's circuits
+  (section 4.1.1).
 - MUST NOT cache articles, groups or answers. An entrance that caches is
   a node, and should be run as one.
+
+### 4.1.1 One Circuit per Session
+
+A web-client session holds several connections: one to each node it
+uses and one watch connection to each (UN-RFC 0008). Unseenet's own
+clients reach a node over one circuit for all of them. A web entrance
+does the same per session, and keeps sessions apart:
+
+- A web client SHOULD add a session tag to the URL,
+  `&session=<tag>`, where the tag is at least 128 random bits in
+  base64url. It makes a new tag every time a session starts (a vault
+  is opened, or the page is loaded) and MUST NOT store it.
+- The entrance MUST derive the SOCKS credentials of a tunnel from an
+  HMAC, under the key of section 4.2, of the visitor's address and the
+  tag. Tunnels from the same visitor with the same tag then share a
+  circuit; tunnels of another session, or of another visitor who sends
+  the same tag, never do.
+- A tunnel without a tag, or with one that is not well formed, MUST get
+  a circuit of its own (random credentials).
+
+Two connections of one session reach the same node in any case, and the
+node already sees them come from one client. Giving each its own
+circuit would hide nothing from the node and doubles the circuits the
+entrance and the node must build, which is what costs them most
+(section 5.1).
 
 ## 4.2 Limits
 
@@ -107,6 +132,16 @@ An entrance MAY limit connections per visitor and in total. It MUST do
 this without storing addresses: counters are kept in memory only, keyed
 by an HMAC of the address under a key made at start and never written
 down, and dropped after at most one hour.
+
+Many visitors share one address: a household, a school, a workplace, a
+mobile network behind carrier-grade NAT. A limit per address SHOULD
+therefore be counted in sessions (distinct tags, section 4.1.1) rather
+than tunnels, and SHOULD allow many sessions per address; it is there
+to stop one visitor from taking the whole entrance, not to allow one
+person per address. The total limit SHOULD follow from the memory the
+entrance has (section 5.1). An entrance refuses with HTTP 429 before
+the WebSocket is opened, so that the client can tell a full entrance
+from a broken one and try another (section 8.3).
 
 ## 4.3 Entrance Information
 
@@ -126,6 +161,21 @@ object:
 `nodes` is `"known"` (only listed nodes) or `"any"`. The web client
 shows this information on its About page. It is a promise, not proof
 (section 5).
+
+## 4.4 Reconnecting
+
+When an entrance restarts or loses its Tor connection, every web client
+on it loses its tunnels at the same moment. If they all reconnect at
+once, the entrance and the nodes must build every circuit in the same
+few seconds, which is the most expensive thing they do (section 5.1).
+
+A web client therefore MUST NOT reconnect at once after a tunnel
+closes that it did not close itself. It SHOULD wait a random time,
+first between 1 and 30 seconds, then twice as long after each attempt
+that fails, at most 5 minutes, and start again from the shortest wait
+once a tunnel has stayed open for a minute. An HTTP 429 from the
+entrance (section 4.2) counts as a failed attempt; after a few, the
+client moves to another entrance (section 8.3).
 
 # 5. Operating a Web Entrance
 
@@ -156,6 +206,49 @@ An operator of a web entrance:
 
 A web client MUST treat the entrance as able to see the visitor's
 address whatever the entrance says about itself.
+
+## 5.1 Capacity
+
+The numbers in this section are informative; the requirements in it
+are not. They were measured in October 2026 with the reference
+entrance (Python, aiohttp) on one core and 512 MB, against a test node
+on one core and 512 MB; the scripts and the full results are in the
+entrance's repository (`tools/loadtest`). A session is two tunnels per
+node (section 4.1.1 makes that one circuit).
+
+| | Per open tunnel |
+|---|---|
+| Entrance, TLS with Python's default read buffer (256 KiB per connection) | about 333 KB |
+| Entrance, TLS with a 16 KiB read buffer | about 99 KB |
+| Entrance without TLS (a server in front adds its own share) | about 36 KB |
+| Node (the Unseenet process) | about 10 KB |
+| Tor at the entrance / at the node | about 60 KB / 5 KB |
+
+- **Memory decides how many visitors fit.** With the default buffer the
+  entrance ran out of memory at about 1650 tunnels; with 16 KiB it held
+  3000 tunnels in 285 MB. An entrance SHOULD keep its per-connection TLS
+  buffers small, or end TLS in a server on the same machine (which
+  section 5 allows: only someone else's machine is ruled out).
+- **Opening circuits costs CPU, holding them does not.** At four new
+  tunnels a second, Tor used about 10 % of a core at the entrance and
+  5 % at the node; with 200 tunnels open and idle, nearly nothing. A
+  new tunnel takes about 2.5 s to open (95 % within about 7 s). Section 4.4
+  exists because of this.
+- **Moving bytes is cheap.** 3000 open tunnels with requests flowing
+  used 2–3 % of a core.
+- **Limits around the program.** Each tunnel holds two open files
+  (WebSocket and SOCKS). An entrance SHOULD raise its open-file limit
+  well above twice the tunnels it allows, and SHOULD set its total
+  limit from its memory, not from a fixed number.
+- **The first visit** downloads the whole web client (about 15 MB, half
+  that compressed). An entrance SHOULD serve it compressed. Later
+  visits use the copy kept on the device (section 7.3).
+
+A node carries the tunnels of every entrance that sends visitors to it,
+and its Tor builds a circuit for each, so nodes need limits of their
+own. A web client SHOULD pick its first node at random from the known
+nodes rather than always the first one listed, so that visitors are
+spread over the network instead of all arriving at one node.
 
 # 6. The Web Client
 
