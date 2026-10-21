@@ -232,7 +232,7 @@ node (section 4.1.1 makes that one circuit).
 - **Opening circuits costs CPU, holding them does not.** At four new
   tunnels a second, Tor used about 10 % of a core at the entrance and
   5 % at the node; with 200 tunnels open and idle, nearly nothing. A
-  new tunnel takes about 2.5 s to open (95 % within 7 s). Section 4.4
+  new tunnel takes about 2.5 s to open (95 % within about 7 s). Section 4.4
   exists because of this.
 - **Moving bytes is cheap.** 3000 open tunnels with requests flowing
   used 2–3 % of a core.
