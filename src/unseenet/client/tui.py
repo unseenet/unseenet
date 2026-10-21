@@ -1923,6 +1923,9 @@ class UnseenetApp(App):
     @work(exclusive=True, group="groups", exit_on_error=False)
     async def refresh_groups(self) -> None:
         s = self.session
+        if set(s.data["subscribed"]) != set(self.groups):    # just followed or left one:
+            self.groups = self._groups_from_vault()          # show it now, not after the round
+            await self._render_groups()
         result = await self.runtime.refresh()   # inbox once, then every group (#139)
         if result.error:
             self.set_status(f"Offline ({result.error}) - showing saved posts")
