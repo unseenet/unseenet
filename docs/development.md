@@ -132,6 +132,14 @@ a group with the session, not with code of your own (#139):
   it (`None` goes back to the owner's).
 - `Session.send_chat(group_id, text)` sends a chat line to a group or to
   `contact:<key>`. Ask about portals first, as for `Session.post()`.
+- `Session.subscribed_groups()` lists the groups you follow, in your order,
+  with type, view, what they take and (unless `counts=False`) unread posts,
+  replies and mentions. Pass what your nodes list to learn which they don't
+  carry (`listed=False`).
+- `Message.to_dict()` and `GroupInfo.to_dict()` give plain JSON-safe data in
+  one documented shape (`DICT_VERSION`, now 1): dates as ISO 8601, the body
+  also split into `text` and `signature`. Send these to a front end, an MCP
+  tool or a bot instead of making your own.
 
 How a row is drawn (icons, colours, indentation) is the client's choice.
 

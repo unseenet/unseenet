@@ -35,7 +35,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
-from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs, is_key_bound,
+from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
                            personal_inbox_id, short_group_id, split_group_id)
 from . import session as _session_module
 from . import naming
@@ -1909,18 +1909,10 @@ class UnseenetApp(App):
     # --- groups ---
     def _groups_from_vault(self, available: dict[str, GroupInfo] | None = None) -> dict[str, GroupInfo]:
         groups = {}
-        for gid in self.session.data["subscribed"]:
-            entry = self.session.group_entry(gid)
-            if available is not None and gid in available:
-                g = available[gid]
-            else:
-                g = GroupInfo(gid, entry.get("title", ""))
-                # key-bound groups (your inbox) are never listed (UN-RFC 0040 section 3)
-                if available is not None and not is_key_bound(gid):
-                    g.description = "(not on your nodes)"
-            g.subscribed = True
-            g.type = entry.get("type") or g.type
-            groups[gid] = g
+        for g in self.session.subscribed_groups(available, counts=False):   # (#139)
+            if g.listed is False:
+                g.description = "(not on your nodes)"
+            groups[g.group_id] = g
         return groups
 
     async def show_offline(self) -> None:

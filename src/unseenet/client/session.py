@@ -45,6 +45,7 @@ SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3)
 MAX_SIG_LINES = 4               # the old netiquette limit
 DEFAULT_SIGNATURE = "{name}  ·  {key}"   # until you set your own; empty means none
 CACHE_SIDECAR = "cache"
+DICT_VERSION = 1                # the shape of Message.to_dict() and GroupInfo.to_dict()
 SENT_SIDECAR = "sent"           # where older vaults kept copies of private posts you sent
 
 log = logging.getLogger(__name__)
@@ -174,6 +175,29 @@ class Message:
     def thread_root(self) -> str:
         return self.references[0] if self.references else self.message_id
 
+    def to_dict(self) -> dict:
+        """The message as plain JSON-safe data, shape ``DICT_VERSION`` (#139).
+
+        Dates are ISO 8601 strings, the raw article is left out, and the body
+        is also given split into ``text`` and ``signature``. How a name or a
+        key is shown is the client's: this holds only what the message says.
+        """
+        text, sig = split_signature(self.body) if self.readable else ("", None)
+        return {
+            "v": DICT_VERSION, "id": self.message_id, "number": self.number,
+            "group": self.group, "subject": self.subject, "from_name": self.from_name,
+            "author_key": self.author_key, "date": _iso(self.date), "body": self.body,
+            "text": text.rstrip("\n"), "signature": (sig or "").rstrip("\n") or None,
+            "references": list(self.references), "thread_root": self.thread_root,
+            "kind": self.kind, "content_type": self.content_type,
+            "encrypted": self.encrypted, "readable": self.readable, "error": self.error,
+            "private": self.private, "sender_key": self.sender_key,
+            "reply_inbox": self.reply_inbox, "to_key": self.to_key,
+            "mention_group": self.mention_group, "mention_of": self.mention_of,
+            "supersedes": list(self.supersedes), "edited": _iso(self.edited),
+            "versions": list(self.versions),
+        }
+
 
 @dataclass
 class GroupInfo:
@@ -183,10 +207,48 @@ class GroupInfo:
     owner_key: str | None = None
     subscribed: bool = False
     nodes: list[str] = field(default_factory=list)   # the nodes that carry it, yours first
+    # filled in by Session.subscribed_groups() (#139); None where not known
+    title: str = ""
+    view: str = "threads"                 # what you see: threads, chat or data
+    owner_view: str = "threads"           # what the owner chose (UN-RFC 0008, 3.1)
+    kinds: tuple[str, ...] = ()           # what it takes: chat lines, posts (UN-RFC 0028)
+    local: bool = False                   # lives on one node only (UN-RFC 0015)
+    low_latency: bool = False
+    owner: bool = False                   # you own it
+    listed: bool | None = None            # carried by your nodes; None while offline
+    unread: int | None = None
+    replies: int | None = None            # unread replies to you
+    mentions: int | None = None           # unread posts naming you
 
     @property
     def short(self) -> str:
         return short_group_id(self.group_id)
+
+    @property
+    def label(self) -> str:
+        """The name without the owner fingerprint, e.g. ``dk.snak``."""
+        return self.group_id.rpartition("@")[0] or self.group_id
+
+    @property
+    def hierarchy(self) -> str:
+        """The first part of the name, as on Usenet: ``dk`` for ``dk.snak``."""
+        return self.label.split(".", 1)[0]
+
+    def to_dict(self) -> dict:
+        """The group as plain JSON-safe data, shape ``DICT_VERSION`` (#139)."""
+        return {
+            "v": DICT_VERSION, "id": self.group_id, "short": self.short, "label": self.label,
+            "hierarchy": self.hierarchy, "title": self.title, "description": self.description,
+            "type": self.type, "owner_key": self.owner_key, "owner": self.owner,
+            "subscribed": self.subscribed, "nodes": list(self.nodes), "listed": self.listed,
+            "view": self.view, "owner_view": self.owner_view, "kinds": list(self.kinds),
+            "local": self.local, "low_latency": self.low_latency,
+            "unread": self.unread, "replies": self.replies, "mentions": self.mentions,
+        }
+
+
+def _iso(at: datetime | None) -> str | None:
+    return at.isoformat() if at else None
 
 
 def art_body_text(body: str) -> str:
@@ -2273,6 +2335,37 @@ class Session:
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
     # --- how a client lays out a group (unseenet #139) ---
+    def subscribed_groups(self, available: dict[str, GroupInfo] | None = None, *,
+                          counts: bool = True) -> list[GroupInfo]:
+        """The groups you follow, in your order, as every client lists them.
+
+        ``available`` is what your nodes list (``list_groups()``), when you
+        have it: a group missing from it gets ``listed=False``. Key-bound groups
+        such as your inbox are never listed, so they always count as listed
+        (UN-RFC 0040 section 3). ``counts`` fills in unread posts, replies and
+        mentions; leave it off when the client counts in its own time.
+        """
+        out = []
+        for gid in self.data["subscribed"]:
+            entry = self.group_entry(gid)
+            data = self.manifest_data(gid)
+            g = available[gid] if available is not None and gid in available \
+                else GroupInfo(gid, entry.get("title", ""))
+            g.subscribed = True
+            g.type = entry.get("type") or g.type or data.get("type")
+            g.title = data.get("title") or entry.get("title", "")
+            g.owner = bool(entry.get("owner"))
+            g.view, g.owner_view = self.view_of(gid), data.get("view", "threads")
+            g.kinds = tuple(self.group_kinds(gid))
+            g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
+            if available is not None:
+                g.listed = gid in available or is_key_bound(gid)
+            if counts:
+                c = self.for_you_counts(gid)
+                g.unread, g.replies, g.mentions = self.unread_count(gid), c.replies, c.mentions
+            out.append(g)
+        return out
+
     def threads(self, group_id: str) -> list[tuple["Message", int]]:
         """A group's posts as every client shows them: ``(message, depth)`` rows.
 
