@@ -16,15 +16,18 @@ the old signature no longer fits.
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 import _owner  # noqa: F401  (puts src/ on the path)
-from _owner import open_owner_session
+from _owner import open_owner_session, post_everywhere
 
 from unseenet import update
+from unseenet.core.article import new_article
+from unseenet.known_nodes import RELEASES_GROUP
 
 REPO = "unseenet/unseenet"
 
@@ -52,7 +55,16 @@ def main() -> None:
         update.check_signature(sums, sig, "stable")      # the key sticks trust
         (d / update.SIG).write_text(sig)
         gh("release", "upload", tag, str(d / update.SIG), "--clobber")
-    print(f"Signed: {update.SIG} is on the {tag} release. Sticks can update to it.")
+        print(f"Signed: {update.SIG} is on the {tag} release. Sticks can update to it.")
+        # and tell the clients, through the network (#264): the checksums and the
+        # signature, posted by the project key itself in unseenet.releases
+        subject, body = update.release_post(sums, sig, "stable")
+        art = new_article(RELEASES_GROUP, subject, body, from_name="Unseenet project")
+        art = art.finalize(identity, _owner.POW_BITS)
+        if asyncio.run(post_everywhere([art.to_bytes()])) == 0:
+            print("No node took the post in unseenet.releases: run this again later.")
+        else:
+            print("Posted in unseenet.releases: clients will offer the update.")
 
 
 if __name__ == "__main__":

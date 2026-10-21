@@ -449,6 +449,52 @@ class Session:
         self.save()
         return True
 
+    async def refresh_releases(self) -> dict | None:
+        """Read the newest signed releases from unseenet.releases (#264) and return
+        update_offer(). The posts only carry a release's checksums and their
+        signature; the signature is checked against the keys the channel trusts
+        (unseenet.update), whoever posted it."""
+        from .. import update
+        from ..known_nodes import RELEASES_GROUP
+        subscribed = RELEASES_GROUP in self.data["subscribed"]
+        try:
+            messages = await self.fetch_group(RELEASES_GROUP)
+        finally:
+            if not subscribed:          # read it, but do not keep it around
+                self.cache.pop(RELEASES_GROUP, None)
+                self._raw.pop(RELEASES_GROUP, None)
+                self._high.pop(RELEASES_GROUP, None)
+        best = dict(self.data.get("releases") or {})
+        for m in messages:
+            post = update.parse_release_post(m.body) if m.readable else None
+            if not post:
+                continue
+            channel, sums, sig = post
+            try:
+                update.check_signature(sums, sig, channel)
+            except update.UpdateError:
+                continue
+            versions = [a.group("version") for a in map(update.ASSET.match, update.parse_sums(sums)) if a]
+            if not versions:
+                continue
+            version = versions[0]
+            if channel not in best or update.version_key(version) > update.version_key(best[channel]["version"]):
+                best[channel] = {"version": version}
+        if best != self.data.get("releases"):
+            self.data["releases"] = best
+            self.save()
+        return self.update_offer()
+
+    def update_offer(self) -> dict | None:
+        """A signed release newer than this program, on its channel (a development
+        build follows development builds): {"version", "channel"}, or None."""
+        from .. import __version__, update
+        channel = "dev" if ".dev" in __version__ else "stable"
+        found = (self.data.get("releases") or {}).get(channel)
+        if found and update.version_key(found["version"]) > update.version_key(__version__):
+            return {"version": found["version"], "channel": channel}
+        return None
+
     async def refresh_naming(self) -> bool:
         """Read the root list, hierarchy lists and names (UN-RFC 0018, 0019). True if changed."""
         return await naming.refresh(self)

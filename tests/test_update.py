@@ -169,7 +169,7 @@ def test_command_downloads_checks_and_updates(keys, tmp_path, monkeypatch, capsy
               z.name: z.read_bytes()}
 
     def fake_fetch(url, socks_port, dest=None, progress=None):
-        assert "/releases/download/dev/" in url or "/releases/latest/download/" in url
+        assert "/releases/download/" in url or "/releases/latest/download/" in url
         data = served[url.rsplit("/", 1)[1]]
         if dest is None:
             return data
