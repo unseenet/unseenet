@@ -547,6 +547,37 @@ class Session:
         threading.Thread(target=run, name="ripening", daemon=True).start()
         return await done
 
+    async def adopt_published_ripening(self, name: str | None = None,
+                                       node: str | None = None) -> bool:
+        """Take over this identity's chain from its own ``ripe@`` group when that is
+        further than the one kept here: the same key on another machine, a vault copy,
+        a service reinstalled, a CI key ripened once elsewhere (UN-RFC 0025 section 3.3).
+        The chain is checked first. True when it was taken over."""
+        name = name or self.default_identity_name()
+        pk = self.identity(name).public_key
+        if not rp.available():
+            return False
+        try:
+            m = await self.fetch_manifest(make_group_id(rp.GROUP_NAME, pk), node)
+        except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+            return False
+        if m is None or "ripening" not in m.raw:
+            return False
+        try:
+            chain = rp.Chain.from_manifest(m.raw["ripening"])
+            if chain.t <= self.ripening(name).t:
+                return False
+            rp.verify(pk, chain)
+        except rp.RipeningError:
+            return False
+        entry = self._ripening_entry(name)
+        entry["segments"] = [s.to_dict() for s in chain.segments]
+        entry["published"] = chain.t
+        self.save()
+        self.emit(ev.Ripening(self.identity(name).key_text, chain.t, rp.level(chain.t),
+                              rp.next_threshold(chain.t)))
+        return True
+
     async def ensure_ripe(self, name: str | None = None, node: str | None = None) -> None:
         """Before posting: ripen to level 0 if needed, and publish ripe@ when its chain
         has reached a level nodes don't know yet (sections 3.3, 7). ``node``: publish
@@ -556,6 +587,8 @@ class Session:
         async with lock:
             if not rp.available():
                 return                     # a node that requires ripening will say so
+            if self.ripening(name).level is None:      # ripened elsewhere already?
+                await self.adopt_published_ripening(name, node)
             while self.ripening(name).level is None:
                 self.say("Ripening your key: a new key takes a few minutes before it can post")
                 if not await self.ripen_segment(name):

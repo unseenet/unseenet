@@ -1,6 +1,10 @@
 # Ripening chains of the project's CI keys
 
-Key ripening (UN-RFC 0025) is computed once, not in every CI run. These files
+Key ripening (UN-RFC 0025) is computed once, not in every CI run. A session
+takes over its key's chain from the key's own `ripe@` group when that is
+further than its own (`Session.adopt_published_ripening`), so a CI key
+ripened and published once anywhere needs nothing here. A file here only
+saves fetching and checking the chain. These files
 hold the **public** ripening chain of the keys CI posts with (the announce and
 canary key, `UNSEENET_ANNOUNCE_SEED`); the workflows point `UNSEENET_STATE_DIR`
 here. They contain no secret: the chain is published in the key's `ripe@` group

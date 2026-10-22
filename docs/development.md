@@ -179,6 +179,9 @@ postage and retries are the same code everywhere:
 - `ClientRuntime(session, ripen_to=SERVICE_RIPEN_TO)` ripens on in the
   background to level 3 (no surcharge), in a low-priority thread, and
   publishes `ripe@` at each level.
+- The same key on another machine (a reinstall, CI, a vault copy) takes over
+  the chain from its own `ripe@` group instead of ripening again
+  (`Session.adopt_published_ripening()`, done before ripening by itself).
 - At setup: `unseenet ripen --key-file KEY --to 0 --node HOST --publish`
   (7-11 minutes to level 0). Computing needs only the public key, so it can
   run on a faster machine; only `--publish` signs.
