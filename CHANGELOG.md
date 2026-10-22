@@ -7,11 +7,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-23
+
+For clients, and what the browser client needs to ripen its keys; nodes can
+stay on 0.4.0. A new key now reads at once while it ripens, and its first
+post no longer fails when the background ripening ran at the same time.
+
 ### Added
 
 - `Session._prove_segment()`: one place where a platform without threads
   can prove key-ripening segments its own way. The browser client proves
-  them in a Web Worker of its own (unseenet-gui#31). The portable client,
+  them in a Web Worker of its own (unseenet-entrance#27). The portable client,
   GUI and TUI work as before (#323).
 
 ### Fixed

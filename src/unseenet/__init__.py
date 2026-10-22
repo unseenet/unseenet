@@ -5,7 +5,7 @@ This package is one implementation of it; the UN-RFCs are the authority.
 """
 
 # Software version: semantic versioning, see docs/development.md#versioning.
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 # Wire protocol version (the Unseenet-Version header, UN-RFC 0002). It changes
 # only through a new UN-RFC and is independent of the software version.
