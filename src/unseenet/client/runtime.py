@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
 RIPEN_TO = 4                  # ripen keys up to this level while running (UN-RFC 0025, 7)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
+RIPEN_RECHECK = 3600.0        # a node that says "-" is asked again this often (#314)
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,
                   asyncio.IncompleteReadError, asyncio.TimeoutError)
 
@@ -56,6 +57,7 @@ class ClientRuntime:
         self.session = session
         self.ripen_to = ripen_to                      # None: don't ripen in the background
         self._run_file = None                         # removing it stops a segment at once
+        self._ripen_stop: asyncio.Event | None = None  # set: stop waiting for a node (#314)
         self.refresh_seconds = refresh_seconds
         self.watch_retry = watch_retry                # None: a random, growing wait (#297)
         self.inbox_ready = False
@@ -207,8 +209,9 @@ class ClientRuntime:
         s = self.session
         if self.ripen_to is None or not rp.available() or not s.has_identity():
             return
-        if not await s.node_wants_ripening():
-            return                              # "-": no node of ours asks for it; spare the CPU
+        self._ripen_stop = asyncio.Event()
+        if not await self._wait_for_a_node_that_asks():
+            return                              # stopped while waiting
         await s.adopt_published_ripening()      # further elsewhere: go on from there
         import tempfile
         from pathlib import Path
@@ -230,8 +233,32 @@ class ClientRuntime:
         finally:
             self._stop_ripening()
 
+    async def _wait_for_a_node_that_asks(self) -> bool:
+        """Wait until our node asks for ripening (UNSEENET-MINRIPE other than "-").
+
+        A node that cannot be reached now (Tor not up yet, the node restarting) is
+        asked again after a growing random wait (#297); one that says "-" is asked
+        again every RIPEN_RECHECK seconds, since its operator may turn ripening on
+        or we may move to another node. Giving up at the first answer left a
+        client that started offline without background ripening until it was
+        restarted, so its first post waited minutes for it (#314). False when
+        ``stop_ripening()`` ended the wait."""
+        backoff = Backoff()
+        while True:
+            value = await self.session.node_min_ripe()
+            if value is not None and value != "-":
+                return True
+            wait = backoff.next() if value is None else RIPEN_RECHECK
+            try:
+                await asyncio.wait_for(self._ripen_stop.wait(), wait)
+                return False                               # stop_ripening()
+            except asyncio.TimeoutError:
+                pass
+
     def stop_ripening(self) -> None:
         """Stop the segment being computed within a second (its run file goes)."""
+        if self._ripen_stop is not None:
+            self._ripen_stop.set()
         self._stop_ripening()
 
     def _stop_ripening(self) -> None:
@@ -247,7 +274,7 @@ class ClientRuntime:
         return loaded
 
     async def stop(self) -> None:
-        self._stop_ripening()                          # before cancelling: frees its thread
+        self.stop_ripening()                           # before cancelling: frees its thread
         tasks = list(self._tasks)
         for task in tasks:
             task.cancel()

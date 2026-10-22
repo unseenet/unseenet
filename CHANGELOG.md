@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- A client or service that started while its node could not be reached
+  (Tor not up yet, the node restarting) never ripened its key in the
+  background until it was restarted, so its first post waited minutes for
+  it. It now asks the node again with the reconnect backoff, and a node
+  that says `"-"` again every hour (#314).
+
 ## [0.4.0] - 2026-10-22
 
 **Key ripening (UN-RFC 0025): every node and client must be updated.** A
