@@ -874,6 +874,20 @@ class Session:
         """Petname, else @domain, else @name, else Name~abcd (UN-RFC 0019 section 8)."""
         return naming.identity_label(self, key_text, from_name)
 
+    def seen_name(self, key_text: str | None) -> str:
+        """The name someone gave themselves in a post we have, newest first, for
+        naming a bare key (a chat partner, a moderator): "" if none is seen."""
+        best, at = "", None
+        for msgs in self.cache.values():
+            for m in msgs.values():
+                if m.author_key == key_text and m.from_name and (at is None or (m.date and m.date > at)):
+                    best, at = m.from_name, m.date
+        return best
+
+    def label_of(self, key_text: str) -> str:
+        """``identity_label`` for a bare key, with the name seen in its posts."""
+        return self.identity_label(key_text, self.seen_name(key_text))
+
     def _forget_numbers(self, group_id: str) -> None:
         """Article numbers belong to one node: drop them when a group moves."""
         for store in (self.cache, self._raw, self._high):
