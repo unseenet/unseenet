@@ -277,3 +277,35 @@ async def test_a_tool_can_check_the_level_before_posting(tmp_path, monkeypatch):
         assert await p.ripening_level() is None
     await first.close()
     server.close()
+
+
+async def test_a_platform_can_prove_segments_elsewhere(tmp_path, monkeypatch):
+    """unseenet#323: the browser client proves in a Web Worker, not a thread."""
+    s = _session(tmp_path, "andreas")
+    asked = []
+
+    async def elsewhere(self, public_key, start, t, run_file=None):
+        asked.append((public_key, start, t, run_file))
+        return rp.prove_segment(public_key, start, t)
+
+    monkeypatch.setattr(Session, "_prove_segment", elsewhere)
+    monkeypatch.setattr(Session, "_in_ripening_thread",
+                        lambda fn: pytest.fail("no thread on this platform"))
+    assert await s.ripen_segment(run_file="stop-file")
+    pk = s.identity("andreas").public_key
+    assert asked == [(pk, rp.GENERATOR, rp.FIRST_SEGMENT, "stop-file")]
+    assert s.ripening().t == rp.FIRST_SEGMENT
+    assert rp.verify(pk, s.ripening()) == 1
+    await s.close()
+
+
+async def test_a_stopped_segment_elsewhere_keeps_the_vault(tmp_path, monkeypatch):
+    s = _session(tmp_path, "andreas")
+
+    async def stopped(self, public_key, start, t, run_file=None):
+        return None                       # the worker was stopped
+
+    monkeypatch.setattr(Session, "_prove_segment", stopped)
+    assert not await s.ripen_segment()
+    assert s.ripening().segments == []
+    await s.close()

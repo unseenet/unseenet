@@ -516,8 +516,7 @@ class Session:
         if not length:
             return False
         pk = self.identity(name).public_key
-        seg = await self._in_ripening_thread(
-            lambda: rp.prove_segment(pk, chain.end, length, run_file))
+        seg = await self._prove_segment(pk, chain.end, length, run_file)
         if seg is None:
             return False
         entry = self._ripening_entry(name)
@@ -529,6 +528,16 @@ class Session:
         self.emit(ev.Ripening(self.identity(name).key_text, t, rp.level(t),
                               rp.next_threshold(t)))
         return True
+
+    async def _prove_segment(self, public_key: bytes, start: bytes, t: int,
+                             run_file=None) -> "rp.Segment | None":
+        """Prove one segment of ``t`` iterations from ``start``: None when stopped
+        (``run_file`` removed), and the segment starts again later (section 3.2).
+
+        Here in the ripening thread. A platform without threads overrides this, e.g.
+        the browser client, which proves in a Web Worker of its own (unseenet#323)."""
+        return await self._in_ripening_thread(
+            lambda: rp.prove_segment(public_key, start, t, run_file))
 
     @staticmethod
     async def _in_ripening_thread(fn):

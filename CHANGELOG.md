@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- `Session._prove_segment()`: one place where a platform without threads
+  can prove key-ripening segments its own way. The browser client proves
+  them in a Web Worker of its own (unseenet-gui#31). The portable client,
+  GUI and TUI work as before (#323).
+
 ## [0.4.1] - 2026-10-22
 
 A fix for clients and services; nodes can stay on 0.4.0.
