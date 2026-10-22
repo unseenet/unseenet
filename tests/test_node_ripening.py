@@ -1,4 +1,5 @@
 """Nodes and clients with key ripening required (UN-RFC 0025 as amended in #278)."""
+import asyncio
 import pytest
 
 import unseenet.client.session as sess
@@ -308,4 +309,15 @@ async def test_a_stopped_segment_elsewhere_keeps_the_vault(tmp_path, monkeypatch
     monkeypatch.setattr(Session, "_prove_segment", stopped)
     assert not await s.ripen_segment()
     assert s.ripening().segments == []
+    await s.close()
+
+
+async def test_two_askers_of_one_segment_both_go_on(tmp_path):
+    """Posting (ensure_ripe) and the background (ClientRuntime.ripen) may ask for
+    the same segment at once. The one that finishes second finds the chain grown:
+    that is progress, not a stop, or the post fails and the background gives up."""
+    s = _session(tmp_path, "andreas")
+    first, second = await asyncio.gather(s.ripen_segment(), s.ripen_segment())
+    assert first and second
+    assert len(s.ripening().segments) == 1
     await s.close()

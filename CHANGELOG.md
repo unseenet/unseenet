@@ -14,6 +14,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   them in a Web Worker of its own (unseenet-gui#31). The portable client,
   GUI and TUI work as before (#323).
 
+### Fixed
+
+- A brand-new key that posted while the client ripened it in the background
+  could fail with "ripening stopped before the key could post", and the
+  background ripening stopped until the next start. Both had proved the same
+  segment, and the second to finish read the chain having grown as a stop.
+  It now counts as progress, and both go on (#326).
+
 ## [0.4.1] - 2026-10-22
 
 A fix for clients and services; nodes can stay on 0.4.0.
