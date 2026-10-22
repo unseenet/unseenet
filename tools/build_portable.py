@@ -166,11 +166,18 @@ def pyinstaller(plat: str, work: Path) -> Path:
            "--collect-all", "textual", "--collect-submodules", "rich",
            "--collect-submodules", "unseenet", "--collect-data", "unseenet",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
-           "--collect-all", "nacl", "--hidden-import", "_cffi_backend",
+           "--collect-all", "nacl", "--hidden-import", "_cffi_backend", "--hidden-import", "chiavdf",
            "--collect-data", "certifi",            # HTTPS for updates (unseenet.update)
            # Pillow is only here to convert the icon; none of these are used at run time
            "--exclude-module", "PIL", "--exclude-module", "tkinter",
            "--exclude-module", "unittest", "--exclude-module", "pydoc_data"]
+    # chiavdf on Windows (key ripening, UN-RFC 0025): its wheel puts mpir*.dll next to the
+    # module, and mpir.dll loads a variant for this CPU (mpir_broadwell.dll, ...) at run
+    # time, which PyInstaller cannot see. Take them all, or the build cannot ripen keys.
+    if plat.startswith("windows"):
+        import sysconfig
+        for dll in sorted(Path(sysconfig.get_paths()["platlib"]).glob("mpir*.dll")):
+            cmd += ["--add-binary", f"{dll}{os.pathsep}."]
     if not plat.startswith("windows"):
         cmd.append("--strip")                       # debug symbols: a lot of megabytes
     icon = ROOT / "assets" / "icon-512.png"        # PyInstaller converts it (needs Pillow)

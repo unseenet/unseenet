@@ -37,6 +37,12 @@ def self_test(network: bool = True, node: str | None = None) -> int:
         print(f"Parts:     BROKEN ({type(exc).__name__}: {exc})")
         return 1
     print("Parts:     client, terminal UI and cryptography load")
+    from .core import ripening
+    problem = ripening.self_check()
+    if problem:
+        print(f"Ripening:  BROKEN ({problem}) - this build could read, but not post on 0.4 nodes")
+        return 1
+    print("Ripening:  a short proof made and checked (UN-RFC 0025)")
     print(f"Program:   {portable.program_dir()}")
     print(f"Portable:  {root if root else 'no (files go in the current directory)'}")
     print(f"Vault:     {portable.default_vault_path().resolve()}")

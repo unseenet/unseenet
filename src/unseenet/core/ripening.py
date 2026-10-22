@@ -49,7 +49,8 @@ def _vdf():
     try:
         import chiavdf
     except ImportError as exc:      # pragma: no cover - depends on the platform
-        raise RipeningUnavailable("key ripening needs chiavdf (pip install chiavdf)") from exc
+        why = "" if isinstance(exc, ModuleNotFoundError) else f": {exc}"   # e.g. a DLL missing
+        raise RipeningUnavailable(f"key ripening needs chiavdf (pip install chiavdf){why}") from exc
     return chiavdf
 
 
@@ -59,6 +60,21 @@ def available() -> bool:
         return True
     except RipeningUnavailable:
         return False
+
+
+def self_check() -> str | None:
+    """Prove and check a very short segment with a throwaway key: None when key
+    ripening works in this build, else what is wrong. For self-tests: a build
+    without a working chiavdf can read, but cannot post on 0.4 nodes."""
+    try:
+        from . import crypto
+        pk = crypto.Identity.generate().public_key
+        seg = prove_segment(pk, GENERATOR, 1000)
+        if seg is None or verify(pk, Chain([seg])) != 1:
+            return "a short proof could not be made"
+        return None
+    except (RipeningUnavailable, RipeningError, RuntimeError, ValueError, OSError) as exc:
+        return str(exc) or type(exc).__name__
 
 
 def seed(public_key: bytes) -> bytes:
