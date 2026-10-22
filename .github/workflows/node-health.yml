@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install .
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor && (sudo systemctl stop tor || true)
+      - run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor && (sudo systemctl stop tor || true)
       - env:
           UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}   # signs the canaries
           UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
