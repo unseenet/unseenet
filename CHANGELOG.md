@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
+A fix for clients and services; nodes can stay on 0.4.0.
+
 ### Fixed
 
 - A client or service that started while its node could not be reached
@@ -14,6 +18,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   background until it was restarted, so its first post waited minutes for
   it. It now asks the node again with the reconnect backoff, and a node
   that says `"-"` again every hour (#314).
+- `tools/project/ripen_keys.py` also ripens the GitHub poster and the
+  registrar's inbox key, which the owner vault keeps beside its identities
+  (#313).
+
+### Changed
+
+- The gateway repository is now
+  [unseenet/unseenet-gateway](https://github.com/unseenet/unseenet-gateway)
+  (the old address redirects).
 
 ## [0.4.0] - 2026-10-22
 
@@ -811,7 +824,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/unseenet/unseenet/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/unseenet/unseenet/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/unseenet/unseenet/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0

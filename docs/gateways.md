@@ -3,7 +3,7 @@
 A gateway connects Unseenet to another network, so groups from there can be
 read and answered here, and an Unseenet group can, if its owner wants it,
 be read and answered from there. The software lives in its own repository,
-[unseenet/gateway](https://github.com/unseenet/gateway), and the rules every
+[unseenet/unseenet-gateway](https://github.com/unseenet/unseenet-gateway), and the rules every
 gateway follows are [UN-RFC 0023](spec/un-rfc-0023.md), with one profile per
 network.
 
@@ -94,6 +94,6 @@ A gateway is a shared core with one **adapter** per network. Usenet and
 Nostr are the reference adapters; one for another network can be written
 by anyone, in its own package, without changing the gateway. Setup and the
 adapter contract are in the
-[gateway's README](https://github.com/unseenet/gateway#writing-an-adapter).
+[gateway's README](https://github.com/unseenet/unseenet-gateway#writing-an-adapter).
 A new network also needs a profile UN-RFC and its hierarchy reserved in the
 root list ([UN-RFC 0018](spec/un-rfc-0018.md)).
