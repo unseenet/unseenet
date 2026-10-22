@@ -21,6 +21,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   background ripening stopped until the next start. Both had proved the same
   segment, and the second to finish read the chain having grown as a stop.
   It now counts as progress, and both go on (#326).
+- A brand-new key on a node that asks for ripening saw its groups without
+  posts for minutes: the client set up its inbox, which waits for the key to
+  ripen, before it fetched any group. The groups are now fetched meanwhile
+  (#328).
 
 ## [0.4.1] - 2026-10-22
 

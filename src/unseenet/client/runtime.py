@@ -82,28 +82,46 @@ class ClientRuntime:
         """Steps 3 and 5: list groups, set up the inbox once, fetch every group
         you follow. Sends ``InboxReady`` the first time, a ``GroupUpdated`` per
         group with new posts, and ``Refreshed`` at the end, which it also returns.
-        A second call while one runs waits for it, then runs again."""
+        A second call while one runs waits for it, then runs again.
+
+        The inbox is set up while the groups are fetched: for a brand-new key
+        it is a post that waits for the key to ripen, minutes, and the groups'
+        posts should not wait for that (#328)."""
         async with self._lock:
             s = self.session
             try:
                 available = {g.group_id: g for g in await s.list_groups()}
             except NETWORK_ERRORS as exc:
                 return self._emit_refreshed(error=str(exc) or type(exc).__name__)
-            if not self.inbox_ready:
-                try:
-                    await s.ensure_inbox()
-                    self.inbox_ready = True
-                    s.emit(ev.InboxReady(s.my_inbox))
-                    available = {g.group_id: g for g in await s.list_groups()}
-                except NETWORK_ERRORS as exc:
-                    s.say(f"Could not set up your inbox: {exc}")
             self.available = available
-            for gid in list(s.data["subscribed"]):
-                try:
-                    await s.fetch_group(gid)
-                except NETWORK_ERRORS:
-                    pass                          # shown as not reachable; saved posts stay
+            inbox = None if self.inbox_ready else asyncio.ensure_future(self._set_up_inbox())
+            fetched = await self._fetch(s.data["subscribed"])
+            if inbox is not None and (listed := await inbox) is not None:
+                self.available = available = listed
+                await self._fetch(g for g in s.data["subscribed"] if g not in fetched)  # the inbox
             return self._emit_refreshed(available=len(available))
+
+    async def _fetch(self, group_ids) -> set[str]:
+        done = set()
+        for gid in list(group_ids):
+            try:
+                await self.session.fetch_group(gid)
+            except NETWORK_ERRORS:
+                pass                              # shown as not reachable; saved posts stay
+            done.add(gid)
+        return done
+
+    async def _set_up_inbox(self) -> dict[str, GroupInfo] | None:
+        """Set up the inbox once; the groups listed again (with it), or None."""
+        s = self.session
+        try:
+            await s.ensure_inbox()
+            self.inbox_ready = True
+            s.emit(ev.InboxReady(s.my_inbox))
+            return {g.group_id: g for g in await s.list_groups()}
+        except NETWORK_ERRORS as exc:
+            s.say(f"Could not set up your inbox: {exc}")
+            return None
 
     def _emit_refreshed(self, available: int = 0, error: str | None = None) -> ev.Refreshed:
         s = self.session
