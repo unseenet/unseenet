@@ -215,6 +215,9 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert [x["message"]["text"] for x in chat["rows"]] == ["Hej Sonia"] and chat["rows"][0]["mine"]
         _, listing = await r.get("/api/groups")
         assert [p["key"] for p in listing["people"]] == [sonia]
+        await r.post("/api/contacts", {"key": sonia, "remove": True})
+        _, listing = await r.get("/api/groups")            # not a contact: the name in her posts
+        assert [(p["contact"], p["name"].split("~")[0]) for p in listing["people"]] == [(False, "Sonia")]
         await r.post("/api/ignore", {"key": sonia, "on": False})
 
         # a group of your own

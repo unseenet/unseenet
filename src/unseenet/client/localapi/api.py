@@ -264,7 +264,7 @@ class LocalAPI:
         groups = [self._group(s, g) for g in s.subscribed_groups(available)
                   if g.group_id != s.my_inbox and not s.is_data_group(g.group_id)]
         people = [{"id": CONTACT + k, "key": k, "contact": bool(s.contact_name(k)),
-                   "name": s.contact_name(k) or s.identity_label(k),
+                   "name": s.contact_name(k) or s.label_of(k),
                    "unread": s.unread_from(k, KIND_CHAT)} for k in s.chat_partners()]
         c = s.for_you_counts()
         tops: dict[str, list[dict]] = {}
@@ -307,7 +307,7 @@ class LocalAPI:
             g = GroupInfo(gid, "Private conversation. Only the two of you can read it.",
                           type="contact", view=s.view_of(gid), owner_view="chat",
                           kinds=(KIND_CHAT,), unread=s.unread_from(key, KIND_CHAT))
-            return {**g.to_dict(), "label": s.contact_name(key) or s.identity_label(key),
+            return {**g.to_dict(), "label": s.contact_name(key) or s.label_of(key),
                     "hierarchy": "", "key": key, "contact": bool(s.contact_name(key)),
                     "may_post": True}
         if gid == FOR_YOU:
@@ -338,10 +338,10 @@ class LocalAPI:
         data = s.manifest_data(gid)
 
         def people(keys) -> list[dict]:
-            return [{"key": k, "label": s.identity_label(k)} for k in keys]
+            return [{"key": k, "label": s.label_of(k)} for k in keys]
         out = {"moderators": people(data.get("moderators", [])),
                "posters": people(data.get("posters", [])),
-               "banned": [{"key": k, "label": s.identity_label(k), "reason": r}
+               "banned": [{"key": k, "label": s.label_of(k), "reason": r}
                           for k, r in s.banned(gid)],
                "moderates": s.moderates(gid), "maintainer": LocalAPI._maintains(s, gid)}
         if s.group_entry(gid).get("owner") and data.get("type") == "closed":
@@ -374,7 +374,7 @@ class LocalAPI:
     @staticmethod
     def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:
         if m.to_key:
-            who, key = "You → " + s.identity_label(m.to_key), m.to_key
+            who, key = "You → " + s.label_of(m.to_key), m.to_key
         elif m.private and m.sender_key:
             who, key = s.identity_label(m.sender_key, m.from_name), m.sender_key
         else:
@@ -619,7 +619,7 @@ class LocalAPI:
 
     def ignored(self) -> dict:
         s = self._ready()
-        return {"ignored": [{"key": k, "label": label or s.identity_label(k)}
+        return {"ignored": [{"key": k, "label": label or s.label_of(k)}
                             for k, label in s.ignored()]}
 
     def ignore(self, data: dict) -> dict:
@@ -809,7 +809,7 @@ class LocalAPI:
             "pending": [{"name": n, "action": a, "sent": when}
                         for n, a, when in naming.pending(s) if n not in held],
             "parents": naming.parents_i_hold(s),
-            "given": [{"name": c.name, "key": c.key, "who": s.identity_label(c.key),
+            "given": [{"name": c.name, "key": c.key, "who": s.label_of(c.key),
                        "expires": c.expires.isoformat()} for c in naming.names_given(s)],
             "requests": [{"id": m.message_id, "name": d.get("name", ""), "key": d.get("key", ""),
                           "who": s.identity_label(d.get("key", ""), m.from_name)}
@@ -839,7 +839,7 @@ class LocalAPI:
             key = _key(data.get("key"))
             years = max(1, min(int(data.get("years", 1) or 1), 10))
             await naming.give_subname(s, name, key, timedelta(days=365 * years))
-            text = f"{name} given to {s.identity_label(key)}"
+            text = f"{name} given to {s.label_of(key)}"
         elif action == "revoke":
             await naming.revoke_subname(s, name)
             text = f"{name} taken back"
