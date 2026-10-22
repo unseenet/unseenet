@@ -7,6 +7,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 **Key ripening (UN-RFC 0025): every node and client must be updated.** A
 new key now does a few minutes of work, once, before nodes take its posts;
 that is what keeps throwaway keys from spamming. Nodes from 0.4.0 refuse
@@ -792,7 +794,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/unseenet/unseenet/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/unseenet/unseenet/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
