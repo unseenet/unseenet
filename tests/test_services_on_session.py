@@ -80,6 +80,47 @@ async def test_the_runtime_ripens_on_and_publishes_each_level(tmp_path, monkeypa
     server.close()
 
 
+async def test_the_runtime_waits_for_a_node_it_cannot_reach_yet(tmp_path, monkeypatch):
+    """#314: unreachable at start (Tor not up, node restarting) is not "never"."""
+    import unseenet.client.runtime as rtmod
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    quick = rtmod.Backoff
+    monkeypatch.setattr(rtmod, "Backoff", lambda: quick(first=(0.01, 0.01)))
+    node, server, addr = await _node()
+    ident = crypto.Identity.generate()
+    s = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
+    s.add_node(addr)
+    real, asked = s.node_min_ripe, []
+
+    async def flaky(node=None):
+        asked.append(node)
+        return None if len(asked) < 3 else await real(node)    # down twice, then up
+    monkeypatch.setattr(s, "node_min_ripe", flaky)
+    await asyncio.wait_for(ClientRuntime(s, ripen_to=0).ripen(), 60)
+    assert len(asked) >= 3 and s.ripening().level == 0 and s.published_level() == 0
+    await s.close()
+    server.close()
+
+
+async def test_a_node_that_says_no_is_asked_again_and_stop_ends_the_wait(tmp_path, monkeypatch):
+    import unseenet.client.runtime as rtmod
+    monkeypatch.setattr(rtmod, "RIPEN_RECHECK", 0.01)
+    ident = crypto.Identity.generate()
+    s = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
+    asked = []
+
+    async def no(node=None):
+        asked.append(node)
+        return "-"
+    monkeypatch.setattr(s, "node_min_ripe", no)
+    rt = ClientRuntime(s, ripen_to=0)
+    task = asyncio.create_task(rt.ripen())
+    await asyncio.sleep(0.2)
+    assert len(asked) > 2 and s.ripening().t == 0          # asked again, nothing computed
+    rt.stop_ripening()
+    await asyncio.wait_for(task, 2)
+
+
 async def test_stopping_ends_a_segment_at_once(tmp_path):
     ident = crypto.Identity.generate()
     s = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
