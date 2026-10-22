@@ -7,6 +7,72 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+**Key ripening (UN-RFC 0025): every node and client must be updated.** A
+new key now does a few minutes of work, once, before nodes take its posts;
+that is what keeps throwaway keys from spamming. Nodes from 0.4.0 refuse
+articles without `Key-Ripening` from keys that have not ripened. 0.4
+clients only send the header to nodes that ask for it (`UNSEENET-MINRIPE`),
+so they work with 0.3 nodes during the change-over; once a node runs 0.4,
+clients from before 0.4.0 can no longer post there. Pre-alpha: there is no
+compatibility code beyond that.
+
+- **People:** the first post of a new identity waits while its key ripens
+  (7-11 minutes on a laptop, longer on old ones); both clients show how far
+  it is. It happens once per identity, and goes on in the background to
+  level 4, which lowers the postage a key pays.
+- **Node operators:** nodes need `chiavdf` (in the container and the
+  bootable images; `pip install chiavdf` elsewhere). `min_ripe` in
+  `node.toml` says what a node asks for: `0` (the default) or higher, or
+  `"-"` for none. With `"-"` keys that have not ripened still pay the
+  unripe surcharge (+6 bits, UN-RFC 0025 section 5): a group at the default
+  20 bits costs 26 bits a post for them.
+- **Bots, gateways and other services:** ripen each key once at setup -
+  `unseenet ripen --key-file KEY --to 0 --node NODE --publish`, or
+  `unseenet-gateway ripen --group-key` - and keep its chain file
+  (`<key file>.state.json`, public). A key ripened and published once is
+  taken over anywhere else instead of ripening again.
+- **The browser client** (through a web entrance) can read but not post on
+  0.4 nodes until it can ripen in the browser (unseenet-gui#31).
+
+### Added
+
+- Key ripening (UN-RFC 0025): Wesolowski VDF chains in `ripe@` groups, the
+  `Key-Ripening` header, levels 0-4 with postage surcharges from +6 bits to
+  -2, and private posts' senders checked against their chain
+  (`private_min_ripe`). `unseenet ripen` ripens a key from its key file or
+  from the public key alone, on any machine (#121, #278, #285, #292).
+- A session takes over its key's chain from the key's own `ripe@` group
+  when that is further than its own: the same key on another machine, a
+  vault copy, a reinstalled service or CI never ripens again (#308).
+- Every portable build proves in its self-test that it can ripen (a short
+  proof made and checked); the Intel Mac builds get `chiavdf` built from
+  source, and the Windows builds the DLLs it loads at run time (#306).
+- The client core every client shares (#139): threads, views and chat
+  lines (`Session.threads`, `view_of`, `send_chat`), groups as every client
+  lists them (`subscribed_groups`, `group_info`), a stable dict form of
+  messages and groups (`to_dict`), typed events (`Session.on`), and
+  `ClientRuntime` for startup, refresh, push, maintenance and ripening.
+- The local client API (UN-RFC 0046, `unseenet.client.localapi`,
+  `unseenet serve`): HTTP and a WebSocket on 127.0.0.1 with a per-start
+  token, for a front end in any language or a bot (service mode with
+  `--key-file`). Posts come as a safe render tree, so no front end turns
+  post text into HTML. unseenet-gui now runs on it (#300-#305).
+- Bots are marked next to their posts, and "Hide bots" leaves them out;
+  clients read the authors' profiles in one batch (#163, #307).
+- Changing the vault's passphrase (Ctrl+P in the terminal client;
+  `Vault.change_passphrase`); copies of the vault elsewhere keep the old
+  one (#281, #282).
+- `tools/project/ripen_keys.py`: ripen and publish the keys in the owner
+  vault.
+
+### Changed
+
+- Everything that posts goes through `Session` - the clients, the bots'
+  `Poster`, the project tools, the gateway, the help bot and the web
+  entrance's release tool - so ripening, the header and postage are one
+  piece of code (#287, #292).
+- `Session.post` takes `extra` headers and `from_name`, for programs.
+
 **All nodes must be updated** (step 4 of #217). Nodes now leave
 key-bound groups out of their listings, so a node from before 0.4.0 can no
 longer catch up on inboxes and profiles from an updated one, and is judged
