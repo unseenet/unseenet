@@ -166,7 +166,7 @@ def pyinstaller(plat: str, work: Path) -> Path:
            "--collect-all", "textual", "--collect-submodules", "rich",
            "--collect-submodules", "unseenet", "--collect-data", "unseenet",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
-           "--collect-all", "nacl", "--hidden-import", "_cffi_backend",
+           "--collect-all", "nacl", "--hidden-import", "_cffi_backend", "--hidden-import", "chiavdf",
            "--collect-data", "certifi",            # HTTPS for updates (unseenet.update)
            # Pillow is only here to convert the icon; none of these are used at run time
            "--exclude-module", "PIL", "--exclude-module", "tkinter",

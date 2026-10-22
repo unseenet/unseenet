@@ -99,3 +99,8 @@ def test_a_segment_stops_when_its_run_file_goes(tmp_path):
     assert not th.is_alive() and got["seg"] is None
     run.touch()                                        # present all along: it finishes
     assert rp.prove_segment(pk, rp.GENERATOR, 2**12, run).t == 2**12
+
+
+def test_self_check_proves_and_checks_a_short_segment():
+    """What the portable builds' self-tests run: None when ripening works here."""
+    assert rp.self_check() is None

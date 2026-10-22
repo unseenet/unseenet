@@ -61,6 +61,21 @@ def available() -> bool:
         return False
 
 
+def self_check() -> str | None:
+    """Prove and check a very short segment with a throwaway key: None when key
+    ripening works in this build, else what is wrong. For self-tests: a build
+    without a working chiavdf can read, but cannot post on 0.4 nodes."""
+    try:
+        from . import crypto
+        pk = crypto.Identity.generate().public_key
+        seg = prove_segment(pk, GENERATOR, 1000)
+        if seg is None or verify(pk, Chain([seg])) != 1:
+            return "a short proof could not be made"
+        return None
+    except (RipeningUnavailable, RipeningError, RuntimeError, ValueError, OSError) as exc:
+        return str(exc) or type(exc).__name__
+
+
 def seed(public_key: bytes) -> bytes:
     """The challenge for a key: a proof belongs to this key only (section 3.1)."""
     return H(DS("UNSEENET-RIPEN-1") + public_key)
