@@ -1,6 +1,6 @@
 {
   "canaries": {
-    "date": "2026-10-21",
+    "date": "2026-10-22",
     "posted": [
       "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
       "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
@@ -10,25 +10,25 @@
   },
   "key_bound": {
     "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a": {
-      "date": "2026-10-21",
+      "date": "2026-10-22",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node4"
     },
     "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka": {
-      "date": "2026-10-21",
+      "date": "2026-10-22",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node4"
     },
     "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya": {
-      "date": "2026-10-21",
+      "date": "2026-10-22",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node4"
     },
     "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq": {
-      "date": "2026-10-21",
+      "date": "2026-10-22",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node3"
