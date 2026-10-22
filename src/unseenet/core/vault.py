@@ -284,10 +284,19 @@ class Vault:
         salt = os.urandom(16)
         key = _key(new, salt, ops, mem)
         with self._lock:
+            before = (self._key, self._salt, self._ops, self._mem)
             self._key, self._salt, self._ops, self._mem = key, salt, ops, mem
-        # The vault first: it is what matters. A sidecar left under the old key
-        # by a crash here is only a cache, and the client starts it over.
-        self.save()
+        # The vault first: it is what matters. If it cannot be written (a full disk,
+        # a stick pulled out), the old key comes back: otherwise a later save would
+        # quietly switch the file to a passphrase the person believes did not take.
+        try:
+            self.save()
+        except BaseException:
+            with self._lock:
+                self._key, self._salt, self._ops, self._mem = before
+            raise
+        # A sidecar left under the old key by a crash here is only a cache, and the
+        # client starts it over.
         for name, payload in side.items():
             if payload is not None:
                 self.write_sidecar(name, payload)

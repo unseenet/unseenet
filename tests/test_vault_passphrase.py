@@ -60,3 +60,22 @@ def test_backups_and_unknown_files_are_not_sidecars(tmp_path):
     assert v.sidecar_names() == ["cache"]
     v.change_passphrase("old", "new")
     assert (tmp_path / "me.vault.notes").read_text() == "mine"
+
+
+def test_a_failed_save_keeps_the_old_passphrase(tmp_path, monkeypatch):
+    """A full disk while changing: the file keeps the old passphrase, and so does the
+    program - a later save must not switch it to the new one behind the person's back."""
+    path, v = _vault(tmp_path)
+
+    def full(*_a, **_k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(v, "_atomic_write", full)
+    with pytest.raises(OSError):
+        v.change_passphrase("old", "new")
+    monkeypatch.undo()
+    v.data["identities"]["me"]["note"] = "later"
+    v.save()                                               # an ordinary save afterwards
+    v.close()
+    assert Vault.open(path, "old").data["identities"]["me"]["note"] == "later"
+    with pytest.raises(VaultError):
+        Vault.open(path, "new")
