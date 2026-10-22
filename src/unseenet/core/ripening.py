@@ -49,7 +49,8 @@ def _vdf():
     try:
         import chiavdf
     except ImportError as exc:      # pragma: no cover - depends on the platform
-        raise RipeningUnavailable("key ripening needs chiavdf (pip install chiavdf)") from exc
+        why = "" if isinstance(exc, ModuleNotFoundError) else f": {exc}"   # e.g. a DLL missing
+        raise RipeningUnavailable(f"key ripening needs chiavdf (pip install chiavdf){why}") from exc
     return chiavdf
 
 
