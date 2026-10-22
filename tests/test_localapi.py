@@ -123,6 +123,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
     other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
     other.new_identity("sonia", "Sonia")
     other.add_node(addr)
+    await other.ensure_inbox()
     g = await other.create_group("dk.snak", "open", min_pow=10)
     await other.post(g, "Hej", "Første **fed** <script>alert(1)</script>\n")
 
@@ -163,7 +164,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert status == 200
         done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
                             and e["state"] in ("reached", "failed"))
-        assert done["state"] == "reached", done
+        assert done["state"] == "reached", done.get("error")
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         reply = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
         assert reply["depth"] == 1 and reply["may_edit"] and reply["may_withdraw"] and reply["mine"]
@@ -174,7 +175,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
                                    {"id": reply["message"]["id"], "body": "Hej selv!"})
         done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
                             and e["state"] in ("reached", "failed"))
-        assert done["state"] == "reached", done
+        assert done["state"] == "reached", done.get("error")
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         newest = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
         assert newest["message"]["text"].startswith("Hej selv!")
@@ -198,6 +199,23 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert [x["key"] for x in (await r.get("/api/ignore"))[1]["ignored"]] == [sonia]
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         assert not [x for x in view["rows"] if x["message"]["subject"] == "Hej"]
+
+        # the pseudo groups: For you, and a chat with one person (UN-RFC 0046 section 4.3)
+        _, fy = await r.get("/api/groups/" + _gid("for-you:"))
+        assert fy["group"]["id"] == "for-you:" and fy["group"]["label"] == "For you"
+        _, chat = await r.get("/api/groups/" + _gid("contact:" + sonia))
+        assert chat["group"]["type"] == "contact" and chat["group"]["view"] == "chat"
+        status, job = await r.post("/api/groups/" + _gid("contact:" + sonia) + "/post",
+                                   {"kind": "chat", "body": "Hej Sonia"})
+        assert status == 200
+        done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
+                            and e["state"] in ("reached", "failed"))
+        assert done["state"] == "reached", done.get("error")
+        _, chat = await r.get("/api/groups/" + _gid("contact:" + sonia))
+        assert [x["message"]["text"] for x in chat["rows"]] == ["Hej Sonia"] and chat["rows"][0]["mine"]
+        _, listing = await r.get("/api/groups")
+        assert [p["key"] for p in listing["people"]] == [sonia]
+        await r.post("/api/ignore", {"key": sonia, "on": False})
 
         # a group of your own
         status, made = await r.post("/api/groups", {"name": "dk.mit", "type": "moderated",
@@ -243,7 +261,7 @@ async def test_a_service_posts_articles_with_its_own_headers(tmp_path):
         assert status == 200, job
         done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
                             and e["state"] in ("reached", "failed"))
-        assert done["state"] == "reached", done
+        assert done["state"] == "reached", done.get("error")
         await ws.close()
     await owner.fetch_group(g)
     [m] = [m for m in owner.cache[g].values() if m.subject == "Vejret"]

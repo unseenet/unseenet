@@ -233,7 +233,12 @@ class GroupInfo:
 
     @property
     def short(self) -> str:
-        return short_group_id(self.group_id)
+        """The ID with a shortened fingerprint; a pseudo group (``for-you:``,
+        ``contact:<key>``, threads.py) has no fingerprint and keeps its ID."""
+        try:
+            return short_group_id(self.group_id)
+        except ValueError:
+            return self.group_id
 
     @property
     def label(self) -> str:
