@@ -88,3 +88,37 @@ async def test_start_runs_by_itself_and_push_fetches_new_posts(tmp_path, monkeyp
     for s in (a, b):
         await s.close()
     server.close()
+
+
+async def test_the_groups_do_not_wait_for_the_inbox(tmp_path, monkeypatch):
+    """#328: a brand-new key's inbox waits for ripening (minutes); the groups
+    you follow are fetched meanwhile, and the refresh still ends with the inbox."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    server, addr = await _node()
+    a = _session(tmp_path, "andreas", addr)
+    b = _session(tmp_path, "sonia", addr)
+    g = await a.create_group("dk.snak", "open", min_pow=10)
+    await a.post(g, "Hej", "Første\n")
+    b.subscribe(g)
+
+    ripened = asyncio.Event()
+    real = Session.ensure_inbox
+
+    async def slow_inbox(self):
+        await ripened.wait()                               # as if the key were ripening
+        return await real(self)
+
+    monkeypatch.setattr(Session, "ensure_inbox", slow_inbox)
+    fetched = asyncio.Event()
+    b.on(lambda e: isinstance(e, ev.GroupUpdated) and e.group_id == g and fetched.set())
+    rt = ClientRuntime(b)
+    rt.open()
+    refreshing = asyncio.ensure_future(rt.refresh())
+    await asyncio.wait_for(fetched.wait(), 10)             # the posts came first
+    assert not rt.inbox_ready and not refreshing.done()
+    ripened.set()
+    result = await asyncio.wait_for(refreshing, 30)
+    assert rt.inbox_ready and result.error is None
+    for s in (a, b):
+        await s.close()
+    server.close()
