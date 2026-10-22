@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-23
+
+0.4.2 with portable builds: chiavdf 1.2.0 came out during that release and
+broke the Windows build. Nodes can stay on 0.4.0.
+
 ### Fixed
 
 - The portable build for Windows could not ripen keys with chiavdf 1.2.0,
@@ -855,7 +860,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/unseenet/unseenet/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/unseenet/unseenet/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/unseenet/unseenet/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/unseenet/unseenet/compare/v0.3.1...v0.4.0
