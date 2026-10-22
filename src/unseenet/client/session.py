@@ -509,7 +509,9 @@ class Session:
 
     async def ripen_segment(self, name: str | None = None, run_file=None) -> bool:
         """Compute this identity's next segment (section 3.2) in a worker thread and
-        keep it in the vault. False at the top, or when ``run_file`` was removed."""
+        keep it in the vault. False at the top, or when ``run_file`` was removed.
+        True also when the chain grew meanwhile from another caller (posting and
+        the background may ask at once): that one's segment is kept, not ours."""
         name = name or self.default_identity_name()
         chain = self.ripening(name)
         length = rp.next_segment_length(chain.t)
@@ -521,7 +523,7 @@ class Session:
             return False
         entry = self._ripening_entry(name)
         if len(entry["segments"]) != len(chain.segments):   # someone else ripened meanwhile
-            return False
+            return self.ripening(name).t > chain.t           # grown all the same (#326)
         entry["segments"].append(seg.to_dict())
         self.save()
         t = chain.t + seg.t
