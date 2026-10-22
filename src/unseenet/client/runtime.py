@@ -202,6 +202,7 @@ class ClientRuntime:
             return
         if not await s.node_wants_ripening():
             return                              # "-": no node of ours asks for it; spare the CPU
+        await s.adopt_published_ripening()      # further elsewhere: go on from there
         import tempfile
         from pathlib import Path
         fd, path = tempfile.mkstemp(prefix="unseenet-ripening-")

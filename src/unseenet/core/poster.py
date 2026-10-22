@@ -195,6 +195,15 @@ class Poster:
                            from_name=self.from_name or "Unseenet bot", references=references,
                            extra=headers)
 
+    async def ripening_level(self) -> int | None:
+        """The key's ripening level (UN-RFC 0025) after taking over the chain it has
+        published, None while it cannot post on nodes that ask for ripening. A tool
+        that must not ripen by itself (CI) checks this before posting."""
+        if self._session is None:
+            raise PosterError("use the Poster in 'async with' (or call start() first)")
+        await self._session.adopt_published_ripening()
+        return self._session.ripening().level
+
     async def post(self, group: str, subject: str, body: str, **kw) -> PostResult:
         """Post a message to every node; see :meth:`build` for the arguments."""
         return await self.post_article(self.build(group, subject, body, **kw))

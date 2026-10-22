@@ -233,3 +233,47 @@ async def test_private_posts_carry_the_senders_ripening_inside(tmp_path, monkeyp
     for s in (a, b, stranger):
         await s.close()
     server.close()
+
+
+async def test_the_same_key_elsewhere_takes_over_its_published_chain(tmp_path, monkeypatch):
+    """A CI key ripened once, a vault copy, a service reinstalled: the chain in the key's
+    own ripe@ group is taken over (after checking it) instead of ripening again."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    first = _session(tmp_path, "andreas", addr)
+    gid = await first.create_group("dk.snak", "open", min_pow=8)       # ripens, publishes
+    level = first.ripening().level
+    assert level == 0 and first.published_level() == 0
+
+    elsewhere = Session.from_key(first.identity(), tmp_path / "ci.state.json",
+                                 status=lambda *_: None)
+    elsewhere.add_node(addr)
+    elsewhere.subscribe(gid)
+    await elsewhere.fetch_group(gid)
+
+    async def no_ripening(*a, **k):
+        raise AssertionError("ripened again although the chain is published")
+    monkeypatch.setattr(elsewhere, "ripen_segment", no_ripening)
+    await elsewhere.post(gid, "Fra CI", "Uden at modne igen\n")
+    assert elsewhere.ripening().t == first.ripening().t
+    assert elsewhere.published_level() == level
+    assert not await elsewhere.adopt_published_ripening()            # nothing further now
+    for s in (first, elsewhere):
+        await s.close()
+    server.close()
+
+
+async def test_a_tool_can_check_the_level_before_posting(tmp_path, monkeypatch):
+    """Poster.ripening_level(): what CI checks so it never ripens by itself."""
+    from unseenet.core.poster import Poster
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    first = _session(tmp_path, "andreas", addr)
+    await first.create_group("dk.snak", "open", min_pow=8)            # ripens, publishes
+    async with Poster(first.identity(), [addr], tor="none", state=tmp_path / "p.json") as p:
+        assert await p.ripening_level() == 0
+    async with Poster(crypto.Identity.generate(), [addr], tor="none",
+                      state=tmp_path / "new.json") as p:
+        assert await p.ripening_level() is None
+    await first.close()
+    server.close()
