@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import random
+import time
 import re
 import base64
 import json
@@ -20,6 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from ..core import crypto
+from ..core.backoff import Backoff
 from ..core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ..core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
 from ..core.groups import MAX_SUPERSEDES, parse_supersedes
@@ -302,6 +304,10 @@ class Session:
         self._tor_lock = asyncio.Lock()   # one Tor per session, however many connect at once
         self._checked_socks: Socks | None = None        # an existing Tor that answered
         self._clients: dict[str, Client] = {}          # one connection per node
+        # a node that failed or refused is tried again only after a random, growing
+        # wait (UN-RFC 0043 section 4.4, #297): not everyone at once after a restart
+        self._backoff: dict[str, Backoff] = {}
+        self._retry_at: dict[str, float] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
         self.cache: dict[str, dict[int, Message]] = {}
@@ -749,6 +755,7 @@ class Session:
         address = address.strip()
         if not address:
             raise SessionError("no address given")
+        self.reset_backoff(address)        # chosen on purpose: try it at once
         nodes = self.data["nodes"]
         if address in nodes:
             if not default:
@@ -937,10 +944,29 @@ class Session:
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)
     # ------------------------------------------------------------------
+    def retry_in(self, address: str) -> float:
+        """Seconds until ``address`` is tried again after it failed or refused (0: now)."""
+        return max(0.0, self._retry_at.get(address, 0.0) - time.monotonic())
+
+    def reset_backoff(self, address: str | None = None) -> None:
+        """Try again at once: after the user chose a node or entrance on purpose."""
+        for a in ([address] if address else list(self._retry_at)):
+            self._retry_at.pop(a, None)
+            self._backoff.pop(a, None)
+
+    def _failed(self, address: str) -> float:
+        wait = self._backoff.setdefault(address, Backoff()).next()
+        self._retry_at[address] = time.monotonic() + wait
+        return wait
+
     async def _connect(self, address: str | None = None, quiet: bool = False) -> Client:
         address = address or self.node
         if not address:
             raise SessionError("no node configured")
+        wait = self.retry_in(address)
+        if wait > 0:                       # it just failed: not again before its time (#297)
+            raise ConnectionError(f"{address} could not be reached; trying again in "
+                                  f"{wait:.0f} s")
         status = (lambda *_: None) if quiet else self.say
         socks = None
         if address.split(":")[0].endswith(".onion"):
@@ -950,8 +976,14 @@ class Session:
             client = await Client.connect(address, socks)
             await client.fetch_capabilities()
         except (OSError, ConnectionError, NNTPError, asyncio.TimeoutError) as exc:
+            wait = self._failed(address)
             self.emit(ev.NodeState(address, False, str(exc) or type(exc).__name__))
+            if isinstance(exc, NNTPError) and exc.code == 400:    # full, at the greeting too
+                raise SessionError(f"{address} is full; trying again in {wait:.0f} s, "
+                                   "or another node") from exc
             raise
+        self._backoff.setdefault(address, Backoff()).up()
+        self._retry_at.pop(address, None)
         self.emit(ev.NodeState(address, True))
         status(f"Connected to {address}")
         return client
@@ -1044,10 +1076,19 @@ class Session:
                     return await fn(client)
                 except (ConnectionError, OSError, asyncio.IncompleteReadError):
                     self._drop(address, client)
+                    self._backoff.setdefault(address, Backoff()).down()
                     if attempt == 2:
                         raise
-                except (NNTPError, SessionError):
+                except NNTPError as exc:
+                    if exc.code == 400:     # full (UN-RFC 0005 section 6): it closes; back off
+                        self._drop(address, client)
+                        wait = self._failed(address)
+                        self.emit(ev.NodeState(address, False, str(exc)))
+                        raise SessionError(f"{address} is full; trying again in {wait:.0f} s, "
+                                           "or another node") from exc
                     raise                   # a complete answer: the connection is fine
+                except SessionError:
+                    raise
                 except BaseException:
                     # Interrupted half-way (cancelled, timed out, a bug): the rest of
                     # an answer may still be on its way, and the next command would

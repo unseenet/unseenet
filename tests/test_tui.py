@@ -537,11 +537,13 @@ async def test_tui_first_start_offers_known_nodes(tmp_path, monkeypatch):
     async with app.run_test(size=(140, 40)) as pilot:
         assert await wait_for(pilot, lambda: isinstance(app.screen, SetupDialog), 300)
         await pilot.pause(0.2)
-        assert app.screen.query_one("#known", Select).value == KNOWN_NODES[0].address
+        chosen = app.screen.query_one("#known", Select).value       # one at random (#297)
+        assert chosen in [n.address for n in KNOWN_NODES]
         assert not app.screen.query_one("#node").display          # only for another node
         app.screen.query_one("#display", Input).value = "Andreas"
         await pilot.click("#ok")
-        assert await wait_for(pilot, lambda: app.session.nodes == [n.address for n in KNOWN_NODES])
+        others = [n.address for n in KNOWN_NODES if n.address != chosen]
+        assert await wait_for(pilot, lambda: app.session.nodes == [chosen, *others])
         await pilot.press("q")
 
 

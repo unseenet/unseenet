@@ -25,6 +25,7 @@ import logging
 import os
 from dataclasses import dataclass
 
+from ..core.backoff import Backoff
 from ..nntp import NNTPError
 from . import events as ev
 from .session import GroupInfo, Session, SessionError
@@ -34,7 +35,6 @@ log = logging.getLogger(__name__)
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
 RIPEN_TO = 4                  # ripen keys up to this level while running (UN-RFC 0025, 7)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
-WATCH_RETRY_SECONDS = 15      # reconnect a push connection after this pause
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,
                   asyncio.IncompleteReadError, asyncio.TimeoutError)
 
@@ -52,12 +52,12 @@ class ClientRuntime:
     """Keeps a session's groups up to date. See the module docstring for the order."""
 
     def __init__(self, session: Session, *, refresh_seconds: float = REFRESH_SECONDS,
-                 watch_retry: float = WATCH_RETRY_SECONDS, ripen_to: int | None = RIPEN_TO):
+                 watch_retry: float | None = None, ripen_to: int | None = RIPEN_TO):
         self.session = session
         self.ripen_to = ripen_to                      # None: don't ripen in the background
         self._run_file = None                         # removing it stops a segment at once
         self.refresh_seconds = refresh_seconds
-        self.watch_retry = watch_retry
+        self.watch_retry = watch_retry                # None: a random, growing wait (#297)
         self.inbox_ready = False
         self.available: dict[str, GroupInfo] = {}     # what your nodes listed last time
         self._lock = asyncio.Lock()                   # one refresh at a time
@@ -147,7 +147,10 @@ class ClientRuntime:
         For a new post in a group you follow (or your inbox) that is read from
         this node, ``on_new(group_id, message_id)`` is awaited if given;
         otherwise the group is fetched, which sends ``GroupUpdated``.
-        Reconnects after ``watch_retry`` seconds; returns when the node cannot
+        Reconnects after a random wait, 1-30 s at first and growing to at most five
+        minutes while the node stays away, so that clients do not all come back
+        at once after a restart (UN-RFC 0043 section 4.4; ``watch_retry`` makes it
+        fixed, for tests). Returns when the node cannot
         push (polling only, then), when it is no longer one of your nodes, or
         when ``keep_going()`` says so.
         """
@@ -163,13 +166,17 @@ class ClientRuntime:
             else:
                 self._spawn(self._fetch_quietly(gid))
 
+        backoff = Backoff()
         while node in s.nodes and (keep_going is None or keep_going()):
+            backoff.up()                     # a watch that stays up a minute starts over
             try:
                 if await s.watch(pushed, node=node) is False:
                     return
             except NETWORK_ERRORS:
                 pass
-            await asyncio.sleep(self.watch_retry)
+            backoff.down()
+            wait = self.watch_retry if self.watch_retry is not None else backoff.next()
+            await asyncio.sleep(max(wait, s.retry_in(node)))
 
     async def read_profiles(self) -> int:
         """Read the profiles of the authors in your groups, all at once, so a client can

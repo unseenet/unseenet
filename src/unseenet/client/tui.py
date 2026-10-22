@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import random
 import inspect
 import os
 import re
@@ -357,12 +358,16 @@ class SetupDialog(Dialog):
                 yield Label("Which node do you want to connect to? Pick one of the known nodes, "
                             "or enter the address of another you were given.", classes="hint")
                 choices = [(f"{n.name} - {n.description}", n.address) for n in self.known]
+                # a known node at random, so new users do not all start on the first
+                # (UN-RFC 0043 section 5.1); the list keeps its order
+                first = random.choice(self.known) if self.known else None
                 choices.append(("Another node - enter its address", OTHER_NODE))
-                yield Select(choices, value=choices[0][1], allow_blank=False, id="known")
+                yield Select(choices, value=first.address if first else OTHER_NODE,
+                             allow_blank=False, id="known")
                 other = Input(placeholder="xyz...abc.onion  (or host:port for testing)", id="node")
                 other.display = False
                 yield other
-                yield Static(known_node_details(self.known[0]) if self.known else "",
+                yield Static(known_node_details(first) if first else "",
                              id="known-details", classes="details", markup=False)
                 yield Checkbox("Also use the other known nodes as backups", value=True, id="backups")
             with Horizontal(classes="buttons"):
