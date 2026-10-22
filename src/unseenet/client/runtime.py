@@ -171,6 +171,21 @@ class ClientRuntime:
                 pass
             await asyncio.sleep(self.watch_retry)
 
+    async def read_profiles(self) -> int:
+        """Read the profiles of the authors in your groups, all at once, so a client can
+        mark bots (UN-RFC 0030 section 6) without the node learning whose profile is
+        looked at (UN-RFC 0022 section 13, UN-RFC 0041 section 3.2). Cached for a day;
+        groups are redrawn when something was read. Quiet on failure."""
+        s = self.session
+        try:
+            n = await s.prefetch_profiles(s.authors())
+        except NETWORK_ERRORS:
+            return 0
+        if n:
+            for gid in list(s.data["subscribed"]):
+                s.emit(ev.GroupUpdated(gid))
+        return n
+
     async def _fetch_quietly(self, gid: str) -> None:
         try:
             await self.session.fetch_group(gid)
@@ -235,6 +250,7 @@ class ClientRuntime:
     async def _run(self) -> None:
         while True:
             await self.refresh()
+            self._spawn(self.read_profiles())
             if self.inbox_ready:
                 for node in self.session.nodes:          # nodes added later get one too
                     if node not in self._watching:

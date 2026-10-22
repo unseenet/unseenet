@@ -396,6 +396,7 @@ class LocalAPI:
                 "notice": notice,
                 "for_me": s.for_me(m, mine, patterns), "who": who, "who_key": key,
                 "contact": bool(key and s.contact_name(key)),
+                "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6
                 "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m)}
 
     @staticmethod
@@ -860,12 +861,12 @@ class LocalAPI:
         return {"signature": s.signature_template(), "signature_preview": s.signature(),
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
                 "private_min_ripe": s.private_min_ripe(),
-                "show_blocked": bool(s.data.get("show_blocked"))}
+                "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots()}
 
     def set_settings(self, data: dict) -> dict:
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
-                               "show_blocked"}
+                               "show_blocked", "hide_bots"}
         if unknown:
             raise SessionError(f"unknown setting {sorted(unknown)[0]}")
         level = data.get("private_min_ripe")
@@ -884,6 +885,8 @@ class LocalAPI:
             s.set_private_min_ripe(level)
         if "show_blocked" in data:
             s.set_show_blocked(bool(data["show_blocked"]))
+        if "hide_bots" in data:
+            s.set_hide_bots(bool(data["hide_bots"]))
         self._redraw_all(s)
         return self.settings()
 
