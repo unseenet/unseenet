@@ -50,7 +50,7 @@ thread and never another bot. Its code is
 - **GitHub issues** - bugs and wishes for
   [the core, node and terminal client](https://github.com/unseenet/unseenet/issues),
   [the graphical client](https://github.com/unseenet/unseenet-gui/issues) or
-  [the gateways](https://github.com/unseenet/gateway/issues).
+  [the gateways](https://github.com/unseenet/unseenet-gateway/issues).
 - **A security weakness** - report it privately, as described in
   [SECURITY.md](https://github.com/unseenet/unseenet/blob/main/SECURITY.md),
   not in a group or an issue.
