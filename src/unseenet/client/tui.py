@@ -294,6 +294,46 @@ class UnlockDialog(Dialog):
         self.dismiss(pw)
 
 
+class ChangePassphraseDialog(Dialog):
+    """The current passphrase and a new one, twice. Returns (old, new)."""
+
+    def __init__(self, path: Path, error: str = ""):
+        super().__init__()
+        self.path, self.error = path, error
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("Change passphrase", classes="title")
+            yield Label(str(self.path.resolve()), classes="hint")
+            yield Input(placeholder="Current passphrase", password=True, id="old")
+            yield Input(placeholder="New passphrase", password=True, id="pw")
+            yield Input(placeholder="Repeat new passphrase", password=True, id="pw2")
+            yield Label("Only this vault file changes. Copies of it on other devices, sticks "
+                        "or backups still open with the old passphrase: replace or delete them.",
+                        classes="hint")
+            if self.error:
+                yield Label(self.error, classes="error")
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Change", variant="primary", id="ok")
+
+    @on(Input.Submitted)
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        old = self.query_one("#old", Input).value
+        pw = self.query_one("#pw", Input).value
+        if pw != self.query_one("#pw2", Input).value:
+            self.app.notify("The new passphrases do not match", severity="error")
+            return
+        if len(pw) < 4:
+            self.app.notify("Passphrase too short", severity="error")
+            return
+        if pw == old:
+            self.app.notify("The new passphrase is the same as the current one", severity="error")
+            return
+        self.dismiss((old, pw))
+
+
 OTHER_NODE = "__other__"
 
 
@@ -2789,6 +2829,26 @@ class UnseenetApp(App):
         self.refresh_groups()
         self._start_watches()
 
+    @work(group="dialog", exit_on_error=False)
+    async def action_change_passphrase(self) -> None:
+        """A new passphrase for this vault file; copies elsewhere keep the old one."""
+        error = ""
+        while True:
+            result = await self.push_screen_wait(ChangePassphraseDialog(self.vault_path, error))
+            if result is None:
+                return
+            old, new = result
+            self.notify("Encrypting the vault with the new passphrase ...")
+            try:
+                await asyncio.to_thread(self.session.change_passphrase, old, new)
+            except VaultError as exc:
+                error = ("The current passphrase is wrong" if "wrong passphrase" in str(exc)
+                         else str(exc))
+                continue
+            self.notify("Passphrase changed. Copies of the vault elsewhere still open with "
+                        "the old one - replace or delete them.", timeout=12)
+            return
+
     def action_about(self) -> None:
         self.push_screen(AboutDialog())
 
@@ -3383,6 +3443,8 @@ class UnseenetApp(App):
              self.action_names),
             ("Edit signature", "The few lines added below '-- ' in your posts  [s]",
              self.action_signature),
+            ("Change passphrase", "A new passphrase for this vault file (copies elsewhere "
+             "keep the old one)", self.action_change_passphrase),
             ("Write plain text" if self.session.text_type() == markup.MARKDOWN_TYPE else "Write Markdown",
              "What you write is sent as Markdown (*emphasis*, `code`, :tada:) or as plain text "
              "(UN-RFC 0031)", self.action_toggle_markdown),
