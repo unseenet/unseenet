@@ -70,13 +70,13 @@ nav:
   - Home: index.md
   - Why Unseenet: why.md
   - Getting started:
+      - Graphical client:
+          - Portable and bootable: graphical.md
+          - In your browser (phones, tablets too): web.md
       - Terminal client:
           - Portable (Linux, macOS, Windows): portable.md
           - Bootable (USB, SSD etc.): bootable.md
           - Using the terminal client: client.md
-      - Graphical client (preview):
-          - Portable and bootable: graphical.md
-          - On the web (phones, tablets too): web.md
       - Updating: updating.md
       - Getting help: help.md
   - How it works:
@@ -94,6 +94,12 @@ nav:
       - Monitor: node/monitor.md
       - Docker: node/docker.md
       - Your responsibility: node/responsibility.md
+  - Running an entrance:
+      - What it is, and installation: entrance/index.md
+      - Settings: entrance/settings.md
+      - Certificates: entrance/certificates.md
+      - New versions, the mirror and blocking: entrance/updates.md
+      - Your responsibility: entrance/responsibility.md
   - Specification:
       - The UN-RFC series: spec/index.md
       - "0000 Process": spec/un-rfc-0000.md

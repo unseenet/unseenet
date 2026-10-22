@@ -104,6 +104,17 @@
   outline-offset: 3px;
 }
 
+/* the terminal client, and running a node or an entrance: there, but quieter */
+.md-typeset .un-alt {
+  margin: 0.9rem 0 0;
+  font-size: 0.74rem;
+  color: rgba(232, 243, 239, 0.75);
+}
+.md-typeset .un-alt a { color: var(--un-paper); text-decoration: underline; text-underline-offset: 3px; }
+.md-typeset .un-alt a:hover { color: var(--un-green); }
+.md-typeset h2.un-term-head { margin: 2.2rem 0 0.3rem; font-size: 1.05rem; }
+.md-typeset .un-term-lede { margin: 0 0 1rem; color: var(--md-default-fg-color--light); font-size: 0.78rem; }
+
 .md-typeset .un-status {
   margin: 1.6rem 0 0;
   padding-top: 0.9rem;

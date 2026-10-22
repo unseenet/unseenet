@@ -26,10 +26,14 @@ stick: no installation, no account, nothing left behind.
 </p>
 
 <div class="un-actions">
-  <a class="un-button un-button--primary" href="portable/">Portable (Linux, macOS, Windows) · Terminal</a>
-  <a class="un-button" href="bootable/">Bootable (USB, SSD etc.) · Terminal</a>
-  <a class="un-button" href="node/install/">Run a node</a>
+  <a class="un-button un-button--primary" href="graphical/#portable">Portable (Linux, macOS, Windows)</a>
+  <a class="un-button" href="graphical/#bootable">Bootable (USB, SSD etc.)</a>
+  <a class="un-button" href="web/">In your browser</a>
 </div>
+
+<p class="un-alt">Prefer the keyboard? <a href="portable/">The terminal client</a>, portable or
+<a href="bootable/">bootable</a>. Keep the network going: <a href="node/install/">run a node</a> ·
+<a href="entrance/">run an entrance</a>.</p>
 
 <p class="un-status">
 <strong>Pre-alpha.</strong> The protocol may still change, test nodes may be
@@ -38,6 +42,34 @@ protect anyone yet.
 </p>
 
 </div>
+
+<section class="un-web" aria-labelledby="web-teaser">
+  <div class="un-web__text">
+    <p class="un-web__kicker">The graphical client</p>
+    <h2 id="web-teaser" class="un-web__title">Unseenet in a window - or in your browser.</h2>
+    <p>Threads you click through, chat that looks like chat, your private posts
+    and contacts, and the groups you run. It comes as a <strong>Portable</strong>
+    for Linux, macOS and Windows that you unzip and start, as a
+    <strong>Bootable</strong> stick that starts full screen and runs from memory,
+    and <strong>in your browser</strong>: open
+    <a href="https://entrance.unseenet.net/">entrance.unseenet.net</a>, also on
+    a phone or a tablet, with nothing to install.</p>
+    <p class="un-web__note">In a browser you can read, but not yet post on nodes
+    from 0.4 on: that comes when key ripening runs in the browser.</p>
+    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="web/">In your browser</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/latest">Downloads</a></p>
+  </div>
+  <div class="un-web__shots">
+    <img class="un-web__main" src="img/web-threads.png" width="1280" height="800" loading="lazy"
+         alt="The graphical client showing a discussion group: the thread as a tree, and the selected post below it with Reply and the post's tools">
+    <img class="un-web__inset" src="img/web-chat.png" width="1200" height="750" loading="lazy"
+         alt="The graphical client showing a chat group with chat bubbles and a message bar">
+  </div>
+</section>
+
+<h2 class="un-term-head" id="terminal">Prefer the keyboard? The terminal client</h2>
+
+<p class="un-term-lede">The same network, groups and vault in a terminal: a newsreader
+in the old style, fast on any machine. It shares a stick and a vault with the graphical client.</p>
 
 <div class="un-recordings">
 
@@ -75,27 +107,6 @@ protect anyone yet.
 
 </div>
 
-<section class="un-web" aria-labelledby="web-teaser">
-  <div class="un-web__text">
-    <p class="un-web__kicker">Preview</p>
-    <h2 id="web-teaser" class="un-web__title">Prefer a mouse? There's a graphical client too.</h2>
-    <p>The graphical client is Unseenet in a window: the same groups, keys and vault,
-    with threads you can click through and chat that looks like chat. It comes
-    as a <strong>Portable</strong> (Linux, macOS, Windows), a
-    <strong>Bootable</strong> that starts full screen - and <strong>on the web</strong>:
-    open <a href="https://entrance.unseenet.net/">entrance.unseenet.net</a> in any browser,
-    also on a phone or a tablet, with nothing to install.</p>
-    <p class="un-web__note">It is newer than the terminal client and only has
-    development builds so far.</p>
-    <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="web/">On the web</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/tag/dev">Development builds</a></p>
-  </div>
-  <div class="un-web__shots">
-    <img class="un-web__main" src="img/web-threads.png" width="1280" height="800" loading="lazy"
-         alt="The graphical client showing a discussion group: the thread as a tree, and the selected post below it with a quote and a Reply button">
-    <img class="un-web__inset" src="img/web-chat.png" width="1200" height="750" loading="lazy"
-         alt="The graphical client showing a chat group with chat bubbles and a message bar">
-  </div>
-</section>
 
 ## How it fits together
 
@@ -195,7 +206,7 @@ that does all of it, in one program, without an account, over Tor.</p>
 <span><svg class="un-ic n" width="16" height="16" aria-hidden="true"><use href="#un-i-no"/></svg> No</span></p>
 
 <div class="un-cmp__cta">
-  <a class="un-button un-button--primary" href="portable/">Try it now</a>
+  <a class="un-button un-button--primary" href="graphical/">Try it now</a>
   <a class="un-button" href="why/">Why Unseenet - and what it costs</a>
 </div>
 
@@ -211,10 +222,10 @@ Pick what you want to do. Each path lists the pages in the order to read them.
   <h3 class="un-path__title">Read and post</h3>
   <p class="un-path__lede">Get Unseenet running and join the conversation. Tor is included.</p>
   <ol class="un-path__steps">
-    <li><span class="un-path__pick">Terminal:</span> <a href="portable/">Portable</a> <span class="un-or">or</span> <a href="bootable/">Bootable</a><br>
-        <span class="un-path__pick">Graphical</span> <span class="un-or">(preview)</span><span class="un-path__pick">:</span> <a href="graphical/#three-ways-to-run-it">Portable <span class="un-or">or</span> Bootable</a> <span class="un-or">or</span> <a href="web/">on the web</a> <span class="un-or">(phones, tablets too)</span></li>
-    <li><a href="client/#first-start">First start</a>: your vault, a name, a node</li>
-    <li>Using it: <a href="client/">the terminal client</a> <span class="un-or">or</span> <a href="graphical/">the graphical client</a></li>
+    <li><a href="graphical/#portable">Portable</a> <span class="un-or">or</span> <a href="graphical/#bootable">Bootable</a> <span class="un-or">or</span> <a href="web/">in your browser</a> <span class="un-or">(phones, tablets too)</span><br>
+        <span class="un-path__pick">Terminal:</span> <a href="portable/">Portable</a> <span class="un-or">or</span> <a href="bootable/">Bootable</a></li>
+    <li><a href="graphical/#first-start">First start</a>: your vault, a name, a node</li>
+    <li>Using it: <a href="graphical/">the graphical client</a> <span class="un-or">or</span> <a href="client/">the terminal client</a></li>
     <li><a href="updating/">Updating</a></li>
   </ol>
   <p class="un-path__more">Also: <a href="other-clients/">other newsreaders</a> · <a href="tor/">Tor and Tails</a></p>
@@ -229,6 +240,17 @@ Pick what you want to do. Each path lists the pages in the order to read them.
     <li><a href="node/configuration/">Configuration</a></li>
     <li><a href="node/peering/">Peering</a> with other nodes</li>
     <li><a href="node/operations/">Operations</a> and the <a href="node/monitor/">monitor</a></li>
+  </ol>
+</section>
+
+<section class="un-path">
+  <h3 class="un-path__title">Run an entrance</h3>
+  <p class="un-path__lede">Let browsers in, and make Unseenet harder to block. A free cloud VM is enough.</p>
+  <ol class="un-path__steps">
+    <li><a href="entrance/responsibility/">Your responsibility</a>: read this first</li>
+    <li><a href="entrance/">Installation</a>: one command, HTTPS included</li>
+    <li><a href="entrance/settings/">Settings</a> and <a href="entrance/certificates/">certificates</a></li>
+    <li><a href="entrance/updates/">New versions, the release mirror, and when you are blocked</a></li>
   </ol>
 </section>
 
