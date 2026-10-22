@@ -59,8 +59,8 @@ jobs:
       - run: pip install .
       - name: Install Tor
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq tor
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor
           sudo systemctl stop tor || true      # we run our own
       - name: Post
         env:
