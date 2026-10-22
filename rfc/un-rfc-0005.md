@@ -170,6 +170,14 @@ uniformly 0 to 60 seconds), independently per peer.
 - A node MAY limit the number of concurrent connections and POSTs per
   connection. Because Tor hides client addresses, per-address limits are
   impossible; postage (UN-RFC 0006) is the primary rate limit.
+- A node that has as many client connections as it takes MAY answer the
+  first command of a new connection with `400 too many connections, try
+  another node` and close it. It SHOULD still let a connection
+  authenticate as a peer first (`CAPABILITIES`, `AUTHINFO`, `XUN-PEER`,
+  `XUN-PEER-PROOF`, UN-RFC 0016), and then serve it: peers do not count
+  against the limit, so a full node keeps replicating. A client treats
+  `400` like a node it cannot reach, and tries again later with a random
+  backoff (UN-RFC 0043 section 4.4).
 
 # 7. Security Considerations
 

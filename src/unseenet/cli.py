@@ -87,7 +87,15 @@ def load_node_config(path: Path | None):
                       avatars=str(node.get("avatars", "refuse")),
                       excludes=str(node.get("excludes", "")),
                       operator=data.get("operator", {}),
+                      max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
                       peers=peers)
+
+
+def _max_clients(path: Path, value):
+    """[limits] max_clients: "auto" or a number of open client connections (#296)."""
+    if value == "auto" or (isinstance(value, int) and not isinstance(value, bool) and value > 0):
+        return value
+    sys.exit(f"{path}: [limits] max_clients must be \"auto\" or a positive number")
 
 
 def load_node_key(data: Path, passphrase: str) -> crypto.Identity:

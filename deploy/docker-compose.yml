@@ -17,6 +17,8 @@ services:
       - unseenet:/data                          # keys (sealed), articles, Tor, node.toml
     # No ports: the node is reached over Tor only.
     read_only: true
+    ulimits:                                    # each client connection is a file (#296)
+      nofile: {soft: 65536, hard: 65536}
     tmpfs:
       - /tmp
     cap_drop: [ALL]
