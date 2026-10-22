@@ -195,6 +195,7 @@ class MonitorApp(App):
             f"Key    {short(node['key'], 28)}\n"
             f"Up     {duration(node['uptime'])}   Tor {tor_text}\n"
             f"Conns  {conn['open']} now ({conn['peers_open']} peers), {conn['total']} all\n"
+            f"Limit  {conn.get('max_clients', '?')} clients, {conn.get('refused', 0)} refused\n"
             f"Store  {store['groups']} groups, {store['articles']} articles\n"
             f"Size   {size(store['bytes'])}, {size(store.get('disk_free'))} free\n"
             f"Rules  {policy.get('min_pow', '?')} bits, {policy.get('retention_days', '?')} days, "

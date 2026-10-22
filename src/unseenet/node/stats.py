@@ -21,7 +21,7 @@ Snapshot (``"v": 1``)::
                  "served": n, "sent": n,
                  "per_minute": {"accepted": [60 values, oldest first], "rejected": [...],
                                 "sent": [...], "served": [...]}},
-     "connections": {"open": n, "peers_open": n, "total": n},
+     "connections": {"open": n, "peers_open": n, "total": n, "max_clients": n, "refused": n},
      "peers": [{name, address, authenticated_by, queue, sent, last_sent, last_error,
                 last_error_at, pulled, last_pull, last_pull_result}],
      "store": {"groups": n, "articles": n, "bytes": n, "db_bytes": n, "disk_free": n,
@@ -107,6 +107,7 @@ class Stats:
         self.open = 0
         self.peers_open = 0
         self.total = 0
+        self.refused = 0                           # clients turned away while full (#296)
         self.peers: dict[str, PeerStats] = {}
         self.log = _LogTail()
         self.tor = None                            # the node's TorProcess, if any
@@ -165,6 +166,9 @@ class Stats:
     def peer_authenticated(self) -> None:
         self.peers_open += 1
 
+    def client_refused(self) -> None:
+        self.refused += 1
+
     # --- the snapshot -------------------------------------------------------
     async def _tor_state(self) -> dict:
         tor = self.tor
@@ -221,7 +225,8 @@ class Stats:
             "traffic": {"accepted": dict(self.accepted), "rejected": dict(self.rejected),
                         "served": self.served, "sent": self.sent,
                         "per_minute": {k: s.values() for k, s in self.series.items()}},
-            "connections": {"open": self.open, "peers_open": self.peers_open, "total": self.total},
+            "connections": {"open": self.open, "peers_open": self.peers_open, "total": self.total,
+                            "max_clients": node.client_limit, "refused": self.refused},
             "peers": peers,
             "store": {"groups": store.group_count(), "articles": sum(counts.values()),
                       "bytes": store.total_bytes(),

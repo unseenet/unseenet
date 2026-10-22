@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from email.utils import format_datetime
 import fnmatch
+from pathlib import Path
 import hmac
 import logging
 import os
@@ -64,6 +65,37 @@ class NodeConfig:
     avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
+    # open client connections at most (#296): a ceiling, not rationing; peers don't count
+    max_clients: int | str = "auto"
+
+    def client_limit(self) -> int:
+        """``max_clients`` as a number: ``"auto"`` is what memory and open files allow."""
+        return self.max_clients if isinstance(self.max_clients, int) else auto_max_clients()
+
+
+CLIENT_BYTES = 50 * 1024             # what a client connection costs, generously (#296)
+FULL_ALLOWED = {"CAPABILITIES", "AUTHINFO", "XUN-PEER", "XUN-PEER-PROOF"}
+
+
+def auto_max_clients() -> int:
+    """min((available memory - 100 MB) / 50 KB, (open files - 128) / 2): tens of
+    thousands on a small VM; where neither can be read, 10 000."""
+    limits = []
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                avail = int(line.split()[1]) * 1024
+                limits.append(max(0, avail - 100 * 1024 * 1024) // CLIENT_BYTES)
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        import resource
+        soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft != resource.RLIM_INFINITY:
+            limits.append(max(0, soft - 128) // 2)
+    except (ImportError, OSError, ValueError):
+        pass
+    return max(16, min(limits)) if limits else 10_000
 
 
 def wildmat(pattern: str, text: str) -> bool:
@@ -81,6 +113,7 @@ class Node:
                  key: crypto.Identity | None = None):
         self.store = store
         self.config = config or NodeConfig()
+        self.client_limit = self.config.client_limit()      # worked out once (#296)
         # The node key identifies this node to its peers (UN-RFC 0016). A real node
         # keeps it sealed in its data directory; without one (tests) it is temporary.
         self.key = key or crypto.Identity.generate()
@@ -728,6 +761,9 @@ class Node:
 
     async def _session(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         session = Session(self, reader, writer)
+        # full (#296): only peers may go on - they authenticate first; everyone else
+        # gets 400 at their first other command and goes to another node
+        session.full = self.stats.open - self.stats.peers_open >= self.client_limit
         self.stats.session_opened()
         try:
             await session.run()
@@ -751,6 +787,7 @@ class Session:
         self._auth_failures = 0
         self._reconcile_rounds = 0
         self._manifest_requests: list[float] = []   # times of recent XUN-MANIFESTS
+        self.full = False                            # opened when the node was full (#296)
 
     def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -769,6 +806,11 @@ class Session:
             if not parts:
                 continue
             cmd, args = parts[0].upper(), parts[1:]
+            if self.full and not self.peer and cmd not in FULL_ALLOWED and cmd != "QUIT":
+                self.node.stats.client_refused()
+                self.send("400 too many connections, try another node")
+                await self.writer.drain()
+                return
             if cmd == "QUIT":
                 self.send("205 bye")
                 await self.writer.drain()

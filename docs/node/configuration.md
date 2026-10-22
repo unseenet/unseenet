@@ -108,6 +108,25 @@ stay listed and still leave out something you will not or may not carry
 where your node runs. The project's own groups (`unseenet*`) cannot be
 excluded by a listed node.
 
+## `[limits]`
+
+```toml
+[limits]
+max_clients = "auto"      # or a number
+```
+
+**`max_clients`**: how many client connections the node keeps open at
+once. Through Tor every client looks the same, so a node cannot limit
+per visitor; this is a ceiling, so that a misbehaving web entrance or a
+script cannot open more than the machine can carry. `"auto"` (the default)
+is what memory and open files allow - about 50 KB of memory and two open
+files per connection - which is tens of thousands on a small VM. When the
+node is full, a new client gets `400 too many connections, try another
+node` and tries elsewhere; peers that authenticate are never refused and
+do not count. The monitor shows the limit and how many were turned away.
+The systemd unit and the Docker Compose file raise the open-files limit
+to 65536 for this.
+
 ## `[operator]`
 
 Who runs the node and how to reach them ([UN-RFC 0011](../spec/un-rfc-0011.md)).
