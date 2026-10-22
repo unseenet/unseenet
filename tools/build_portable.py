@@ -171,13 +171,19 @@ def pyinstaller(plat: str, work: Path) -> Path:
            # Pillow is only here to convert the icon; none of these are used at run time
            "--exclude-module", "PIL", "--exclude-module", "tkinter",
            "--exclude-module", "unittest", "--exclude-module", "pydoc_data"]
-    # chiavdf on Windows (key ripening, UN-RFC 0025): its wheel puts mpir*.dll next to the
-    # module, and mpir.dll loads a variant for this CPU (mpir_broadwell.dll, ...) at run
-    # time, which PyInstaller cannot see. Take them all, or the build cannot ripen keys.
+    # chiavdf on Windows (key ripening, UN-RFC 0025): mpir.dll loads a variant for this
+    # CPU (mpir_broadwell.dll, ...) at run time, which PyInstaller cannot see. Take them
+    # all, or the build cannot ripen keys. Up to 1.1 they lie in site-packages; from 1.2
+    # in site-packages/chiavdf.libs, which chiavdf adds to the DLL search itself (#332).
     if plat.startswith("windows"):
         import sysconfig
-        for dll in sorted(Path(sysconfig.get_paths()["platlib"]).glob("mpir*.dll")):
+        site = Path(sysconfig.get_paths()["platlib"])
+        for dll in sorted(site.glob("mpir*.dll")):
             cmd += ["--add-binary", f"{dll}{os.pathsep}."]
+        for dll in sorted((site / "chiavdf.libs").glob("*.dll")):
+            cmd += ["--add-binary", f"{dll}{os.pathsep}chiavdf.libs",
+                    "--add-binary", f"{dll}{os.pathsep}."]
+        cmd += ["--hidden-import", "chiavdf._chiavdf"]
     if not plat.startswith("windows"):
         cmd.append("--strip")                       # debug symbols: a lot of megabytes
     icon = ROOT / "assets" / "icon-512.png"        # PyInstaller converts it (needs Pillow)

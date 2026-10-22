@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- The portable build for Windows could not ripen keys with chiavdf 1.2.0,
+  which keeps its DLLs in `chiavdf.libs`. The build now takes them from
+  there as well (#332). 0.4.2 has no portable files because of this.
+
 ## [0.4.2] - 2026-10-23
 
 For clients, and what the browser client needs to ripen its keys; nodes can
