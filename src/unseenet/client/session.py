@@ -2559,6 +2559,9 @@ class Session:
         msgs = resolve_edits(msgs)
         if self.private_min_ripe() is not None:
             msgs = [m for m in msgs if self.sender_shown(m)]
+        if self.hide_bots():                            # bots out of sight (UN-RFC 0030, 6)
+            msgs = [m for m in msgs if m.private or m.to_key is not None
+                    or not self.is_bot(m.author_key)]
         groups = {m.group for m in msgs}
         banned = {gid: {k for k, _ in self.banned(gid)} for gid in groups}
         if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
@@ -2593,6 +2596,37 @@ class Session:
     def set_show_blocked(self, on: bool) -> None:
         self.data["show_blocked"] = bool(on)
         self.save()
+
+    # --- bots (UN-RFC 0022 section 4, UN-RFC 0030 section 6) ---
+    def is_bot(self, key_text: str | None) -> bool:
+        """Whether the key's profile says it posts automatically (``bot: true``), from
+        the cached profiles only (no network; the client runtime keeps them fresh).
+        A statement by the key's holder: a missing flag proves nothing (0030, 6)."""
+        if not key_text:
+            return False
+        if self.has_identity() and key_text == self.identity().key_text:
+            return bool((self.my_profile() or {}).get("bot") is True)
+        hit = self._profile_cache().get(key_text) or {}
+        return bool((hit.get("profile") or {}).get("bot") is True)
+
+    def hide_bots(self) -> bool:
+        return bool(self.data.get("hide_bots"))
+
+    def set_hide_bots(self, on: bool) -> None:
+        """Leave out posts by keys whose profile says ``bot`` (UN-RFC 0030 section 6)."""
+        self.data["hide_bots"] = bool(on)
+        self.save()
+
+    def authors(self, limit: int = 500) -> list[str]:
+        """The keys that wrote what you can read in your groups, the newest first:
+        whose profiles to read in one batch (UN-RFC 0041 section 3.2)."""
+        seen: dict[str, float] = {}
+        for gid in self.data["subscribed"]:
+            for m in self.cache.get(gid, {}).values():
+                if m.author_key and not m.private:
+                    at = m.date.timestamp() if m.date else 0.0
+                    seen[m.author_key] = max(seen.get(m.author_key, 0.0), at)
+        return sorted(seen, key=seen.get, reverse=True)[:limit]
 
     def contacts(self) -> list[tuple[str, str]]:
         """(key, name) sorted by name."""

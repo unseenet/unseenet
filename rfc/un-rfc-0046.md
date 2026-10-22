@@ -185,7 +185,7 @@ wherever a group ID does: `contact:<key>` (the chat with one person) and
 {"group": <GroupInfo dict>,
  "rows": [{"message": <Message dict>, "depth": 0, "read": true, "for_me": null,
            "who": "...", "who_key": "...", "contact": false,
-           "mine": false, "may_edit": false, "may_withdraw": false,
+           "mine": false, "bot": false, "may_edit": false, "may_withdraw": false,
            "tree": [...], "groups": ["#name@fp", ...], "notice": null}, ...]}
 ```
 
@@ -198,7 +198,8 @@ rendered for showing (UN-RFC 0031): Markdown or plain by the post's
 `Content-Type`, as nodes `{"t": "p" | "text" | "strong" | ..., "c": [...],
 "v": "..."}` in which HTML is always text. A front end MUST draw the tree,
 or the plain text, and MUST NOT put a post's text into a page as HTML.
-`groups` are the `#group` references in it; `notice` is set for a mention
+`bot` is true when the author's profile says it posts automatically
+(UN-RFC 0030 section 6): show a mark. `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
 `portal_warning`, and for its owner or a moderator `roles` (section 4.7):
@@ -304,7 +305,8 @@ not (you do not own or moderate the group).
   `notices` (`{"send": true, "receive": true}`, UN-RFC 0032),
   `private_min_ripe` (a level or null, UN-RFC 0025 section 3.5),
   `show_blocked` (true or false: show posts a hierarchy blocked,
-  UN-RFC 0018). Both answer all settings, with `signature_preview` (the
+  UN-RFC 0018), `hide_bots` (true or false: leave out posts by keys whose
+  profile says `bot`, UN-RFC 0030 section 6). Both answer all settings, with `signature_preview` (the
   template filled in). An unknown setting is `400`.
 
 ## 4.9 Articles from a Program

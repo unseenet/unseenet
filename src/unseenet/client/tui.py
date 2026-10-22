@@ -2265,6 +2265,8 @@ class UnseenetApp(App):
             line.append(who, style="bold green" if own else "bold")
             if not own and self.session.contact_name(m.author_key):
                 line.append(" √", style="green")
+            if not own and not m.private and self.session.is_bot(m.author_key):
+                line.append(" bot", style="dim")             # UN-RFC 0030 section 6
             if m.readable and m.kind != KIND_CHAT:      # a post in a chat stands out (UN-RFC 0028)
                 line.append(": ")
                 line.append(f"≡ {m.subject or '(no subject)'}", style="bold underline")
@@ -2413,7 +2415,9 @@ class UnseenetApp(App):
         if not m.author_key:
             return m.from_name or "anonymous"
         # your petname, else a registered name, else what they call themselves (UN-RFC 0019)
-        return self.session.identity_label(m.author_key, m.from_name)
+        who = self.session.identity_label(m.author_key, m.from_name)
+        # a key whose profile says it posts automatically (UN-RFC 0030 section 6)
+        return who + " (bot)" if not m.private and self.session.is_bot(m.author_key) else who
 
     def _key_label(self, key_text: str) -> str:
         """A contact's name, else the start of the key and its fingerprint."""
@@ -3433,6 +3437,9 @@ class UnseenetApp(App):
              else "Hide posts blocked by maintainers",
              "Maintainers of hierarchies can block people; you decide whether to see them",
              self.action_toggle_blocked),
+            ("Show bots" if self.session.hide_bots() else "Hide bots",
+             "Posts by keys whose profile says they post automatically (UN-RFC 0030)",
+             self.action_toggle_bots),
             ("Banned from group", "Owner: see who is banned and why, and lift a ban",
              self.action_banned),
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
@@ -3892,6 +3899,12 @@ class UnseenetApp(App):
         self.set_status("")
         self.current_message = None
         self.notify(f"{who} is blocked in {where}.*")
+        self._render_threads()
+
+    def action_toggle_bots(self) -> None:
+        on = not self.session.hide_bots()
+        self.session.set_hide_bots(on)
+        self.notify("Hiding posts by bots" if on else "Showing posts by bots, marked (bot)")
         self._render_threads()
 
     def action_toggle_blocked(self) -> None:
