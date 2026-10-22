@@ -114,6 +114,10 @@ class LocalAPI:
         elif isinstance(e, ev.Refreshed):
             self.connected = e.error is None
         self._broadcast(e.to_dict())
+        if isinstance(e, ev.Refreshed) and self.session is not None:
+            # the status line every front end shows after a round (as the TUI's)
+            self._say(f"Offline ({e.error}) - showing saved posts" if e.error
+                      else f"Connected to {self.session.node}")
         if self._job is not None:            # progress of the job being sent
             job, group = self._job
             if isinstance(e, ev.PowProgress) and not e.done:
@@ -121,6 +125,12 @@ class LocalAPI:
             elif isinstance(e, ev.Ripening) and e.next_at:
                 self._job_event(job, group, "ripening",
                                 fraction=round(min(1.0, e.t / e.next_at), 3))
+
+    def emit(self, event: str, **data) -> None:
+        """Send an event of a front end's own (UN-RFC 0046 section 6), such as an
+        extension's progress, to everyone listening on ``/api/events``. Name it
+        ``x-<extension>-...``."""
+        self._broadcast({"event": event, **data})
 
     def _job_event(self, job: str, group: str, state: str, **more) -> None:
         self._broadcast({"event": "job", "job": job, "group": group, "state": state, **more})

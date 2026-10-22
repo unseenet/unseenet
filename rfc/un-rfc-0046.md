@@ -346,6 +346,9 @@ again; events are not replayed.
 A runtime MAY offer more, under `/x/<name>/` (for example unseenet-gui's
 owner tools or a bootable machine's Wi-Fi and power settings, `/x/gui/`),
 with the same security rules. Paths under `/api/` are this document's.
+An extension's own events on `/api/events` are named `x-<name>-...`
+(`x-gui-update` for unseenet-gui's update progress); a front end ignores
+events it does not know.
 
 ## 6.1 Not in This API
 
