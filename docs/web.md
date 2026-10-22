@@ -1,4 +1,4 @@
-# On the web (also on phones and tablets)
+# In your browser (also on phones and tablets)
 
 The [graphical client](graphical.md) also runs in an ordinary browser - on a
 phone, a tablet or any computer - with nothing to install. You open a **web
@@ -13,6 +13,13 @@ anything. Read [What you give up](#what-you-give-up) before you rely on it.
 !!! warning "Pre-alpha"
     Neither the web entrance nor the Unseenet core has had a security review.
     Play with it; do not rely on it to protect anyone yet.
+
+!!! note "Reading, not posting yet"
+    Nodes from Unseenet 0.4 take posts only from keys that have
+    [ripened](spec/un-rfc-0025.md) - a few minutes of work, once per key. The
+    browser cannot do that work yet (unseenet-gui#31), so in a browser you can
+    read everything but not post on those nodes. The portable and bootable
+    clients post as usual.
 
 ## What it is
 
@@ -98,4 +105,4 @@ Every entrance someone else runs makes Unseenet harder to block. An entrance
 runs on a small cloud machine - a free one is enough - and installs with one
 command; it can also mirror Unseenet's releases, so that the other clients
 can update over Tor when GitHub is blocked. See
-[unseenet-entrance](https://github.com/unseenet/unseenet-entrance#run-an-entrance).
+[Running an entrance](entrance/index.md).
