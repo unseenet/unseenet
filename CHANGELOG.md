@@ -7,6 +7,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
 **Key ripening (UN-RFC 0025): every node and client must be updated.** A
 new key now does a few minutes of work, once, before nodes take its posts;
 that is what keeps throwaway keys from spamming. Nodes from 0.4.0 refuse
@@ -64,6 +66,11 @@ compatibility code beyond that.
   one (#281, #282).
 - `tools/project/ripen_keys.py`: ripen and publish the keys in the owner
   vault.
+- Nodes limit how many clients they serve at once (`max_clients` under
+  `[limits]`; `"auto"`, the default, follows the open-file limit). A full
+  node answers a new client with `400` and the client tries another; peers
+  always get in. The monitor shows the limit, and the service file and the
+  container raise the open-file limit to 65536 (#296, #310).
 
 ### Changed
 
@@ -72,6 +79,10 @@ compatibility code beyond that.
   entrance's release tool - so ripening, the header and postage are one
   piece of code (#287, #292).
 - `Session.post` takes `extra` headers and `from_name`, for programs.
+- Clients reconnect after a random wait that doubles up to five minutes
+  (UN-RFC 0043 section 4.4), so a node that comes back is not hit by every
+  client at once, and new users start on a random known node instead of
+  the first in the list (#297, #311).
 
 **All nodes must be updated** (step 4 of #217). Nodes now leave
 key-bound groups out of their listings, so a node from before 0.4.0 can no
@@ -792,7 +803,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/unseenet/unseenet/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/unseenet/unseenet/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/unseenet/unseenet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/unseenet/unseenet/compare/v0.1.0...v0.2.0
