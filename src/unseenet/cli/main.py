@@ -16,6 +16,7 @@ from .messages import *  # noqa: F403
 from .network import *  # noqa: F403
 from .services import *  # noqa: F403
 from .kept import *  # noqa: F403
+from .following import *  # noqa: F403
 
 
 COMMANDS = {
@@ -26,6 +27,8 @@ COMMANDS = {
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
     "pin": c_pin, "pins": c_pins, "page-put": c_page_put, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
+    "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
+    "timeline": c_timeline, "address": c_address, "open": c_open,
 }
 
 
@@ -122,6 +125,36 @@ def client_main(argv=None) -> None:
             s.add_argument("--comments", choices=["open", "none"], default="open",
                            help="whether readers may comment (default open)")
         s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    s = sub.add_parser("profile", help="show or publish your profile (public), or --of someone's")
+    s.add_argument("--of", metavar="WHO", help="show this person's profile (key, fingerprint or name)")
+    s.add_argument("--about", help="a few words about you")
+    s.add_argument("--markdown", action="store_true", help="--about is Markdown")
+    s.add_argument("--link", action="append", metavar="KIND=VALUE",
+                   help="e.g. web=https://..., mastodon=@me@host, email=me@... (repeat; replaces all)")
+    s.add_argument("--lang", action="append", metavar="TAG", help="a language you write, e.g. da")
+    s.add_argument("--feed", action="append", metavar="GROUP_ID",
+                   help="a feed of yours your followers should also follow (UN-RFC 0022 4.5)")
+    s.add_argument("--picture", metavar="FILE", help="your picture: cut square, made small, no metadata")
+    s.add_argument("--alt", help="with --picture: what it shows, for screen readers")
+    s.add_argument("--remove-picture", action="store_true")
+    s.add_argument("--empty", action="store_true", help="publish an empty profile")
+    s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    s = sub.add_parser("follow", help="follow a feed, or a person (nobody is told)")
+    s.add_argument("target", help="a Group ID or address, or a key, fingerprint or name")
+    s = sub.add_parser("unfollow", help="stop following a feed or a person")
+    s.add_argument("target")
+    s = sub.add_parser("following", help="the people and feeds you follow")
+    s.add_argument("--refresh", action="store_true", help="read their profiles again first")
+    s = sub.add_parser("timeline", help="the entries of the feeds you follow, newest first")
+    s.add_argument("--limit", type=int, default=50)
+    s = sub.add_parser("address", help="the unseenet: address of a group, post, page - or you")
+    s.add_argument("group", nargs="?")
+    s.add_argument("--message", metavar="MSGID")
+    s.add_argument("--page", metavar="PATH")
+    s.add_argument("--node", metavar="ONION", help="add a node that carries it, as a hint")
+    s = sub.add_parser("open", help="say what an unseenet: address names")
+    s.add_argument("address")
+    s.add_argument("--follow", action="store_true", help="and follow it")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")

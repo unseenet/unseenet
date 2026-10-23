@@ -33,6 +33,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- Profiles, following and addresses from the command line (#387, part 4):
+  `profile` (with `feeds`, UN-RFC 0022 4.5, and a picture cut square, made
+  small and cleaned of metadata), `follow`/`unfollow` a feed or a person
+  (by key, fingerprint, address or name; their personal groups and the
+  listed feeds that are really theirs, kept up to date), `following`,
+  `timeline` (newest first, as written), `address` and `open`. In the core:
+  `Session` part `following.py`, `publish_picture_file()`,
+  `core.addresses` (every `unseenet:` form, older ones read), `feeds` in
+  `core.profiles`, `client.media.avatar()`. The core of #207, #155 and #357.
 - Background ripening can be paused and resumed: `ClientRuntime.pause_ripening()`
   and `resume_ripening()`, and in the local client API `POST /api/ripening`,
   `"paused"` in the state's `ripening` and a `ripening-paused` event

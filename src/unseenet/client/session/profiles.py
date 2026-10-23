@@ -130,6 +130,20 @@ class ProfilesMixin:
             lambda serial, bits: prof.avatar_manifest(ident, picture, serial=serial,
                                                       pow_bits=bits))
 
+    async def publish_picture_file(self, path, alt: str = "") -> dict:
+        """Publish a picture from a file as this identity's profile picture: the middle
+        square, at most 128 pixels and 8 KiB, saved again without metadata
+        (``client.media.avatar``, section 8.1). Returns the published manifest data."""
+        from .. import media
+        try:
+            data, ctype, px = media.avatar(Path(path).read_bytes())
+            picture = prof.make_picture(data, ctype, px, alt.strip()[:prof.MAX_ALT])
+        except OSError as exc:
+            raise SessionError(f"cannot read {Path(path).name}: {exc.strerror or exc}") from exc
+        except (ValueError, prof.ProfileError) as exc:
+            raise SessionError(str(exc)) from exc
+        return await self.publish_picture(picture)
+
     async def picture_of(self, key_text: str) -> dict | None:
         """The picture of a key, if its node carries avatar groups (section 8.2)."""
         pk = crypto.key_from_text(key_text)

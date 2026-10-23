@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from . import crypto
 from .article import Article
 from .encoding import DS, H, b64, b64decode
-from .groups import Manifest, canonical_json, make_group_id, manifest_article
+from .groups import Manifest, canonical_json, make_group_id, manifest_article, split_group_id
 from .markup import MAX_TYPE, text_type_for
 
 PROFILE_NAME = "profile"                 # profile@<fp> (section 5.1)
@@ -19,6 +19,7 @@ MAX_PROFILE = 8192                       # octets of canonical JSON (section 4.4
 MAX_ABOUT = 2048                         # characters (section 4)
 MAX_LINKS = 16
 MAX_LANGS = 8
+MAX_FEEDS = 16                            # section 4.5
 MAX_VALUE, MAX_LABEL = 256, 64           # section 4.2
 LINK_KINDS = ("web", "onion", "email", "mastodon", "bluesky", "matrix", "xmpp", "signal",
               "pgp", "github", "gitlab", "facebook", "instagram", "tiktok", "x", "youtube",
@@ -95,6 +96,14 @@ def check_profile(obj, *, private: bool = False) -> dict:
         raise ProfileError(f"lang is a list of at most {MAX_LANGS} BCP 47 tags")
     if "bot" in obj and not isinstance(obj["bot"], bool):
         raise ProfileError("bot is true or false")
+    feeds = obj.get("feeds", [])
+    if not isinstance(feeds, list) or len(feeds) > MAX_FEEDS or len(set(feeds)) != len(feeds):
+        raise ProfileError(f"feeds is a list of at most {MAX_FEEDS} Group IDs, none twice")
+    for gid in feeds:
+        try:
+            split_group_id(gid)
+        except (ValueError, AttributeError, TypeError):      # not text, or not name@fp
+            raise ProfileError(f"{gid!r} in feeds is not a Group ID") from None
     rest = dict(obj)
     if "avatar" in rest:
         if not private:
@@ -109,7 +118,7 @@ def check_profile(obj, *, private: bool = False) -> dict:
 
 def make_profile(about: str = "", links: list[dict] | None = None,
                  lang: list[str] | None = None, bot: bool = False,
-                 markdown: bool = False) -> dict:
+                 markdown: bool = False, feeds: list[str] | None = None) -> dict:
     """A profile object. ``markdown``: ``about`` is Markdown without images (4.1)."""
     obj: dict = {"v": 1}
     if about.strip():
@@ -123,6 +132,8 @@ def make_profile(about: str = "", links: list[dict] | None = None,
         obj["lang"] = list(lang)
     if bot:
         obj["bot"] = True
+    if feeds:
+        obj["feeds"] = list(feeds)
     return check_profile(obj)
 
 

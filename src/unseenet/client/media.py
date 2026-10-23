@@ -139,3 +139,30 @@ def prepare(name: str, octets: bytes) -> Prepared:
                         "software, dates) is not removed.")
     return Prepared(name, media_type, octets,
                     f"{name} is sent as it is: only pictures are cleaned of metadata.")
+
+
+def avatar(octets: bytes, *, max_octets: int = 8192, sizes=(128, 96, 64, 48, 32)) -> tuple[bytes, str, int]:
+    """A profile picture (UN-RFC 0022 section 8.1) from any picture: the middle square,
+    turned the way it was shown, at the largest of ``sizes`` (128 to 32 pixels) that
+    fits in ``max_octets`` as WebP, else JPEG - with no metadata. Returns ``(octets,
+    media type, px)``; ``ValueError`` if it is not a picture or cannot be made to fit."""
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(octets))
+        img.load()
+    except Exception as exc:  # noqa: BLE001 - Pillow raises many kinds
+        raise ValueError(f"not a picture that can be read: {exc}") from exc
+    img = _turned(img).convert("RGB")
+    side = min(img.size)
+    left, top = (img.width - side) // 2, (img.height - side) // 2
+    square = img.crop((left, top, left + side, top + side))
+    for px in sizes:
+        small = _bare(square.resize((px, px), Image.LANCZOS))
+        for fmt, ctype in (("WEBP", "image/webp"), ("JPEG", "image/jpeg")):
+            for quality in (85, 70, 55, 40):
+                out = io.BytesIO()
+                small.save(out, fmt, quality=quality)
+                if len(out.getvalue()) <= max_octets:
+                    return out.getvalue(), ctype, px
+    raise ValueError("the picture cannot be made small enough")

@@ -741,6 +741,13 @@ unseenet --help
 | `pages SITE_ID` | A site's pages, the home page first |
 | `feed-start [--comments open\|none] [--yes]` | Start your personal feed - public and tied to your key, so you are told first |
 | `site-start [--yes]` | Start your personal site, the same way |
+| `profile [--about TEXT] [--link KIND=VALUE] [--lang TAG] [--feed GROUP_ID] [--picture FILE]` | Show or publish your public profile; a picture is cut square, made small and cleaned of metadata. `--of WHO` shows someone else's |
+| `follow TARGET` | Follow a feed (its Group ID or address) or a person (a key, fingerprint, `unseenet:` address or name): their feeds, now and as they change. Nobody is told |
+| `unfollow TARGET` | Stop following; the feeds followed only because of a person go too |
+| `following [--refresh]` | Whom and what you follow |
+| `timeline [--limit N]` | The entries of every feed you follow, newest first, as written |
+| `address [GROUP_ID [--message ID \| --page PATH]]` | The `unseenet:` address of a group, a post or a page - or, alone, yours |
+| `open ADDRESS [--follow]` | What an `unseenet:` address names |
 | `read GROUP_ID` | Read a group, with each post's Message-ID |
 | `withdraw GROUP_ID MESSAGE_ID ... [--yes]` | [Withdraw posts](#withdrawing-a-post): your own, or any in a group you own or moderate |
 | `withdraw GROUP_ID --all [--keep MESSAGE_ID]` | Withdraw every post in a group you own or moderate |
