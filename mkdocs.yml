@@ -100,6 +100,10 @@ nav:
   - How it works:
       - Concepts: concepts.md
       - Tor and Tails: tor.md
+      - The guide:
+          - About the guide: guide/index.md
+          - Why it matters: guide/why.md
+          - A post's journey: guide/journey.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
       - Gateways to other networks: gateways.md
