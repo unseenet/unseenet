@@ -10,7 +10,7 @@ blocks:  {"t": "p", "c": inl}          {"t": "h", "n": 1-3, "c": inl}
 inline:  {"t": "text", "v": str}   {"t": "br"}   {"t": "code", "v": str}
          {"t": "em"|"strong"|"del", "c": inl}
          {"t": "link", "href": str, "c": inl}
-         {"t": "image", "blob": hash, "alt": str}
+         {"t": "image", "blob": blob ID (blob1:...), "alt": str}
          {"t": "emoji", "v": glyph, "name": shortcode}
 
 Nothing in the tree points outside the network except links, which only a
@@ -34,7 +34,7 @@ MAX_HEADING = 3
 MAX_LIST_DEPTH = 4
 MAX_TEXT = 256 * 1024                 # a crafted message must not hang a client (section 7)
 _SHORTCODE = re.compile(r":([a-z0-9_+\-]+):")
-_BLOB = re.compile(r"^blob:([0-9a-f]{16,128})$")
+_BLOB = re.compile(r"^(blob1:[a-z2-7]{52})$")    # a blob ID of UN-RFC 0027 section 3.1
 
 
 def is_markdown(content_type: str | None) -> bool:
@@ -153,18 +153,43 @@ def text_type_for(markdown: bool, text: str) -> str | None:
     return MARKDOWN_TYPE if markdown and (text or "").strip() else None
 
 
-def _without_images(nodes):
+def only_carried_images(nodes, blob_ids) -> list:
+    """The tree with only the images whose blob the article itself carries (UN-RFC 0031
+    section 3.5): ``blob_ids`` are the IDs in its ``Blobs`` header (``core.blobs.
+    parse_blobs``); any other image is shown as its alt text and never fetched."""
+    return _without_images(nodes, keep=set(blob_ids))
+
+
+def image_blobs(nodes) -> list[str]:
+    """The blob IDs a tree's images point at, in order, each once."""
+    out = []
+    for n in nodes:
+        if isinstance(n, list):
+            out += [b for b in image_blobs(n) if b not in out]
+        elif n.get("t") == "image":
+            if n["blob"] not in out:
+                out.append(n["blob"])
+        else:
+            for key in ("c", "items"):
+                if isinstance(n.get(key), list):
+                    out += [b for b in image_blobs(n[key]) if b not in out]
+    return out
+
+
+def _without_images(nodes, keep=frozenset()):
     out = []
     for n in nodes:
         if isinstance(n, list):                    # a list item's blocks
-            out.append(_without_images(n))
+            out.append(_without_images(n, keep))
+        elif n.get("t") == "image" and n.get("blob") in keep:
+            out.append(n)
         elif n.get("t") == "image":
             out.append({"t": "text", "v": f"[image: {n.get('alt') or 'no description'}]"})
         else:
             n = dict(n)
             for key in ("c", "items"):
                 if isinstance(n.get(key), list):
-                    n[key] = _without_images(n[key])
+                    n[key] = _without_images(n[key], keep)
             out.append(n)
     return out
 

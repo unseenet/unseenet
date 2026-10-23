@@ -1,3 +1,4 @@
+import json
 """UN-RFC 0031: Markdown and emoji as a safe tree."""
 
 from unseenet.core import markup
@@ -36,8 +37,11 @@ def test_no_html_and_only_safe_links():
 
 
 def test_images_only_from_blobs():
-    good = markup.parse("![skærmbillede](blob:" + "ab" * 16 + ")")[0]["c"]
-    assert good == [{"t": "image", "blob": "ab" * 16, "alt": "skærmbillede"}]
+    blob = "blob1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"                         # a blob ID of UN-RFC 0027 (#427)
+    good = markup.parse(f"![skærmbillede]({blob})")[0]["c"]
+    assert good == [{"t": "image", "blob": blob, "alt": "skærmbillede"}]
+    old = markup.parse("![gammel](blob:" + "ab" * 16 + ")")[0]["c"]
+    assert old == [{"t": "text", "v": "[image: gammel]"}]       # the old form is gone
     remote = markup.parse("![sporing](https://evil.example/pixel.png)")[0]["c"]
     assert remote == [{"t": "text", "v": "[image: sporing]"}]   # never fetched
 
@@ -99,3 +103,15 @@ async def test_posts_are_markdown_by_default(tmp_path, monkeypatch):
     assert markup.is_markdown(by["Hemmelig"].content_type)     # inside the encryption too
     await s.close()
     server.close()
+
+
+def test_only_the_articles_own_blobs_are_shown():
+    """UN-RFC 0031 section 3.5 (#427): an image must point at a blob the article
+    carries; one that does not is shown as its alt text, so a post cannot make a reader
+    fetch someone else's file."""
+    own, other = "blob1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "blob1:" + "b" * 52
+    tree = markup.parse(f"Mine:\n\n![a guinea pig]({own})\n\n- ![not mine]({other})\n")
+    assert markup.image_blobs(tree) == [own, other]
+    shown = markup.only_carried_images(tree, [own])
+    assert markup.image_blobs(shown) == [own]
+    assert "[image: not mine]" in json.dumps(shown)

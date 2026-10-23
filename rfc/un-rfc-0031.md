@@ -158,11 +158,16 @@ digit, `_`, `@`, `#`, `/`, `&`, `.`, `+` or `-` does not start one.
 An image MUST point at an attachment, never at an address:
 
 ```
-![screenshot of the error](blob:<hash>)
+![screenshot of the error](blob1:<52 characters>)
 ```
 
-where `<hash>` names a blob of UN-RFC 0027. The client fetches it
-through its node over Tor, under that document's limits. An image with
+where the destination is a blob ID of UN-RFC 0027 section 3.1, written
+as it is, and MUST be one of the blobs the article itself carries (its
+`Blobs` header, or for an encrypted article the inner one). An image
+whose blob the article does not carry is shown as its alt text, as
+below, so a post cannot make a reader fetch someone else's file. The
+client fetches it through its node over Tor, under that document's
+limits. An image with
 any other destination is shown as its alt text, e.g.
 `[image: screenshot of the error]`, and the client MUST NOT fetch it.
 The same alt text is shown where the blob cannot be had: the node does

@@ -116,6 +116,8 @@ def client_main(argv=None) -> None:
     s.add_argument("path", help="e.g. index, about, guides/start")
     s.add_argument("file", help="the page as Markdown (.txt: plain text), - for stdin")
     s.add_argument("--title", help="the page's title (default: its path)")
+    s.add_argument("--attach", action="append", metavar="FILE",
+                   help="a file to send with the page; images in it: ![alt](file:photo.jpg)")
     s = sub.add_parser("page-remove", help="remove a page from a site")
     s.add_argument("group")
     s.add_argument("path")
