@@ -1,4 +1,6 @@
 """Emoji for pickers (#362): categories, names, search, and GET /api/emoji."""
+import asyncio
+
 import pytest
 
 from unseenet.core import markup
@@ -6,7 +8,7 @@ from unseenet.core import markup
 aiohttp = pytest.importorskip("aiohttp")
 
 from unseenet.client.localapi import LocalAPI               # noqa: E402
-from tests.test_localapi import Running, fast               # noqa: E402,F401
+from unseenet.client.localapi import server as srv          # noqa: E402
 
 
 def test_categories_cover_the_table_once():
@@ -44,10 +46,22 @@ def test_find_emoji_one_per_glyph_and_limit():
 
 
 async def test_api_emoji_while_locked(tmp_path):
-    async with Running(LocalAPI(tmp_path / "me.vault")) as r:
-        status, body = await r.get("/api/emoji")
-        assert status == 200
-        assert body["table"]["tada"] == "🎉"
-        assert body["categories"][0]["codes"][0] in body["table"]
-        assert "party" in body["names"]["tada"]
-        assert (await r.get("/api/emoji", token=False))[0] == 401
+    api, stop, started, where = LocalAPI(tmp_path / "me.vault"), asyncio.Event(), asyncio.Event(), {}
+    task = asyncio.create_task(srv.serve(api, on_ready=lambda port, token: where.update(port=port, token=token),
+                                         started=started, stop=stop))
+    try:
+        await asyncio.wait_for(started.wait(), 10)
+        url = f"http://127.0.0.1:{where['port']}/api/emoji"
+        async with aiohttp.ClientSession() as http:
+            async with http.get(url, headers={srv.TOKEN_HEADER: where["token"]}) as r:
+                assert r.status == 200
+                body = await r.json()
+            async with http.get(url) as r:
+                assert r.status == 401
+    finally:
+        stop.set()
+        await task
+        await api.close()
+    assert body["table"]["tada"] == "🎉"
+    assert body["categories"][0]["codes"][0] in body["table"]
+    assert "party" in body["names"]["tada"]
