@@ -79,6 +79,26 @@ groups under spam pressure may raise `min_pow`.
   algorithm name (`sha256`) exists so that a memory-hard algorithm (e.g.
   Argon2id) can be added by a later UN-RFC. The name `argon2id` is
   reserved for that purpose.
+- Postage is deliberately useless work. "Useful" proof-of-work, such
+  as the work units of volunteer computing projects (SETI@home,
+  Folding@home and other BOINC projects), was considered and rejected.
+  Postage needs four properties such work lacks: the puzzle is derived
+  from the article itself, so it cannot be computed in advance or
+  reused; any node can verify it with one hash evaluation without
+  trusting anyone; its difficulty can be set to any number of bits; and
+  no party issues or judges the work. Volunteer computing hands out
+  work units from a central server, checks results by having other
+  machines recompute them, and cannot bind a unit to an article. A
+  central issuer would also learn when a client is about to post, which
+  works against hiding where an article entered the network.
+- Puzzles that are both useful and cheap to verify do exist, for
+  example searching for prime chains from an origin derived from a hash
+  (as in Primecoin). They keep the properties above but add complexity
+  for marginal value. At a few seconds per article, the total work of
+  the network would in any case be small next to a single machine
+  running volunteer computing full time. Operators who want their
+  hardware to do useful work can run such software beside their node;
+  it is not part of the protocol.
 - Postage limits volume; it does not judge content. Content filtering
   remains the job of moderators, node operators and readers
   (UN-RFC 0001 section 4).
