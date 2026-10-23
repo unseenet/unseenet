@@ -20,7 +20,7 @@ for people who build nodes and clients.
    owner.
 2. [A post's journey](journey.md) - one post followed from the keyboard to
    another reader's screen, and what everybody on the way learns.
-3. *Identity* - keys, the vault, names, key ripening and profiles. *(coming)*
+3. [Identity](identity.md) - keys, the vault, names, key ripening and profiles.
 4. *Groups* - hierarchies, manifests, chats and posts, closed groups,
    feeds, pages and moderation. *(coming)*
 5. *The node* - what it stores, peering, the known-node list, files, and

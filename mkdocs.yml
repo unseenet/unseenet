@@ -104,6 +104,7 @@ nav:
           - About the guide: guide/index.md
           - Why it matters: guide/why.md
           - A post's journey: guide/journey.md
+          - Identity: guide/identity.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
       - Gateways to other networks: gateways.md
