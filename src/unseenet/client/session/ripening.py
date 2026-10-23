@@ -1,4 +1,14 @@
-"""Key ripening (UN-RFC 0025). Part of Session (see __init__.py)."""
+"""Key ripening (UN-RFC 0025): a key works for a while, once, before it posts.
+
+Belongs here: the chain in the vault and its published point (``ripe@<fp>``), computing
+segments (``ripen_segment``, in a thread or a browser worker through ``_prove_segment``),
+taking over a chain published elsewhere, ``ensure_ripe`` before posting, the
+``Key-Ripening`` header, what a node asks for (``UNSEENET-MINRIPE``), and the level
+private senders must have (section 3.5).
+
+Not here: running ripening in the background (``client.runtime.ClientRuntime``), or
+postage itself (posting.py).
+"""
 
 from __future__ import annotations
 
@@ -7,18 +17,6 @@ from .. import session as _s   # names tests patch on the module, read at call t
 
 
 class RipeningMixin:
-    # --- key ripening (UN-RFC 0025) ---
-    def _identity_named_by(self, key) -> str | None:
-        """The name of our identity with this public key (bytes or text), if it is ours."""
-        try:
-            text = key if isinstance(key, str) else crypto.key_to_text(key)
-        except (crypto.CryptoError, TypeError, ValueError):
-            return None
-        for name in self.data["identities"]:
-            if self.identity(name).key_text == text:
-                return name
-        return None
-
     def _ripening_entry(self, name: str | None = None) -> dict:
         name = name or self.default_identity_name()
         return self.data.setdefault("ripening", {}).setdefault(
@@ -286,96 +284,3 @@ class RipeningMixin:
         except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
             node_pow = _s.DEFAULT_POW
         return rp.required_pow(node_pow, 0, chain.level, allow_unripe=True)
-
-    def default_identity_name(self) -> str:
-        ids = self.data["identities"]
-        if not ids:
-            raise SessionError("no identity yet")
-        name = self._acting_as or self.data.get("default_identity")
-        return name if name in ids else next(iter(ids))
-
-    def act_as(self, name: str | None) -> None:
-        """Use the identity ``name`` for this run, without changing the vault's
-        default (a command-line client's -i)."""
-        if name is not None and name not in self.data["identities"]:
-            raise SessionError(f"no identity {name!r} in this vault")
-        self._acting_as = name
-
-    def identity(self, name: str | None = None) -> crypto.Identity:
-        entry = self.data["identities"][name or self.default_identity_name()]
-        return crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
-
-    def my_fingerprints(self) -> tuple[str, ...]:
-        """The fingerprints of all your identities (owner:me in a group search, #13)."""
-        return tuple(crypto.fingerprint(crypto.Identity.from_seed(bytes.fromhex(e["seed"])).public_key)
-                     for e in self.data["identities"].values())
-
-    def filter_groups(self, groups: list["GroupInfo"], query: str,
-                      known: dict | None = None) -> list["GroupInfo"]:
-        """The groups that match a search (#13, ``client.groupfilter``), locally.
-        ``known``: manifest data fetched for groups you do not follow."""
-        from .. import groupfilter
-        f = groupfilter.parse(query)
-        if not f:
-            return list(groups)
-        mine, known = self.my_fingerprints(), known or {}
-        return [g for g in groups if groupfilter.matches(
-            f, g.group_id, description=g.description, gtype=g.type,
-            data=known.get(g.group_id) or self.manifest_data(g.group_id),
-            subscribed=g.subscribed, my_fingerprints=mine)]
-
-    async def group_manifests(self, groups: list["GroupInfo"], known: dict) -> int:
-        """Fetch the manifests of listed groups whose type is not known yet, from the
-        node that carries each, in a few requests (UN-RFC 0041), into ``known``
-        (Group ID -> manifest data) and each GroupInfo's type. Asking for all of them
-        tells a node nothing about what you search for. Returns how many were asked."""
-        todo: dict[str | None, list[GroupInfo]] = {}
-        for g in groups:
-            if g.type or g.group_id in known or self.manifest_data(g.group_id):
-                continue
-            todo.setdefault(g.nodes[0] if g.nodes else None, []).append(g)
-        asked = 0
-        for node, items in todo.items():
-            found = await self.fetch_manifests([g.group_id for g in items], node,
-                                               fallback=False)
-            for g in items:
-                m = found.get(g.group_id)
-                known[g.group_id] = dict(m.raw) if m else {}
-                if m:
-                    g.type = m.type
-            asked += len(items)
-        return asked
-
-    def display_name(self, name: str | None = None) -> str:
-        return self.data["identities"][name or self.default_identity_name()]["display"]
-
-    def signature_template(self, name: str | None = None) -> str:
-        # no "signature" yet: the default; one set to "" by the user: none
-        return self.data["identities"][name or self.default_identity_name()].get(
-            "signature", DEFAULT_SIGNATURE)
-
-    def set_signature(self, template: str, name: str | None = None) -> None:
-        lines = template.strip("\n").split("\n") if template.strip() else []
-        if len(lines) > MAX_SIG_LINES:
-            raise SessionError(f"a signature has at most {MAX_SIG_LINES} lines")
-        self.data["identities"][name or self.default_identity_name()]["signature"] = "\n".join(lines)
-        self.save()
-
-    def signature(self, name: str | None = None) -> str:
-        """The signature with {name}, {key} and {fp} filled in ('' if none)."""
-        template = self.signature_template(name)
-        if not template:
-            return ""
-        ident = self.identity(name)
-        for placeholder, value in (("{name}", self.display_name(name)), ("{key}", ident.key_text),
-                                   ("{fp}", ident.fingerprint[:4])):
-            template = template.replace(placeholder, value)
-        return template
-
-    def new_identity(self, name: str, display: str | None = None) -> crypto.Identity:
-        ident = crypto.Identity.generate()
-        self.data["identities"][name] = {"seed": ident.seed.hex(), "display": display or name,
-                                         "signature": DEFAULT_SIGNATURE}
-        self.data.setdefault("default_identity", name)
-        self.save()
-        return ident

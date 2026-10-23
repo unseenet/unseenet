@@ -1,4 +1,13 @@
-"""Nodes, the known-node list, the connection and Tor bridges. Part of Session (see __init__.py)."""
+"""Nodes and the connection to them: where the network is reached.
+
+Belongs here: the nodes the user has (``add_node``, ``node_for`` - the node a group is
+read on), the known-node list and releases from the project's channels (UN-RFC 0010,
+0020), the one connection per node over Tor with retries and backoff (``_connect``,
+``_call``), push (``watch``, UN-RFC 0008), Tor and bridges (``set_tor``,
+``set_bridges``), a node's information (UN-RFC 0011), and ``close``.
+
+Not here: what is read from a node (reading.py, groups.py) or posted to it (posting.py).
+"""
 
 from __future__ import annotations
 
@@ -169,32 +178,6 @@ class NodesMixin:
         if found and update.version_key(found["version"]) > update.version_key(__version__):
             return {"version": found["version"], "channel": channel}
         return None
-
-    async def refresh_naming(self) -> bool:
-        """Read the root list, hierarchy lists and names (UN-RFC 0018, 0019). True if changed."""
-        return await naming.refresh(self)
-
-    def group_label(self, group_id: str, also_known: set[str] = frozenset()) -> str:
-        """The name to show for a group: without the fingerprint where UN-RFC 0018 allows."""
-        return naming.group_label(self, group_id, also_known)
-
-    def identity_label(self, key_text: str, from_name: str = "") -> str:
-        """Petname, else @domain, else @name, else Name~abcd (UN-RFC 0019 section 8)."""
-        return naming.identity_label(self, key_text, from_name)
-
-    def seen_name(self, key_text: str | None) -> str:
-        """The name someone gave themselves in a post we have, newest first, for
-        naming a bare key (a chat partner, a moderator): "" if none is seen."""
-        best, at = "", None
-        for msgs in self.cache.values():
-            for m in msgs.values():
-                if m.author_key == key_text and m.from_name and (at is None or (m.date and m.date > at)):
-                    best, at = m.from_name, m.date
-        return best
-
-    def label_of(self, key_text: str) -> str:
-        """``identity_label`` for a bare key, with the name seen in its posts."""
-        return self.identity_label(key_text, self.seen_name(key_text))
 
     def _forget_numbers(self, group_id: str) -> None:
         """Article numbers belong to one node: drop them when a group moves."""
@@ -428,3 +411,12 @@ class NodesMixin:
             if self.tor:
                 await self.tor.stop()
                 self.tor = None
+
+    async def node_info(self, node: str | None = None) -> dict:
+        """UN-RFC 0011 node information, or {} if the node does not offer it."""
+        async def run(c: Client) -> dict:
+            if c.capability("UNSEENET-NODEINFO") is None:
+                return {}
+            lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
+            return json.loads(lines[0]) if lines else {}
+        return await self._call(run, node)

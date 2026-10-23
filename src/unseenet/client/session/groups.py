@@ -1,4 +1,14 @@
-"""Groups: creating and changing them, moderation, portals, bans. Part of Session (see __init__.py)."""
+"""Groups: what they are, and the owner's and moderators' side of them.
+
+Belongs here: a group's manifest (fetching and checking it, ``manifest_data``, UN-RFC
+0004), creating and changing groups (``create_group``, ``update_group`` with the fields
+of 0004, 0014, 0027-0035), may you write here (``write_permission``, #181), moderated
+groups and submissions (0004 section 5, 0009 section 3), roles, bans and members,
+portals to other networks (0023), removing a group (0013), and finding groups
+(``filter_groups``, ``find_group_ref``).
+
+Not here: following and reading groups (reading.py), posting to them (posting.py).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +17,42 @@ from .. import session as _s   # names tests patch on the module, read at call t
 
 
 class GroupsMixin:
+    def filter_groups(self, groups: list["GroupInfo"], query: str,
+                      known: dict | None = None) -> list["GroupInfo"]:
+        """The groups that match a search (#13, ``client.groupfilter``), locally.
+        ``known``: manifest data fetched for groups you do not follow."""
+        from .. import groupfilter
+        f = groupfilter.parse(query)
+        if not f:
+            return list(groups)
+        mine, known = self.my_fingerprints(), known or {}
+        return [g for g in groups if groupfilter.matches(
+            f, g.group_id, description=g.description, gtype=g.type,
+            data=known.get(g.group_id) or self.manifest_data(g.group_id),
+            subscribed=g.subscribed, my_fingerprints=mine)]
+
+    async def group_manifests(self, groups: list["GroupInfo"], known: dict) -> int:
+        """Fetch the manifests of listed groups whose type is not known yet, from the
+        node that carries each, in a few requests (UN-RFC 0041), into ``known``
+        (Group ID -> manifest data) and each GroupInfo's type. Asking for all of them
+        tells a node nothing about what you search for. Returns how many were asked."""
+        todo: dict[str | None, list[GroupInfo]] = {}
+        for g in groups:
+            if g.type or g.group_id in known or self.manifest_data(g.group_id):
+                continue
+            todo.setdefault(g.nodes[0] if g.nodes else None, []).append(g)
+        asked = 0
+        for node, items in todo.items():
+            found = await self.fetch_manifests([g.group_id for g in items], node,
+                                               fallback=False)
+            for g in items:
+                m = found.get(g.group_id)
+                known[g.group_id] = dict(m.raw) if m else {}
+                if m:
+                    g.type = m.type
+            asked += len(items)
+        return asked
+
     # ------------------------------------------------------------------
     # groups
     # ------------------------------------------------------------------
@@ -73,68 +119,6 @@ class GroupsMixin:
         return sorted(found, key=lambda g: (not g.subscribed,
                                             self.group_label(g.group_id, also) != ref.name,
                                             g.group_id))
-
-    def subscribe(self, group_id: str, on: bool = True, node: str | None = None) -> None:
-        split_group_id(group_id)
-        subs = self.data["subscribed"]
-        if on and node:
-            self.pin_group(group_id, node)
-        elif on and self.node:
-            self.group_entry(group_id).setdefault("node", self.node)
-        changed = (on and group_id not in subs) or (not on and group_id in subs)
-        if on and group_id not in subs:
-            subs.append(group_id)
-        elif not on and group_id in subs:
-            subs.remove(group_id)
-        self.save()
-        if changed:
-            self.emit(ev.GroupsChanged())
-
-    async def peek_group(self, group_id: str, node: str | None = None,
-                         max_heads: int = 300) -> tuple[dict, int]:
-        """(manifest, number of posts) of a group you may not follow, for browsing.
-
-        Reads only headers, and the manifest articles themselves; the manifest must be
-        signed by the owner named in the group ID. Nothing is cached or subscribed.
-        """
-        from ...core.groups import Manifest
-
-        async def run(c: Client) -> tuple[dict, int]:
-            count, low, high = await c.group(group_id)
-            best: dict = {}
-            for n in range(low, min(high, low + max_heads - 1) + 1):
-                try:
-                    head = await c.multiline(f"HEAD {n}", 221)
-                except NNTPError:
-                    continue
-                if not any(h.lower().replace(" ", "") == "control:manifest" for h in head):
-                    continue
-                raw = await c.article(str(n))
-                try:
-                    m = Manifest.from_article(Article.from_bytes(raw))
-                except (ArticleError, ValueError, TypeError):
-                    continue
-                if m.group_id == group_id and m.serial >= int(best.get("serial", 0)):
-                    best = dict(m.raw)
-            return best, count
-
-        cached = self.manifest_data(group_id)
-        data, count = await self._call(run, node or self.node_for(group_id))
-        return (cached if int(cached.get("serial", 0)) > int(data.get("serial", 0)) else data), count
-
-    def subscribe_starter_groups(self) -> bool:
-        """Subscribe to the project's groups once per vault (a new client has
-        something to read). Groups unsubscribed later are not added again."""
-        if self.data.get("starter_groups") or not self.node:
-            return False
-        from ...known_nodes import STARTER_GROUPS
-        for gid in STARTER_GROUPS:
-            if gid not in self.data["subscribed"]:
-                self.data["subscribed"].append(gid)
-                self.group_entry(gid).setdefault("node", self.node)
-        self.data["starter_groups"] = True
-        self.save()
-        return True
 
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
                            min_pow: int = _s.DEFAULT_POW, local: bool = False,
@@ -374,15 +358,6 @@ class GroupsMixin:
         self.group_entry(group_id)["portals_ok"] = portals.fingerprint(self.group_portals(group_id))
         self.save()
 
-    def text_type(self) -> str:
-        """The Content-Type your posts get: Markdown, unless you turned it off (UN-RFC 0031)."""
-        from ...core.markup import MARKDOWN_TYPE, PLAIN_TYPE
-        return PLAIN_TYPE if self.data.get("plain_text") else MARKDOWN_TYPE
-
-    def set_markdown(self, on: bool) -> None:
-        self.data["plain_text"] = not on
-        self.save()
-
     def group_kinds(self, group_id: str) -> tuple[str, ...]:
         """What a group takes: chat lines, posts with a subject, or both (UN-RFC 0028, 4.1)."""
         data = self.manifest_data(group_id)
@@ -487,54 +462,6 @@ class GroupsMixin:
         self.data.setdefault("rules_seen", {})[group_id] = int(self.manifest_data(group_id).get("serial", 1))
         self.save()
 
-    async def required_pow(self, group_id: str | None, group_min: int | None = None,
-                           node: str | None = None) -> int:
-        """Postage to attach: max(node minimum, group minimum) - UN-RFC 0008 section 4."""
-        async def node_min(c: Client) -> tuple[int, bool]:
-            value = c.capability("UNSEENET-MINPOW")
-            ripening = c.capability("UNSEENET-MINRIPE") is not None
-            return (int(value) if value and value.strip().isdigit() else _s.DEFAULT_POW), ripening
-        try:
-            node_pow, ripening = await self._call(node_min, node or self.node_for(group_id))
-        except (OSError, ConnectionError, SessionError):
-            node_pow, ripening = _s.DEFAULT_POW, True
-        if group_min is None and group_id:
-            manifest = self.manifest_data(group_id)
-            # A group joined before manifests were kept has none cached yet; the
-            # network default is the safe guess (the node will say if it wants more).
-            group_min = int(manifest.get("min_pow", 0)) if manifest else _s.DEFAULT_POW
-        # UN-RFC 0025 section 5: the key's level adds to it or takes from it. A sealed
-        # post to someone's inbox is signed by a one-time key: it pays as unripe (3.5).
-        sealed = bool(group_id) and group_id.split("@", 1)[0] == INBOX_NAME \
-            and group_id != self.my_inbox
-        if not ripening:                         # a node from before UN-RFC 0025
-            return max(node_pow, group_min or 0)
-        lv = None if sealed or not self.has_identity() else self.published_level()
-        return rp.required_pow(node_pow, group_min or 0, lv, allow_unripe=True)
-
-    async def _post_with_postage(self, group_id: str, build) -> Article:
-        """Build with ``build(bits)`` and post; if the node asks for more postage
-        ("need N bits"), rebuild once with N and post again. Returns the posted article."""
-        bits = await self.required_pow(group_id)
-        art = await self._compute(lambda: build(bits))
-        try:
-            await self._post_article(art)
-            return art
-        except SessionError as exc:
-            m = re.search(r"need (\d+) bits", str(exc))
-            if not m or int(m.group(1)) <= bits or int(m.group(1)) > 28:
-                raise
-            need = int(m.group(1))
-        self.say(f"Node wants {need} bits of postage, computing again ...")
-        art = await self._compute(lambda: build(need))
-        await self._post_article(art)
-        entry = self.data["groups"].get(group_id)
-        if entry is not None:                      # remember it for next time
-            entry.setdefault("manifest", {})
-            if int(entry["manifest"].get("min_pow", 0)) < need:
-                entry["manifest"]["min_pow"] = need
-        return art
-
     async def remove_group(self, group_id: str, reason: str = "") -> None:
         """UN-RFC 0013: remove a group you own from the whole network. Final."""
         entry = self.data["groups"].get(group_id, {})
@@ -610,3 +537,107 @@ class GroupsMixin:
         if on:
             current.append(key_text)
         await self.update_group(group_id, **{role: current})
+
+    @staticmethod
+    def _checked_manifest(raw: bytes | None, group_id: str):
+        """A manifest from a node, checked as UN-RFC 0004 section 4 and 0041 section
+        3.1 ask: a valid signed article, by the owner in the Group ID, for this group,
+        not expired. None otherwise - a node is not trusted for any of it."""
+        from ...core.groups import Manifest
+        if not raw:
+            return None
+        try:
+            raw = strip_reader_headers(raw)
+            art = Article.from_bytes(raw)
+            validate_structure(art, raw_size=len(raw))
+            m = Manifest.from_article(art)
+        except (ArticleError, ValueError, TypeError):
+            return None
+        return m if m.group_id == group_id and not m.expired() else None
+
+    async def _manifest_by_group(self, c: Client, group_id: str):
+        """The newest valid manifest in a small group of manifests only (profile@,
+        avatar@), read with GROUP, HDR Control and ARTICLE: for nodes without
+        XUN-MANIFESTS (UN-RFC 0041 section 1)."""
+        try:
+            _, low, high = await c.group(group_id)
+        except NNTPError:
+            return None
+        if high < low:
+            return None
+        best = None
+        for line in await c.multiline(f"HDR Control {low}-{high}", 225):
+            number, _, value = line.partition(" ")
+            if value.strip().lower() != "manifest":
+                continue
+            m = self._checked_manifest(await c.article(number), group_id)
+            if m is not None and m.supersedes(best):
+                best = m
+        return best
+
+    async def fetch_manifests(self, group_ids: list[str], node: str | None = None,
+                              fallback: bool = True) -> dict:
+        """The current manifests of many groups, Group ID -> Manifest or None.
+
+        With XUN-MANIFESTS (UN-RFC 0041) in requests of up to 256 groups; else one
+        group at a time. Cached Message-IDs are not named (section 3.3), so a node
+        cannot recognise this client by what it holds. ``fallback`` False: on a node
+        without the command, ask nothing (single lookups read whole groups, fine for
+        profile groups but not for ordinary ones) and return None for each."""
+        wanted = list(dict.fromkeys(group_ids))
+        by_node: dict[str | None, list[str]] = {}
+        for gid in wanted:
+            by_node.setdefault(node or self.node_for(gid), []).append(gid)
+        out: dict = {}
+        for address, gids in by_node.items():
+            async def run(c: Client, gids=gids):
+                if c.capability("UNSEENET-MANIFESTS") is None:
+                    if not fallback:
+                        return {g: None for g in gids}
+                    return {g: await self._manifest_by_group(c, g) for g in gids}
+                answers = await c.manifests_all([(g, None) for g in gids])
+                return {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
+                        for g in gids}
+            out.update(await self._call(run, address))
+        return out
+
+    async def fetch_manifest(self, group_id: str, node: str | None = None):
+        """The current valid, unexpired manifest of one group; None if there is none."""
+        return (await self.fetch_manifests([group_id], node)).get(group_id)
+
+    def moderates_or_owns(self, group_id: str) -> bool:
+        me = self.identity().key_text
+        manifest = self.manifest_data(group_id)
+        return manifest.get("owner") == me or me in manifest.get("moderators", [])
+
+    @staticmethod
+    def _take_manifest(art: Article, group_id: str, entry: dict) -> bool:
+        """Keep a manifest from a node only if it is valid (UN-RFC 0004, section 4):
+        signed by the owner whose fingerprint is in the group ID, for this group,
+        and of the same type as before. A client does not trust its node for this:
+        a hostile node could otherwise serve a manifest signed by its own key, e.g.
+        adding itself to the posters of unseenet.nodes or unseenet.names (#41).
+        Of the valid ones the newest wins (section 3.2). True if it was taken."""
+        from ...core.groups import Manifest
+        try:
+            # our own inbox from before UN-RFC 0029 has no expires: take it, to renew it
+            m = Manifest.from_article(art, stored=bool(entry.get("owner")))
+        except (ArticleError, ValueError, TypeError):
+            return False
+        if m.group_id != group_id:
+            return False
+        old = entry.get("manifest") or {}
+        if old:
+            if old.get("type") != m.type or old.get("owner") != m.raw.get("owner") \
+                    or bool(old.get("local")) != m.local:
+                return False                # type, owner and locality never change
+            # Newer serial wins; on a tie the lower Message-ID (as Manifest.supersedes)
+            if (m.serial, entry.get("manifest_id", "")) <= (int(old.get("serial", 0)), m.message_id):
+                return False
+        entry["manifest"] = dict(m.raw)
+        entry["manifest_id"] = m.message_id
+        entry["type"] = m.type
+        entry["owner_key"] = m.raw.get("owner")
+        if m.title:
+            entry["title"] = m.title
+        return True

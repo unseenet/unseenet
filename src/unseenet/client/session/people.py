@@ -1,4 +1,12 @@
-"""Contacts, ignoring, mentions and notices, bots, reporting. Part of Session (see __init__.py)."""
+"""People: contacts, who you ignore, what is for you, and reporting.
+
+Belongs here: contacts and the address book (UN-RFC 0028 section 6.2), ignoring keys
+(the reader's own killfile, never sent), replies and mentions for you (#109, #170) and
+mention notices (UN-RFC 0032), hierarchy blocks (0018 section 8.2), bots (0030 section
+6), and reporting a post to those who can act on it (#74).
+
+Not here: private posts themselves (private.py), profiles (profiles.py).
+"""
 
 from __future__ import annotations
 
@@ -517,73 +525,6 @@ class PeopleMixin:
         return sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
                       key=lambda kv: kv[1].lower())
 
-    def sent_messages(self, to: str | None = None) -> list["Message"]:
-        """Your copies of the private messages you sent (to one key, or all).
-
-        They are sealed to their recipients, so the node's copies are unreadable to
-        you; these come from the encrypted ``sent`` sidecar of the vault.
-        """
-        mine = self.identity().key_text
-        out = []
-        for i, e in enumerate(self.sent):
-            if to is not None and e.get("to") != to:
-                continue
-            msg = Message(-1 - i, e["msgid"], self.my_inbox, subject=e["subject"],
-                          from_name="You", author_key=mine, body=e["body"],
-                          references=e.get("references", []), encrypted=True, private=True,
-                          sender_key=mine, reply_inbox=e.get("group"), to_key=e.get("to"),
-                          kind=KIND_CHAT if e.get("kind") == KIND_CHAT else KIND_POST)
-            try:
-                msg.date = datetime.fromisoformat(e["date"])
-            except (KeyError, ValueError):
-                pass
-            out.append(msg)
-        return out
-
-    def _in_order(self, received: list["Message"], sent: list["Message"]) -> list["Message"]:
-        """Received and sent private messages together, oldest first. Inbox dates are
-        rounded to 10 minutes for privacy, so a sent message is placed after the
-        received messages that had arrived when it was written."""
-        after = {e["msgid"]: e.get("after", 0) for e in self.sent}
-        order = {m.message_id: (m.number, 0, 0) for m in received}
-        for i, m in enumerate(sent):
-            order[m.message_id] = (after.get(m.message_id, 0), 1, i)
-        return sorted(received + sent, key=lambda m: order[m.message_id])
-
-    def conversation(self, key_text: str, kind: str | None = None) -> list["Message"]:
-        """Private messages between you and a key, both directions, oldest first.
-
-        ``kind`` keeps only chats or only posts (UN-RFC 0028); None keeps both.
-        """
-        received = [m for m in self.cache.get(self.my_inbox, {}).values()
-                    if m.sender_key == key_text and (kind is None or m.kind == kind)]
-        sent = [m for m in self.sent_messages(key_text) if kind is None or m.kind == kind]
-        return self._in_order(received, sent)
-
-    def private_messages(self, kind: str | None = None) -> list["Message"]:
-        """Your inbox and what you sent privately, oldest first; only one ``kind`` if given."""
-        return self._in_order(
-            [m for m in self.cache.get(self.my_inbox, {}).values() if kind is None or m.kind == kind],
-            [m for m in self.sent_messages() if kind is None or m.kind == kind])
-
-    def unread_from(self, key_text: str, kind: str | None = None) -> int:
-        return sum(1 for m in self.cache.get(self.my_inbox, {}).values()
-                   if m.sender_key == key_text and (kind is None or m.kind == kind)
-                   and not self.is_read(m))
-
-    def unread_private(self, kind: str | None = None) -> int:
-        """Unread private messages of one kind (or all), from anyone."""
-        return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
-                   if (kind is None or m.kind == kind) and not self.is_read(m))
-
-    def _in_private_posts(self, m: "Message") -> bool:
-        """Private posts; chats live in a conversation per person (chat_partners). An
-        anonymous chat has no person to belong to, so it stays here. Mention notices
-        are shown in For you instead (UN-RFC 0032, section 5)."""
-        if self.is_notice(m) or m.content_type.startswith(NOTICES_TYPE):
-            return False
-        return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
-
     # --- reporting a post (#74): private messages to those who can act on it ---
     async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:
         """(who, inbox, key) of the people who can act on a post: the group's owner,
@@ -650,20 +591,4 @@ class PeopleMixin:
         found = dict(re.findall(r"^(Group|Message-ID): (\S+)$", msg.body or "", re.M))
         if "Group" in found and "Message-ID" in found:
             return found["Group"], found["Message-ID"]
-        return None
-
-    async def node_info(self, node: str | None = None) -> dict:
-        """UN-RFC 0011 node information, or {} if the node does not offer it."""
-        async def run(c: Client) -> dict:
-            if c.capability("UNSEENET-NODEINFO") is None:
-                return {}
-            lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
-            return json.loads(lines[0]) if lines else {}
-        return await self._call(run, node)
-
-    def _identity_for_fingerprint(self, fp: str) -> crypto.Identity | None:
-        for entry in self.data["identities"].values():
-            ident = crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
-            if ident.fingerprint == fp:
-                return ident
         return None

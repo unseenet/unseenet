@@ -1,4 +1,12 @@
-"""Posting and postage. Part of Session (see __init__.py)."""
+"""Posting: writing to the network, and taking it back.
+
+Belongs here: posting a post or chat line (``post``), postage (UN-RFC 0006, with the
+ripening level, 0025 section 5), posting articles built elsewhere (``post_article``,
+for bots, gateways and the local API), editing (``edit``, UN-RFC 0042) and
+withdrawing (``withdraw``, ``cancel``, UN-RFC 0004 section 7).
+
+Not here: private posts (private.py), group settings (groups.py).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +15,166 @@ from .. import session as _s   # names tests patch on the module, read at call t
 
 
 class PostingMixin:
+    async def required_pow(self, group_id: str | None, group_min: int | None = None,
+                           node: str | None = None) -> int:
+        """Postage to attach: max(node minimum, group minimum) - UN-RFC 0008 section 4."""
+        async def node_min(c: Client) -> tuple[int, bool]:
+            value = c.capability("UNSEENET-MINPOW")
+            ripening = c.capability("UNSEENET-MINRIPE") is not None
+            return (int(value) if value and value.strip().isdigit() else _s.DEFAULT_POW), ripening
+        try:
+            node_pow, ripening = await self._call(node_min, node or self.node_for(group_id))
+        except (OSError, ConnectionError, SessionError):
+            node_pow, ripening = _s.DEFAULT_POW, True
+        if group_min is None and group_id:
+            manifest = self.manifest_data(group_id)
+            # A group joined before manifests were kept has none cached yet; the
+            # network default is the safe guess (the node will say if it wants more).
+            group_min = int(manifest.get("min_pow", 0)) if manifest else _s.DEFAULT_POW
+        # UN-RFC 0025 section 5: the key's level adds to it or takes from it. A sealed
+        # post to someone's inbox is signed by a one-time key: it pays as unripe (3.5).
+        sealed = bool(group_id) and group_id.split("@", 1)[0] == INBOX_NAME \
+            and group_id != self.my_inbox
+        if not ripening:                         # a node from before UN-RFC 0025
+            return max(node_pow, group_min or 0)
+        lv = None if sealed or not self.has_identity() else self.published_level()
+        return rp.required_pow(node_pow, group_min or 0, lv, allow_unripe=True)
+
+    async def _post_with_postage(self, group_id: str, build) -> Article:
+        """Build with ``build(bits)`` and post; if the node asks for more postage
+        ("need N bits"), rebuild once with N and post again. Returns the posted article."""
+        bits = await self.required_pow(group_id)
+        art = await self._compute(lambda: build(bits))
+        try:
+            await self._post_article(art)
+            return art
+        except SessionError as exc:
+            m = re.search(r"need (\d+) bits", str(exc))
+            if not m or int(m.group(1)) <= bits or int(m.group(1)) > 28:
+                raise
+            need = int(m.group(1))
+        self.say(f"Node wants {need} bits of postage, computing again ...")
+        art = await self._compute(lambda: build(need))
+        await self._post_article(art)
+        entry = self.data["groups"].get(group_id)
+        if entry is not None:                      # remember it for next time
+            entry.setdefault("manifest", {})
+            if int(entry["manifest"].get("min_pow", 0)) < need:
+                entry["manifest"]["min_pow"] = need
+        return art
+
+    def may_cancel(self, msg: Message) -> bool:
+        """Your own post, or any post in a group you own or moderate (UN-RFC 0004, 7.1)."""
+        if msg is None or msg.private or msg.group not in self.data["groups"]:
+            return False
+        me = self.identity().key_text
+        manifest = self.manifest_data(msg.group)
+        return msg.author_key == me or manifest.get("owner") == me \
+            or me in manifest.get("moderators", [])
+
+    async def withdraw(self, group_id: str, message_id: str, reason: str = "") -> str:
+        """Withdraw a post by its Message-ID (UN-RFC 0004 section 7): any post in a
+        group you own or moderate, else your own. The node has the last word."""
+        mid = message_id if message_id.startswith("<") else f"<{message_id}>"
+        if not self.moderates_or_owns(group_id):
+            msg = next((m for m in self.cache.get(group_id, {}).values() if m.message_id == mid), None)
+            if msg is None or msg.author_key != self.identity().key_text:
+                raise SessionError("you can only withdraw your own posts, or posts in a group "
+                                   "you own or moderate")
+        if self.group_entry(group_id).get("type") == "closed":
+            reason = ""                     # the nodes could read it (section 7.5)
+        me = self.identity()
+        art = await self._post_with_postage(group_id, lambda bits: new_article(
+            group_id, None, reason, extra=[("Control", f"cancel {mid}")]).finalize(me, bits))
+        self.group_entry(group_id).setdefault("cancels", {})[mid] = {"by": me.key_text, "date": art["Date"]}
+        self._apply_cancels(group_id)
+        self.save()
+        self.save_offline()
+        return art.message_id
+
+    async def withdraw_all(self, group_id: str, keep=(), reason: str = "") -> list[str]:
+        """Owner or moderator: withdraw every post in the group but those in ``keep``
+        (for example a demo's weekly reset). Returns the Message-IDs withdrawn."""
+        if not self.moderates_or_owns(group_id):
+            raise SessionError("only the owner or a moderator can withdraw all posts")
+        await self.fetch_group(group_id)
+        done = []
+        for msg in list(self.cache.get(group_id, {}).values()):
+            if msg.message_id in keep:
+                continue
+            await self.withdraw(group_id, msg.message_id, reason)
+            done.append(msg.message_id)
+        return done
+
+    async def cancel(self, msg: Message, reason: str = "") -> str:
+        """Withdraw a post from the network (UN-RFC 0004, section 7). Best effort:
+        people who read it already, and nodes that ignore cancels, may keep it."""
+        if not self.may_cancel(msg):
+            raise SessionError("you can only withdraw your own posts, or posts in a group "
+                               "you own or moderate")
+        group_id = msg.group
+        if self.group_entry(group_id).get("type") == "closed":
+            reason = ""                     # the nodes could read it (section 7.5)
+        me = self.identity()
+        art = await self._post_with_postage(group_id, lambda bits: new_article(
+            group_id, None, reason, extra=[("Control", f"cancel {msg.message_id}")]
+        ).finalize(me, bits))
+        entry = self.group_entry(group_id)
+        entry.setdefault("cancels", {})[msg.message_id] = {"by": me.key_text, "date": art["Date"]}
+        self._apply_cancels(group_id)
+        self.save()
+        self.save_offline()
+        return art.message_id
+
+    def _apply_cancels(self, group_id: str) -> bool:
+        """Drop posts withdrawn by a valid cancel (UN-RFC 0004, 7.1 and 7.3).
+
+        The client checks each cancel itself: signed (checked in _parse) by the
+        target's author, or by the group's owner or a moderator. Cancels whose
+        target has not arrived are kept for the group's retention, then dropped.
+        True if anything changed."""
+        entry = self.group_entry(group_id)
+        cancels = entry.get("cancels") or {}
+        cache = self.cache.get(group_id, {})
+        raws = self._raw.get(group_id, {})
+        manifest = self.manifest_data(group_id)
+        privileged = {manifest.get("owner")} | set(manifest.get("moderators", []))
+        by_id = {m.message_id: n for n, m in cache.items()}
+        keep_days = int(manifest.get("retention_days", 90))
+        now = datetime.now(timezone.utc)
+        changed = False
+        for target, c in list(cancels.items()):
+            n = by_id.get(target)
+            if n is None:
+                try:
+                    old = (now - parse_date(c.get("date", ""))).days > keep_days
+                except (TypeError, ValueError):
+                    old = True
+                if old:                     # pending too long (section 7.2)
+                    del cancels[target]
+                    changed = True
+                continue
+            try:                            # the target's signer, also for private messages
+                target_author = Article.from_bytes(raws[n])["Author-Key"] if n in raws \
+                    else cache[n].author_key
+            except (ArticleError, KeyError, ValueError):
+                target_author = cache[n].author_key
+            if c.get("by") == target_author or c.get("by") in privileged:
+                gone = cache.pop(n)
+                raws.pop(n, None)
+                changed = True
+                # withdrawing an edit withdraws the post: its earlier versions by the
+                # same author go too, or they would show again (UN-RFC 0042, 4.2)
+                for v in gone.supersedes:
+                    vn = by_id.get(v)
+                    if vn in cache and cache[vn].author_key == gone.author_key:
+                        del cache[vn]
+                        raws.pop(vn, None)
+            else:                           # not valid for this target: forget it
+                del cancels[target]
+                changed = True
+        return changed
+
     # ------------------------------------------------------------------
     # posting
     # ------------------------------------------------------------------

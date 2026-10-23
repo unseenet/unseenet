@@ -1,7 +1,26 @@
-"""Client session: vault, node connection, reading and posting.
+"""Client session: one person's (or one service's) client of the Unseenet network.
 
-Shared by the command line and the TUI. Everything persistent lives in the
-encrypted vault (UN-RFC 0007); articles are cached in memory only.
+``Session`` is the client core that every client is built on - the command line, the
+TUI, unseenet-gui, the local client API (UN-RFC 0046), bots and gateways - so they all
+behave alike. It holds the encrypted vault (UN-RFC 0007), talks to nodes over Tor, and
+reads and posts. Clients use the one class; its code is split by area:
+
+    base.py       the vault, identities, settings, events
+    ripening.py   key ripening (UN-RFC 0025)
+    nodes.py      nodes, the connection, push, Tor
+    labels.py     how people and groups are shown: names and labels (UN-RFC 0019)
+    groups.py     manifests, creating and changing groups, moderation, roles, portals
+    private.py    the inbox, private posts and chats, key-bound groups and renewal
+    profiles.py   profiles and pictures (UN-RFC 0022)
+    people.py     contacts, ignoring, for you and mentions, notices, bots, reporting
+    reading.py    following, fetching, threads and views, the offline cache, read marks
+    posting.py    posting, postage, editing and withdrawing
+
+New code goes in the file whose docstring says it belongs there; a new area gets a file
+of its own, added to ``Session`` below. This file holds what all parts share: imports,
+constants, ``Message``, ``GroupInfo``, ``Permission``, ``SessionError`` and helpers.
+Names that tests patch on this module (``DEFAULT_POW``, ``TorProcess``) are read
+through it (``_s.NAME``) in the parts.
 """
 
 from __future__ import annotations
@@ -317,6 +336,7 @@ __all__ = [n for n in dir() if not n.startswith('__')]
 from .base import BaseMixin  # noqa: E402
 from .ripening import RipeningMixin  # noqa: E402
 from .nodes import NodesMixin  # noqa: E402
+from .labels import LabelsMixin  # noqa: E402
 from .groups import GroupsMixin  # noqa: E402
 from .private import PrivateMixin  # noqa: E402
 from .profiles import ProfilesMixin  # noqa: E402
@@ -325,7 +345,7 @@ from .reading import ReadingMixin  # noqa: E402
 from .posting import PostingMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

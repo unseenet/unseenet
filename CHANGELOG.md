@@ -93,7 +93,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 ### Changed
 
 - `Session` is split into files by area (`client/session/`: base, ripening,
-  nodes, groups, private, profiles, people, reading, posting), joined into
+  nodes, labels, groups, private, profiles, people, reading, posting), each
+  with a docstring saying what belongs there, joined into
   the one class clients use as before (#390). Code moved only.
 
 ## [0.4.4] - 2026-10-23
