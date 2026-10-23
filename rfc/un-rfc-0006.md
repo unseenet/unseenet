@@ -80,8 +80,8 @@ groups under spam pressure may raise `min_pow`.
   Argon2id) can be added by a later UN-RFC. The name `argon2id` is
   reserved for that purpose.
 - Postage is deliberately useless work. "Useful" proof-of-work, such
-  as the work units of volunteer computing projects (SETI@home,
-  Folding@home and other BOINC projects), was considered and rejected.
+  as the work units of volunteer computing projects (SETI@home and
+  other BOINC projects, or Folding@home), was considered and rejected.
   Postage needs four properties such work lacks: the puzzle is derived
   from the article itself, so it cannot be computed in advance or
   reused; any node can verify it with one hash evaluation without
