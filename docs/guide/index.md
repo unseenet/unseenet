@@ -21,8 +21,8 @@ for people who build nodes and clients.
 2. [A post's journey](journey.md) - one post followed from the keyboard to
    another reader's screen, and what everybody on the way learns.
 3. [Identity](identity.md) - keys, the vault, names, key ripening and profiles.
-4. *Groups* - hierarchies, manifests, chats and posts, closed groups,
-   feeds, pages and moderation. *(coming)*
+4. [Groups](groups.md) - hierarchies, manifests, chats and posts, closed
+   groups, feeds, pages and moderation.
 5. *The node* - what it stores, peering, the known-node list, files, and
    what an operator can and cannot see. *(coming)*
 6. *The clients* - one core shared by the terminal client, the graphical
