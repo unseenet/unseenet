@@ -14,6 +14,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `"paused"` in the state's `ripening` and a `ripening-paused` event
   (UN-RFC 0046, #337). A pause lasts for the run; a post that needs a riper
   key still ripens what it needs.
+- The local client API has what unseenet-gui served on its own (#320): a
+  group's `write` and each row's `reply` (may you write, and if not, why),
+  `POST /api/passphrase`, and for profiles the label, whether you hid it,
+  `POST /api/profile/hide`, publishing from a form's fields, and for yours
+  whether one is published and the warning before the first. Opening
+  someone's profile reads the authors' profiles together, so a node cannot
+  tell whose you open. The warning is `profiles.PROFILE_WARNING`, used by the
+  TUI too (UN-RFC 0046).
 
 ### Fixed
 

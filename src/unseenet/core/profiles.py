@@ -33,6 +33,18 @@ MAX_ALT = 128
 MAX_PRIVATE_AVATAR = 11264               # octets of the `avatar` field in a private profile
 
 
+# Shown before someone publishes their first profile, the same in every client
+# (section 9.1; was in the TUI and copied into unseenet-gui, unseenet#320).
+PROFILE_WARNING = (
+    "Anybody who sees this identity's posts can read its profile.\n\n"
+    "A link ties this identity - everything it has posted and will post - to that "
+    "account.\n\n"
+    "A published profile cannot be fully taken back: others may already have kept a "
+    "copy.\n\n"
+    "If you only want certain people to know, keep a separate identity for that, or "
+    "leave the profile out.")
+
+
 class ProfileError(ValueError):
     pass
 

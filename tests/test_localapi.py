@@ -232,6 +232,42 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert view["group"]["owner"] and view["group"]["kinds"] == ["post"]
         assert view["group"]["roles"]["maintainer"] is False
         assert (await r.get("/api/groups/nonsense@0000"))[0] == 404
+
+        # may you write, before you write (#320): posts only here, no chat lines
+        w = view["group"]["write"]
+        assert w["post"]["allowed"] and not w["chat"]["allowed"] and w["chat"]["code"] == "kind"
+        assert w["chat"]["reason"]
+        _, view = await r.get(f"/api/groups/{_gid(g)}")
+        assert view["rows"] and all(x["reply"]["allowed"] for x in view["rows"])
+        _, fy = await r.get("/api/groups/" + _gid("for-you:"))
+        assert "write" not in fy["group"]
+
+        # profiles (#320): the warning, a form's fields, hiding someone's
+        _, mine = await r.get("/api/profile")
+        assert mine["mine"] and mine["published"] is False and "Anybody" in mine["warning"]
+        assert "mastodon" in mine["link_kinds"]
+        status, mine = await r.post("/api/profile", {"edit": {
+            "about": "Hej *med* dig", "markdown": True, "lang": "da, en",
+            "links": [{"kind": "Web", "value": "https://unseenet.org"}, {"kind": "x", "value": " "}]}})
+        assert status == 200 and mine["published"] is True
+        assert mine["profile"]["lang"] == ["da", "en"] and mine["profile"]["links"] == [
+            {"kind": "web", "value": "https://unseenet.org"}]
+        assert (await r.post("/api/profile", {"edit": {"lang": "not a language!"}}))[0] == 400
+        _, theirs = await r.get("/api/profile?key=" + sonia)
+        assert not theirs["mine"] and theirs["hidden"] is False and theirs["label"]
+        assert (await r.post("/api/profile/hide", {"key": sonia, "hidden": True}))[1]["hidden"]
+        _, theirs = await r.get("/api/profile?key=" + sonia)
+        assert theirs["hidden"] is True and theirs["profile"] is None
+        await r.post("/api/profile/hide", {"key": sonia, "hidden": False})
+        me = (await r.get("/api/state"))[1]["identity"]["key"]
+        assert (await r.post("/api/profile/hide", {"key": me}))[0] == 400
+
+        # a new passphrase (#320)
+        status, body = await r.post("/api/passphrase", {"old": "wrong", "new": "newpass"})
+        assert status == 400 and "not right" in body["error"]
+        assert (await r.post("/api/passphrase", {"old": "pw", "new": "x"}))[0] == 400
+        assert (await r.post("/api/passphrase", {"old": "pw", "new": "newpass"}))[1] == {"ok": True}
+        assert (await r.post("/api/passphrase", {"old": "newpass", "new": "again"}))[0] == 200
         await ws.close()
     await other.close()
     server.close()

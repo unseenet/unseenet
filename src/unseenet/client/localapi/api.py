@@ -23,6 +23,7 @@ from ... import names as nm
 from ...core import about as about_text
 from ...core import crypto
 from ...core import markup
+from ...core import profiles as prof
 from ...core import ripening as rp
 from ...core.groups import (KIND_CHAT, KIND_POST, group_refs, manifest_article, message_kind,
                             personal_inbox_id)
@@ -51,6 +52,11 @@ class Locked(Exception):
 
 class NotFound(Exception):
     """404: no such group or post."""
+
+
+def _perm(p) -> dict:
+    """``Session.write_permission`` for a front end: greyed out, with the reason (#181)."""
+    return {"allowed": bool(p.allowed), "reason": p.reason, "code": p.code}
 
 
 def _key(text) -> str:
@@ -342,7 +348,10 @@ class LocalAPI:
                "rules_tree": markup.manifest_text(data.get("rules", ""), data.get("rules_type"))
                if data.get("rules") else [],
                "portals": [{"network": n, "source": src} for n, src in s.group_portals(gid)],
-               "portal_warning": s.portal_warning(gid)}
+               "portal_warning": s.portal_warning(gid),
+               # may you write here, and if not, why - before you write (#181, #320)
+               "write": {"post": _perm(s.write_permission(gid, kind=KIND_POST)),
+                         "chat": _perm(s.write_permission(gid, kind=KIND_CHAT))}}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
         return out
@@ -382,8 +391,11 @@ class LocalAPI:
             rows = s.threads(gid)
         mine, patterns = s.my_message_ids(), s._mention_patterns()
         keys = {s.identity(n).key_text for n in s.data["identities"]}
-        return {"group": head,
-                "rows": [self._row(s, m, d, mine, patterns, keys) for m, d in rows]}
+        out = [self._row(s, m, d, mine, patterns, keys) for m, d in rows]
+        if "write" in head:                     # a real group: may you answer each post?
+            for row, (m, _) in zip(out, rows):
+                row["reply"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_POST))
+        return {"group": head, "rows": out}
 
     @staticmethod
     def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:
@@ -787,11 +799,52 @@ class LocalAPI:
 
     # --- who you are (section 4.8) ---------------------------------------------
     async def profile(self, key: str | None = None) -> dict:
+        """A profile with what a front end shows around it (#320): its label, whether
+        you hid it, and for yours whether one is published and the warning before
+        the first (UN-RFC 0022 sections 9.1, 9.2)."""
         s = self._ready()
-        if not key or key == s.identity().key_text:
-            return self._profile(s.identity().key_text, s.my_profile())
-        p = await s.profile_of(_key(key))
-        return self._profile(key, None if p is None else (p.raw or {"about": p.about}))
+        me = s.identity().key_text
+        key = (key or "").strip() or me
+        base = {"label": s.label_of(key), "link_kinds": list(prof.LINK_KINDS)}
+        if key == me:
+            return {**self._profile(me, s.my_profile()), **base, "mine": True, "hidden": False,
+                    "published": s.has_published_profile(), "warning": prof.PROFILE_WARNING}
+        key = _key(key)
+        if s.profile_hidden(key):                         # hidden: not even asked for
+            return {**self._profile(key, None), **base, "mine": False, "hidden": True}
+        # all the authors you have, read together, so a node cannot tell whose you open
+        # (UN-RFC 0022 section 13, UN-RFC 0041 section 3.2)
+        authors = [m.author_key for g in s.cache.values() for m in g.values()
+                   if m.readable and m.author_key][:255]
+        with contextlib.suppress(*NETWORK_ERRORS):        # profile_of below tries again
+            await s.prefetch_profiles([key, *authors])
+        p = await s.profile_of(key)
+        return {**self._profile(key, None if p is None else (p.raw or {"about": p.about})),
+                **base, "mine": False, "hidden": False}
+
+    def hide_profile(self, key: str, hidden: bool = True) -> dict:
+        """Hide or show someone's profile, for you alone (UN-RFC 0022 section 9.2)."""
+        s = self._ready()
+        key = _key(key)
+        if key == s.identity().key_text:
+            raise SessionError("You cannot hide your own profile")
+        s.hide_profile(key, bool(hidden))
+        return {"key": key, "hidden": s.profile_hidden(key)}
+
+    async def change_passphrase(self, old: str, new: str) -> dict:
+        """A new passphrase for this vault file (#281). Slow, so off the event loop.
+        Copies of the vault elsewhere keep the old one."""
+        s = self._ready()
+        if self.service:
+            raise SessionError("a service has no vault passphrase")
+        if len(new) < 4:
+            raise SessionError("The new passphrase is too short.")
+        try:
+            await asyncio.to_thread(s.change_passphrase, old, new)
+        except VaultError as exc:
+            raise SessionError("The current passphrase is not right." if "wrong passphrase" in str(exc)
+                               else f"Could not change it: {exc}") from exc
+        return {"ok": True}
 
     @staticmethod
     def _profile(key: str, obj: dict | None) -> dict:
@@ -801,12 +854,39 @@ class LocalAPI:
 
     async def publish_profile(self, profile) -> dict:
         s = self._ready()
+        if isinstance(profile, dict) and isinstance(profile.get("edit"), dict):
+            profile = self._from_fields(s, profile["edit"])
         if profile is not None and not isinstance(profile, dict):
             raise SessionError("a profile is an object or null")
         if self.service and isinstance(profile, dict):
             profile = {**profile, "bot": True}             # a program says so (UN-RFC 0030, 6)
         await s.publish_profile(profile)
-        return self._profile(s.identity().key_text, s.my_profile())
+        return {**self._profile(s.identity().key_text, s.my_profile()),
+                "published": s.has_published_profile()}
+
+    @staticmethod
+    def _from_fields(s: Session, f: dict) -> dict:
+        """A profile from a form's fields (#320): ``about``, ``links`` as
+        ``[{"kind", "value", "label"}]``, ``lang`` as a list or "da, en", and
+        ``markdown``. The bot mark you have stays."""
+        links = []
+        for link in f.get("links") or []:
+            if isinstance(link, dict) and str(link.get("value", "")).strip():
+                item = {"kind": str(link.get("kind", "")).strip().lower(),
+                        "value": str(link["value"]).strip()}
+                if str(link.get("label", "")).strip():
+                    item["label"] = str(link["label"]).strip()
+                links.append(item)
+        lang = f.get("lang") or []
+        if isinstance(lang, str):
+            lang = lang.split(",")
+        lang = [str(t).strip() for t in lang if str(t).strip()]
+        try:
+            return prof.make_profile(str(f.get("about", "")), links, lang,
+                                     bot=(s.my_profile() or {}).get("bot") is True,
+                                     markdown=bool(f.get("markdown")))
+        except prof.ProfileError as exc:
+            raise SessionError(str(exc)) from exc
 
     async def names(self) -> dict:
         s = self._ready()
