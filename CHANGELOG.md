@@ -107,6 +107,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - The node's store is split into files by area (`core/store/`: base,
   articles, groups, key-bound, kept, blobs, withdrawals, peers, stats),
   each with a docstring saying what belongs there (#398). Code moved only.
+- The local client API is split into files by section of UN-RFC 0046
+  (`client/localapi/api/`), so a section and its code find each other
+  (#400). Code moved only. `tools/dev/check_globals.py` checks that every
+  global name a function in a package uses exists in its file.
 
 ## [0.4.4] - 2026-10-23
 
