@@ -178,4 +178,5 @@ nav:
       - The code: developers/code.md
       - Session reference: developers/session.md
       - Local client API: developers/localapi.md
+      - Node reference: developers/node.md
       - Decisions and principles: development.md

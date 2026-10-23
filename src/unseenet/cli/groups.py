@@ -15,6 +15,8 @@ from .. import cli as _c   # names tests patch on the module, read at call time
 
 
 async def c_groups(app: App, args) -> None:
+    """``unseenet groups [PATTERN] [--mine]``: the groups the node carries; ``--mine``
+    only those an identity in this vault owns."""
     async with app.connect() as c:
         lines = await c.multiline(f"LIST NEWSGROUPS {args.pattern}", 215)
     for line in lines:
@@ -138,6 +140,8 @@ async def c_group_edit(app: App, args) -> None:
 
 
 async def c_group_create(app: App, args) -> None:
+    """``unseenet group-create NAME --type ...``: create a group you own, with the
+    settings of ``_group_options``, through ``Session.create_group``. Prints its Group ID."""
     from ..client.session import SessionError
     fields, extra = _group_fields(args)
     s = _session(app, args)
@@ -158,6 +162,8 @@ async def c_group_create(app: App, args) -> None:
 
 
 async def c_invite(app: App, args) -> None:
+    """``unseenet invite GROUP KEY``: owner of a closed group - give a key access, and
+    print the invitation to share."""
     owner = app.identity(args.identity)
     entry = app.data["groups"].get(args.group)
     if not entry or not entry.get("owner") or entry["type"] != "closed":

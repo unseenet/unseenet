@@ -69,6 +69,9 @@ class Identity:
         return {"key": key, "profile": obj, "about_tree": tree}
 
     async def publish_profile(self, profile) -> dict:
+        """``POST /api/profile`` (section 4.8): publish your profile - an object, or
+        ``{"edit": fields}`` from the profile form, or null to withdraw it. A program's profile
+        says it is a bot. Answers the profile as ``GET`` shows it."""
         s = self._ready()
         if isinstance(profile, dict) and isinstance(profile.get("edit"), dict):
             profile = self._from_fields(s, profile["edit"])
@@ -105,6 +108,8 @@ class Identity:
             raise SessionError(str(exc)) from exc
 
     async def names(self) -> dict:
+        """``GET /api/names`` (section 4.8): your names (UN-RFC 0019) - the ones you hold,
+        which is shown first, pending claims, and the DNS value to prove a domain."""
         s = self._ready()
         with contextlib.suppress(*NETWORK_ERRORS, asyncio.TimeoutError):
             await asyncio.wait_for(s.refresh_naming(), 60)
@@ -167,6 +172,8 @@ class Identity:
         return {"text": text}
 
     def settings(self) -> dict:
+        """``GET /api/settings`` (section 4.8): your settings, with a preview of your
+        signature as it will be signed."""
         s = self._ready()
         return {"signature": s.signature_template(), "signature_preview": s.signature(),
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
@@ -174,6 +181,8 @@ class Identity:
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots()}
 
     def set_settings(self, data: dict) -> dict:
+        """``POST /api/settings`` (section 4.8): change your settings - signature,
+        Markdown, notices, the ripening level private senders need, blocked posts, bots."""
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
                                "show_blocked", "hide_bots"}

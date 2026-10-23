@@ -43,6 +43,7 @@ class Blobs:
                 and self.store.blob_usage("group", art.group) + octets <= per_group)
 
     def store_blob(self, bid: str, octets: bytes) -> None:
+        """Keep a blob's octets on disk and note it in the store (UN-RFC 0027 section 7)."""
         self.blobs.put(bid, octets)
         self.store.note_blob(bid, len(octets))
 
@@ -91,6 +92,8 @@ class Blobs:
         return True
 
     def fetching(self, bid: str) -> bool:
+        """True while the node is fetching this blob for an article it holds back
+        (UN-RFC 0027 section 6.3): BLOB then answers ``436`` (try later)."""
         return any(bid in w["missing"] for w in self.blob_wait.values())
 
     def blobs_done(self, message_id: str) -> None:

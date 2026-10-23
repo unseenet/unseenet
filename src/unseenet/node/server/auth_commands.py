@@ -10,6 +10,8 @@ from .. import server as _s   # names tests patch on the module, read at call ti
 
 class AuthCommands:
     async def cmd_authinfo(self, args):
+        """``AUTHINFO USER``/``PASS`` (RFC 4643): a configured peer logging in with its
+        password (``281``); peers with node keys use XUN-PEER instead (UN-RFC 0016)."""
         if len(args) < 2:
             self.send("501 syntax")
         elif args[0].upper() == "USER":

@@ -46,6 +46,8 @@ async def c_withdraw(app: App, args) -> None:
 
 
 async def c_post(app: App, args) -> None:
+    """``unseenet post GROUP -s SUBJECT [--body ... | stdin] [--attach FILE]``: post to a
+    group. Warns first when the group has portals to other networks (UN-RFC 0023)."""
     from ..core import portals
     author = app.identity(args.identity)
     entry = app.data["groups"].get(args.group, {})
@@ -108,6 +110,8 @@ async def _post_with_files(app: App, args, author, body: str) -> None:
 
 
 async def c_read(app: App, args) -> None:
+    """``unseenet read GROUP``: print the group's posts - checked, decrypted for closed
+    groups you are in - with their Message-IDs."""
     split_group_id(args.group)
     me = app.identity(args.identity)
     entry = app.data["groups"].setdefault(args.group, {"type": None, "owner": False, "keys": {}})

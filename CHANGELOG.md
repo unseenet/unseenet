@@ -112,11 +112,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (#400). Code moved only. `tools/dev/check_globals.py` checks that every
   global name a function in a package uses exists in its file.
 - Every public `Session` function has a docstring - what it does, what it
-  returns, when a client uses it - and a test keeps it so (#402).
+  returns, when a client uses it - and a test keeps it so (#402). So does
+  every public function of the local client API (each naming its route and
+  its section of UN-RFC 0046, #404), the node, its NNTP commands (syntax,
+  answers, RFC), the store and the command line (#407).
 - The site has a Developers section (#405): how to write a client on
   `Session` or the local client API, a map of the code and where new code
   goes, and a Session and local API reference generated from the
-  docstrings (mkdocstrings).
+  docstrings (mkdocstrings), and a Node reference: the accept pipeline, the
+  commands and the store.
 
 ## [0.4.4] - 2026-10-23
 

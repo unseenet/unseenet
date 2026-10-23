@@ -12,6 +12,8 @@ from .. import server as _s   # names tests patch on the module, read at call ti
 class ListsCommands:
     # --- lists ---
     async def cmd_list_active(self, args):
+        """``LIST ACTIVE [wildmat]``: the ordinary groups this node carries, with
+        their high and low numbers - key-bound groups are not listed (UN-RFC 0040 section 3)."""
         pattern = args[0] if args else "*"
         self.send("215 list follows")
         for gid, high, low, _ in self.node.store.groups(ordinary=True):   # UN-RFC 0040, 3
@@ -20,6 +22,8 @@ class ListsCommands:
         self.send(".")
 
     async def cmd_list_newsgroups(self, args):
+        """``LIST NEWSGROUPS [wildmat]``: the ordinary groups with their
+        descriptions from the manifest."""
         pattern = args[0] if args else "*"
         self.send("215 descriptions follow")
         for gid, _, _, desc in self.node.store.groups(ordinary=True):

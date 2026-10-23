@@ -205,11 +205,14 @@ def _open_box(key: bytes, box: bytes) -> bytes:
 
 
 def seal(payload: bytes, passphrase: str, *, ops: int = OPSLIMIT, mem: int = MEMLIMIT) -> bytes:
+    """Encrypt ``payload`` with a key derived from ``passphrase`` (Argon2id, UN-RFC 0007
+    section 2). ``ops`` and ``mem`` are the KDF's cost; the result carries them."""
     salt = os.urandom(16)
     return _pack(_key(passphrase, salt, ops, mem), salt, ops, mem, payload)
 
 
 def unseal(blob: bytes, passphrase: str) -> bytes:
+    """Decrypt what ``seal`` made; raises on a wrong passphrase or a damaged file."""
     ops, mem, salt, box = _unpack(blob)
     return _open_box(_key(passphrase, salt, ops, mem), box)
 

@@ -14,6 +14,8 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class Running:
     # --- groups you run (section 4.7) -------------------------------------------
     async def create_group(self, data: dict) -> dict:
+        """``POST /api/groups`` (section 4.7): create a group you own - name, type,
+        title, description, kinds, view, rules and the channel settings. Answers its Group ID."""
         s = self._ready()
         gtype = str(data.get("type", "open"))
         if gtype not in GROUP_TYPES:
@@ -35,6 +37,9 @@ class Running:
         return {"id": gid}
 
     async def group_settings(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/settings`` (section 4.7): owner - change a group's
+        settings (title, description, rules, view, kinds and the others in ``SETTINGS_FIELDS``).
+        A new manifest; type, owner and locality never change."""
         s = self._ready()
         unknown = set(data) - set(SETTINGS_FIELDS)
         if unknown:
@@ -50,6 +55,8 @@ class Running:
         return {"ok": True}
 
     async def remove_group(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/remove`` (section 4.7): owner - remove a group from
+        the whole network (UN-RFC 0013). Final, so it needs ``"confirm": "remove"``."""
         s = self._ready()
         if data.get("confirm") != "remove":
             raise SessionError('give "confirm": "remove"')
@@ -58,18 +65,24 @@ class Running:
         return {"ok": True}
 
     async def invite(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/invite`` (section 4.7): owner of a closed group - give a
+        key the group's current key."""
         s = self._ready()
         await s.invite(gid, _key(data.get("key")))
         s.emit(ev.GroupUpdated(gid))
         return {"ok": True}
 
     async def remove_member(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/members/remove`` (section 4.7): owner of a closed
+        group - remove a member, which starts a new key epoch. Answers the epoch."""
         s = self._ready()
         epoch = await s.remove_member(gid, _key(data.get("key")))
         s.emit(ev.GroupUpdated(gid))
         return {"epoch": epoch}
 
     async def role(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/role`` (section 4.7): owner - add or remove a moderator or
+        a poster (``role`` moderators or posters, ``on``)."""
         s = self._ready()
         role = str(data.get("role", ""))
         if role not in ("moderators", "posters"):
@@ -79,6 +92,8 @@ class Running:
         return {"ok": True}
 
     async def ban(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/ban`` (section 4.7): owner - ban a key (``on`` true, with a
+        ``reason``) or lift a ban (``on`` false). A new manifest."""
         s = self._ready()
         key = _key(data.get("key"))
         if data.get("on", True):
@@ -89,6 +104,8 @@ class Running:
         return {"ok": True}
 
     async def moderation(self) -> dict:
+        """``GET /api/moderation`` (section 4.7): the submissions waiting for you as a
+        moderator, fetched from your inbox, with who sent them and to which group."""
         s = self._ready()
         with contextlib.suppress(*NETWORK_ERRORS):
             await s.fetch_group(s.my_inbox)
@@ -107,6 +124,8 @@ class Running:
         return {"waiting": out}
 
     async def moderate(self, data: dict) -> dict:
+        """``POST /api/moderation`` (section 4.7): moderator - approve a submission
+        (``approve`` true; it is posted) or reject it with a ``reason`` sent to its author."""
         s = self._ready()
         found = next(((m, a) for m, a in s.submissions() if m.message_id == data.get("id")), None)
         if found is None:

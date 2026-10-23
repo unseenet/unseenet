@@ -22,10 +22,14 @@ class Setup:
             self.status = "Starting"
 
     def needs_setup(self) -> bool:
+        """True when the vault is open but has no identity or no node yet: the front
+        end shows the setup (section 4.2)."""
         s = self.session
         return s is not None and (not s.has_identity() or not s.node)
 
     async def unlock(self, passphrase: str) -> dict:
+        """``POST /api/unlock`` (section 4.2): open the vault with its passphrase (made if
+        it does not exist yet) and start the runtime. A service has no vault to unlock."""
         if self.service:
             raise SessionError("a service has no vault to unlock")
         if self.session is None:
@@ -45,6 +49,8 @@ class Setup:
         return self.state()
 
     async def setup(self, display: str, node: str) -> dict:
+        """``POST /api/setup`` (section 4.2): the first setup of a new vault - your display
+        name and a node (an address, or one from the known nodes). Starts the runtime."""
         if self.service:
             raise SessionError("a service is set up with its key file")
         s = self._unlocked()
@@ -72,6 +78,8 @@ class Setup:
         self._say(f"{loaded} saved posts available offline - connecting ...")
 
     async def close(self) -> None:
+        """Stop the runtime and every task, and close the session. The server calls it on
+        shutdown; a test or another transport calls it when done."""
         for task in list(self._tasks):
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)

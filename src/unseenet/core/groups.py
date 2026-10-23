@@ -74,6 +74,8 @@ def make_group_id(name: str, owner_pk: bytes) -> str:
 
 
 def split_group_id(group_id: str) -> tuple[str, str]:
+    """``(name, fingerprint)`` of a Group ID; ``ValueError`` if it is not one
+    (UN-RFC 0004 section 2)."""
     name, at, fp = group_id.rpartition("@")
     if not at or not _NAME_RE.match(name) or len(name) > 128 or not _FP_RE.match(fp):
         raise ValueError(f"invalid group ID {group_id!r}")
@@ -81,6 +83,8 @@ def split_group_id(group_id: str) -> tuple[str, str]:
 
 
 def short_group_id(group_id: str) -> str:
+    """A group's name with a short fingerprint, ``name@abcd``, for showing - never
+    for finding a group, where the full ID is needed."""
     name, fp = split_group_id(group_id)
     return f"{name}@{fp[:4]}"
 
@@ -506,6 +510,8 @@ def parse_key_update(art: Article) -> tuple[int, bytes | None, dict]:
 
 
 def open_envelope(art: Article, me: crypto.Identity) -> tuple[int, crypto.GroupKeys] | None:
+    """Your keys from a key update: ``(epoch, GroupKeys)`` if it has an envelope for
+    ``me``, else None (UN-RFC 0004 section 6)."""
     epoch, _, envelopes = parse_key_update(art)
     box = envelopes.get(envelope_tag(art.group, epoch, me.public_key))
     if box is None:
@@ -537,6 +543,7 @@ def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author:
 
 
 def encryption_epoch(art: Article) -> int:
+    """The key epoch an encrypted article names in its ``Encrypted`` header."""
     m = re.match(rf"^{ENC_SCHEME};\s*epoch=(\d+)$", art.get("Encrypted", "").strip())
     if not m:
         raise ArticleError("syntax", "unsupported Encrypted header")
@@ -544,6 +551,8 @@ def encryption_epoch(art: Article) -> int:
 
 
 def decrypt_article(art: Article, keys: crypto.GroupKeys) -> Article:
+    """The inner article of a closed group's post, decrypted with the epoch's keys
+    (UN-RFC 0004 section 6). Raises if it was not made with them."""
     epoch = encryption_epoch(art)
     blob = b64decode("".join(art.body.split()))
     return Article.from_bytes(crypto.aead_decrypt(keys.enc_key, blob, _aad(art.group, epoch)))
@@ -560,6 +569,8 @@ def verify_member_signature(art: Article, member_pk: bytes) -> bool:
 # --- inbox groups (UN-RFC 0009) ----------------------------------------------
 
 def personal_inbox_id(pk: bytes) -> str:
+    """The Group ID of the personal inbox of a public key: ``inbox@<fingerprint>``
+    (UN-RFC 0009)."""
     return make_group_id(INBOX_NAME, pk)
 
 

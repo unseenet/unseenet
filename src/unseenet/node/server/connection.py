@@ -32,9 +32,12 @@ class ConnectionBase:
         self.staged: dict[str, tuple[bytes, float]] = {}   # UN-RFC 0027 6.2: blob ID -> (octets, when)
 
     def send(self, line: str) -> None:
+        """Send one line to the other side (CRLF added). Buffered; ``run`` drains it."""
         self.writer.write(line.encode("utf-8") + b"\r\n")
 
     async def run(self) -> None:
+        """The command loop: greet with ``200``, read a command a line at a time and answer
+        it, until QUIT, an idle connection (``IDLE_SECONDS``) or the client goes."""
         self.send(f"200 Unseenet node {__version__} ready (posting ok)")
         while True:
             await self.writer.drain()
@@ -74,6 +77,9 @@ class ConnectionBase:
 
     # --- capabilities & misc ---
     async def cmd_capabilities(self, args):
+        """``CAPABILITIES`` (RFC 3977 5.2): what this node speaks, with the Unseenet
+        capabilities of UN-RFC 0005 - its size and postage limits, ripening, files and the
+        XUN commands."""
         cfg = self.node.config
         self.send("101 capability list follows")
         for cap in ("VERSION 2", "READER", "POST", "IHAVE", "STREAMING", "AUTHINFO USER",
@@ -89,9 +95,11 @@ class ConnectionBase:
         self.send(".")
 
     async def cmd_date(self, args):
+        """``DATE`` (RFC 3977 7.1): the node's time in UTC - ``111 yyyymmddhhmmss``."""
         self.send("111 " + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
 
     async def cmd_help(self, args):
+        """``HELP``: points to UN-RFC 0005 for the supported commands - ``100``."""
         self.send("100 help text follows")
         self.send("See UN-RFC 0005 for the supported command profile.")
         self.send(".")

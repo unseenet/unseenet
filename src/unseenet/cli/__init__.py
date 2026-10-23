@@ -151,6 +151,8 @@ def _strip_reader_headers(raw: bytes) -> bytes:
 
 
 async def client_command(args) -> None:
+    """Open the vault (passphrase from ``UNSEENET_PASSPHRASE`` or the terminal) and
+    run one ``unseenet`` command on it, closing the session and Tor after."""
     path = Path(args.vault)
     passphrase = _passphrase("Vault passphrase: ", "UNSEENET_PASSPHRASE")
     try:

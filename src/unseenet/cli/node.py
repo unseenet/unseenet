@@ -27,6 +27,9 @@ def _min_ripe(path, value):
 
 
 def load_node_config(path: Path | None):
+    """Read ``node.toml`` into a ``NodeConfig``, checking every section - ``[node]``,
+    ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]`` - so a mistake stops the node at
+    start with a clear message. No file: the defaults."""
     from ..node.server import NodeConfig, PeerConfig
 
     if path is None:
@@ -113,6 +116,8 @@ def load_node_key(data: Path, passphrase: str) -> crypto.Identity:
 
 
 async def run_node(args) -> None:
+    """Run a node: open its store and blobs, unseal its key, start Tor and publish the
+    onion service, feed and pull from its peers, fetch blobs, expire, until stopped."""
     from ..node.peering import Feeder
     from ..node.server import Node
 
@@ -182,6 +187,8 @@ async def run_node(args) -> None:
 
 
 def node_main(argv=None) -> None:
+    """The ``unseenet-node`` command line (an entry point): run a node, or do one thing
+    and exit (``--show-key``, ``--sign``, ``--drop-group``, ``--refuse-blob``)."""
     p = argparse.ArgumentParser(prog="unseenet-node", description="Run an Unseenet node.")
     p.add_argument("--data", default="node-data", help="data directory (put it on an encrypted disk)")
     p.add_argument("--config", help="TOML config file")

@@ -14,6 +14,8 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class State:
     # --- state (section 4.1) ---------------------------------------------------
     def state(self) -> dict:
+        """``GET /api/state`` (section 4.1): everything a front end needs to draw itself -
+        locked or not, setup, connection, identity, nodes, inbox, ripening."""
         s = self.session
         out = {"api": API_VERSION, "version": __version__, "service": self.service,
                "unlocked": s is not None, "setup": self.needs_setup(),
@@ -48,6 +50,8 @@ class State:
         return self.state()["ripening"]
 
     def about(self) -> dict:
+        """``GET /api/about`` (section 4.1): the "About Unseenet" text every client shows,
+        with this version."""
         return about_text.as_dict(__version__)
 
     @staticmethod

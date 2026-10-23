@@ -45,6 +45,9 @@ class Writing:
             s.accept_portals(gid)
 
     def post(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/post`` (section 4.4): a post or a chat line, as a job whose
+        progress (ripening, postage) comes as events. To a contact's pseudo-group it is a
+        private post."""
         s = self._ready()
         kind = _kind(data)
         if gid.startswith(CONTACT):
@@ -82,6 +85,8 @@ class Writing:
         return {"job": self._new_job(gid, send, after)}
 
     def private(self, data: dict) -> dict:
+        """``POST /api/private`` (section 4.4): a private post or chat line to a key's
+        inbox (UN-RFC 0009), as a job."""
         s = self._ready()
         key = _key(data.get("key"))
         if key == s.identity().key_text:
@@ -114,6 +119,8 @@ class Writing:
         return {"job": self._new_job(group, send, after)}
 
     def edit(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/edit`` (section 4.5): a new version of one of your posts
+        (UN-RFC 0042), as a job; its progress comes as events."""
         s = self._ready()
         m = self._find(s, gid, str(data.get("id", "")))
         if not s.may_edit(m):
@@ -131,6 +138,8 @@ class Writing:
         return {"job": self._new_job(gid, send, after)}
 
     async def withdraw(self, gid: str, message_id: str) -> dict:
+        """``POST /api/groups/{gid}/withdraw`` (section 4.5): withdraw a post - your own,
+        or any in a group you own or moderate (UN-RFC 0004 section 7)."""
         s = self._ready()
         m = self._find(s, gid, message_id)
         if not s.may_cancel(m):
@@ -141,6 +150,9 @@ class Writing:
         return {"ok": True}
 
     def mentioned(self, gid: str, subject: str, body: str) -> dict:
+        """``POST /api/groups/{gid}/mentioned`` (section 4.5): before posting, whom a
+        text mentions by name and whether notices may be sent here (UN-RFC 0032) - for asking
+        the writer."""
         s = self._ready()
         if not s.may_notify(gid):
             return {"may": False, "names": [], "max": MAX_MENTION_NOTICES}
