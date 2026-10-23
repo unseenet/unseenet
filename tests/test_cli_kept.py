@@ -174,3 +174,19 @@ async def test_a_page_with_a_picture(setup, tmp_path, capsys):
     assert markup.image_blobs(markup.only_carried_images(tree, [bid])) == [bid]
     stored = node.blobs.get(bid)
     assert stored and b"SecretCam" not in stored
+
+
+
+async def test_a_personal_feed_with_pictures(setup, capsys):
+    """Found by the demo: a personal feed took no files. feed-start --attachments
+    makes one that does, and gives an existing one the setting."""
+    node, app = setup
+    me = await app("me")
+    await cli.c_feed_start(me, _args())
+    feed = _json(capsys)["group"]
+    assert "attachments" not in node.store.manifest(feed).raw
+    await cli.c_feed_start(me, _args(attachments=1048576, types="image/*"))
+    assert _json(capsys)["group"] == feed
+    m = node.store.manifest(feed)
+    assert m.raw["attachments"] == {"max_size": 1048576, "types": ["image/*"]} and m.raw["serial"] == 2
+    assert "expires" in m.raw                                  # still a key-bound group

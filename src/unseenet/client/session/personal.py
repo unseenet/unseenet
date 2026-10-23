@@ -39,11 +39,13 @@ class PersonalMixin:
         return PERSONAL_GROUP_WARNING.format(what=kind)
 
     async def start_personal_group(self, kind: str, *, comments: str = "open",
-                                   title: str = "") -> str:
+                                   title: str = "", attachments: dict | None = None) -> str:
         """Start this identity's personal feed or site - only when the user asked for it,
         after showing ``personal_group_warning``. A feed takes comments unless
         ``comments="none"`` (UN-RFC 0034 section 5.2); a site is a channel shown as
-        pages. If it exists already, it is followed again. Returns its Group ID."""
+        pages. ``attachments`` (``{"max_size": ..., "types": [...]}``, UN-RFC 0027
+        section 5.1) lets it carry pictures. If it exists already, it is followed again,
+        and given ``attachments`` if it has other or none. Returns its Group ID."""
         from ...core.groups import PERSONAL_GROUPS
         gid = self.personal_group(kind)
         try:
@@ -57,12 +59,16 @@ class PersonalMixin:
             art = make_manifest(self.identity(), kind, "channel", view=PERSONAL_GROUPS[kind],
                                 title=title, serial=serial, min_pow=_s.DEFAULT_POW,
                                 comments=comments if kind == "feed" else None,
+                                extra={"attachments": attachments} if attachments else None,
                                 pow_bits=await self.required_pow(gid),
                                 lifetime=self.key_bound_lifetime())
             await self._post_article(art)
             entry["manifest"] = json.loads(art.body)
+            entry.update({"type": "channel", "owner": True})
         else:
             entry["manifest"] = dict(current.raw)
-        entry.update({"type": "channel", "owner": True})
+            entry.update({"type": "channel", "owner": True})
+            if attachments and current.raw.get("attachments") != attachments:
+                await self.update_group(gid, attachments=attachments)
         self.subscribe(gid)
         return gid
