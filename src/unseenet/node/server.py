@@ -347,7 +347,11 @@ class Node:
             carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)
             for bid in carried:                         # staged on this connection: now kept
-                self.blobs.put(bid, staged.pop(bid)[0])
+                self.store_blob(bid, staged.pop(bid)[0])
+            if carried:                                 # UN-RFC 0027 8.1: the day's quota
+                self.store.charge_blobs(art["Author-Key"], art.group,
+                                        sum(n for b, n in blobs if b in carried))
+            self._refusal_list(art)
             if versions:
                 self._apply_edit(art, versions, held)
             if self._wait_for_blobs(art, blobs, source, from_peer):
@@ -587,6 +591,8 @@ class Node:
             # force (UN-RFC 0033 section 4.2, step 2)
             self.store.add_cancel(target, art["Author-Key"], art.group)
             self.store.add(art, raw)
+            if meta is not None:
+                self.sweep_blobs(retention=False)        # its blobs go too (UN-RFC 0027 7.2)
         elif ctl[0] in (pn.PIN, pn.UNPIN) and len(ctl) == 2:
             self._accept_pin(art, manifest, raw, ctl[0], ctl[1])
         else:
@@ -600,19 +606,67 @@ class Node:
         if not blobs or from_peer or not self.config.carries_blobs(art.group, bl.encrypted(art)):
             return []
         staged = staged or {}
-        missing = [b for b, _ in blobs if not self.blobs.has(b) and b not in staged]
+        wanted = [(b, n) for b, n in blobs if not self.store.blob_refused(b)]   # 7.3: not ours
+        missing = [b for b, _ in wanted if not self.blobs.has(b) and b not in staged]
         if missing:
             raise ArticleError("blobs", f"{len(missing)} blob(s) neither stored nor staged")
-        return [b for b, _ in blobs if b in staged and not self.blobs.has(b)]
+        new = [(b, n) for b, n in wanted if b in staged and not self.blobs.has(b)]
+        if new and not self._within_quota(art, sum(n for _, n in new)):
+            raise ArticleError("quota", "too many blob octets today for this key or group")
+        return [b for b, _ in new]
+
+    def _within_quota(self, art: Article, octets: int) -> bool:
+        """Section 8.1: a day's blob octets per author key and per group."""
+        b = self.config.blobs or {}
+        per_key = b.get("daily_per_key", bl.DAILY_PER_KEY)
+        per_group = b.get("daily_per_group", bl.DAILY_PER_GROUP)
+        return (self.store.blob_usage("key", art["Author-Key"]) + octets <= per_key
+                and self.store.blob_usage("group", art.group) + octets <= per_group)
+
+    def store_blob(self, bid: str, octets: bytes) -> None:
+        self.blobs.put(bid, octets)
+        self.store.note_blob(bid, len(octets))
+
+    def sweep_blobs(self, retention: bool = True) -> int:
+        """Delete the blobs no stored article references, refused ones, and those
+        past the node's blob retention unless a kept article references them
+        (UN-RFC 0027 sections 7.1-7.3, UN-RFC 0017 section 2.1)."""
+        days = (self.config.blobs or {}).get("retention_days") if retention else None
+        gone = self.store.blobs_to_delete(days)
+        for bid in gone:
+            self.blobs.delete(bid)
+            self.store.forget_blob(bid)
+        return len(gone)
+
+    def _refusal_list(self, art: Article) -> None:
+        """Section 7.3: a refusal list, followed only from keys the operator configured."""
+        b = self.config.blobs or {}
+        keys = b.get("refusal_keys") or []
+        if (not keys or art["Author-Key"] not in keys or "Encrypted" in art
+                or not wildmat(b.get("refusal_groups", "*"), art.group)
+                or not (art.get("Content-Type") or "").startswith("application/x-unseenet-blob-refusals")):
+            return
+        try:
+            data = parse_canonical_json(art.body)
+            listed = [x for x in data.get("blobs", []) if isinstance(x, str) and bl.valid_id(x)]
+            reason = str(data.get("reason", ""))[:200]
+        except (ValueError, AttributeError):
+            return
+        for bid in listed:
+            self.store.refuse_blob(bid, reason, art["Author-Key"])
+        if listed:
+            self.sweep_blobs(retention=False)
 
     def _wait_for_blobs(self, art: Article, blobs, source: str | None, from_peer: bool) -> bool:
         """Section 6.3: an article from a peer whose blobs we carry but lack is not
         passed on until we have fetched them, or at most BLOB_WAIT_SECONDS."""
         if not blobs or not from_peer or not self.config.carries_blobs(art.group, bl.encrypted(art)):
             return False
-        missing = {b: n for b, n in blobs if n <= self.config.max_blob and not self.blobs.has(b)}
-        if not missing:
-            return False
+        missing = {b: n for b, n in blobs if n <= self.config.max_blob and not self.blobs.has(b)
+                   and not self.store.blob_refused(b)}
+        if not missing or not self._within_quota(art, sum(missing.values())):
+            return False                 # over the quota: the article goes on, its files not (8.1)
+        self.store.charge_blobs(art["Author-Key"], art.group, sum(missing.values()))
         self.blob_wait[art.message_id] = {"group": art.group, "source": source, "missing": missing,
                                           "until": time.time() + BLOB_WAIT_SECONDS}
         return True
@@ -656,6 +710,12 @@ class Node:
                 raise ArticleError("permission", "a pin is in the group of its target")
             if Article.from_bytes(self.store.get(target)).control:
                 raise ArticleError("permission", "control articles cannot be pinned")
+        if action == pn.PIN and meta is not None:        # UN-RFC 0017 2.2: 8 MiB kept per group
+            kept = self.store.kept_blobs(art.group)
+            extra = sum(n for b, n in self.store.blob_refs(self.store.current_version(target))
+                        if b not in kept)
+            if extra and sum(kept.values()) + extra > bl.MAX_KEPT_PER_GROUP:
+                raise ArticleError("permission", "the group's kept blobs would pass 8 MiB")
         replaces = parse_supersedes(art, control_ok=True)     # section 3.1
         for old in replaces:
             held = self.store.marker(old)
@@ -799,6 +859,8 @@ class Node:
         store.db.execute("UPDATE supersedes SET new=? WHERE new IN (%s)" % ",".join("?" * len(versions)),
                          (art.message_id, *versions))
         store.db.commit()
+        if held:
+            self.sweep_blobs(retention=False)            # an edit withdraws like a cancel
 
     def _check_superseded(self, art: Article) -> None:
         """A version that arrives after its edit is refused (section 3.1)."""
@@ -1461,6 +1523,9 @@ class Session:
         if cfg.blobs is None:
             self.send("445 unsupported")
             return
+        if self.node.store.blob_refused(bid):
+            self.send("445 refused")
+            return
         if self.node.blobs.has(bid) or bid in self._fresh_staged():
             self.send("245 blob staged")
             return
@@ -1486,7 +1551,8 @@ class Session:
         if len(args) != 1 or not bl.valid_id(args[0]):
             self.send("501 syntax: BLOB <blob-id>")
             return
-        octets = self.node.blobs.get(args[0]) if self.node.config.blobs is not None else None
+        octets = (self.node.blobs.get(args[0]) if self.node.config.blobs is not None
+                  and not self.node.store.blob_refused(args[0]) else None)
         if octets is None:
             self.send("436 try later" if self.node.fetching(args[0]) else "430 no such blob")
             return

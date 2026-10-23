@@ -10,6 +10,7 @@ from pathlib import Path
 from .reconcile import FULL, MOD, item_hash, item_key, item_value
 from . import crypto
 from .article import Article, parse_date
+from . import blobs as bl
 from . import pins as pn
 from .groups import (KEY_BOUND_NAMES, MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound,
                      stored_expires)
@@ -94,6 +95,33 @@ CREATE TABLE IF NOT EXISTS markers (          -- pins and unpins (UN-RFC 0033), 
 );
 CREATE INDEX IF NOT EXISTS markers_group ON markers(group_id);
 CREATE INDEX IF NOT EXISTS markers_target ON markers(target);
+
+CREATE TABLE IF NOT EXISTS blob_refs (        -- UN-RFC 0027 7.1: which articles reference a blob
+    message_id TEXT NOT NULL,
+    blob_id    TEXT NOT NULL,
+    group_id   TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    PRIMARY KEY (message_id, blob_id)
+);
+CREATE INDEX IF NOT EXISTS blob_refs_blob ON blob_refs(blob_id);
+CREATE TABLE IF NOT EXISTS blob_meta (         -- blobs this node stores, and since when
+    blob_id    TEXT PRIMARY KEY,
+    stored_at  INTEGER NOT NULL,
+    size       INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS refused_blobs (     -- UN-RFC 0027 7.3: by the operator or a list
+    blob_id    TEXT PRIMARY KEY,
+    at         INTEGER NOT NULL,
+    reason     TEXT NOT NULL,
+    source     TEXT NOT NULL                    -- "operator" or the list's author key
+);
+CREATE TABLE IF NOT EXISTS blob_usage (        -- UN-RFC 0027 8.1: octets accepted per day
+    day        TEXT NOT NULL,
+    kind       TEXT NOT NULL,                   -- "key" or "group"
+    who        TEXT NOT NULL,
+    octets     INTEGER NOT NULL,
+    PRIMARY KEY (day, kind, who)
+);
 
 CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pulled from a peer
     peer       TEXT PRIMARY KEY,
@@ -202,6 +230,12 @@ class Store:
             "INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?, ?)",
             (art.message_id, group, number, int(parse_date(art["Date"]).timestamp()),
              int(time.time()), art["Author-Key"], raw))
+        try:
+            refs = bl.parse_blobs(art)
+        except Exception:  # noqa: BLE001  checked before; nothing to remember then
+            refs = []
+        self.db.executemany("INSERT OR IGNORE INTO blob_refs VALUES (?, ?, ?, ?)",
+                            [(art.message_id, b, group, n) for b, n in refs])
         self.remember(art.message_id)
         self.db.commit()
         return number
@@ -375,6 +409,68 @@ class Store:
             "WHERE group_id=?) ORDER BY e.epoch", (group_id, group_id))]
         out += [k for k in self.kept_ids(group_id) if self.has(k) and k not in out]
         return out
+
+    # --- blobs (UN-RFC 0027 sections 7, 8) ---
+    def note_blob(self, bid: str, size: int) -> None:
+        self.db.execute("INSERT OR IGNORE INTO blob_meta VALUES (?, ?, ?)", (bid, int(time.time()), size))
+        self.db.commit()
+
+    def forget_blob(self, bid: str) -> None:
+        self.db.execute("DELETE FROM blob_meta WHERE blob_id=?", (bid,))
+        self.db.commit()
+
+    def blob_refs(self, message_id: str) -> list[tuple[str, int]]:
+        return list(self.db.execute("SELECT blob_id, size FROM blob_refs WHERE message_id=?",
+                                    (message_id,)))
+
+    def blobs_to_delete(self, retention_days: int | None, now: float | None = None) -> list[str]:
+        """Section 7.1: stored blobs no stored article references, refused ones, and
+        - beyond the node's blob retention - those no kept article references."""
+        now = now or time.time()
+        self.db.execute("DELETE FROM blob_refs WHERE message_id NOT IN (SELECT message_id FROM articles)")
+        self.db.commit()
+        out = [r[0] for r in self.db.execute(
+            "SELECT blob_id FROM blob_meta WHERE blob_id NOT IN (SELECT blob_id FROM blob_refs) "
+            "OR blob_id IN (SELECT blob_id FROM refused_blobs)")]
+        if retention_days is not None:
+            kept = self.kept_blobs()
+            out += [r[0] for r in self.db.execute(
+                "SELECT blob_id FROM blob_meta WHERE stored_at < ?", (now - retention_days * 86400,))
+                if r[0] not in kept and r[0] not in out]
+        return out
+
+    def kept_blobs(self, group_id: str | None = None) -> dict[str, int]:
+        """Blobs referenced by kept articles (UN-RFC 0017 2.1), {blob ID: octets}."""
+        groups = [group_id] if group_id else [r[0] for r in self.db.execute(
+            "SELECT DISTINCT group_id FROM markers")]
+        out: dict[str, int] = {}
+        for g in groups:
+            for mid in self.kept_ids(g):
+                out.update(self.blob_refs(mid))
+        return out
+
+    def refuse_blob(self, bid: str, reason: str = "", source: str = "operator") -> None:
+        self.db.execute("INSERT OR IGNORE INTO refused_blobs VALUES (?, ?, ?, ?)",
+                        (bid, int(time.time()), reason[:200], source))
+        self.db.commit()
+
+    def blob_refused(self, bid: str) -> bool:
+        return self.db.execute("SELECT 1 FROM refused_blobs WHERE blob_id=?", (bid,)).fetchone() is not None
+
+    def blob_usage(self, kind: str, who: str, day: str | None = None) -> int:
+        day = day or time.strftime("%Y-%m-%d", time.gmtime())
+        row = self.db.execute("SELECT octets FROM blob_usage WHERE day=? AND kind=? AND who=?",
+                              (day, kind, who)).fetchone()
+        return row[0] if row else 0
+
+    def charge_blobs(self, key: str, group: str, octets: int) -> None:
+        day = time.strftime("%Y-%m-%d", time.gmtime())
+        for kind, who in (("key", key), ("group", group)):
+            self.db.execute("INSERT INTO blob_usage VALUES (?, ?, ?, ?) ON CONFLICT(day, kind, who) "
+                            "DO UPDATE SET octets = octets + excluded.octets", (day, kind, who, octets))
+        self.db.execute("DELETE FROM blob_usage WHERE day < ?",
+                        (time.strftime("%Y-%m-%d", time.gmtime(time.time() - 3 * 86400)),))
+        self.db.commit()
 
     # --- kept articles (UN-RFC 0017 section 2.1): pins (UN-RFC 0033) ---
     def has(self, message_id: str) -> bool:

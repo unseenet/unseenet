@@ -61,7 +61,7 @@ class BlobFollower:
                         log.debug("blob %s from %s: %s", bid, peer.name, exc)
                         continue
                     if octets is not None:
-                        self.node.blobs.put(bid, octets)
+                        self.node.store_blob(bid, octets)
                         w["missing"].pop(bid, None)
                         got += 1
                         break

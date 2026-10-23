@@ -21,6 +21,9 @@ STAGE_MIN_COUNT, STAGE_MIN_BYTES = 4, 8 * 1024 * 1024   # per connection, at lea
 STAGE_SECONDS = 3600
 FREE_TOTAL = 65536                    # no postage extra up to this (section 4.5)
 MAX_NAME, MAX_ALT = 128, 512          # octets before b64 (section 4.2)
+DAILY_PER_KEY = 32 * 1024 * 1024      # section 8.1, RECOMMENDED
+DAILY_PER_GROUP = 256 * 1024 * 1024
+MAX_KEPT_PER_GROUP = 8 * 1024 * 1024  # blobs of kept articles in one group (UN-RFC 0017 2.2)
 _ID_RE = re.compile(r"^blob1:[a-z2-7]{52}$")
 _ATTACHMENT_RE = re.compile(r"^Attachment-([1-9][0-9]*)$", re.IGNORECASE)
 
