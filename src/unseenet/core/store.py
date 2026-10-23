@@ -698,6 +698,15 @@ class Store:
         self.db.execute("DELETE FROM peer_queue WHERE peer=? AND message_id=?", (peer, message_id))
         self.db.commit()
 
+    def reschedule(self, message_id: str, when) -> None:
+        """Move an article queued for peers to ``when(peer)`` (unix seconds), for
+        example when the blobs it waited for have come (UN-RFC 0027 section 6.3)."""
+        for (peer,) in list(self.db.execute("SELECT peer FROM peer_queue WHERE message_id=?",
+                                            (message_id,))):
+            self.db.execute("UPDATE peer_queue SET not_before=? WHERE peer=? AND message_id=?",
+                            (when(peer), peer, message_id))
+        self.db.commit()
+
     def postpone(self, peer: str, message_id: str, seconds: float) -> None:
         self.db.execute("UPDATE peer_queue SET not_before=? WHERE peer=? AND message_id=?",
                         (time.time() + seconds, peer, message_id))
