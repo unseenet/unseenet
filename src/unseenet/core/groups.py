@@ -343,7 +343,10 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   rules: str = "", view: str | None = None, low_latency: bool = False,
                   kinds: list[str] | None = None, comments: str | None = None,
                   comment_days: int | None = None, pow_bits: int = 18,
-                  rules_type: str | None = None, lifetime: timedelta | None = None) -> Article:
+                  rules_type: str | None = None, lifetime: timedelta | None = None,
+                  extra: dict | None = None) -> Article:
+    """``extra``: further manifest fields - ``attachments`` (UN-RFC 0027), ``max_pins``
+    (0033), ``max_pages`` and ``home`` (0035) - checked as nodes check them."""
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -377,7 +380,31 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["comments"] = comments
     if comment_days is not None:
         data["comment_days"] = comment_days
+    for key, value in (extra or {}).items():
+        if key not in EXTRA_FIELDS:
+            raise ValueError(f"{key} is not a manifest field this client sets")
+        if value is not None:
+            data[key] = value
+    check_extra_fields(data)
     return manifest_article(owner, group_id, data, pow_bits, lifetime=lifetime)
+
+
+# manifest fields of the 0.5.0 documents, set through ``extra`` and Session.update_group
+EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home")
+
+
+def check_extra_fields(data: dict) -> None:
+    """ValueError if ``attachments``, ``max_pins``, ``max_pages`` or ``home`` are not
+    as UN-RFC 0027 section 5.1, 0033 section 4.1 and 0035 section 3 say."""
+    from .blobs import check_attachments_field
+    from .pages import check_manifest_fields
+    from .pins import max_pins
+    check_attachments_field(data)
+    max_pins(data)
+    if data.get("view") == "pages":
+        check_manifest_fields(data)
+    elif "max_pages" in data or "home" in data:
+        raise ValueError("max_pages and home are for sites (view pages)")
 
 
 MAX_RULES = 8192

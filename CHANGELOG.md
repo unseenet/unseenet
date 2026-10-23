@@ -9,6 +9,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- The CLI is one more client on `Session`, like the TUI and the GUI
+  (#387, part 1): `group-create` with views, posters, moderators, files,
+  pins and site settings; `group-edit` for roles, bans and settings in one
+  new manifest; `group-show`; `withdraw` for several posts, or `--all` in a
+  group you own or moderate; `--json` for scripts; `-i` acts as an identity
+  for the run without changing the vault's default. `Session` gains
+  `withdraw()`, `withdraw_all()` and the manifest fields of 0.5.0 in
+  `create_group()`/`update_group()`.
 - Background ripening can be paused and resumed: `ClientRuntime.pause_ripening()`
   and `resume_ripening()`, and in the local client API `POST /api/ripening`,
   `"paused"` in the state's `ripening` and a `ripening-paused` event
