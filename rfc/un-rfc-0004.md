@@ -226,13 +226,16 @@ To add a member without starting a new epoch, the owner posts
 
 How a prospective member communicates their public key to the owner is
 outside the protocol (e.g. an invitation link or a message in another
-group). A client SHOULD support invitation URIs of the form
+group). An invitation is the group's address (UN-RFC 0031 section
+3.4.1), with the node to ask:
 
 ```
-unseenet:join?g=<group-id>&n=<node-onion-address>
+unseenet:<group-id>?n=<node-onion-address>
 ```
 
-which tell the client which group to subscribe to and which node to ask.
+which tells the client which group to subscribe to and which node to
+ask. The older form `unseenet:join?g=<group-id>&n=<node-onion-address>`
+is still read, as UN-RFC 0031 section 3.4.1 says.
 
 ## 6.5 Encrypted Articles
 
