@@ -74,7 +74,7 @@ key = "ed25519:..."            # the friend's node key (UN-RFC 0016)
 ```
 
 The documentation is built with `tools/build_docs.sh` (`pip install
-mkdocs-material`). The screenshots of the client in
+mkdocs-material "mkdocstrings[python]" mkdocs-redirects`). The screenshots of the client in
 [Using the client](client.md) are made by `tools/docs_screenshots.py`: it
 starts a node on your machine without Tor, fills it with made-up people,
 groups and posts, drives `unseenet-tui` headless and writes
@@ -273,10 +273,12 @@ algorithm so a memory-hard one (Argon2id) can be added.
 - Known limit: Python cannot reliably wipe secrets from memory. For strong
   adversaries, recommend running from Tails.
 
-### Text only, 64 KiB
+### Text by default, 64 KiB
 
 Keeps storage bounded, nodes cheap, and operators away from the legal
-problems binary groups brought to Usenet.
+problems binary groups brought to Usenet. Small files (UN-RFC 0027) are
+stored apart from the text as blobs, which a node carries only when its
+operator turns them on.
 
 ## Open Questions
 
@@ -448,6 +450,10 @@ the release notes can say what changed and link to the discussion:
    reaches `main`, `Refs #12` only links it.
 4. End the changelog line with the issue number: `- ... (#12)`. The release
    notes are made from `CHANGELOG.md`, so the number becomes a link there.
+5. Update the docs the change touches. If it changes how something works,
+   also the chapter of [How it works](guide/index.md) (`docs/guide/`) that
+   describes it - those pages explain the design in prose and go stale
+   quietly. The pull request template has the checklist.
 
 | Label | Meaning |
 |-------|---------|
