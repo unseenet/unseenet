@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0031                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0002, 0028
+Updates: 0002, 0004, 0022, 0028, 0035
 
              Unseenet: Formatting - Markdown and Emoji
 ```
@@ -89,12 +89,69 @@ Allowed destinations:
 | Scheme              | Meaning                                         |
 |---------------------|-------------------------------------------------|
 | `http`, `https`     | the web; a client SHOULD warn before opening one that is not a `.onion` address, as it leaves Tor's protection unless the browser is Tor Browser |
-| `unseenet`          | a group, post or join link inside the network   |
+| `unseenet`          | an address inside the network (section 3.4.1)   |
 | `news`              | a Usenet article or group (RFC 5538)             |
 
 Any other destination (`javascript:`, `data:`, `file:` and the rest) is
 shown as text and not as a link. Bare addresses in the text MAY be made
 into links by the same rules.
+
+### 3.4.1 Addresses
+
+An `unseenet:` address names something in the network. It is the one
+form for all of them, used in links, invitations, link proofs and
+anywhere else a client writes or reads one:
+
+```
+unseenet:<fingerprint>                    an identity
+unseenet:<group-id>                       a group: also a feed, a site, a personal group
+unseenet:<group-id>?m=<message-id>        a post or chat line in that group
+unseenet:<group-id>?p=<path>              a page of a site (UN-RFC 0035)
+```
+
+- `<fingerprint>` is a key's fingerprint (UN-RFC 0003 section 2), 16
+  characters of `a-z` and `2-7`. `<group-id>` is a whole Group ID,
+  `<name>@<fingerprint>` (UN-RFC 0004), never a shortened one.
+- `m` is a Message-ID without its angle brackets; `p` is a path of
+  UN-RFC 0035 section 4.1.
+- `n=<onion address>` MAY be added to any of them: a node that carries
+  it, as a hint. A client MAY ask that node over Tor, and SHOULD ask
+  the user before adding it to the nodes it uses.
+- Parameters are separated by `&` and may come in any order; their
+  values are percent-encoded as RFC 3986 requires, except that `@` and
+  `/` may be written as they are. A client ignores parameters it does
+  not know.
+- Names (UN-RFC 0019) are not part of an address: they can change hands
+  and look like Group IDs. Where a name is valid for a key, a client
+  SHOULD show it with the address, and MUST let the reader see the
+  fingerprint.
+
+A client opens an address only when the reader asks (section 3.4). It
+shows a group the user does not follow and asks before subscribing; it
+shows what it cannot find as unavailable, which is not an error.
+
+Older forms MUST still be read, and SHOULD NOT be written:
+
+| Older form                                  | Read as                               |
+|---------------------------------------------|---------------------------------------|
+| `unseenet:join?g=<group-id>&n=...&p=...`    | `unseenet:<group-id>?n=...&p=...`     |
+| `unseenet:<fingerprint>/<path>`             | `unseenet:site@<fingerprint>?p=<path>` |
+
+### 3.4.2 Group References
+
+In the text of a post, a chat line, a profile's `about` or a group's
+`rules`, `#<name>` or `#<name>@<fp>` refers to a group, so that one can
+point somebody to a better place. `<name>` is a group name that contains
+a letter, at most 128 characters; `<fp>` is the first 4 to 16
+characters of the owner's fingerprint. A `#` that follows a letter,
+digit, `_`, `@`, `#`, `/`, `&`, `.`, `+` or `-` does not start one.
+
+- `#<name>@<fingerprint>` with the whole fingerprint means
+  `unseenet:<name>@<fingerprint>`.
+- A shorter `<fp>`, or none, is resolved by the reader's client among
+  the groups its nodes list. It shows every match, with the warning of
+  UN-RFC 0018 where the name is not the hierarchy's, and asks when
+  there is more than one.
 
 ## 3.5 Images
 
@@ -159,6 +216,9 @@ separate matters and need documents of their own.
 - UN-RFC 0022 section 4.1 and UN-RFC 0014 section 2.1 let a profile's
   `about` and a group's `rules` be Markdown with the post subset of
   section 3.2, without images.
+- UN-RFC 0004 section 6.4 (invitations), UN-RFC 0022 section 7 (link
+  proofs) and UN-RFC 0035 section 8 (links to pages) use the addresses
+  of section 3.4.1; their older forms are read as section 3.4.1 says.
 
 # 7. Security and Privacy Considerations
 
