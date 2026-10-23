@@ -96,6 +96,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   nodes, labels, groups, private, profiles, people, reading, posting), each
   with a docstring saying what belongs there, joined into
   the one class clients use as before (#390). Code moved only.
+- The node server is split into files by area (`node/server/`): the
+  accept pipeline and the rules of each kind of article (postage,
+  manifests, controls, kept articles, blobs, blocks, edits, forwarding) for
+  `Node`, and the commands by area for `Session`, each with a docstring
+  saying what belongs there (#394). Code moved only.
 
 ## [0.4.4] - 2026-10-23
 
