@@ -192,62 +192,31 @@ An identity's personal feed is the group it owns named `feed`:
 feed@<fingerprint of the identity's key>
 ```
 
-Like the personal inbox (UN-RFC 0009 section 2.2) and the profile
-(UN-RFC 0022 section 5.1), its Group ID follows from the key, so anyone
-who knows a key, or a name that leads to it (UN-RFC 0019), can find the
-feed without asking anybody.
+It is a **personal group** (UN-RFC 0029 section 2.1): its Group ID
+follows from the key, so anyone who knows a key, or a name that leads to
+it (UN-RFC 0019), can find it, and how it is started, ended, renewed,
+found and followed is said there once for all personal groups. Only
+what is particular to a feed is here.
 
-Its manifest (UN-RFC 0004 section 3) has:
+Its manifest (UN-RFC 0004 section 3) has, besides what UN-RFC 0029
+section 2.1 requires:
 
-- `name`: `feed`;
-- `type`: `channel`. The owner MAY list `posters`, for example a key of
-  their own on another device; they SHOULD NOT list other people,
-  since readers take a personal feed to be one person's;
 - `view`: `feed`;
 - `comments`: `open` or `none`, and optionally `comment_days`
   (UN-RFC 0030);
-- `kinds`: RECOMMENDED `["chat", "post"]`;
-- `expires`: as for every key-bound group (section 5.3).
+- `kinds`: RECOMMENDED `["chat", "post"]`.
 
-A node MUST reject a manifest for a group named `feed` whose `type` is
-not `channel` or whose `view` is not `feed`. A feed for a closed
-circle of people is an ordinary closed group with `"view": "feed"`
-(section 3.2), not a personal feed.
+A feed for a closed circle of people is an ordinary closed group with
+`"view": "feed"` (section 3.2), not a personal feed.
 
-## 5.2 Starting and Ending a Feed
+## 5.2 Starting a Feed
 
-A personal feed is public, and it ties everything in it to the
-identity. A client therefore:
-
-- MUST NOT create a personal feed without the user asking for it. It
-  MAY offer to when an identity is created;
-- SHOULD ask, when the feed is created, whether readers may comment,
-  with `open` as the suggested answer;
-- MUST tell the user, as for a public profile (UN-RFC 0022 section
-  5.3), that what is published can be kept by others and cannot be
-  recalled.
-
-The owner ends a feed by removing the group (UN-RFC 0013) or by letting
-it expire.
-
-## 5.3 Lifetime
-
-Personal feeds are key-bound groups (UN-RFC 0029). The owner's client
-renews `feed@<fp>` together with the identity's other key-bound groups,
-and the feed of a key that nobody uses any more disappears with them.
+When a client creates a personal feed, which it only does when the user
+asks (UN-RFC 0029 section 2.1), it SHOULD ask whether readers may
+comment, with `open` as the suggested answer.
 
 Entries expire with the group's `retention_days` like all articles.
 Owners who want a few entries to stay pin them (UN-RFC 0033).
-
-## 5.4 Finding a Feed
-
-- Wherever a client shows an identity (its profile, an author name, a
-  mention), it SHOULD offer the identity's feed when the feed group is
-  current, and SHOULD NOT show anything when it is not.
-- A client finds out whether a feed exists the same way it reads a
-  profile (UN-RFC 0022 section 5.2): by asking a node it uses for the
-  feed group's current manifest. If the node does not carry it, there is
-  no feed to show, and this is not an error.
 
 # 6. Following
 
@@ -264,8 +233,42 @@ reading the client does anyway.
   Over Tor the node does not learn who. Clients SHOULD read followed
   feeds the same way and at the same times as their other groups, so
   that following does not stand out.
-- A client MAY let a user follow any feed, not only personal ones: a
-  news channel, a community feed, a bot.
+- Following is subscribing: there is no separate mechanism. Every
+  group a user subscribes to that is shown as a feed is followed,
+  personal or not - a channel such as `dk.marsvin` where a few post and
+  everybody comments, news, a bot - and its entries come into the
+  timeline (section 7). "Follow" is only the word a client uses for
+  subscribing to a feed or to a person (section 6.1).
+
+## 6.1 Following a Person
+
+A user can also follow a **person**: an identity, given by its key or
+by a name that leads to one (UN-RFC 0019), such as `andreas@lorensen`.
+It is how people follow one another on Mastodon or Facebook, without
+anybody being told.
+
+- **What it follows.** To follow an identity is to follow every feed
+  that is its own: its personal feed (section 5) and, when they exist,
+  its other personal groups (UN-RFC 0029 section 2.1), and the feeds it
+  lists in its public profile (UN-RFC 0022 section 4.5). A client
+  subscribes to each of them as in section 6, and their entries come
+  into the timeline (section 7).
+- **New feeds.** A client reads the profiles of the identities a user
+  follows as it reads other profiles (UN-RFC 0022 section 9.2), and
+  when it finds a personal group or a listed feed it did not follow
+  before, it follows it too. A feed the identity no longer lists, or
+  whose group has expired, it stops following, unless the user also
+  follows that feed on its own.
+- **The key, not the name.** A client resolves a name to a key when the
+  user follows, and from then on follows the key. If the name later
+  leads to another key (UN-RFC 0019), the client keeps following the
+  first and tells the user, who may follow the new key instead.
+- **Private, as all following.** The list of identities a user follows
+  is kept in the vault with the rest of section 6, and the same rules
+  apply: it MUST NOT be published or sent to anyone, and the identity is
+  not told. Section 8 is unchanged.
+- **Unfollowing** an identity unsubscribes from the feeds that were
+  followed only because of it.
 
 # 7. The Timeline
 
@@ -333,7 +336,8 @@ This document does not define such a mapping.
   (section 3.1), and a client that does not know a value of `view`
   shows the group as `threads`.
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
-  `feed@<fp>`, personal feed, this document section 5.1.
+  `feed@<fp>`, a personal group (UN-RFC 0029 section 2.1), this
+  document section 5.1.
 - **UN-RFC 0000** section 6: 0034 is added to the index.
 
 # 11. Rationale
