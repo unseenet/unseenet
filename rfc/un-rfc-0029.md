@@ -97,7 +97,9 @@ them (the view, comments, pages).
 - **Following.** To follow a personal group is to subscribe to it, as to
   any group (UN-RFC 0034 section 6): the list is kept in the user's
   vault, never published, and followed groups are read like the others
-  so that following does not stand out.
+  so that following does not stand out. A user can also follow a
+  person, which follows all of that identity's personal groups and the
+  feeds its profile lists (UN-RFC 0034 section 6.1).
 
 A personal group for a closed circle of people is not a key-bound
 group: it is an ordinary closed group, for example with `"view": "feed"`
