@@ -2,7 +2,7 @@ name: docs
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "site-extra/**", "tools/docs_hooks.py", "src/unseenet/core/about.py", ".github/workflows/docs.yml",
+    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "site-extra/**", "tools/docs_hooks.py", "tools/guide_diagram.py", "src/unseenet/core/about.py", ".github/workflows/docs.yml",
             # the developers' reference is generated from these docstrings
             "src/unseenet/client/session/**", "src/unseenet/client/localapi/**",
             "src/unseenet/node/server/**", "src/unseenet/core/store/**"]

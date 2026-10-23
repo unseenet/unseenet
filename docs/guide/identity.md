@@ -7,6 +7,8 @@ that means: where the key lives, how people recognise you, why a new key
 has to wait before it can post cheaply, and what you can say about
 yourself.
 
+<!-- unseenet:diagram identity -->
+
 ## You are a key
 
 The first time you start a client, it makes a **key pair** for you: a

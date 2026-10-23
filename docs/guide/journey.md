@@ -5,6 +5,8 @@ moment it is written until somebody else reads it. Maja writes a post in
 the discussion group `dk.snak`; Jonas, who follows the group, reads it a
 little later from another node.
 
+<!-- unseenet:diagram journey -->
+
 ## 1. Writing
 
 Maja's client - the terminal client, the graphical client or any other -

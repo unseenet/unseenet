@@ -7,6 +7,8 @@ between each other, the way Usenet servers always did. This chapter is
 about what a node does, how nodes find and trust each other, and what
 the person running one can and cannot see.
 
+<!-- unseenet:diagram node -->
+
 ## What a node is
 
 A node is one program, `unseenet-node`, with Tor beside it. It is small:

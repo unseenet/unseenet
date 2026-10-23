@@ -65,6 +65,7 @@ exclude_docs: |
 extra_css:
   - assets/asciinema/asciinema-player.css
   - stylesheets/home.css
+  - stylesheets/guide.css
 
 extra_javascript:
   - assets/asciinema/asciinema-player.min.js

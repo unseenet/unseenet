@@ -5,6 +5,8 @@ a site, even your inbox. This chapter is about what a group is, who
 decides what in it, and how one group can look like Usenet while another
 looks like Facebook - on exactly the same technique underneath.
 
+<!-- unseenet:diagram groups -->
+
 ## What a group is
 
 A group is a name, an owner and a set of articles.

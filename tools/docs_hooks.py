@@ -157,8 +157,27 @@ def about_markdown(config) -> str:
     return "\n".join(out)
 
 
+DIAGRAM = re.compile(r"<!-- unseenet:diagram (\w+) -->")
+_diagram = None
+
+
+def _diagram_module(config):
+    """tools/guide_diagram.py, loaded from its file like the about text."""
+    global _diagram
+    if _diagram is None:
+        import importlib.util
+        path = os.path.join(os.path.dirname(config["config_file_path"]), "tools", "guide_diagram.py")
+        spec = importlib.util.spec_from_file_location("guide_diagram", path)
+        _diagram = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_diagram)
+    return _diagram
+
+
 def on_page_markdown(markdown: str, page, config, files) -> str:
     global _lines
+    if "<!-- unseenet:diagram " in markdown:
+        mod = _diagram_module(config)
+        markdown = DIAGRAM.sub(lambda m: "\n" + mod.svg(m.group(1)) + "\n", markdown)
     if ABOUT_MARKER in markdown:
         markdown = markdown.replace(ABOUT_MARKER, about_markdown(config))
     if MARKER not in markdown:

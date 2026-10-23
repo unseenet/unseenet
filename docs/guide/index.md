@@ -7,6 +7,8 @@ between [Why Unseenet](../why.md), written for people who have never heard
 of Tor, and the [UN-RFC series](../spec/index.md), written for people who
 build nodes and clients.
 
+<!-- unseenet:diagram overview -->
+
 !!! note "The specification decides"
     These pages are not normative. They simplify on purpose, and they may
     lag behind a change. When they and a UN-RFC disagree, the UN-RFC is
