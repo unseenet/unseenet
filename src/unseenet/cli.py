@@ -295,8 +295,12 @@ class App:
         """Posting goes through Session (#287): postage, key ripening (UN-RFC 0025)
         and its header are the same code as in every client."""
         if self._session is None:
-            from .client.session import Session
+            from .client.session import Session, SessionError
             self._session = Session(self.vault, status=lambda m: print(m, file=sys.stderr))
+            try:
+                self._session.act_as(getattr(self, "acting_as", None))     # -i, for this run
+            except SessionError as exc:
+                sys.exit(str(exc))
         return self._session
 
     async def bits(self, group_id: str | None, ident: crypto.Identity) -> int:
@@ -383,6 +387,7 @@ async def client_command(args) -> None:
     except VaultError as exc:
         sys.exit(str(exc))
     app = App(vault)
+    app.acting_as = getattr(args, "identity", None)
     try:
         await COMMANDS[args.cmd](app, args)
     finally:
@@ -479,41 +484,148 @@ async def c_group_remove(app: App, args) -> None:
 
 
 async def c_withdraw(app: App, args) -> None:
-    """UN-RFC 0004 section 7: withdraw a post (your own, or in a group you own or moderate)."""
-    ident = app.identity(args.identity)
-    mid = args.message_id if args.message_id.startswith("<") else f"<{args.message_id}>"
-    print("Withdrawing is best effort: nodes delete the post and clients stop showing")
-    print("it, but people who read it may have kept a copy.")
+    """UN-RFC 0004 section 7: withdraw posts - your own, or any in a group you own or
+    moderate; ``--all`` every post in such a group (a demo's reset)."""
+    from .client.session import SessionError
+    ids = [args.message_id] if isinstance(args.message_id, str) else list(args.message_id or [])
+    every = getattr(args, "all", False)
+    if not ids and not every:
+        sys.exit("Give Message-IDs, or --all.")
+    if not getattr(args, "json", False):
+        print("Withdrawing is best effort: nodes delete the post and clients stop showing")
+        print("it, but people who read it may have kept a copy.")
     if not args.yes:
         if not sys.stdin.isatty():
             sys.exit("Not withdrawn. Add --yes to confirm when not running interactively.")
-        if input(f"Withdraw {mid} from {args.group}? [y/N] ").strip().lower() not in ("y", "yes"):
+        what = "every post" if every else ", ".join(ids)
+        if input(f"Withdraw {what} from {args.group}? [y/N] ").strip().lower() not in ("y", "yes"):
             sys.exit("Not withdrawn.")
-    art = new_article(args.group, None, "", extra=[("Control", f"cancel {mid}")])
-    art.finalize(ident, await app.bits(args.group, ident))
-    await app.post(art)
-    print(f"Withdrawn {mid}")
+    s = _session(app, args)
+    reason = getattr(args, "reason", None) or ""
+    try:
+        if every:
+            done = await s.withdraw_all(args.group, keep=set(getattr(args, "keep", None) or []),
+                                        reason=reason)
+        else:
+            done = []
+            for mid in ids:
+                await s.withdraw(args.group, mid, reason)
+                done.append(mid if mid.startswith("<") else f"<{mid}>")
+    except SessionError as exc:
+        sys.exit(f"Not withdrawn: {exc}")
+    emit(args, f"Withdrawn {len(done)}: " + " ".join(done), {"withdrawn": done})
+
+
+def _session(app: App, args):
+    """The app's Session, acting as ``args.identity`` when given (-i)."""
+    from .client.session import SessionError
+    s = app.session
+    if getattr(args, "identity", None):
+        try:
+            s.act_as(args.identity)
+        except SessionError as exc:
+            sys.exit(str(exc))
+    return s
+
+
+def _group_fields(args) -> tuple[dict, dict]:
+    """(Session.update_group/create_group fields, extra manifest fields) from options."""
+    fields, extra = {}, {}
+    for opt, key in (("title", "title"), ("description", "description"), ("min_pow", "min_pow"),
+                     ("retention_days", "retention_days"), ("view", "view"),
+                     ("comments", "comments"), ("comment_days", "comment_days")):
+        value = getattr(args, opt, None)
+        if value is not None:
+            fields[key] = value
+    if getattr(args, "kinds", None):
+        fields["kinds"] = [k.strip() for k in args.kinds.split(",") if k.strip()]
+    if getattr(args, "rules", None):
+        text = sys.stdin.read() if args.rules == "-" else Path(args.rules).read_text()
+        fields["rules"] = text
+        fields["rules_type"] = ("text/markdown; charset=utf-8; variant=unseenet"
+                                if args.rules.endswith(".md") else None)
+    if getattr(args, "attachments", None) is not None:
+        extra["attachments"] = None if args.attachments == 0 else (
+            {"max_size": args.attachments} | ({"types": args.types.split(",")} if args.types else {}))
+    for opt in ("max_pins", "max_pages", "home"):
+        if getattr(args, opt, None) is not None:
+            extra[opt] = getattr(args, opt)
+    return fields, extra
+
+
+def emit(args, text: str, data=None) -> None:
+    """Print for people, or JSON for scripts with --json."""
+    if getattr(args, "json", False):
+        print(json.dumps(data if data is not None else {"text": text}, ensure_ascii=False))
+    else:
+        print(text)
+
+
+async def c_group_show(app: App, args) -> None:
+    """The group's current manifest: who owns it, who may post, and its settings."""
+    from .client.session import SessionError
+    try:
+        m = await _session(app, args).fetch_manifest(args.group)
+    except SessionError as exc:
+        sys.exit(f"Could not read the manifest: {exc}")
+    if m is None:
+        sys.exit("The node does not carry that group.")
+    emit(args, json.dumps(m.raw, indent=2, ensure_ascii=False), m.raw)
+
+
+async def c_group_edit(app: App, args) -> None:
+    """A new manifest for a group you own (UN-RFC 0004 section 4): roles, bans and
+    settings, all in one."""
+    from .client.session import SessionError
+    s = _session(app, args)
+    try:
+        await s.fetch_manifest(args.group)
+        data = s.manifest_data(args.group)
+        if not data:
+            sys.exit("The node does not carry that group.")
+        fields, extra = _group_fields(args)
+        fields |= extra
+        for role, add, remove in (("posters", args.add_poster, args.remove_poster),
+                                  ("moderators", args.add_moderator, args.remove_moderator)):
+            if add or remove:
+                keys = [k for k in data.get(role, []) if k not in (remove or [])]
+                fields[role] = keys + [k for k in (add or []) if k not in keys]
+        if args.ban or args.unban:
+            banned = [b for b in data.get("banned", []) if isinstance(b, dict)
+                      and b.get("key") not in (args.unban or []) and b.get("key") not in (args.ban or [])]
+            for key in args.ban or []:
+                crypto.key_from_text(key)
+                entry = {"key": key}
+                if args.reason:
+                    entry["reason"] = args.reason[:200]
+                banned.append(entry)
+            fields["banned"] = banned
+        if not fields:
+            sys.exit("Nothing to change.")
+        new = await s.update_group(args.group, **fields)
+    except (SessionError, ValueError, crypto.CryptoError) as exc:
+        sys.exit(f"Not changed: {exc}")
+    emit(args, f"Changed {args.group} (serial {new['serial']})", new)
 
 
 async def c_group_create(app: App, args) -> None:
-    owner = app.identity(args.identity)
-    art = make_manifest(owner, args.name, args.type, title=args.title or "",
-                        description=args.description or "", min_pow=args.min_pow,
-                        local=args.local, retention_days=30 if args.type == "inbox" else 90,
-                        comments=args.comments if args.type == "channel" else None,
-                        comment_days=args.comment_days if args.type == "channel" else None,
-                        pow_bits=await app.bits(None, owner))
-    await app.post(art)
-    group_id = art.group
-    entry = {"type": args.type, "owner": True, "keys": {}}
-    if args.type == "closed":
-        keys = crypto.GroupKeys.generate()
-        await app.post(make_key_update(owner, group_id, 1, keys, [],
-                                       pow_bits=await app.bits(group_id, owner)))
-        entry["keys"]["1"] = keys.secret.hex()
-    app.data["groups"][group_id] = entry
-    app.vault.save()
-    print(f"Created {group_id}")
+    from .client.session import SessionError
+    fields, extra = _group_fields(args)
+    s = _session(app, args)
+    try:
+        gid = await s.create_group(
+            args.name, args.type, title=fields.get("title", ""),
+            description=fields.get("description", ""), min_pow=fields.get("min_pow", 20),
+            local=getattr(args, "local", False), retention_days=fields.get("retention_days"),
+            rules=fields.get("rules", ""), rules_type=fields.get("rules_type"),
+            view=fields.get("view"), kinds=fields.get("kinds"),
+            comments=fields.get("comments") if args.type == "channel" else None,
+            comment_days=fields.get("comment_days") if args.type == "channel" else None,
+            moderators=getattr(args, "moderator", None) or [],
+            posters=getattr(args, "poster", None) or [], extra=extra or None)
+    except (SessionError, ValueError) as exc:
+        sys.exit(f"Not created: {exc}")
+    emit(args, f"Created {gid}", {"group": gid})
 
 
 async def c_invite(app: App, args) -> None:
@@ -854,10 +966,32 @@ def _lv(level) -> str:
 COMMANDS = {
     "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
-    "withdraw": c_withdraw,
+    "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
 }
+
+
+def _group_options(s, *, create: bool) -> None:
+    """The settings group-create and group-edit share (UN-RFC 0004, 0008, 0027-0035)."""
+    s.add_argument("--title")
+    s.add_argument("--description")
+    s.add_argument("--min-pow", type=int, help="postage in bits (create: default 20)")
+    s.add_argument("--retention-days", type=int, help="how long posts circulate (UN-RFC 0012)")
+    s.add_argument("--view", choices=["threads", "chat", "feed", "pages"],
+                   help="how the group is shown (pages: channels only)")
+    s.add_argument("--kinds", help="chat, post or chat,post (UN-RFC 0028)")
+    s.add_argument("--rules", metavar="FILE", help="the group's rules from a file (.md: Markdown), - for stdin")
+    s.add_argument("--comments", choices=["none", "open"],
+                   help="channels: whether readers may comment on posts (UN-RFC 0030)")
+    s.add_argument("--comment-days", type=int,
+                   help="channels: days after a post during which it takes comments")
+    s.add_argument("--attachments", type=int, metavar="MAX_SIZE",
+                   help="allow files up to this many octets (UN-RFC 0027); 0 to stop")
+    s.add_argument("--types", help="with --attachments: allowed media types, e.g. image/*,application/pdf")
+    s.add_argument("--max-pins", type=int, help="pins in force, 0-25 (UN-RFC 0033)")
+    s.add_argument("--max-pages", type=int, help="sites: pages in force, 1-100 (UN-RFC 0035)")
+    s.add_argument("--home", help="sites: the path of the home page")
 
 
 def client_main(argv=None) -> None:
@@ -866,6 +1000,7 @@ def client_main(argv=None) -> None:
     p.add_argument("--vault", default=str(default_vault_path()), help="encrypted vault file")
     p.add_argument("--identity", "-i", help="identity to use (default: first)")
     p.add_argument("--version", action="version", version=f"unseenet {__version__}")
+    p.add_argument("--json", action="store_true", help="answer in JSON, for scripts")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("id-new", help="create a new identity")
@@ -881,20 +1016,31 @@ def client_main(argv=None) -> None:
     s.add_argument("name")
     s.add_argument("--type", choices=["open", "moderated", "channel", "closed", "inbox"], default="open")
     s.add_argument("--local", action="store_true", help="never replicated to other nodes (UN-RFC 0009)")
-    s.add_argument("--title")
-    s.add_argument("--description")
-    s.add_argument("--min-pow", type=int, default=20)
-    s.add_argument("--comments", choices=["none", "open"], default="none",
-                   help="channels: whether readers may comment on posts (UN-RFC 0030)")
-    s.add_argument("--comment-days", type=int,
-                   help="channels: days after a post during which it takes comments")
+    s.add_argument("--moderator", action="append", metavar="KEY", help="a moderator's key (repeat)")
+    s.add_argument("--poster", action="append", metavar="KEY", help="channels: a poster's key (repeat)")
+    _group_options(s, create=True)
+    s = sub.add_parser("group-edit", help="change a group you own: roles, bans and settings")
+    s.add_argument("group", help="full group ID, name@fingerprint")
+    s.add_argument("--add-poster", action="append", metavar="KEY")
+    s.add_argument("--remove-poster", action="append", metavar="KEY")
+    s.add_argument("--add-moderator", action="append", metavar="KEY")
+    s.add_argument("--remove-moderator", action="append", metavar="KEY")
+    s.add_argument("--ban", action="append", metavar="KEY", help="ban a key from posting (UN-RFC 0004 5.1)")
+    s.add_argument("--unban", action="append", metavar="KEY")
+    s.add_argument("--reason", help="with --ban: shown to the banned and to readers")
+    _group_options(s, create=False)
+    s = sub.add_parser("group-show", help="show a group's current manifest")
+    s.add_argument("group", help="full group ID, name@fingerprint")
     s = sub.add_parser("group-remove", help="remove groups you own from the whole network (final)")
     s.add_argument("group", nargs="+", help="full group ID, name@fingerprint")
     s.add_argument("--reason", help="short reason, shown to nodes and readers")
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
-    s = sub.add_parser("withdraw", help="withdraw a post: your own, or in a group you own or moderate")
+    s = sub.add_parser("withdraw", help="withdraw posts: your own, or any in a group you own or moderate")
     s.add_argument("group", help="full group ID, name@fingerprint")
-    s.add_argument("message_id", help="the post's Message-ID")
+    s.add_argument("message_id", nargs="*", help="Message-IDs")
+    s.add_argument("--all", action="store_true", help="every post in a group you own or moderate")
+    s.add_argument("--keep", action="append", metavar="MSGID", help="with --all: leave this one")
+    s.add_argument("--reason", help="shown to readers (not in closed groups)")
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("invite", help="give a key access to a closed group you own")
     s.add_argument("group")

@@ -28,7 +28,8 @@ from ..core.groups import MAX_SUPERSEDES, parse_supersedes
 from ..core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_group_id, make_manifest, manifest_article, message_kind, open_envelope,
-                           open_inbox_article, personal_inbox_id, short_group_id, split_group_id)
+                           open_inbox_article, personal_inbox_id, short_group_id, split_group_id,
+                           EXTRA_FIELDS, check_extra_fields)
 from ..core.groups import _comments  # UN-RFC 0030 field check
 from ..core.groups import (FIRST_LIFETIME, FIRST_RENEW_WHEN_LEFT, MAX_LIFETIME, RENEW_WHEN_LEFT,
                            RENEW_WINDOW, is_key_bound, stored_expires)
@@ -311,6 +312,7 @@ class Session:
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
         self.cache: dict[str, dict[int, Message]] = {}
+        self._acting_as: str | None = None   # act_as(): an identity for this run only
         self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores
         self._high: dict[str, int] = {}               # highest article number fetched
         d = self.vault.data
@@ -675,8 +677,15 @@ class Session:
         ids = self.data["identities"]
         if not ids:
             raise SessionError("no identity yet")
-        name = self.data.get("default_identity")
+        name = self._acting_as or self.data.get("default_identity")
         return name if name in ids else next(iter(ids))
+
+    def act_as(self, name: str | None) -> None:
+        """Use the identity ``name`` for this run, without changing the vault's
+        default (a command-line client's -i)."""
+        if name is not None and name not in self.data["identities"]:
+            raise SessionError(f"no identity {name!r} in this vault")
+        self._acting_as = name
 
     def identity(self, name: str | None = None) -> crypto.Identity:
         entry = self.data["identities"][name or self.default_identity_name()]
@@ -1314,7 +1323,10 @@ class Session:
                            view: str | None = None, low_latency: bool = False,
                            kinds: list[str] | None = None, node: str | None = None,
                            comments: str | None = None, comment_days: int | None = None,
-                           rules_type: str | None = None) -> str:
+                           rules_type: str | None = None, moderators=(), posters=(),
+                           extra: dict | None = None) -> str:
+        """``moderators``/``posters``: keys as text; ``extra``: attachments, max_pins,
+        max_pages, home (see groups.EXTRA_FIELDS)."""
         owner = self.identity()
         node = node or self.node
         self.mark_in_use()               # making a group is using the identity (#270)
@@ -1323,9 +1335,11 @@ class Session:
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
                             rules=rules, view=view, low_latency=low_latency, kinds=kinds,
-                            rules_type=rules_type,
+                            rules_type=rules_type, moderators=list(moderators),
+                            posters=list(posters) if gtype == "channel" else (),
                             comments=comments if gtype == "channel" else None,
                             comment_days=comment_days if gtype == "channel" else None,
+                            extra=extra,
                             pow_bits=await self.required_pow(None, node=node))
         await self._post_article(art, node)
         entry = {"type": gtype, "owner": True, "keys": {}, "manifest": json.loads(art.body),
@@ -1574,7 +1588,7 @@ class Session:
             raise SessionError("the group's manifest has not been fetched yet")
         allowed = {"title", "description", "rules", "rules_type", "view", "low_latency", "min_pow",
                    "retention_days", "banned", "moderators", "posters", "kinds",
-                   "comments", "comment_days"}
+                   "comments", "comment_days", *EXTRA_FIELDS}
         if ("comments" in changes or "comment_days" in changes) and data.get("type") != "channel":
             raise SessionError("only channels take comments")
         if changes.get("comments") == "none":
@@ -1592,7 +1606,7 @@ class Session:
                                                          "rules_type",
                                                          "low_latency", "banned", "moderators",
                                                          "posters", "kinds", "comments",
-                                                         "comment_days"):
+                                                         "comment_days", *EXTRA_FIELDS):
                 data.pop(key, None)
             else:
                 data[key] = value
@@ -1604,6 +1618,7 @@ class Session:
             raise SessionError("view must be one of " + ", ".join(VIEWS))
         try:
             _comments(data)
+            check_extra_fields(data)
         except ValueError as exc:
             raise SessionError(str(exc)) from exc
         data["serial"] = int(data.get("serial", 1)) + 1
@@ -3151,6 +3166,45 @@ class Session:
         manifest = self.manifest_data(msg.group)
         return msg.author_key == me or manifest.get("owner") == me \
             or me in manifest.get("moderators", [])
+
+    def moderates_or_owns(self, group_id: str) -> bool:
+        me = self.identity().key_text
+        manifest = self.manifest_data(group_id)
+        return manifest.get("owner") == me or me in manifest.get("moderators", [])
+
+    async def withdraw(self, group_id: str, message_id: str, reason: str = "") -> str:
+        """Withdraw a post by its Message-ID (UN-RFC 0004 section 7): any post in a
+        group you own or moderate, else your own. The node has the last word."""
+        mid = message_id if message_id.startswith("<") else f"<{message_id}>"
+        if not self.moderates_or_owns(group_id):
+            msg = next((m for m in self.cache.get(group_id, {}).values() if m.message_id == mid), None)
+            if msg is None or msg.author_key != self.identity().key_text:
+                raise SessionError("you can only withdraw your own posts, or posts in a group "
+                                   "you own or moderate")
+        if self.group_entry(group_id).get("type") == "closed":
+            reason = ""                     # the nodes could read it (section 7.5)
+        me = self.identity()
+        art = await self._post_with_postage(group_id, lambda bits: new_article(
+            group_id, None, reason, extra=[("Control", f"cancel {mid}")]).finalize(me, bits))
+        self.group_entry(group_id).setdefault("cancels", {})[mid] = {"by": me.key_text, "date": art["Date"]}
+        self._apply_cancels(group_id)
+        self.save()
+        self.save_offline()
+        return art.message_id
+
+    async def withdraw_all(self, group_id: str, keep=(), reason: str = "") -> list[str]:
+        """Owner or moderator: withdraw every post in the group but those in ``keep``
+        (for example a demo's weekly reset). Returns the Message-IDs withdrawn."""
+        if not self.moderates_or_owns(group_id):
+            raise SessionError("only the owner or a moderator can withdraw all posts")
+        await self.fetch_group(group_id)
+        done = []
+        for msg in list(self.cache.get(group_id, {}).values()):
+            if msg.message_id in keep:
+                continue
+            await self.withdraw(group_id, msg.message_id, reason)
+            done.append(msg.message_id)
+        return done
 
     async def cancel(self, msg: Message, reason: str = "") -> str:
         """Withdraw a post from the network (UN-RFC 0004, section 7). Best effort:
