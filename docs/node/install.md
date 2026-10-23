@@ -54,8 +54,12 @@ people you trust; see [`[blobs]`](configuration.md#blobs). Files in
 closed groups and private posts are encrypted, and are not carried
 unless you also turn on `encrypted`.
 
+It also asks about **sites**: small sets of pages - a person's homepage,
+a project's guide, a wiki - that stay until their owner changes them, at
+most 100 pages each. Off unless you say yes, for the same reason.
+
 To answer beforehand, for example in a script:
-`UNSEENET_BLOBS=yes UNSEENET_AVATARS=yes` before `bash`. Without a
+`UNSEENET_BLOBS=yes UNSEENET_AVATARS=yes UNSEENET_SITES=yes` before `bash`. Without a
 terminal and without these, both stay off. You can change your mind
 later in `node.toml`.
 

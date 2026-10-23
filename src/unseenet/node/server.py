@@ -23,6 +23,7 @@ from ..core.groups import message_kind, parse_supersedes
 from ..core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
                            is_key_bound, make_group_id, parse_key_update, split_group_id)
 from ..core import blobs as bl
+from ..core import pages as pg
 from ..core import pins as pn
 from ..core import ripening as rp
 from ..core.store import Store
@@ -68,6 +69,7 @@ class NodeConfig:
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
     profiles: str = "accept"             # UN-RFC 0022 section 10: carry profile@ groups
     avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
+    sites: str = "refuse"                # UN-RFC 0035 6.2: sites stay, so off by default
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
     # open client connections at most (#296): a ceiling, not rationing; peers don't count
@@ -337,7 +339,8 @@ class Node:
         elif ctl:
             self._accept_control(art, manifest, raw)
         else:
-            versions = parse_supersedes(art)          # an edit (UN-RFC 0042)
+            page = self._check_page(art, manifest, blobs) if art.get("Page") is not None else None
+            versions = [] if page else parse_supersedes(art)   # an edit (UN-RFC 0042)
             held = self._check_edit(art, manifest, versions) if versions else {}
             self._check_cancelled(art, manifest)
             self._check_superseded(art)
@@ -346,6 +349,8 @@ class Node:
             self._check_blocked(art)
             carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)
+            if page:
+                self.store.add_page(art, *page)
             for bid in carried:                         # staged on this connection: now kept
                 self.store_blob(bid, staged.pop(bid)[0])
             if carried:                                 # UN-RFC 0027 8.1: the day's quota
@@ -511,6 +516,8 @@ class Node:
             raise ArticleError("group", "node does not accept this new group")
         if m.expired():
             raise ArticleError("group", "key-bound group has expired")
+        if m.view == "pages" and self.config.sites != "accept":     # UN-RFC 0035 section 6.2
+            raise ArticleError("group", "this node carries no sites")
         self._check_profile_content(m)
         self._check_ripe_manifest(m, current)
         self.store.add(art, raw)
@@ -597,6 +604,29 @@ class Node:
             self._accept_pin(art, manifest, raw, ctl[0], ctl[1])
         else:
             raise ArticleError("syntax", f"unknown control {ctl[0]!r}")
+
+    # --- sites (UN-RFC 0035) ---
+    def _check_page(self, art: Article, manifest: Manifest, blobs) -> tuple:
+        """Section 4.3: valid in a site, by a writer, with the headers of 4.2 and a
+        Supersedes that names only pages of the same path (4.4). Its blobs must
+        not take the site's kept blobs above 8 MiB (UN-RFC 0017 2.2)."""
+        if manifest.view != "pages":
+            raise ArticleError("permission", "a page article belongs in a site")
+        author = art.author_key
+        if author != manifest.owner and author not in manifest.moderators \
+                and author not in manifest.posters:
+            raise ArticleError("permission", "only the site's writers write pages")
+        path, removed, sup = pg.parse_page(art)
+        for old in sup:
+            held = self.store.page(old)
+            if held is not None and held != (art.group, path):
+                raise ArticleError("permission", "a new version names pages of its own path")
+        if blobs:
+            kept = self.store.kept_blobs(art.group)
+            extra = sum(n for b, n in blobs if b not in kept)
+            if extra and sum(kept.values()) + extra > bl.MAX_KEPT_PER_GROUP:
+                raise ArticleError("permission", "the site's kept blobs would pass 8 MiB")
+        return path, removed, tuple(sup)
 
     # --- blobs (UN-RFC 0027) ---
     def _blobs_for(self, art: Article, blobs, from_peer: bool, staged: dict | None) -> list[str]:
@@ -739,6 +769,14 @@ class Node:
                        for p in self.store.pins_in_force(art.group, manifest, [me]))
         if ctl:
             return False
+        if art.get("Page") is not None and manifest.view == "pages":   # UN-RFC 0035 6.1
+            try:
+                path, removed, sup = pg.parse_page(art)
+            except ArticleError:
+                return False
+            me = pg.Version(art.message_id, path, art["Author-Key"],
+                            int(parse_date(art["Date"]).timestamp()), removed, tuple(sup))
+            return art.message_id in self.store.site_kept(art.group, manifest, extra=[me])
         # a pinned post, or an edit of one (UN-RFC 0033 section 4.2, step 2)
         pinned = {p.target for p in self.store.pins_in_force(art.group, manifest)}
         pinned |= {self.store.current_version(t) for t in pinned}
@@ -937,6 +975,7 @@ class Node:
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,
                            "archive": False, "honours_blocks": cfg.honour_blocks,
                            "profiles": cfg.profiles, "avatars": cfg.avatars,
+                           "sites": cfg.sites,
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
         excludes = self.excludes()
         if excludes:

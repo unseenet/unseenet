@@ -11,6 +11,7 @@ from .reconcile import FULL, MOD, item_hash, item_key, item_value
 from . import crypto
 from .article import Article, parse_date
 from . import blobs as bl
+from . import pages as pg
 from . import pins as pn
 from .groups import (KEY_BOUND_NAMES, MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound,
                      stored_expires)
@@ -122,6 +123,17 @@ CREATE TABLE IF NOT EXISTS blob_usage (        -- UN-RFC 0027 8.1: octets accept
     octets     INTEGER NOT NULL,
     PRIMARY KEY (day, kind, who)
 );
+
+CREATE TABLE IF NOT EXISTS pages (            -- page articles of sites (UN-RFC 0035)
+    message_id TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    author_key TEXT NOT NULL,
+    date       INTEGER NOT NULL,
+    removed    INTEGER NOT NULL,
+    supersedes TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS pages_group ON pages(group_id);
 
 CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pulled from a peer
     peer       TEXT PRIMARY KEY,
@@ -534,22 +546,78 @@ class Store:
         """The group's kept articles in listing order (UN-RFC 0017 sections 2.1, 3):
         pins in force, the latest unpin of a target while inside the window, then
         the pinned targets. At most 256 targets (section 2.2)."""
-        if not self.db.execute("SELECT 1 FROM markers WHERE group_id=? LIMIT 1",
-                               (group_id,)).fetchone():
+        has_markers = self.db.execute("SELECT 1 FROM markers WHERE group_id=? LIMIT 1",
+                                      (group_id,)).fetchone() is not None
+        has_pages = self.db.execute("SELECT 1 FROM pages WHERE group_id=? LIMIT 1",
+                                    (group_id,)).fetchone() is not None
+        if not has_markers and not has_pages:
             return []                    # most groups: nothing kept, nothing to work out
         m = self.manifest(group_id)
         if m is None:
             return []
-        pins = self.pins_in_force(group_id, m)
         days = m.retention_days if window_days is None else window_days
         since = (now or time.time()) - days * 86400
+        site = self.site_kept(group_id, m, since) if has_pages else []
+        if not has_markers:
+            return site
+        pins = self.pins_in_force(group_id, m)
         allowed = {crypto.key_to_text(m.owner), *(crypto.key_to_text(k) for k in m.moderators)}
         unpins = sorted((u for u in pn.current(self.markers(group_id), allowed).values()
                          if u.action == pn.UNPIN and u.date >= since),
                         key=lambda u: u.newest_first)
         # an edited post is kept as its current version (UN-RFC 0033 section 5.1)
         targets = [self.current_version(p.target) for p in pins][:pn.KEPT_PER_GROUP]
-        return [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
+        out = [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
+        return out + [s for s in site if s not in out][:max(0, pn.KEPT_PER_GROUP - len(targets))]
+
+    # --- sites (UN-RFC 0035): page versions as kept articles ---
+    def add_page(self, art: Article, path: str, removed: bool, supersedes=()) -> None:
+        self.db.execute("INSERT OR IGNORE INTO pages VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (art.message_id, art.group, path, art["Author-Key"],
+                         int(parse_date(art["Date"]).timestamp()), int(removed), " ".join(supersedes)))
+        self.db.commit()
+
+    def page(self, message_id: str) -> tuple[str, str] | None:
+        """(group, path) of a page article we hold."""
+        row = self.db.execute("SELECT group_id, path FROM pages WHERE message_id=?",
+                              (message_id,)).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def page_versions(self, group_id: str) -> list[pg.Version]:
+        gone = self.withdrawn(group_id)                  # cancelled: they do not count (5.1)
+        return [pg.Version(mid, path, author, date, bool(removed), tuple(sup.split()))
+                for mid, path, author, date, removed, sup in self.db.execute(
+                    "SELECT message_id, path, author_key, date, removed, supersedes FROM pages "
+                    "WHERE group_id=? AND message_id IN (SELECT message_id FROM articles)",
+                    (group_id,))
+                if mid not in gone]
+
+    def site(self, group_id: str, manifest: Manifest | None = None,
+             extra: list[pg.Version] = ()) -> tuple[dict, list[str]]:
+        """(current versions by path, paths in force) of a site (sections 5.1, 5.2)."""
+        m = manifest or self.manifest(group_id)
+        if m is None or m.view != "pages":
+            return {}, []
+        allowed = {crypto.key_to_text(k) for k in (m.owner, *m.moderators, *m.posters)}
+        currents = pg.current_versions([*self.page_versions(group_id), *extra], allowed)
+        force = pg.in_force(currents, max_pages=m.raw.get("max_pages", pg.MAX_PAGES_DEFAULT),
+                            home=m.raw.get("home", pg.HOME_DEFAULT))
+        return currents, force
+
+    def site_kept(self, group_id: str, manifest: Manifest | None = None, since: float = 0,
+                  extra: list[pg.Version] = ()) -> list[str]:
+        """Section 6.1: the current and previous version of every page in force, by
+        path, and a current removal while inside the window."""
+        currents, force = self.site(group_id, manifest, extra)
+        out = []
+        for path in sorted(force):
+            cur, prev = currents[path]
+            out.append(cur.message_id)
+            if prev is not None:
+                out.append(prev.message_id)
+        out += [cur.message_id for p, (cur, _) in sorted(currents.items())
+                if cur.removed and cur.date >= since]
+        return out
 
     def removals_since(self, since: int) -> list[tuple[str, str]]:
         """(rmgroup Message-ID, group) for groups their owner removed since ``since``."""

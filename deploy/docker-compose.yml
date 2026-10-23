@@ -16,6 +16,7 @@ services:
       # Without them, people using this node see posts without their pictures.
       UNSEENET_BLOBS: "no"                      # "yes" to carry them (recommended)
       UNSEENET_AVATARS: "no"                    # "yes" to carry profile pictures
+      UNSEENET_SITES: "no"                      # "yes" to carry sites (pages that stay)
     secrets:
       - unseenet_node_passphrase
     volumes:
