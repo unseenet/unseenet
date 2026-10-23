@@ -333,6 +333,10 @@ class PostingMixin:
         blobs, file_bits = [], 0
         if files:
             from ...core import blobs as bl
+            if not self.manifest_data(group_id):     # a group not read yet: its rules for files
+                m = await self.fetch_manifest(group_id)
+                if m is not None:
+                    self.group_entry(group_id)["manifest"] = dict(m.raw)
             self.check_files(group_id, files)
             edit_header += bl.attachment_headers([(f.name, f.media_type, f.octets) for f in files])
             blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
