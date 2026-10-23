@@ -256,41 +256,14 @@ An identity's personal site is the group it owns named `site`:
 site@<fingerprint of the identity's key>
 ```
 
-Like the profile (UN-RFC 0022 section 5.1) and the feed (UN-RFC 0034
-section 5.1), its Group ID follows from the key, so anyone who knows a
-key, or a name that leads to it (UN-RFC 0019), can find the site.
+It is a **personal group** (UN-RFC 0029 section 2.1), like the personal
+feed (UN-RFC 0034 section 5): anyone who knows a key, or a name that
+leads to it (UN-RFC 0019), can find it, and how it is started, ended,
+renewed, found and followed is said there once for all personal
+groups. Its manifest has `view`: `pages`, besides what UN-RFC 0029
+section 2.1 requires.
 
-Its manifest (UN-RFC 0004 section 3) has:
-
-- `name`: `site`;
-- `type`: `channel`. The owner MAY list `posters`, for example a key of
-  their own on another device; they SHOULD NOT list other people;
-- `view`: `pages`;
-- `expires`: as for every key-bound group (section 7.3).
-
-A node MUST reject a manifest for a group named `site` whose `type` is
-not `channel` or whose `view` is not `pages`.
-
-## 7.2 Starting and Ending a Site
-
-A personal site is public, and it ties everything in it to the
-identity. A client therefore:
-
-- MUST NOT create a personal site without the user asking for it;
-- MUST tell the user, as for a public profile (UN-RFC 0022 section
-  5.3), that what is published can be kept by others and cannot be
-  recalled, also after a page is changed or removed.
-
-The owner ends a site by removing the group (UN-RFC 0013) or by letting
-it expire.
-
-## 7.3 Lifetime
-
-Personal sites are key-bound groups (UN-RFC 0029). The owner's client
-renews `site@<fp>` together with the identity's other key-bound groups,
-and the site of a key that nobody uses any more disappears with them.
-
-## 7.4 Other Sites
+## 7.2 Other Sites
 
 Any open channel can be a site: a project's (for example
 `unseenet.site`), an association's under a country hierarchy, or a
@@ -343,9 +316,6 @@ MUST let the reader see the fingerprint.
   seen names in `Supersedes`, the client SHOULD say that a newer version
   exists but is not available, rather than show the older one as
   current (section 13).
-- Wherever a client shows an identity, it SHOULD offer the identity's
-  personal site when the site group is current, as for feeds (UN-RFC
-  0034 section 5.4).
 
 ## 9.2 Writing
 
@@ -385,7 +355,8 @@ capsules, need a document of their own.
   0027 is said there.
 - **UN-RFC 0011** section 4: the policy field `sites` (section 6.2).
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
-  `site@<fp>`, personal site, this document section 7.1.
+  `site@<fp>`, a personal group (UN-RFC 0029 section 2.1), this
+  document section 7.1.
 - **UN-RFC 0031** section 3.4: links within a site and to pages
   (section 8).
 - **UN-RFC 0000** section 6: 0035 is added to the index.
@@ -431,8 +402,8 @@ capsules, need a document of their own.
 
 - **A personal site is public and linked to the identity.** Everything
   in it can be kept by anybody, also after it is changed or removed.
-  Section 7.2 makes the client say so. Users who need to keep things
-  apart SHOULD use a separate identity for a site.
+  UN-RFC 0029 section 2.1 makes the client say so. Users who need to
+  keep things apart SHOULD use a separate identity for a site.
 - **Abuse.** Static content that stays is more attractive for unlawful
   material than a discussion. The limits of section 3 and UN-RFC 0017 section 2.2, the
   operator's freedom to carry no sites, no site images or any single
@@ -456,7 +427,7 @@ capsules, need a document of their own.
 - **Rendering cost.** The 64 KiB limit and the rendering limits of
   UN-RFC 0031 section 7 keep a crafted page from hanging a client.
 - **Scale.** A personal site is one more key-bound group per identity,
-  but it exists only when its owner asks for it (section 7.2), so it
+  but it exists only when its owner asks for it (UN-RFC 0029 section 2.1), so it
   does not grow with the number of identities as profiles do. The upper
   bound per identity is one site of at most 100 pages of 64 KiB, each
   with one previous version (12.5 MiB of text), and 8 MiB of blobs
