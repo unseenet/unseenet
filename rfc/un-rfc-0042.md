@@ -85,14 +85,18 @@ of a site (UN-RFC 0035), and then MUST say:
 - **which** earlier versions a new version names, if not every one:
   for example those the writer knows, newest first, at most 32, when
   something else (a page's path) already ties the versions together;
-- whether rule 5 applies.
+- whether rule 5 applies;
+- whether replaced versions are **kept** for a while instead of
+  withdrawn, and how many (for example the previous version of a page,
+  so that it can come back, UN-RFC 0035).
 
 Everything else in this document holds for such versions too: nodes
-withdraw the versions a valid new version names (section 3.1), and
-section 5.2 decides which version is current when two name the same
-earlier one. Section 3.1's check that the earlier version is "by the
-same author" is then the other document's rule for who may write a new
-version.
+withdraw the versions a valid new version names (section 3.1), unless
+the other document keeps them - then a node keeps them as it says and
+lets them expire normally after that - and section 5.2 decides which
+version is current when two name the same earlier one. Section 3.1's
+check that the earlier version is "by the same author" is then the
+other document's rule for who may write a new version.
 
 # 3. Nodes
 
