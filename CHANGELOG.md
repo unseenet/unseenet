@@ -22,6 +22,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   someone's profile reads the authors' profiles together, so a node cannot
   tell whose you open. The warning is `profiles.PROFILE_WARNING`, used by the
   TUI too (UN-RFC 0046).
+- Groups can be shown as a feed (`view: feed`, UN-RFC 0034) or, for
+  channels, as pages (`view: pages`, UN-RFC 0035). `feed@<fp>` and
+  `site@<fp>` are key-bound personal groups (UN-RFC 0029 section 2.1):
+  nodes accept them only as channels with that view, and do not list
+  them (#359). **Nodes must be updated** before clients create them.
 
 ### Fixed
 
