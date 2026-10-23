@@ -111,6 +111,7 @@ nav:
       - The node: guide/node.md
       - The clients: guide/clients.md
       - Out into the world: guide/world.md
+      - The threat model: guide/threats.md
       - Tor and Tails: tor.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
