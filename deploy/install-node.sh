@@ -30,9 +30,10 @@ python3 -m venv .venv
 mkdir -p ~/node-data && chmod 700 ~/node-data
 USER
 
-# Pictures and small files (UN-RFC 0027), and profile pictures (UN-RFC 0022). Off unless
-# the operator says yes: a node that carries them keeps strangers' files. Asked on the
-# terminal; UNSEENET_BLOBS=yes|no and UNSEENET_AVATARS=yes|no answer beforehand.
+# Pictures and small files (UN-RFC 0027), profile pictures (UN-RFC 0022) and sites
+# (UN-RFC 0035). Off unless the operator says yes: a node that carries them keeps what
+# strangers publish. Asked on the terminal; UNSEENET_BLOBS, UNSEENET_AVATARS and
+# UNSEENET_SITES (yes|no) answer beforehand.
 ask() {   # ask "question" -> 0 for yes; the recommended answer is yes
   local answer
   if [ ! -r /dev/tty ]; then return 1; fi
@@ -71,6 +72,10 @@ encrypted = false'
   echo
   echo "Profile pictures: small pictures (at most 8 KB) people choose for themselves."
   if yes_no "${UNSEENET_AVATARS:-}" "Carry profile pictures?"; then AVATARS=accept; else AVATARS=refuse; fi
+  echo
+  echo "Sites: small sets of pages (a person's homepage, a project's guide, a wiki)"
+  echo "that stay until their owner changes them, at most 100 pages each."
+  if yes_no "${UNSEENET_SITES:-}" "Carry sites?"; then SITES=accept; else SITES=refuse; fi
   cat > /home/unseenet/node.toml <<TOML
 [node]
 name = "$NODE_NAME"
@@ -78,6 +83,7 @@ min_pow = 18
 retention_days = 90
 new_groups = "accept"
 avatars = "$AVATARS"
+sites = "$SITES"
 $BLOBS_TOML
 
 # Add peers like this, then: systemctl restart unseenet-node

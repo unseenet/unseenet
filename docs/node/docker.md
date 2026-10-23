@@ -60,6 +60,7 @@ edit the file in the volume and restart the container:
 | `UNSEENET_NEW_GROUPS` | `accept` | `accept`, `trusted` or `manual` |
 | `UNSEENET_BLOBS` | `no` | `yes`: carry pictures and small files, 1 MiB, 30 days ([why it is a choice](install.md#pictures-and-files)) |
 | `UNSEENET_AVATARS` | `no` | `yes`: carry profile pictures |
+| `UNSEENET_SITES` | `no` | `yes`: carry sites, pages that stay ([UN-RFC 0035](../spec/un-rfc-0035.md)) |
 
 ```bash
 docker run --rm -it -v unseenet:/data alpine vi /data/node.toml   # add [[peer]] sections

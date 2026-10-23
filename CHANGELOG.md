@@ -70,6 +70,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   without a terminal both stay off). The Docker image takes the same
   variables, off by default. `unseenet post --attach FILE` posts with a
   file, as a tool for testing nodes.
+- Nodes carry sites (UN-RFC 0035, #382): channels with `view: pages`,
+  page articles with a `Page` path, new versions with `Supersedes` by any
+  of the site's writers, `max_pages` and `home`. A node keeps each page's
+  current and previous version beyond the window, so a page falls back
+  when its writer is removed, and a new node gets the whole site by
+  pulling. Off unless `sites = "accept"`; the installer and Docker ask.
 
 ### Fixed
 

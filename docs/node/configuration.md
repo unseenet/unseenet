@@ -42,6 +42,7 @@ groups = "*"
 | `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
 | `profiles` | `"accept"` | Carry identities' public profiles (`profile@...`), see [below](#profiles-and-pictures). `"refuse"` to leave them out. |
 | `avatars` | `"refuse"` | Carry identities' pictures (`avatar@...`). Off until you turn it on. |
+| `sites` | `"refuse"` | Carry sites: channels shown as pages, kept until their owner changes them ([UN-RFC 0035](../spec/un-rfc-0035.md)). Off until you turn it on. |
 | `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
 
 ### Profiles and pictures
