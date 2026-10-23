@@ -60,8 +60,8 @@ FOCUS: dict[str, set[str]] = {
 }
 
 CAPTIONS: dict[str, str] = {
-    "overview": "The whole network: clients reach nodes over Tor; a web entrance lets a "
-                "browser in, a gateway links other networks.",
+    "overview": ("The whole network: clients reach nodes over Tor; a web entrance lets a "
+                 "browser in, a gateway links other networks."),
     "journey":  "A post goes from a client over Tor to its node, and from node to node.",
     "identity": "Your keys live in your client's vault, never on a node.",
     "groups":   "Groups live on the nodes, copied between them.",
@@ -78,8 +78,8 @@ def _cls(part: str, focus: set[str]) -> str:
 def svg(name: str) -> str:
     """The drawing with the parts of FOCUS[name] picked out, as inline HTML."""
     focus = FOCUS[name]
-    out = [f'<figure class="ug-figure"><svg class="ug" viewBox="0 0 {W} {H}" role="img" '
-           f'aria-label="{escape(CAPTIONS[name])}" xmlns="http://www.w3.org/2000/svg">']
+    out = [(f'<figure class="ug-figure"><svg class="ug" viewBox="0 0 {W} {H}" role="img" '
+            f'aria-label="{escape(CAPTIONS[name])}" xmlns="http://www.w3.org/2000/svg">')]
     out.append(f'<g class="ug-torarea{_cls("tor", focus)}">'
                '<rect x="300" y="16" width="330" height="368" rx="26"/>'
                '<text x="318" y="40">Tor</text>'
