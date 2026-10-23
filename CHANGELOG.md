@@ -37,7 +37,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and `unpin` by the owner or a moderator, the manifest field `max_pins`
   (0-25, default 5), and a pin that arrives before its post. Kept articles
   are not expired, are listed with the group's state, and are accepted
-  when older than the window, so a new node gets them by pulling (#361).
+  when older than the window, so a new node gets them by pulling. A pin
+  or unpin names the one it replaces (`Supersedes`), so a quick undo is
+  not decided by the rounded `Date`, and a pin follows an edit of its
+  post (#361).
 
 ### Fixed
 

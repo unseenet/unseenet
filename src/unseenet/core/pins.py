@@ -27,11 +27,13 @@ class Marker:
     action: str               # "pin" or "unpin"
     author_key: str           # the key as text
     date: int                 # the marker's Date, unix seconds
+    supersedes: tuple[str, ...] = ()   # the markers it replaces (section 3.1)
 
     @property
-    def order(self) -> tuple[int, str]:
-        """Later is greater; on equal dates the greater Message-ID (section 4.2)."""
-        return (self.date, self.message_id)
+    def newest_first(self) -> tuple[int, str]:
+        """Sort key: the latest Date first, on a tie the lower Message-ID (UN-RFC
+        0042 section 5.2, which section 4.2 uses)."""
+        return (-self.date, self.message_id)
 
 
 def max_pins(manifest_data: dict) -> int:
@@ -42,12 +44,19 @@ def max_pins(manifest_data: dict) -> int:
     return value
 
 
-def latest(markers) -> dict[str, Marker]:
-    """For each target, the pin or unpin that counts: the latest (section 4.2)."""
-    out: dict[str, Marker] = {}
+def current(markers, allowed) -> dict[str, Marker]:
+    """For each target, the marker that decides (section 4.2): among those whose
+    author is in ``allowed`` (owner and moderators now), one no other of them names
+    in Supersedes; of several, the latest Date, then the lower Message-ID."""
+    by_target: dict[str, list[Marker]] = {}
     for m in markers:
-        if m.target not in out or m.order > out[m.target].order:
-            out[m.target] = m
+        if m.author_key in allowed:
+            by_target.setdefault(m.target, []).append(m)
+    out = {}
+    for target, ms in by_target.items():
+        named = {s for m in ms for s in m.supersedes}
+        heads = [m for m in ms if m.message_id not in named] or ms
+        out[target] = min(heads, key=lambda m: m.newest_first)
     return out
 
 
@@ -55,20 +64,24 @@ def in_force(markers, *, owner: str, moderators, limit: int, withdrawn=()) -> li
     """The pins in force, newest first (section 4.2). ``owner`` and ``moderators``
     are keys as text from the current manifest; ``withdrawn``: targets withdrawn by
     a valid cancel."""
-    allowed = {owner, *moderators}
     gone = set(withdrawn)
-    pins = [m for m in latest(markers).values()
-            if m.action == PIN and m.author_key in allowed and m.target not in gone]
-    pins.sort(key=lambda m: m.order, reverse=True)
+    pins = [m for m in current(markers, {owner, *moderators}).values()
+            if m.action == PIN and m.target not in gone]
+    pins.sort(key=lambda m: m.newest_first)
     return pins[:max(0, min(limit, KEPT_PER_GROUP))]
 
 
 def pin_article(identity: crypto.Identity, group_id: str, target: str, *, unpin: bool = False,
-                note: str = "", pow_bits: int = 18, now: datetime | None = None) -> Article:
-    """A signed pin or unpin of ``target`` (a Message-ID with its angle brackets)."""
+                note: str = "", replaces=(), pow_bits: int = 18,
+                now: datetime | None = None) -> Article:
+    """A signed pin or unpin of ``target`` (a Message-ID with its angle brackets).
+    ``replaces``: the pin or unpin of the same target it replaces, newest first
+    (section 3.1)."""
     if len(note) > MAX_NOTE:
         raise ValueError(f"a pin's note is at most {MAX_NOTE} characters")
     body = (note.strip() + "\n") if note.strip() else ""
-    art = new_article(group_id, None, body, now=now,
-                      extra=[("Control", f"{UNPIN if unpin else PIN} {target}")])
+    extra = [("Control", f"{UNPIN if unpin else PIN} {target}")]
+    if replaces:
+        extra.append(("Supersedes", " ".join(list(replaces)[:32])))
+    art = new_article(group_id, None, body, now=now, extra=extra)
     return art.finalize(identity, pow_bits)

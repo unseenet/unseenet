@@ -583,8 +583,13 @@ class Node:
                 raise ArticleError("permission", "a pin is in the group of its target")
             if Article.from_bytes(self.store.get(target)).control:
                 raise ArticleError("permission", "control articles cannot be pinned")
+        replaces = parse_supersedes(art, control_ok=True)     # section 3.1
+        for old in replaces:
+            held = self.store.marker(old)
+            if held is not None and held != (art.group, target):
+                raise ArticleError("permission", "a pin replaces a pin or unpin of the same target")
         self.store.add(art, raw)
-        self.store.add_marker(art, action, target)
+        self.store.add_marker(art, action, target, replaces)
 
     def _keep_old(self, art: Article, manifest: Manifest) -> bool:
         """An article older than the window that would be kept (UN-RFC 0017 section
@@ -593,15 +598,18 @@ class Node:
         if ctl and ctl[0] == pn.PIN and len(ctl) == 2:
             try:
                 me = pn.Marker(art.message_id, ctl[1], pn.PIN, art["Author-Key"],
-                               int(parse_date(art["Date"]).timestamp()))
+                               int(parse_date(art["Date"]).timestamp()),
+                               tuple(parse_supersedes(art, control_ok=True)))
             except (KeyError, ValueError):
                 return False
             return any(p.message_id == art.message_id
                        for p in self.store.pins_in_force(art.group, manifest, [me]))
         if ctl:
             return False
-        return any(p.target == art.message_id
-                   for p in self.store.pins_in_force(art.group, manifest))
+        # a pinned post, or an edit of one (UN-RFC 0033 section 4.2, step 2)
+        pinned = {p.target for p in self.store.pins_in_force(art.group, manifest)}
+        pinned |= {self.store.current_version(t) for t in pinned}
+        return art.message_id in pinned or any(v in pinned for v in parse_supersedes(art))
 
     # --- maintainers' blocks (UN-RFC 0018 sections 5.4 and 8.2) ---
     BLOCKS_TTL = 300.0

@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS markers (          -- pins and unpins (UN-RFC 0033), 
     target     TEXT NOT NULL,
     action     TEXT NOT NULL,                   -- "pin" or "unpin"
     author_key TEXT NOT NULL,
-    date       INTEGER NOT NULL                 -- the marker's Date, unix seconds
+    date       INTEGER NOT NULL,                -- the marker's Date, unix seconds
+    supersedes TEXT NOT NULL DEFAULT ''         -- the markers it replaces (UN-RFC 0033, 3.1)
 );
 CREATE INDEX IF NOT EXISTS markers_group ON markers(group_id);
 CREATE INDEX IF NOT EXISTS markers_target ON markers(target);
@@ -380,16 +381,28 @@ class Store:
         return self.db.execute("SELECT 1 FROM articles WHERE message_id=?",
                                (message_id,)).fetchone() is not None
 
-    def add_marker(self, art: Article, action: str, target: str) -> None:
-        self.db.execute("INSERT OR IGNORE INTO markers VALUES (?, ?, ?, ?, ?, ?)",
+    def add_marker(self, art: Article, action: str, target: str, replaces=()) -> None:
+        self.db.execute("INSERT OR IGNORE INTO markers VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (art.message_id, art.group, target, action, art["Author-Key"],
-                         int(parse_date(art["Date"]).timestamp())))
+                         int(parse_date(art["Date"]).timestamp()), " ".join(replaces)))
         self.db.commit()
 
     def markers(self, group_id: str) -> list[pn.Marker]:
-        return [pn.Marker(*row) for row in self.db.execute(
-            "SELECT message_id, target, action, author_key, date FROM markers WHERE group_id=?",
-            (group_id,))]
+        return [pn.Marker(mid, target, action, author, date, tuple(sup.split()))
+                for mid, target, action, author, date, sup in self.db.execute(
+                    "SELECT message_id, target, action, author_key, date, supersedes "
+                    "FROM markers WHERE group_id=?", (group_id,))]
+
+    def marker(self, message_id: str) -> tuple[str, str] | None:
+        """(group, target) of a pin or unpin we hold."""
+        row = self.db.execute("SELECT group_id, target FROM markers WHERE message_id=?",
+                              (message_id,)).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def current_version(self, message_id: str) -> str:
+        """An edited post's current version (UN-RFC 0042); the post itself otherwise."""
+        row = self.db.execute("SELECT new FROM supersedes WHERE old=?", (message_id,)).fetchone()
+        return row[0] if row else message_id
 
     def withdrawn(self, group_id: str) -> set[str]:
         """Targets withdrawn by a valid cancel (UN-RFC 0033 section 4.2, step 2)."""
@@ -425,10 +438,12 @@ class Store:
         pins = self.pins_in_force(group_id, m)
         days = m.retention_days if window_days is None else window_days
         since = (now or time.time()) - days * 86400
-        unpins = sorted((u for u in pn.latest(self.markers(group_id)).values()
+        allowed = {crypto.key_to_text(m.owner), *(crypto.key_to_text(k) for k in m.moderators)}
+        unpins = sorted((u for u in pn.current(self.markers(group_id), allowed).values()
                          if u.action == pn.UNPIN and u.date >= since),
-                        key=lambda u: u.order, reverse=True)
-        targets = [p.target for p in pins][:pn.KEPT_PER_GROUP]
+                        key=lambda u: u.newest_first)
+        # an edited post is kept as its current version (UN-RFC 0033 section 5.1)
+        targets = [self.current_version(p.target) for p in pins][:pn.KEPT_PER_GROUP]
         return [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
 
     def removals_since(self, since: int) -> list[tuple[str, str]]:
