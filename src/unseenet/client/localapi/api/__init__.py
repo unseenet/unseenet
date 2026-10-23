@@ -1,0 +1,109 @@
+"""What the local client API does (UN-RFC 0046), without the web server.
+
+``LocalAPI`` holds one session - a person's unlocked vault, or a service's key (section
+3.2) - with its ``ClientRuntime``, and answers every request of UN-RFC 0046 section 4
+as plain JSON-safe data. ``server.py`` puts it behind HTTP and a WebSocket; a test or
+another transport can call it directly. Every front end - the GUI, a screen-reader
+client, a bot in another language - gets the same behaviour.
+
+The code follows the sections of UN-RFC 0046, one file each:
+
+    base.py       LocalAPI.__init__: the session and its runtime
+    state.py      4.1  state, pausing ripening, about, emoji
+    setup.py      4.2  unlocking and setting up
+    groups.py     4.3  groups you follow, one group's posts, browsing
+    writing.py    4.4, 4.5  posting, private posts, edits and withdrawals as jobs
+    people.py     4.6  contacts, ignoring, reporting, blocking
+    running.py    4.7  groups you run: settings, members, roles, bans, moderation
+    identity.py   4.8  profiles, names, the passphrase, settings
+    articles.py   4.9  articles and manifests from a program
+    events.py     5    events over the WebSocket
+
+A new request goes in the file of its section (and a route in ``server.py``); a new
+section of the RFC gets a file of its own, added to ``LocalAPI`` below. This file holds
+what all parts share: imports, constants, ``Locked``, ``NotFound`` and helpers.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import os
+from datetime import timedelta
+from pathlib import Path
+
+from .... import __version__
+from .... import names as nm
+from ....core import about as about_text
+from ....core import crypto
+from ....core import markup
+from ....core import profiles as prof
+from ....core import ripening as rp
+from ....core.groups import (KIND_CHAT, KIND_POST, group_refs, manifest_article, message_kind,
+                            personal_inbox_id)
+from ....core.vault import Vault, VaultError
+from ... import events as ev
+from ... import naming
+from ...grouptree import group_tree
+from ...runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime
+from ...session import MAX_MENTION_NOTICES, GroupInfo, Message, Session, SessionError
+from ...threads import CONTACT, FOR_YOU
+
+API_VERSION = 1
+MAX_READ = 500                  # ids per read request
+MAX_REFERENCES = 50
+GROUP_TYPES = ("open", "moderated", "channel", "closed")
+KINDS = {"both": None, "post": [KIND_POST], "chat": [KIND_CHAT]}
+SETTINGS_FIELDS = ("title", "description", "rules", "rules_type", "view", "kinds",
+                   "low_latency", "min_pow", "retention_days", "comments", "comment_days")
+FIXED_FIELDS = ("type", "owner", "name", "local")      # never change (UN-RFC 0004, 4)
+PROGRAM_HEADERS = ("x-", "gateway-")                   # what a program may add (section 4.9)
+
+
+class Locked(Exception):
+    """409: unlock (or set up) first."""
+
+
+class NotFound(Exception):
+    """404: no such group or post."""
+
+
+def _perm(p) -> dict:
+    """``Session.write_permission`` for a front end: greyed out, with the reason (#181)."""
+    return {"allowed": bool(p.allowed), "reason": p.reason, "code": p.code}
+
+
+def _key(text) -> str:
+    text = str(text or "").strip()
+    crypto.key_from_text(text)                     # raises ValueError on a bad key
+    return text
+
+
+def _kind(data: dict) -> str:
+    kind = str(data.get("kind", KIND_POST))
+    if kind not in (KIND_POST, KIND_CHAT):
+        raise SessionError("kind is post or chat")
+    return kind
+
+
+# every name above, for the parts (`from . import *`), underscored ones too
+__all__ = [n for n in dir() if not n.startswith('__') or n == '__version__']
+
+from .base import ApiBase  # noqa: E402
+from .events import Events  # noqa: E402
+from .setup import Setup  # noqa: E402
+from .state import State  # noqa: E402
+from .groups import Groups  # noqa: E402
+from .writing import Writing  # noqa: E402
+from .people import People  # noqa: E402
+from .running import Running  # noqa: E402
+from .identity import Identity  # noqa: E402
+from .articles import Articles  # noqa: E402
+
+
+class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles):
+    """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
+    a session made with ``Session.from_key`` and ``service=True`` (a bot or
+    gateway, section 3.2).
+
+    Split by section of UN-RFC 0046 (client/localapi/api/*.py, see above)."""
