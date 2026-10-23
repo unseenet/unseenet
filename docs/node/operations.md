@@ -173,6 +173,28 @@ clock).
 The node listens on `127.0.0.1:1119` only; Tor forwards onion traffic to
 it. Do not change `--listen` to a public interface.
 
+### Keep the machine quiet
+
+If you run your node to keep its location hidden, don't run anything on
+the same machine that announces the machine to the world. The onion
+service hides the node's address, but a public service beside it can
+undo that: if its uptime, hardware or address can be seen, someone can
+compare it with when the node is reachable.
+
+Avoid on the node's machine:
+
+- a Tor relay (it is listed publicly in the consensus with its uptime)
+- volunteer computing such as BOINC or Folding@home (projects publish
+  host lists with hardware and when each host was last seen, and the
+  account is tied to an email address)
+- public web servers, status pages, dynamic DNS or monitoring that
+  reports to a public dashboard
+
+This holds over Tor too: hiding the IP address does not hide a public
+record of when the machine is online. Run such things on a different
+machine. If your node is a public backbone node whose operator is
+known, this does not matter.
+
 ## Resources
 
 - **RAM**: about 300 MB at peak during start (unlocking the onion key uses
