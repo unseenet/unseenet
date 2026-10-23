@@ -150,6 +150,10 @@ The protocol is designed to be extended without breaking old software:
 | 0041 | Fetching Many Manifests at Once               | Standards Track |
 | 0042 | Editing Posts (Supersedes)                    | Standards Track |
 | 0043 | Web Entrances and Clients on the Open Web     | Standards Track |
+| 0044 | Your State in the Network                     | Standards Track |
+| 0045 | Spam Reports                                  | Standards Track |
+| 0046 | The Local Client API                          | Standards Track |
+| 0047 | Team Inboxes                                  | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
