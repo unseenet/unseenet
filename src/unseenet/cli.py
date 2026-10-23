@@ -104,8 +104,22 @@ def _blobs_config(path: Path, b: dict) -> dict | None:
     days = b.get("retention_days", 30)
     if isinstance(days, bool) or not isinstance(days, int) or days < 1:
         sys.exit(f"{path}: [blobs] retention_days must be a positive number")
-    return {"max_size": size, "retention_days": days, "encrypted": bool(b.get("encrypted", False)),
-            "groups": str(b.get("groups", "*"))}
+    out = {"max_size": size, "retention_days": days, "encrypted": bool(b.get("encrypted", False)),
+           "groups": str(b.get("groups", "*")),
+           # section 7.3: refusal lists only from keys the operator names; none by default
+           "refusal_keys": [str(k) for k in b.get("refusal_keys", [])],
+           "refusal_groups": str(b.get("refusal_groups", "*"))}
+    for name, default in (("daily_per_key", bl.DAILY_PER_KEY), ("daily_per_group", bl.DAILY_PER_GROUP)):
+        value = b.get(name, default)                    # section 8.1
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            sys.exit(f"{path}: [blobs] {name} must be a number of octets")
+        out[name] = value
+    for k in out["refusal_keys"]:
+        try:
+            crypto.key_from_text(k)
+        except crypto.CryptoError:
+            sys.exit(f"{path}: [blobs] refusal_keys: bad key {k!r}")
+    return out
 
 
 def _max_clients(path: Path, value):
@@ -182,6 +196,7 @@ async def run_node(args) -> None:
     async def expire_loop():
         while True:
             node.store.expire(config.retention_days)
+            node.sweep_blobs()                 # UN-RFC 0027 section 7: what nothing keeps
             await asyncio.sleep(3600)
 
     try:
@@ -216,6 +231,10 @@ def node_main(argv=None) -> None:
                         "(e.g. when asking to be listed), and exit")
     p.add_argument("--undrop-group", metavar="GROUP_ID",
                    help="allow a group dropped with --drop-group again, and exit")
+    p.add_argument("--refuse-blob", metavar="BLOB_ID",
+                   help="refuse a blob: delete it and never stage, fetch or serve it again "
+                        "(UN-RFC 0027 section 7.3), and exit; a running node follows at once")
+    p.add_argument("--reason", default="", help="why, with --refuse-blob (kept on this node only)")
     args = p.parse_args(argv)
     if args.sign:
         key_file = Path(args.data) / "node_key.vault"
@@ -228,6 +247,17 @@ def node_main(argv=None) -> None:
         data = Path(args.data)
         data.mkdir(parents=True, exist_ok=True, mode=0o700)
         print(load_node_key(data, _passphrase("Node passphrase: ", "UNSEENET_NODE_PASSPHRASE")).key_text)
+        return
+    if args.refuse_blob:
+        from .core import blobs as bl
+        if not bl.valid_id(args.refuse_blob):
+            sys.exit(f"not a blob ID: {args.refuse_blob}")
+        store = Store(Path(args.data) / "articles.sqlite")
+        store.refuse_blob(args.refuse_blob, args.reason)
+        bl.BlobStore(Path(args.data) / "blobs").delete(args.refuse_blob)
+        store.forget_blob(args.refuse_blob)
+        print(f"Refused {args.refuse_blob}: deleted, and not staged, fetched or served again. "
+              "Articles that reference it stay.")
         return
     if args.drop_group or args.undrop_group:
         from .node.server import Node

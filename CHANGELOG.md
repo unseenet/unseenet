@@ -54,6 +54,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   then from others carrying the group, before passing the article on, and
   after 10 minutes passes it on without them. `BLOB` answers `436 try
   later` meanwhile.
+- Keeping and removing blobs (UN-RFC 0027 sections 7, 8.1, #377): a blob
+  goes when no stored article references it (expiry, cancels, edits), and
+  after `[blobs] retention_days` unless a kept article such as a pinned
+  post references it. Operators refuse a blob with `unseenet-node
+  --refuse-blob ID`, and may follow refusal lists from `refusal_keys`
+  (none by default). Daily quotas per key and group (`daily_per_key`,
+  `daily_per_group`): `441 quota` for the node's own clients; from peers
+  the article goes on without its files. A pin is refused when its post's
+  blobs would take the group's kept blobs above 8 MiB (UN-RFC 0017 2.2).
 
 ### Fixed
 
