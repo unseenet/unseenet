@@ -737,7 +737,7 @@ unseenet --help
 | `post ... --format markdown\|plain` | The text's format (default: your setting) |
 | `pin GROUP_ID MESSAGE_ID [--note TEXT] [--unpin]` | Owner or moderator: pin a post at the top of the group, kept beyond its window |
 | `pins GROUP_ID` | The posts pinned in a group |
-| `page-put SITE_ID PATH FILE [--title TEXT]` | Write a page of a site you write in, from a Markdown file; a new version replaces the old one, which is kept as the previous version |
+| `page-put SITE_ID PATH FILE [--title TEXT]` | Write a page of a site you write in, from a Markdown file; a new version replaces the old one, which is kept as the previous version. Pictures: write `![what it shows](file:photo.jpg)` in the page, and the file is cleaned of metadata, sent with it and pointed at |
 | `page-remove SITE_ID PATH` | Remove a page from a site |
 | `pages SITE_ID` | A site's pages, the home page first |
 | `feed-start [--comments open\|none] [--yes]` | Start your personal feed - public and tied to your key, so you are told first |

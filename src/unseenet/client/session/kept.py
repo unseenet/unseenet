@@ -126,10 +126,12 @@ class KeptMixin:
         return [v.message_id for v in vs][:32]
 
     async def put_page(self, group_id: str, path: str, text: str, title: str = "", *,
-                       content_type: str | None = None) -> str:
+                       content_type: str | None = None, files=None) -> str:
         """Write a page of a site you write in: its first version, or a new one naming
-        the versions it replaces. ``title`` defaults to the path. Read the site first
-        (``fetch_group``) so the current version is named. Returns its Message-ID."""
+        the versions it replaces. ``title`` defaults to the path; ``files`` are prepared
+        files (``prepare_files``) its images point at by blob ID (UN-RFC 0031 section
+        3.5). Read the site first (``fetch_group``) so the current version is named.
+        Returns its Message-ID."""
         from ...core import pages as pg
         self._writes_pages(group_id)
         if not pg.valid_path(path):
@@ -139,7 +141,7 @@ class KeptMixin:
         title = (title or path).strip()[:pg.MAX_TITLE]
         return await self.post(group_id, title, text, content_type=content_type,
                                supersedes=self._versions_of(group_id, path) or None,
-                               extra=[("Page", path)])
+                               extra=[("Page", path)], files=files)
 
     async def remove_page(self, group_id: str, path: str) -> str:
         """Remove a page from a site (``Page-Removed``): its versions stop counting, and

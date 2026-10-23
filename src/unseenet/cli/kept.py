@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from . import *  # noqa: F403  - the shared names, as when this was one file
 from .. import cli as _c   # names tests patch on the module, read at call time
+import re
 
 
 async def _read(s, group: str) -> None:
@@ -50,21 +51,49 @@ async def c_pins(app: App, args) -> None:
     emit(args, text, {"pins": rows})
 
 
+_LOCAL_IMAGE = re.compile(r"!\[([^\]]*)\]\(file:([^)\s]+)\)")
+
+
+def _local_images(s, text: str, base: Path) -> tuple[str, list]:
+    """A page's ``![alt](file:photo.jpg)``: each file (relative to the page's own file)
+    prepared - cleaned of metadata - and its image pointed at its blob ID (UN-RFC 0031
+    section 3.5). Returns the text and the prepared files."""
+    from ..core import blobs as bl
+    files, ids = [], {}
+
+    def swap(m):
+        name = m.group(2)
+        if name not in ids:
+            f, = s.prepare_files([base / name])
+            files.append(f)
+            ids[name] = bl.blob_id(f.octets)
+        return f"![{m.group(1)}]({ids[name]})"
+    return _LOCAL_IMAGE.sub(swap, text), files
+
+
 async def c_page_put(app: App, args) -> None:
-    """``unseenet page-put SITE PATH FILE [--title TEXT]``: write a page of a site you
-    write in, from a Markdown or text file (``-`` for stdin); a new version names
-    the ones it replaces."""
+    """``unseenet page-put SITE PATH FILE [--title TEXT] [--attach FILE]``: write a page
+    of a site you write in, from a Markdown or text file (``-`` for stdin); a new
+    version names the ones it replaces. Pictures: write ``![alt](file:photo.jpg)`` in
+    the page and the file is cleaned of metadata, sent with it and pointed at."""
     from ..client.session import SessionError
     s = _session(app, args)
     text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text()
+    base = Path.cwd() if args.file == "-" else Path(args.file).resolve().parent
     ctype = "text/plain; charset=utf-8" if str(args.file).endswith(".txt") else None
     try:
+        text, files = _local_images(s, text, base)
+        files += s.prepare_files(getattr(args, "attach", None) or [])
+        for f in files:
+            if f.note:
+                print(f"Note: {f.note}", file=sys.stderr)
         await _read(s, args.group)
         mid = await s.put_page(args.group, args.path, text, getattr(args, "title", None) or "",
-                               content_type=ctype)
+                               content_type=ctype, files=files or None)
     except SessionError as exc:
         sys.exit(f"Not written: {exc}")
-    emit(args, f"Wrote {args.path} ({mid})", {"path": args.path, "message_id": mid})
+    emit(args, f"Wrote {args.path} ({mid})" + (f" with {len(files)} file(s)" if files else ""),
+         {"path": args.path, "message_id": mid, "files": [f.name for f in files]})
 
 
 async def c_page_remove(app: App, args) -> None:
@@ -125,4 +154,4 @@ async def c_site_start(app: App, args) -> None:
 
 
 __all__ = ['c_pin', 'c_pins', 'c_page_put', 'c_page_remove', 'c_pages', 'c_feed_start',
-           'c_site_start', '_read', '_start']
+           'c_site_start', '_read', '_start', '_local_images']

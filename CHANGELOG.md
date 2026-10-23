@@ -33,6 +33,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- Images in Markdown point at real blobs (UN-RFC 0031 section 3.5, #427):
+  `![alt](blob1:...)`, the blob ID of UN-RFC 0027, which must be one the
+  article carries (`markup.only_carried_images`); the old `blob:<hex>`, which
+  no blob ever had, is gone. Pages can carry their pictures:
+  `Session.put_page(files=)`, and `unseenet page-put` turns
+  `![alt](file:photo.jpg)` into a cleaned, attached, pointed-at picture.
 - `unseenet id-import NAME` adds an identity from its seed, read from stdin
   so it never shows in the process list (for unseenet-demo, #385); `id-new`
   and `whoami` answer in JSON too.

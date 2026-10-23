@@ -138,3 +138,39 @@ async def test_starting_a_personal_group_asks_first(setup, capsys):
     with pytest.raises(SystemExit, match="--yes"):
         await cli.c_feed_start(me, _args(yes=False))
     assert "cannot be recalled" in capsys.readouterr().err
+
+
+async def test_a_page_with_a_picture(setup, tmp_path, capsys):
+    """#427: a page's ![alt](file:...) is cleaned, sent with it and pointed at by its
+    blob ID, which the article carries (UN-RFC 0031 section 3.5)."""
+    import io
+    from PIL import Image
+    from unseenet.core import blobs as bl
+    from unseenet.core import markup
+    from unseenet.core.article import Article
+    node, app = setup
+    node.config.blobs = {"max_size": 1048576}
+    from unseenet.core.blobs import BlobStore
+    node.blobs = BlobStore()
+    me = await app("me")
+    await cli.c_group_create(me, _args(name="dk.wiki", type="channel", view="pages",
+                                       attachments=1048576, types="image/*"))
+    gid = _json(capsys)["group"]
+    img = Image.new("RGB", (60, 40), (90, 160, 60))
+    ex = Image.Exif()
+    ex[0x010F] = "SecretCam"
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=ex)
+    (tmp_path / "pics").mkdir()
+    (tmp_path / "pics" / "garden.jpg").write_bytes(buf.getvalue())
+    page = tmp_path / "index.md"
+    page.write_text("# The garden\n\n![the garden in May](file:pics/garden.jpg)\n")
+    await cli.c_page_put(me, _args(group=gid, path="index", file=str(page), attach=None))
+    out = _json(capsys)
+    art = Article.from_bytes(node.store.get(out["message_id"]))
+    (bid, _), = bl.parse_blobs(art)
+    tree = markup.parse(art.body)
+    assert markup.image_blobs(tree) == [bid] and "file:" not in art.body
+    assert markup.image_blobs(markup.only_carried_images(tree, [bid])) == [bid]
+    stored = node.blobs.get(bid)
+    assert stored and b"SecretCam" not in stored
