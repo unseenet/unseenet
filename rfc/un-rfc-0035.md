@@ -3,9 +3,9 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0035                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0008, 0011, 0017, 0029, 0031, 0042
+Updates: 0000, 0008, 0011, 0017, 0029, 0030, 0031, 0042
 
-                       Unseenet: Pages and Sites
+                   Unseenet: Pages, Sites and Books
 ```
 
 # Abstract
@@ -21,6 +21,13 @@ the safe Markdown of UN-RFC 0031 and the attachments of UN-RFC 0027:
 no HTML, no scripts and nothing fetched from outside the network.
 Sites are small by design, and node operators choose whether they
 carry them.
+
+A site with a `contents` page is a **book**: its pages have a reading
+order, and readers may propose new versions of a page as comments. The
+owner chooses whether editors accept proposals (`review`) or whether
+readers may publish versions directly (`wiki`), and may have nodes keep
+a few earlier versions of every page, so that changes can be checked
+and undone.
 
 # 1. Motivation
 
@@ -45,6 +52,14 @@ Pages are not the web. This document deliberately leaves out HTML,
 scripts, forms, styles, remote content and anything else that makes a
 page a program. A site is a handful of documents to read.
 
+Some documents are read in order and kept up by more than one person:
+a manual, a FAQ that its readers improve, or this very series of
+UN-RFCs, which should be readable inside the network it describes
+(unseenet #280). A **book** is a site with a reading order (section
+10.1), where readers propose changes as comments (section 10.2) and
+where earlier versions can be kept (section 10.4). It is not a second
+kind of group: everything else in this document applies to books.
+
 # 2. Terms
 
 - **Site:** a channel group with `"view": "pages"` (section 3).
@@ -59,6 +74,18 @@ page a program. A site is a handful of documents to read.
 - **Home page:** the page shown when a reader opens the site, by default
   the path `index`.
 - **Personal site:** the key-bound group `site@<fp>` (section 7).
+- **Starter:** the owner, a moderator or a poster (UN-RFC 0030
+  section 2).
+- **Book:** a site whose path `contents` is in force (section 10.1).
+- **Base:** the version a new version or a proposal changes: the first
+  Message-ID in a version's `Supersedes`, or in a proposal's
+  `References` (section 10.3).
+- **Proposal:** a comment that offers a new version of a page
+  (section 10.2).
+- **Conflict:** two or more versions of a path with the same base
+  (section 10.3).
+- **Kept version:** an earlier version of a page that nodes keep
+  because of the `history` field (section 10.4).
 
 # 3. The Pages View
 
@@ -68,14 +95,21 @@ A group may have `"view": "pages"` only if its type is `channel`
 (UN-RFC 0004 section 2), and only if it is not closed. A node MUST
 reject a manifest with `"view": "pages"` for any other group. Who may
 write pages is who may post in a channel: the owner, moderators and
-listed `posters`.
+listed `posters`, and in `wiki` mode also others (section 10.5).
 
 A site's manifest MAY contain:
 
-| Field       | Type    | Default   | Meaning                                       |
-|-------------|---------|-----------|-----------------------------------------------|
-| `max_pages` | integer | `32`      | How many pages may be in force (1-100)        |
-| `home`      | string  | `"index"` | The path of the home page (section 4.1)       |
+| Field       | Type    | Default    | Meaning                                       |
+|-------------|---------|------------|-----------------------------------------------|
+| `max_pages` | integer | `32`       | How many pages may be in force (1-100)        |
+| `home`      | string  | `"index"`  | The path of the home page (section 4.1)       |
+| `history`   | integer | `1`        | Earlier versions kept per page (1-4)          |
+| `edit`      | string  | `"review"` | `review` or `wiki` (section 10.5)             |
+| `wiki_ripe` | integer | `2`        | Lowest level for direct `wiki` edits (0-4)    |
+
+`(1 + history) × max_pages` MUST NOT be more than 200 (section 6.1). A
+manifest with `"edit": "wiki"` MUST have `comments` set to `open`
+(UN-RFC 0030 section 3).
 
 A value outside these ranges makes the manifest invalid (UN-RFC 0004
 section 4, step 3).
@@ -106,7 +140,9 @@ A page article is an article (UN-RFC 0002) in a site with:
 - `Content-Type: text/markdown; charset=utf-8; variant=unseenet`
   (UN-RFC 0031 section 2), or `text/plain`;
 - no `References`: a page is not a reply, and a reply to a page is an
-  ordinary article.
+  ordinary article or a proposal (section 10.2);
+- optionally `Page-Source: <Message-ID>`, naming a proposal or an
+  earlier version whose text this version takes over (section 10.2).
 
 Its body is at most 65 536 octets. Markdown in a page uses the subset
 for posts (UN-RFC 0031 section 3.2), with the links of section 8, and
@@ -122,7 +158,8 @@ A page article is **valid** when:
 
 1. it is in a group whose current manifest has `"view": "pages"`;
 2. its author is the owner, a moderator or a listed poster in that
-   manifest;
+   manifest, or the site is in `wiki` mode and the author may edit
+   directly (section 10.5);
 3. its path, subject and size follow sections 4.1 and 4.2, and its
    `Supersedes` follows section 4.4;
 4. it is not a cancel or other control article.
@@ -139,9 +176,11 @@ set:
 
 - **Who:** anyone who may write pages in the site (section 3), not only
   the author of the earlier version: the owner, moderators and posters
-  look after a site together.
+  look after a site together, and in `wiki` mode others too (section
+  10.5).
 - **Which:** the versions of the same path the writer knows, newest
-  first, at most 32; at least the current version it edited. Older
+  first, at most 32; first the version it edited, its base (section
+  10.3). Older
   versions need not be named, since the path already ties the versions
   together. The first version of a path has no `Supersedes`.
 - Every Message-ID named MUST be a page article of the same path in the
@@ -150,8 +189,9 @@ set:
 
 A removal (section 4.2) names the versions it removes in the same way.
 Replaced versions are **not** withdrawn (UN-RFC 0042 section 2.1): a
-site keeps the previous version of each page (sections 5.1 and 6.1),
-and older versions expire normally.
+site keeps the previous version of each page, or as many as its
+`history` says (sections 5.1, 6.1 and 10.4), and older versions expire
+normally.
 
 # 5. Which Pages Count
 
@@ -159,12 +199,14 @@ and older versions expire normally.
 
 For each path, the page articles that **count** are the valid ones
 whose author is owner, moderator or poster in the **current** manifest,
-and that have not been withdrawn by a valid cancel. Among them, the
-current version is the one UN-RFC 0042 section 5.2 picks: a version no
-other counting version names in `Supersedes`, and of several the one
-with the latest `Date`, then the lower Message-ID. The **previous
-version** of a page is the newest counting version that its current
-version names.
+or, while the site is in `wiki` mode, may edit directly under it
+(section 10.5), and that have not been withdrawn by a valid cancel.
+Among them, the current version is the one UN-RFC 0042 section 5.2
+picks: a version no other counting version names in `Supersedes`, and
+of several the one with the latest `Date`, then the lower Message-ID.
+The **previous version** of a page is the newest counting version that
+its current version names; it is the first of its kept versions
+(section 10.4).
 
 A version that no longer counts replaces nothing. When a writer loses
 their role, the versions they replaced become current again: their
@@ -193,24 +235,28 @@ The current versions of a site's pages are kept articles in the sense
 of UN-RFC 0017 section 2.1, with no markers: the page articles are the
 targets themselves.
 
-- **Which:** the current version of every page in force (section 5.2)
-  and its previous version (section 5.1), and the current version of
-  every path whose current version is a removal, as long as that
-  removal is inside the group's window.
-- **How many:** `max_pages` (section 3) current versions, and one
-  previous version each: the limit of this kind in UN-RFC 0017 section
-  2.2 is twice `max_pages`, at most 200, which leaves room for pins.
+- **Which:** the current version of every page in force (section 5.2),
+  its kept versions (section 10.4, by default only the previous
+  version) and the versions in conflict with it (section 10.3), and the
+  current version of every path whose current version is a removal, as
+  long as that removal is inside the group's window.
+- **How many:** `(1 + history) × max_pages` (section 3), current and
+  kept versions together, with the versions in conflict counted in the
+  same limit; at most 200, which leaves room for pins within the 256 of
+  UN-RFC 0017 section 2.2. When a site passes it, versions in conflict
+  leave first, then the oldest kept versions.
 - **Order:** after the pins of UN-RFC 0033, the current versions of
-  pages by ascending path.
+  pages by ascending path, then for each path its kept versions from
+  newest to oldest and its versions in conflict.
 
 Everything else - that they do not expire, that an old current version
 is accepted so a new node receives the whole site, the blobs of pages
 and the 8 MiB of blobs per group - is UN-RFC 0017 sections 2.1 and 2.2.
-When a page article is no longer kept, because two newer versions
-replaced it, its path was removed or pushed out of `max_pages`, or its
-author lost their role, it expires normally (UN-RFC 0012). Versions
-older than the previous one are therefore not kept, and a site does not
-grow with each edit.
+When a page article is no longer kept, because newer versions replaced
+it beyond `history`, its path was removed or pushed out of `max_pages`,
+or its author lost their role, it expires normally (UN-RFC 0012).
+Versions older than the kept ones are therefore not kept, and a site
+does not grow with each edit.
 
 A page whose images a node refused (UN-RFC 0027 section 7.3) stays, and
 its images are shown by their alt text.
@@ -316,16 +362,20 @@ MUST let the reader see the fingerprint.
   of a site it reads. If a node then offers it a version that one it has
   seen names in `Supersedes`, the client SHOULD say that a newer version
   exists but is not available, rather than show the older one as
-  current (section 13).
+  current (section 14).
+- Wherever a client shows an identity, it SHOULD offer the identity's
+  personal site when the site group is current, as for feeds (UN-RFC
+  0034 section 5.4).
 
 ## 9.2 Writing
 
 - The client keeps the Markdown source the author wrote and offers a
   preview rendered as readers will see it.
-- A new version names the version the client edited, and the earlier
-  ones it knows (section 4.4). Before publishing, the client SHOULD
-  fetch the site's current state, so that an edit from another device
-  or another writer is not silently overtaken.
+- A new version names first the version the client edited, its base
+  (section 10.3), and then the earlier ones it knows (section 4.4).
+  Before publishing, the client SHOULD fetch the site's current state,
+  so that an edit from another device or another writer is not silently
+  overtaken.
 - The client SHOULD warn before a change would push a page out of
   `max_pages`, or take the site's blobs above 8 MiB (UN-RFC 0017
   section 2.2).
@@ -333,27 +383,161 @@ MUST let the reader see the fingerprint.
   current, the client SHOULD say which pages will fall back to their
   previous version (section 5.1), and offer to publish the current ones
   again under their own key, as for pins (UN-RFC 0033 section 4.2).
-- A client MAY offer to go back to the previous version of a page: it
-  publishes the previous version's content as a new version.
+- A client MAY offer to go back to a kept version of a page (section
+  10.4).
 - Images are prepared as UN-RFC 0027 section 9.1 requires.
 
-# 10. Gateways
+# 10. Books
+
+## 10.1 Contents and Reading Order
+
+A site whose path `contents` is in force is a book. The body of the
+`contents` page is Markdown whose lists of links give the book's
+reading order: the targets of its links, in the order they appear,
+taken depth first through nested lists. Nested lists are parts and
+chapters. Links to pages in other sites (section 8) MAY appear; they
+are part of the order, so one book can gather several.
+
+A client showing a book:
+
+- SHOULD offer the `contents` page as the table of contents, next to
+  the home page, which MAY be the same page;
+- SHOULD offer "previous" and "next" on every page that appears in the
+  reading order, and show where in the book the reader is;
+- shows pages that are in force but not in the reading order as for
+  any site (section 9.1).
+
+A site without a `contents` page is not a book and is shown as before.
+Nothing else in this document changes for books, and the limits of
+sections 3, 6.1 and 6.4 apply to each book. A collection larger than
+one book allows, such as the whole UN-RFC series, is split into several
+books whose `contents` pages link to each other.
+
+## 10.2 Proposals
+
+A **proposal** offers a new version of a page for the editors to
+accept. It is a comment (UN-RFC 0030), so it may only be posted where
+comments are open, and the comment rules apply to it: `comment_days`,
+`banned`, postage and `min_ripe`. A proposal has:
+
+- `References: <Message-ID of its base>`, a version of the page, which
+  as a thread root makes the proposal a comment on it;
+- `Page-Proposal: <path>`, the path of that page;
+- a `Subject`, `Content-Type`, body and `Blobs` as a page article
+  (section 4.2), holding the whole proposed page, not a difference.
+
+A proposal is not a page article: it has no `Page` header and never
+counts as a version (section 5.1). It is not kept and expires as any
+article does. A node that holds the base MUST reject a proposal whose
+`Page-Proposal` is not the base's path.
+
+A starter, or in `wiki` mode anyone who may edit directly, accepts a
+proposal by publishing a new version of the page with the proposal's
+text, and `Page-Source` naming the proposal. Its `Supersedes` names
+first the current version at that time, which need not be the
+proposal's base. The proposal stays signed by its author, so readers can check
+who wrote the text that was accepted, also after the proposal itself
+has expired from the nodes, as long as someone has kept a copy.
+
+Replies to a page that are not proposals are ordinary comments.
+Clients MUST show proposals apart from comments, and SHOULD offer to
+show a proposal as the difference between its base and its text, and
+against the current version if that has changed since.
+
+## 10.3 Bases and Conflicts
+
+Every version of a path except the first names its base first in
+`Supersedes` (section 4.4): the version its writer edited. A node does
+not check that the base was current, which it may not know.
+
+When two writers edit the same version, both new versions name it, and
+neither names the other. Of the counting versions of a path that no
+other counting version names in `Supersedes`, section 5.1 picks one as
+current, so every node and client agrees on what the page shows; the
+others are in **conflict** with it. They are kept (section 6.1) until
+a version names them; at most 4 versions in conflict per path are
+kept, the newest by `Date` and Message-ID as in section 5.1, and a
+newer one replaces the oldest.
+
+A client that holds a version in conflict with the current version
+MUST show the page as having a conflict and SHOULD let the reader see
+both texts. An editor resolves a conflict by publishing a new version,
+based on the current version, that takes from the others what should
+stay and names them too in `Supersedes`.
+
+## 10.4 Kept Versions
+
+Nodes keep, for every page in force, the first `history` counting
+versions that its current version names in `Supersedes`, in that
+order (newest first, section 4.4). With the default of 1 this is the
+previous version of section 5.1; a book may keep up to 4. A removal
+ends the history: it and the versions it names are not kept. Kept
+versions are kept articles (section 6.1) and share the site's limits
+with the pages in force.
+
+A client:
+
+- SHOULD offer a page's kept versions with their dates and authors,
+  and the difference between any two of them;
+- lets a starter, or in `wiki` mode anyone who may edit directly,
+  restore a kept version by publishing its text as a new version, with
+  `Page-Source` naming the kept version.
+
+Older versions than the kept ones expire. Readers and archives may keep
+more (UN-RFC 0012); a version found there is still signed and can be
+checked.
+
+## 10.5 Edit Modes
+
+The manifest field `edit` decides who publishes versions:
+
+- **`review`** (the default): only starters publish versions. Others
+  propose (section 10.2), if comments are open.
+- **`wiki`**: besides starters, every key that may comment (UN-RFC 0030
+  section 4) and whose ripening level (UN-RFC 0025 section 4) is at
+  least `wiki_ripe` may **edit directly**: publish page articles other
+  than removals. Only starters remove pages, since a removal ends a
+  page's kept versions (section 10.4). Proposals are still allowed.
+
+UN-RFC 0030 section 4 is amended: in a site in `wiki` mode, a node MUST
+accept a page article from a key that may edit directly, even though it
+is a thread root.
+
+A version written by a key that is not a starter counts only while the
+site is in `wiki` mode (section 5.1). Before an owner's client publishes
+a manifest that turns `wiki` mode off, it MUST publish, as the owner,
+every current version written by others again, with `Page-Source`
+naming the original, so that the pages do not change for readers when
+the mode does. Kept versions written by others stop counting and
+expire.
+
+Moderators and the owner undo vandalism by restoring a kept version
+(section 10.4), and stop it by banning the key (UN-RFC 0004 section
+5.1), by raising `wiki_ripe`, or by setting `edit` to `review`. A
+moderator MAY also withdraw a version with a cancel, as any article.
+
+# 11. Gateways
 
 Gateways (UN-RFC 0023) do not carry page articles in this document.
 Mappings to other networks, such as Nostr long-form articles or Gemini
 capsules, need a document of their own.
 
-# 11. Changes to Other Documents
+# 12. Changes to Other Documents
 
 - **UN-RFC 0008** section 3.1: `view` gains the value `pages`, for open
   channel groups only (section 3).
 - **UN-RFC 0042** section 2.1: a new version of a page uses
   `Supersedes`, written by anyone who may write pages, and replaced
-  versions are kept as the previous version rather than withdrawn
-  (sections 4.4, 6.1).
-- **UN-RFC 0017** section 2.1: a site's current pages are kept
-  articles (section 6.1). What that means for UN-RFC 0012 and UN-RFC
+  versions are kept as the page's kept versions rather than withdrawn
+  (sections 4.4, 6.1, 10.4).
+- **UN-RFC 0017** section 2.1: a site's current pages, their kept
+  versions and versions in conflict are kept articles (section 6.1);
+  the limit of this kind in section 2.2 is `(1 + history) ×
+  max_pages`, at most 200. What that means for UN-RFC 0012 and UN-RFC
   0027 is said there.
+- **UN-RFC 0030** section 4: in `wiki` mode, page articles from keys
+  that may edit directly are accepted (section 10.5); proposals are
+  comments with an extra header (section 10.2).
 - **UN-RFC 0011** section 4: the policy field `sites` (section 6.2).
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
   `site@<fp>`, a personal group (UN-RFC 0029 section 2.1), this
@@ -362,36 +546,68 @@ capsules, need a document of their own.
   (section 8).
 - **UN-RFC 0000** section 6: 0035 is added to the index.
 
-# 12. Rationale
+# 13. Rationale
 
 - **Why not HTML?** HTML brings scripts, styles, forms, remote fonts
   and images, and all the ways a page can track or fool its reader.
   The Markdown of UN-RFC 0031 is already safe in every client and reads
   well as plain text in a terminal. Sites lose layout and gain the
   certainty that reading a page cannot hurt the reader.
-- **Why channels only?** A page is something its owner stands behind.
-  Pages anybody may change are a wiki, which needs rules for conflicts,
-  vandalism and history that this document does not attempt.
+- **Why channels only?** A page is something its owner and the people
+  the owner trusts stand behind. Even a wiki (section 10.5) is a
+  channel whose owner has opened it, and can close it again.
+- **Why are books sites and not a group type of their own?** A book
+  needs signed pages, versions, links, limits and the state that keeps
+  them, which sites already have. A second type would duplicate all of
+  it and drift apart. A book only adds an order, proposals and a little
+  history, and a site gains them by having a `contents` page.
+- **Why is the order a page and not a manifest field?** Editors change
+  the order as often as the pages, and a page can be proposed,
+  versioned and restored like any other. A manifest is the owner's
+  alone, and changing it for every new chapter would make the owner a
+  bottleneck.
+- **Why are proposals comments?** Comments already have the rules a
+  proposal needs: who may write, for how long, postage, ripening and
+  moderation (UN-RFC 0030). A proposal sits under the page it changes,
+  where readers discuss it. It carries the whole text, because
+  differences break when several proposals change the same version.
+- **Why does wiki need history and ripening?** A wiki without kept
+  versions cannot undo vandalism, which is why earlier drafts of this
+  document left wikis out. Kept versions make undoing one step, and
+  `wiki_ripe` makes a fresh throw-away key wait about half a day
+  (level 2, UN-RFC 0025 section 4) before it can change a page.
+  Removals are left to starters, since they end the history.
+- **Why show conflicts instead of merging them?** Articles reach nodes
+  late and out of order, so two people often edit the same version.
+  Letting the last one win silently loses work; merging text
+  automatically guesses. Section 5.1 gives every reader the same page,
+  and the client shows that another text exists.
 - **Why not closed groups?** In a closed group nodes cannot read the
   `Page` header, so they cannot tell the current version from an old
   one. Members-only sites need the carried copies of UN-RFC 0033
   section 6 or something like them, and a document of their own.
-- **Why the current and the previous version?** Full history is what
-  makes a site grow without end; nodes keep what is current, and
-  readers and archives (UN-RFC 0012) may keep more. One previous version
-  is the least that lets a page fall back when a writer is removed, and
-  lets anyone undo the last edit. Browsing and restoring older history
-  belong to a later wiki mode.
+- **Why keep one to four earlier versions?** Full history is what makes
+  a site grow without end; nodes keep what is current, and readers and
+  archives (UN-RFC 0012) may keep more. One previous version is the
+  least that lets a page fall back when a writer is removed, and lets
+  anyone undo the last edit. A book may keep up to four, so readers can
+  check what a page said before a change, signed and inside the network
+  rather than on a server they must trust. They share the site's
+  limits, so `history` trades pages for depth and never raises the
+  bound.
 - **Why `Supersedes` and not a version number?** Saying which version
   an edit replaces is the one way Unseenet says "a new version"
   (UN-RFC 0042 section 2.1), so nodes and clients handle pages and
   posts with the same code. It also orders versions by what each writer
   saw, not by clocks; the date only settles two edits of the same
-  version.
+  version, and the first entry of `Supersedes` names the base a
+  conflict is found from (section 10.3).
 - **Why limits this low?** 32 pages and 8 MiB is plenty for a person's
   or a project's site, and small enough that carrying a few thousand
-  sites costs a node little. Larger collections belong in ordinary
-  groups with attachments, which expire.
+  sites costs a node little. The UN-RFC series in October 2026 was 43
+  documents and 552 KB, none above 64 KiB, which fits; as it grows it
+  becomes several books (section 10.1). Larger collections belong in
+  several books or in ordinary groups with attachments, which expire.
 - **Why a key-bound personal site?** So that it can be found from a key
   or a name with no directory, and disappears when the key is no longer
   used (UN-RFC 0029), as profiles and feeds do.
@@ -399,7 +615,7 @@ capsules, need a document of their own.
   manifest and cannot have images (UN-RFC 0027 section 7.1). Keeping
   sites apart also lets an operator carry profiles without sites.
 
-# 13. Security and Privacy Considerations
+# 14. Security and Privacy Considerations
 
 - **A personal site is public and linked to the identity.** Everything
   in it can be kept by anybody, also after it is changed or removed.
@@ -409,8 +625,23 @@ capsules, need a document of their own.
   material than a discussion. The limits of section 3 and UN-RFC 0017 section 2.2, the
   operator's freedom to carry no sites, no site images or any single
   blob (section 6.2, UN-RFC 0027 section 7.3), and blocks within a
-  hierarchy (UN-RFC 0018 section 8.2) apply. A site that breaks a node's rules can be dropped
-  as any group can.
+  hierarchy (UN-RFC 0018 section 8.2) apply. A site that breaks a
+  node's rules can be dropped as any group can.
+- **Vandalism in a wiki.** A key that may edit directly can replace a
+  page with anything until a moderator restores it. Kept versions make
+  that one step (section 10.4), removals are not open to it, and
+  `wiki_ripe` and bans make each new attempt cost hours of ripening.
+  A node that receives a vandalised version before its restoration
+  serves it in the meantime, as it would any article until a cancel
+  arrives. Owners who cannot watch a book SHOULD use `review`.
+- **Proposals as a channel for spam.** Proposals are comments and cost
+  what comments cost (UN-RFC 0030, UN-RFC 0006, UN-RFC 0025). They are
+  not kept, so unaccepted ones expire; a proposal never changes what a
+  page shows until an editor accepts it.
+- **Who wrote what.** A version accepted from a proposal is signed by
+  the editor who accepted it, not by the proposer. `Page-Source` lets a
+  reader find the proposer's signed text while it is still held, but
+  the editor is the one who answers for what the page says.
 - **Stale pages.** A node can serve an old version of a page, or none,
   but cannot forge one: every version is signed. Section 9.1 has the
   client remember the current version it has seen, so a node that holds
@@ -430,17 +661,18 @@ capsules, need a document of their own.
 - **Scale.** A personal site is one more key-bound group per identity,
   but it exists only when its owner asks for it (UN-RFC 0029 section 2.1), so it
   does not grow with the number of identities as profiles do. The upper
-  bound per identity is one site of at most 100 pages of 64 KiB, each
-  with one previous version (12.5 MiB of text), and 8 MiB of blobs
-  (sections 3, 4.2 and 6.1, UN-RFC 0017 section 2.2); with the default
-  `max_pages` of 32 the text is at most 4 MiB. Older versions expire
-  (section 6.1), so editing does not make a site grow. A node
-  carries sites only when its operator turns them on, and may carry
-  their text without their blobs (section 6.2), so at the design
-  targets of UN-RFC 0001 section 1.2 a node pays only for the sites it
-  has chosen. A new node gets a site through the ordinary state
-  transfer of UN-RFC 0017 (sections 6.2 and 6.3), with no extra round
-  trips.
+  bound per identity is one site of at most 200 kept versions of 64
+  KiB, current, kept and in conflict together (12.5 MiB of text), and
+  8 MiB of blobs (sections 3, 4.2 and 6.1, UN-RFC 0017 section 2.2);
+  with the defaults (32 pages, one previous version each) the text is
+  at most 4 MiB. A book's `history` and conflicts share that bound
+  rather than raise it, and older versions expire (section 6.1), so
+  editing does not make a site grow. A node carries sites only when its
+  operator turns them on, and may carry their text without their blobs
+  (section 6.2), so at the design targets of UN-RFC 0001 section 1.2 a
+  node pays only for the sites it has chosen. A new node gets a site
+  through the ordinary state transfer of UN-RFC 0017 (sections 2.1 and
+  3), with no extra round trips.
 
 # Copyright Notice
 
