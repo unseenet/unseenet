@@ -82,10 +82,9 @@ applies:
 
 Registered and domain names are given out by a **registrar** as signed
 certificates. The identity carries its certificate along with its posts,
-so a client can check a name without asking anyone. A registered name
-lasts a year and is renewed by the client without you noticing; names
-that are Internet top-level domains, such as `@dk` or `@microsoft`,
-cannot be registered.
+so a client can check a name without asking anyone. Names that are
+Internet top-level domains, such as `@dk` or `@microsoft`, cannot be
+registered.
 
 The registrar is not a central point of failure. It runs as several
 **replicas** on different machines, any one of which can answer, and the
@@ -94,6 +93,58 @@ the certificates are in the posts. And a registrar has no power over
 anyone: it cannot stop an identity posting, change a post or remove one.
 An identity without a name can do everything an identity with one can,
 and clients must not treat it as less trustworthy.
+
+### A name is only how you are shown
+
+It is worth being clear about what a name is not. It is not your
+identity, and it is not an account. Your identity is still your key:
+your posts are signed by the key, groups are owned by keys, and every
+rule in the network - who may post, who is banned, who owns what - is
+about keys, never about names. A name is a label that a registrar, a
+domain or another identity has signed to say "this key may be shown as
+`@lorensen`".
+
+That is why names can be as simple as they are:
+
+- **Losing a name loses nothing else.** If a name runs out, is given up
+  or is taken away in a dispute, your posts, your groups and your
+  contacts are all still there. You are just shown as `Andreas~2byg`
+  again until you get a name back.
+- **Nobody can take over your identity by taking your name.** Someone who
+  gets `@lorensen` after you have let it go gets the label, not your key:
+  they cannot sign as you, and the people who gave you a petname still
+  see your petname on your posts and theirs on the new holder's.
+- **You can hold several**, and choose which one your posts show.
+
+### Claiming a name
+
+In the client you press `@`, type the name you want and claim it.
+
+- **A registered name** such as `lorensen` is first come, first served:
+  three to thirty-two lowercase letters, digits and hyphens, no dot. The
+  claim is sent sealed to the registrar's inbox, with a little extra
+  postage so that grabbing hundreds of names costs something. The
+  registrar answers in your private messages, usually within an hour,
+  with the certificate. It lasts a year; you renew it under `@`, and
+  for 30 days after it runs out nobody but you can take it. A key can hold at most three registered names, and a few names - such as
+  `admin`, `help` and `unseenet` - are kept for the project so nobody can
+  pose as it.
+- **A domain name** such as `lorensen.dk` proves that the domain is
+  yours. You add a DNS record with your key, the client claims the name,
+  and the registrar checks the record again every month. Nobody can
+  dispute a domain name, which makes it the right choice for an
+  organisation.
+- **A name under a name** such as `sonia@lorensen` involves no registrar
+  at all. You ask the holder of `@lorensen`; if they agree, their own
+  key signs the name for you, and their client renews it while the
+  name is theirs. If `@lorensen` ever stops being theirs,
+  the names under it stop counting too. A domain can name its people the
+  same way, in DNS - an organisation can give everyone a name such as
+  `andlo@lorensen.dk` without running anything itself.
+
+Your posts in public groups carry the certificate now and then, so
+readers can check the name. Posts in closed groups and private posts
+never carry it.
 
 There is one thing to remember about names: a name links everything its
 identity writes. Give one to the identity you want people to recognise,
