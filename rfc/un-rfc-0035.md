@@ -309,11 +309,12 @@ UN-RFC 0031 section 3.4 is extended for page articles.
   site. An optional `#fragment` names a heading in the target page, as
   the client derives anchors from headings; a client that cannot show
   it opens the top of the page.
-- **To a personal site:** `unseenet:<fingerprint>/<path>` opens that
-  page on the identity's personal site; `unseenet:<fingerprint>` alone
-  keeps its meaning from UN-RFC 0022 (the identity).
-- **To another site:** `unseenet:join?g=<group-id>&p=<path>` extends the
-  join link of UN-RFC 0004 with the path to open.
+- **To another site, or a personal one:** the page's address (UN-RFC
+  0031 section 3.4.1), `unseenet:<group-id>?p=<path>`; for a personal
+  site `unseenet:site@<fingerprint>?p=<path>`. Without `p` it opens the
+  site's home page. The older forms `unseenet:<fingerprint>/<path>` and
+  `unseenet:join?g=<group-id>&p=<path>` are still read, as UN-RFC 0031
+  section 3.4.1 says.
 
 A link that leads to a page that is not in force, or a site the node
 does not carry, opens nothing and is shown as unavailable; it is not an
