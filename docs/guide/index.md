@@ -67,10 +67,9 @@ you from what you write yourself, from a compromised computer, or from
 someone watching the whole internet - and it has not been reviewed yet.
 → [The threat model in plain words](threats.md)
 
-## Still to come
-
-- *Build your own* - which UN-RFCs to read, in which order, to write a
-  node or a client.
+**Build your own.** Everything is written down in the UN-RFCs, so anyone
+can build a compatible node, client or gateway in any language - or build
+on the project's core. → [Build your own](build.md)
 
 Some of what these pages describe is still being built. Where that is so,
 they say which release brings it.
