@@ -61,12 +61,13 @@ class FollowingMixin:
             raise SessionError(f"no identity is known by the name {target}")
         return crypto.fingerprint(crypto.key_from_text(key)), key, target
 
-    async def _feeds_of(self, fp: str, key: str | None) -> tuple[list[str], str | None]:
-        """The feeds that are a person's own now, and their key: the personal groups
-        that are current (UN-RFC 0029 section 2.1), and the feeds their profile lists
-        whose manifest is a feed naming them as owner, moderator or poster (0022, 4.5)."""
+    async def _feeds_of(self, fp: str, key: str | None) -> tuple[dict, str | None]:
+        """The feeds that are a person's own now, with their current manifests, and
+        their key: the personal groups that are current (UN-RFC 0029 section 2.1), and
+        the feeds their profile lists whose manifest is a feed naming them as owner,
+        moderator or poster (0022, 4.5)."""
         from ...core import profiles as prof
-        out = []
+        out = {}
 
         async def current(gid):
             try:
@@ -85,14 +86,14 @@ class FollowingMixin:
             m = await current(f"{kind}@{fp}")
             if m is not None:
                 key = key or crypto.key_to_text(m.owner)
-                out.append(m.group_id)
+                out[m.group_id] = dict(m.raw)
         for gid in listed:
             m = await current(gid)
             if m is None or m.view != "feed" or key is None:
                 continue
             roles = {crypto.key_to_text(k) for k in (m.owner, *m.moderators, *m.posters)}
             if key in roles:
-                out.append(gid)
+                out[gid] = dict(m.raw)
         return out, key
 
     def _followed_for(self, gid: str, but: str | None = None) -> bool:
@@ -117,19 +118,22 @@ class FollowingMixin:
         if key:
             person["key"] = key
         new = []
-        for gid in feeds:
-            if gid in person.get("skip", []) or gid in person["feeds"]:
+        for gid, raw in feeds.items():
+            if gid in person.get("skip", []):
                 continue
-            if gid not in self.data["subscribed"]:
-                self.subscribe(gid)
-                person["feeds"].append(gid)       # followed because of this person
-                new.append(gid)
+            if gid in self.data["subscribed"] or gid in person["feeds"]:
+                self.group_entry(gid)["manifest"] = raw   # known to be a feed next time too
+                continue
+            self.group_entry(gid)["manifest"] = raw
+            self.subscribe(gid)
+            person["feeds"].append(gid)           # followed because of this person
+            new.append(gid)
         for gid in [g for g in person["feeds"] if g not in feeds]:   # no longer theirs
             person["feeds"].remove(gid)
             if not self._followed_for(gid, but=fp):
                 self.subscribe(gid, on=False)
         return {"fingerprint": fp, "key": person.get("key"), "name": person.get("name"),
-                "feeds": feeds, "new": new}
+                "feeds": list(feeds), "new": new}
 
     async def refresh_following(self) -> list[str]:
         """Read the profiles and personal groups of everyone you follow again: follow
@@ -178,8 +182,28 @@ class FollowingMixin:
         self.save()
 
     def feeds_followed(self) -> list[str]:
-        """The groups you follow that are feeds (their manifest's view is ``feed``)."""
+        """The groups you follow that are feeds (their manifest's view is ``feed``), as far
+        as this client knows their manifests - ``fetch_unknown_manifests`` asks for the
+        ones it does not know."""
         return [g for g in self.data["subscribed"] if self.manifest_data(g).get("view") == "feed"]
+
+    async def fetch_unknown_manifests(self) -> int:
+        """Fetch the manifest of every group you follow that this client has none of,
+        so a feed is known to be one before the timeline is built. Returns how many."""
+        found = 0
+        for gid in list(self.data["subscribed"]):
+            if self.manifest_data(gid):
+                continue
+            try:
+                m = await self.fetch_manifest(gid)
+            except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError):
+                continue
+            if m is not None:
+                self.group_entry(gid)["manifest"] = dict(m.raw)
+                found += 1
+        if found:
+            self.save()
+        return found
 
     def timeline(self, limit: int = 100) -> list[Message]:
         """The timeline (UN-RFC 0034 section 7): the entries - posts that start a thread

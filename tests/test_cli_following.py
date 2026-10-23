@@ -175,3 +175,28 @@ async def test_addresses(setup, capsys):
     assert _json(capsys)["available"] is False
     with pytest.raises(SystemExit, match="Not an address"):
         await cli.c_open(bob, _args(address="https://example.org"))
+
+
+
+async def test_the_timeline_in_the_next_command(setup, tmp_path, capsys):
+    """Found on the test nodes: each command is a new process, so what follow learnt
+    about a feed must be in the vault - else the timeline did not know it was a feed."""
+    node, app = setup
+    alice, bob = await app("alice"), await app("bob")
+    await cli.c_feed_start(alice, _args())
+    feed = _json(capsys)["group"]
+    await cli.c_post(alice, _args(group=feed, subject="Hej verden"))
+    capsys.readouterr()
+    await cli.c_follow(bob, _args(target=alice.session.identity().fingerprint))
+    capsys.readouterr()
+    again = cli.App(Vault.open(tmp_path / "bob.vault", "pw", **KDF))     # the next command
+    again.data["nodes"][:] = bob.data["nodes"]
+    try:
+        await cli.c_timeline(again, _args())
+        assert [e["subject"] for e in _json(capsys)["entries"]] == ["Hej verden"]
+        again.data["groups"][feed].pop("manifest")                     # and if it is not known
+        await cli.c_timeline(again, _args())
+        assert [e["subject"] for e in _json(capsys)["entries"]] == ["Hej verden"]
+    finally:
+        if again._session is not None:
+            await again._session.close()
