@@ -129,7 +129,10 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
 
     api = LocalAPI(tmp_path / "me.vault", refresh_seconds=3600)
     async with Running(api) as r:
+        assert (await r.get("/api/known-nodes"))[0] == 409                 # locked
         assert (await r.post("/api/unlock", {"passphrase": "pw"}))[1]["setup"] is True
+        status, body = await r.get("/api/known-nodes")                     # for choosing one in setup
+        assert status == 200 and body["nodes"] and body["nodes"][0]["address"]
         status, body = await r.post("/api/setup", {"display": "Andreas"})
         assert status == 400 and "node" in body["error"]
         ws = await r.events()

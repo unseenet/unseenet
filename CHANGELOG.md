@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `GET /api/known-nodes` answers during setup too, so a new user of a front
+  end like the graphical client can choose a node from the list instead of
+  only typing an address (UN-RFC 0046 section 4.3, #372).
+
 ## [0.4.3] - 2026-10-23
 
 0.4.2 with portable builds: chiavdf 1.2.0 came out during that release and
