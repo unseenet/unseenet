@@ -101,6 +101,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifests, controls, kept articles, blobs, blocks, edits, forwarding) for
   `Node`, and the commands by area for `Session`, each with a docstring
   saying what belongs there (#394). Code moved only.
+- The command line is split into files by area (`cli/`: node, basics,
+  groups, messages, network, services, main), each with a docstring saying
+  what belongs there (#396). Code moved only.
 
 ## [0.4.4] - 2026-10-23
 
