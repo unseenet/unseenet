@@ -233,8 +233,12 @@ reading the client does anyway.
   Over Tor the node does not learn who. Clients SHOULD read followed
   feeds the same way and at the same times as their other groups, so
   that following does not stand out.
-- A client MAY let a user follow any feed, not only personal ones: a
-  news channel, a community feed, a bot.
+- Following is subscribing: there is no separate mechanism. Every
+  group a user subscribes to that is shown as a feed is followed,
+  personal or not - a channel such as `dk.marsvin` where a few post and
+  everybody comments, news, a bot - and its entries come into the
+  timeline (section 7). "Follow" is only the word a client uses for
+  subscribing to a feed or to a person (section 6.1).
 
 ## 6.1 Following a Person
 
