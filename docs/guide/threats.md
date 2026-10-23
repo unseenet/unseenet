@@ -33,6 +33,48 @@ on it most.
 7. **Your voice.** Nobody can remove a post from the whole network, take
    a person off it, or stop anyone from running a node.
 
+## Nobody to track or profile you
+
+On today's platforms, being tracked is not a breach - it is the business.
+Every account is tied to an e-mail address and usually a phone number.
+What you read, what you like, how long you look at something, where you
+are and which other sites you visit are collected, joined into a profile,
+and used to decide which advertisements you see and what the feed shows
+you next. The same profile can be handed to a government that asks, sold
+to a data broker, or leaked.
+
+None of that exists on Unseenet, because the things it is built from do
+not exist here:
+
+- **There is no account to tie you to.** No e-mail address, no phone
+  number, no name, no payment card. A key is made on your own computer and
+  says nothing about who holds it.
+- **There is no company in the middle.** Nobody collects data from
+  everyone, so nobody holds a database that could be sold, leaked or
+  demanded. A government that wants to know who wrote something has no one
+  to send the request to.
+- **There is nothing that follows you around.** No tracking pixels, no
+  cookies, no advertising IDs, no "log in with" buttons, no device
+  fingerprinting. Clients fetch nothing from the open web unless you ask,
+  so even a link in a post cannot report back that you read it.
+- **There is no algorithm watching what you do.** Groups show posts in the
+  order they were written, and the timeline is the feeds you chose,
+  newest first. Nothing measures what you linger on, because nothing needs
+  to: there are no advertisements to target and no engagement to sell.
+- **No single node sees the whole picture.** The node you use knows which
+  groups some client reads, but not who or where that client is, and it
+  sees only its own users. No one sees everyone.
+
+That does not make you invisible - nothing can. What you post in a public
+group is public, and anyone may read it, keep it and study it, just as on
+the old Usenet. Everything one key writes can be linked to that key, and
+someone who reads it all may guess a lot from your writing, your topics
+and your hours. The difference is who holds the pieces: on a platform the
+owner holds all of them, about everyone, by design; on Unseenet nobody
+does, and what can be linked to you is what you chose to publish under a
+key - which is why it is worth keeping separate identities for separate
+parts of your life.
+
 ## Who sees what
 
 | Who | Can see | Cannot see |
