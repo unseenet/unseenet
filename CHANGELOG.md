@@ -54,6 +54,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 - Stopping and starting ripening quickly could let the old run remove the
   new run's file, so the new segment stopped at once (#337).
+- `GET /api/known-nodes` answers during setup too, so a new user of a front
+  end like the graphical client can choose a node from the list instead of
+  only typing an address (UN-RFC 0046 section 4.3).
 
 ## [0.4.3] - 2026-10-23
 
