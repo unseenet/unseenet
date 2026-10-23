@@ -538,6 +538,9 @@ async def c_post(app: App, args) -> None:
         sys.exit(portals.warning(args.group.rpartition("@")[0], found)
                  + "\n\nAdd --publish-outside-tor to post anyway.")
     body = sys.stdin.read() if args.body is None else args.body
+    if getattr(args, "attach", None):
+        await _post_with_files(app, args, author, body)
+        return
     if entry.get("type") == "closed":
         epoch = max(int(e) for e in entry["keys"])
         keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
@@ -548,6 +551,44 @@ async def c_post(app: App, args) -> None:
         art = new_article(args.group, args.subject, body, from_name=app.display_name(args.identity))
         art.finalize(author, await app.bits(args.group, author))
     await app.post(art)
+
+
+async def _post_with_files(app: App, args, author, body: str) -> None:
+    """For testing nodes only (#148): upload files with BLOBPOST and post an article
+    that references them (UN-RFC 0027). Plain groups only; the clients' real
+    attachments are #149 and unseenet-gui#63, with metadata removed first."""
+    import mimetypes
+    from .core import blobs as bl
+    if app.data["groups"].get(args.group, {}).get("type") in ("closed", "inbox"):
+        sys.exit("--attach is a test tool for open groups; encrypted files come with the clients")
+    if len(args.attach) > bl.MAX_PER_ARTICLE:
+        sys.exit(f"at most {bl.MAX_PER_ARTICLE} files")
+    files = [(Path(f).name, Path(f).read_bytes()) for f in args.attach]
+    headers = [("Blobs", " ".join(f"{bl.blob_id(d)}={len(d)}" for _, d in files))]
+    for i, (name, data) in enumerate(files, 1):
+        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        headers.append((f"Attachment-{i}", f"{bl.blob_id(data)}; type={mime}; size={len(data)}; "
+                                           f"name={crypto.b64(name.encode()[:128])}"))
+    art = new_article(args.group, args.subject, body, from_name=app.display_name(args.identity),
+                      extra=headers)
+    art.finalize(author, await app.bits(args.group, author) + bl.extra_bits(art))
+    header = app.session.ripening_header()
+    if header:
+        art.set("Key-Ripening", header)
+    async with app.connect() as c:
+        for _, data in files:
+            bid = bl.blob_id(data)
+            code, text = await c.command(f"BLOBPOST {bid} {len(data)}")
+            if code == 345:
+                c.writer.write(data)
+                await c.writer.drain()
+                code, text = await c._response()
+            if code != 245:
+                sys.exit(f"The node did not take {bid}: {code} {text}")
+        code, text = await c.post(art.to_bytes())
+    if code != 240:
+        sys.exit(f"Rejected: {code} {text}")
+    print(f"Posted {art.message_id} with {len(files)} file(s)")
 
 
 async def c_read(app: App, args) -> None:
@@ -863,6 +904,9 @@ def client_main(argv=None) -> None:
     s.add_argument("--body")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
+    s.add_argument("--attach", action="append", metavar="FILE",
+                   help="for testing nodes: attach a file (UN-RFC 0027), up to 4; "
+                        "metadata is NOT removed")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")

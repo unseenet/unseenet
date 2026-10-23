@@ -11,6 +11,11 @@ services:
     restart: unless-stopped
     environment:
       UNSEENET_NODE_NAME: my-unseenet-node      # only used for the first node.toml
+      # Carry pictures and small files (UN-RFC 0027) and profile pictures? Off unless
+      # you say yes: the node then keeps files strangers post, 30 days at most.
+      # Without them, people using this node see posts without their pictures.
+      UNSEENET_BLOBS: "no"                      # "yes" to carry them (recommended)
+      UNSEENET_AVATARS: "no"                    # "yes" to carry profile pictures
     secrets:
       - unseenet_node_passphrase
     volumes:

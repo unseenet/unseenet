@@ -58,6 +58,8 @@ edit the file in the volume and restart the container:
 | `UNSEENET_MIN_POW` | `18` | Minimum postage, bits |
 | `UNSEENET_RETENTION_DAYS` | `90` | How long articles are kept |
 | `UNSEENET_NEW_GROUPS` | `accept` | `accept`, `trusted` or `manual` |
+| `UNSEENET_BLOBS` | `no` | `yes`: carry pictures and small files, 1 MiB, 30 days ([why it is a choice](install.md#pictures-and-files)) |
+| `UNSEENET_AVATARS` | `no` | `yes`: carry profile pictures |
 
 ```bash
 docker run --rm -it -v unseenet:/data alpine vi /data/node.toml   # add [[peer]] sections

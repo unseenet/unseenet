@@ -40,6 +40,10 @@ export UNSEENET_NODE_PASSPHRASE
 
 # The first start writes node.toml from the environment; edit it in /data after.
 if [ ! -f "$CONFIG" ]; then
+    # pictures and small files (UN-RFC 0027), profile pictures (UN-RFC 0022): off unless
+    # the operator says yes with UNSEENET_BLOBS=yes / UNSEENET_AVATARS=yes
+    case "${UNSEENET_BLOBS:-no}" in [yY]*|1|true) BLOBS=true ;; *) BLOBS=false ;; esac
+    case "${UNSEENET_AVATARS:-no}" in [yY]*|1|true|accept) AVATARS=accept ;; *) AVATARS=refuse ;; esac
     cat > "$CONFIG" <<EOF
 # Unseenet node in Docker. See https://unseenet.org/node/configuration/
 [node]
@@ -47,6 +51,14 @@ name = "${UNSEENET_NODE_NAME:-unseenet-docker}"
 min_pow = ${UNSEENET_MIN_POW:-18}
 retention_days = ${UNSEENET_RETENTION_DAYS:-90}
 new_groups = "${UNSEENET_NEW_GROUPS:-accept}"
+avatars = "$AVATARS"
+
+# Pictures and small files (UN-RFC 0027): files strangers post, kept 30 days at most
+[blobs]
+enabled = $BLOBS
+max_size = 1048576
+retention_days = 30
+encrypted = false
 
 # Peers: other nodes to exchange groups with.
 # [[peer]]

@@ -127,6 +127,43 @@ do not count. The monitor shows the limit and how many were turned away.
 The systemd unit and the Docker Compose file raise the open-files limit
 to 65536 for this.
 
+## `[blobs]`
+
+Pictures and small files in posts ([UN-RFC 0027](../spec/un-rfc-0027.md)).
+Off unless `enabled = true`; the installer asks
+([why](install.md#pictures-and-files)).
+
+```toml
+[blobs]
+enabled = true
+max_size = 1048576          # largest file, 1-4 MiB
+retention_days = 30         # files go after this, the post stays
+encrypted = false           # also files of closed groups and private posts
+groups = "*"                # which groups, a wildmat
+daily_per_key = 33554432    # 32 MiB per author key per day
+daily_per_group = 268435456 # 256 MiB per group per day
+# refusal_keys = ["ed25519:..."]   # follow refusal lists by these keys
+# refusal_groups = "*"
+```
+
+A file goes when no post on the node references it any more (expired,
+withdrawn, edited), or after `retention_days`, except files of pinned
+posts. Over a daily limit, your own users get `441 quota`; posts from
+peers come in without their files.
+
+**Refusing a file.** `unseenet-node --data ~/node-data --refuse-blob
+blob1:... --reason "..."` deletes it, and the node never takes, fetches
+or serves it again; the post that references it stays, and readers see
+that the file is not available. A running node follows at once.
+
+**Refusal lists.** With `refusal_keys`, the node also refuses the files
+named in refusal lists (`application/x-unseenet-blob-refusals`) posted by
+those keys in groups matching `refusal_groups`. Nobody can make your node
+follow a list; none is followed by default.
+
+The monitor shows how many files the node keeps, how much they take,
+today's uploads and how many are refused.
+
 ## `[operator]`
 
 Who runs the node and how to reach them ([UN-RFC 0011](../spec/un-rfc-0011.md)).

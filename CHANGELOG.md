@@ -63,6 +63,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `daily_per_group`): `441 quota` for the node's own clients; from peers
   the article goes on without its files. A pin is refused when its post's
   blobs would take the group's kept blobs above 8 MiB (UN-RFC 0017 2.2).
+- Operators see and choose blobs (#380): node info has `policy.blobs`, the
+  monitor shows the files a node keeps, and `install-node.sh` asks whether
+  to carry pictures and small files and profile pictures (recommended:
+  yes; `UNSEENET_BLOBS`/`UNSEENET_AVATARS` answer beforehand, and
+  without a terminal both stay off). The Docker image takes the same
+  variables, off by default. `unseenet post --attach FILE` posts with a
+  file, as a tool for testing nodes.
 
 ### Fixed
 
