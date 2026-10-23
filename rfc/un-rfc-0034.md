@@ -192,62 +192,31 @@ An identity's personal feed is the group it owns named `feed`:
 feed@<fingerprint of the identity's key>
 ```
 
-Like the personal inbox (UN-RFC 0009 section 2.2) and the profile
-(UN-RFC 0022 section 5.1), its Group ID follows from the key, so anyone
-who knows a key, or a name that leads to it (UN-RFC 0019), can find the
-feed without asking anybody.
+It is a **personal group** (UN-RFC 0029 section 2.1): its Group ID
+follows from the key, so anyone who knows a key, or a name that leads to
+it (UN-RFC 0019), can find it, and how it is started, ended, renewed,
+found and followed is said there once for all personal groups. Only
+what is particular to a feed is here.
 
-Its manifest (UN-RFC 0004 section 3) has:
+Its manifest (UN-RFC 0004 section 3) has, besides what UN-RFC 0029
+section 2.1 requires:
 
-- `name`: `feed`;
-- `type`: `channel`. The owner MAY list `posters`, for example a key of
-  their own on another device; they SHOULD NOT list other people,
-  since readers take a personal feed to be one person's;
 - `view`: `feed`;
 - `comments`: `open` or `none`, and optionally `comment_days`
   (UN-RFC 0030);
-- `kinds`: RECOMMENDED `["chat", "post"]`;
-- `expires`: as for every key-bound group (section 5.3).
+- `kinds`: RECOMMENDED `["chat", "post"]`.
 
-A node MUST reject a manifest for a group named `feed` whose `type` is
-not `channel` or whose `view` is not `feed`. A feed for a closed
-circle of people is an ordinary closed group with `"view": "feed"`
-(section 3.2), not a personal feed.
+A feed for a closed circle of people is an ordinary closed group with
+`"view": "feed"` (section 3.2), not a personal feed.
 
-## 5.2 Starting and Ending a Feed
+## 5.2 Starting a Feed
 
-A personal feed is public, and it ties everything in it to the
-identity. A client therefore:
-
-- MUST NOT create a personal feed without the user asking for it. It
-  MAY offer to when an identity is created;
-- SHOULD ask, when the feed is created, whether readers may comment,
-  with `open` as the suggested answer;
-- MUST tell the user, as for a public profile (UN-RFC 0022 section
-  5.3), that what is published can be kept by others and cannot be
-  recalled.
-
-The owner ends a feed by removing the group (UN-RFC 0013) or by letting
-it expire.
-
-## 5.3 Lifetime
-
-Personal feeds are key-bound groups (UN-RFC 0029). The owner's client
-renews `feed@<fp>` together with the identity's other key-bound groups,
-and the feed of a key that nobody uses any more disappears with them.
+When a client creates a personal feed, which it only does when the user
+asks (UN-RFC 0029 section 2.1), it SHOULD ask whether readers may
+comment, with `open` as the suggested answer.
 
 Entries expire with the group's `retention_days` like all articles.
 Owners who want a few entries to stay pin them (UN-RFC 0033).
-
-## 5.4 Finding a Feed
-
-- Wherever a client shows an identity (its profile, an author name, a
-  mention), it SHOULD offer the identity's feed when the feed group is
-  current, and SHOULD NOT show anything when it is not.
-- A client finds out whether a feed exists the same way it reads a
-  profile (UN-RFC 0022 section 5.2): by asking a node it uses for the
-  feed group's current manifest. If the node does not carry it, there is
-  no feed to show, and this is not an error.
 
 # 6. Following
 
@@ -333,7 +302,8 @@ This document does not define such a mapping.
   (section 3.1), and a client that does not know a value of `view`
   shows the group as `threads`.
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
-  `feed@<fp>`, personal feed, this document section 5.1.
+  `feed@<fp>`, a personal group (UN-RFC 0029 section 2.1), this
+  document section 5.1.
 - **UN-RFC 0000** section 6: 0034 is added to the index.
 
 # 11. Rationale
