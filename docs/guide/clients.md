@@ -7,6 +7,8 @@ command line - but they are less different than they look. This chapter
 is about the one core they share, the ways you can run them, and what
 that means for your privacy.
 
+<!-- unseenet:diagram clients -->
+
 ## One core, many front ends
 
 Everything hard about being a client lives in one place: the **client
