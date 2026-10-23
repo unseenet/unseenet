@@ -7,6 +7,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- Background ripening can be paused and resumed: `ClientRuntime.pause_ripening()`
+  and `resume_ripening()`, and in the local client API `POST /api/ripening`,
+  `"paused"` in the state's `ripening` and a `ripening-paused` event
+  (UN-RFC 0046, #337). A pause lasts for the run; a post that needs a riper
+  key still ripens what it needs.
+
+### Fixed
+
+- Stopping and starting ripening quickly could let the old run remove the
+  new run's file, so the new segment stopped at once (#337).
+
 ## [0.4.3] - 2026-10-23
 
 0.4.2 with portable builds: chiavdf 1.2.0 came out during that release and

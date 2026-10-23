@@ -275,6 +275,36 @@ async def test_a_service_posts_articles_with_its_own_headers(tmp_path):
     server.close()
 
 
+async def test_pausing_ripening_over_the_api(tmp_path):
+    """#337: POST /api/ripening, the state's "paused", and an event for every window."""
+    assert (await _locked_ripening(tmp_path)) == 409
+    node, server, addr = await _node()
+    bot = Session.from_key(crypto.Identity.generate(), tmp_path / "bot.state.json",
+                           status=lambda *_: None)
+    bot.add_node(addr)
+    api = LocalAPI(session=bot, service=True, refresh_seconds=3600)
+    await api.start()
+    async with Running(api) as r:
+        _, state = await r.get("/api/state")
+        assert state["ripening"]["paused"] is False
+        assert (await r.post("/api/ripening", {"paused": "yes"}))[0] == 400
+        ws = await r.events()
+        status, rip = await r.post("/api/ripening", {"paused": True})
+        assert status == 200 and rip["paused"] is True and "level" in rip
+        assert (await _until(ws, lambda e: e["event"] == "ripening-paused"))["paused"] is True
+        assert (await r.get("/api/state"))[1]["ripening"]["paused"] is True
+        status, rip = await r.post("/api/ripening", {"paused": False})
+        assert status == 200 and rip["paused"] is False
+        assert (await _until(ws, lambda e: e["event"] == "ripening-paused"))["paused"] is False
+        await ws.close()
+    server.close()
+
+
+async def _locked_ripening(tmp_path) -> int:
+    async with Running(LocalAPI(tmp_path / "locked.vault")) as r:
+        return (await r.post("/api/ripening", {"paused": True}))[0]
+
+
 async def test_unseenet_serve_announces_itself(tmp_path):
     key = tmp_path / "bot.key"
     key.write_text(crypto.Identity.generate().seed.hex() + "\n")

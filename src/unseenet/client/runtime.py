@@ -58,6 +58,9 @@ class ClientRuntime:
         self.ripen_to = ripen_to                      # None: don't ripen in the background
         self._run_file = None                         # removing it stops a segment at once
         self._ripen_stop: asyncio.Event | None = None  # set: stop waiting for a node (#314)
+        self._ripen_task: asyncio.Task | None = None  # the background ripening, one at a time
+        self._ripen_paused = False                    # pause_ripening() (#337), this run only
+        self._ripen_switch = asyncio.Lock()           # pause and resume, one after the other
         self.refresh_seconds = refresh_seconds
         self.watch_retry = watch_retry                # None: a random, growing wait (#297)
         self.inbox_ready = False
@@ -227,21 +230,22 @@ class ClientRuntime:
         s = self.session
         if self.ripen_to is None or not rp.available() or not s.has_identity():
             return
-        self._ripen_stop = asyncio.Event()
-        if not await self._wait_for_a_node_that_asks():
+        stop = self._ripen_stop = asyncio.Event()
+        if not await self._wait_for_a_node_that_asks(stop):
             return                              # stopped while waiting
         await s.adopt_published_ripening()      # further elsewhere: go on from there
         import tempfile
         from pathlib import Path
         fd, path = tempfile.mkstemp(prefix="unseenet-ripening-")
         os.close(fd)
-        self._run_file = Path(path)
+        # this call's own run file: one that ends late must not remove the next one's (#337)
+        run_file = self._run_file = Path(path)
         try:
-            while True:
+            while not stop.is_set():
                 lv = s.ripening().level
                 if lv is not None and lv >= self.ripen_to:
                     break
-                if not await s.ripen_segment(run_file=self._run_file):
+                if not await s.ripen_segment(run_file=run_file):
                     break                                  # stopped, or at the top
                 if s.ripening().level != s.published_level():
                     try:
@@ -249,9 +253,11 @@ class ClientRuntime:
                     except NETWORK_ERRORS as exc:
                         log.info("ripe@ not published now (%s); again at the next level", exc)
         finally:
-            self._stop_ripening()
+            run_file.unlink(missing_ok=True)
+            if self._run_file is run_file:
+                self._run_file = None
 
-    async def _wait_for_a_node_that_asks(self) -> bool:
+    async def _wait_for_a_node_that_asks(self, stop: asyncio.Event) -> bool:
         """Wait until our node asks for ripening (UNSEENET-MINRIPE other than "-").
 
         A node that cannot be reached now (Tor not up yet, the node restarting) is
@@ -268,7 +274,7 @@ class ClientRuntime:
                 return True
             wait = backoff.next() if value is None else RIPEN_RECHECK
             try:
-                await asyncio.wait_for(self._ripen_stop.wait(), wait)
+                await asyncio.wait_for(stop.wait(), wait)
                 return False                               # stop_ripening()
             except asyncio.TimeoutError:
                 pass
@@ -283,6 +289,37 @@ class ClientRuntime:
         if self._run_file is not None:
             self._run_file.unlink(missing_ok=True)
             self._run_file = None
+
+    # --- pausing the background ripening (#337) ---
+    @property
+    def ripening_paused(self) -> bool:
+        return self._ripen_paused
+
+    async def pause_ripening(self) -> None:
+        """Stop ripening in the background until ``resume_ripening()``: a warm
+        phone, a laptop on battery. For this run only; the next start ripens
+        again. A post that needs a riper key still ripens what it needs."""
+        async with self._ripen_switch:
+            self._ripen_paused = True
+            self.stop_ripening()
+            task, self._ripen_task = self._ripen_task, None
+            if task is not None and not task.done():
+                done, _ = await asyncio.wait({task}, timeout=10)
+                if not done:                   # its segment ignored the run file: no more waiting
+                    task.cancel()
+
+    async def resume_ripening(self) -> None:
+        """Ripen on from where the key is. Before the inbox is ready, ``start()``
+        begins it as usual."""
+        async with self._ripen_switch:
+            self._ripen_paused = False
+            if self._background_started:
+                self._start_ripening()
+
+    def _start_ripening(self) -> None:
+        if self._ripen_paused or (self._ripen_task is not None and not self._ripen_task.done()):
+            return
+        self._ripen_task = self._spawn(self.ripen())
 
     # --- or let it run on its own ---
     async def start(self) -> int:
@@ -311,7 +348,7 @@ class ClientRuntime:
                 if not self._background_started:
                     self._background_started = True
                     self._spawn(self.maintain())
-                    self._spawn(self.ripen())
+                    self._start_ripening()
             await asyncio.sleep(self.refresh_seconds)
 
     def _spawn(self, coro) -> asyncio.Task:

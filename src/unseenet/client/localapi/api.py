@@ -249,8 +249,22 @@ class LocalAPI:
             out["node"], out["nodes"] = s.node, list(s.nodes)
             t = s.ripening().t
             out["ripening"] = {"level": rp.level(t), "t": t, "next_at": rp.next_threshold(t),
-                               "published": s.published_level(), "available": rp.available()}
+                               "published": s.published_level(), "available": rp.available(),
+                               "paused": bool(self.runtime and self.runtime.ripening_paused)}
         return out
+
+    async def set_ripening_paused(self, paused: bool) -> dict:
+        """Pause or resume ripening in the background (#337), for this run only.
+        Answers the state's ``ripening``; every listener gets ``ripening-paused``."""
+        self._ready()
+        if self.runtime is None:
+            raise Locked("not running")
+        if paused:
+            await self.runtime.pause_ripening()
+        else:
+            await self.runtime.resume_ripening()
+        self._broadcast({"event": "ripening-paused", "paused": self.runtime.ripening_paused})
+        return self.state()["ripening"]
 
     def about(self) -> dict:
         return about_text.as_dict(__version__)

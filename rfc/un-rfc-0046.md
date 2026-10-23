@@ -138,8 +138,17 @@ check `v` and refuse a version it does not know rather than draw wrong.
 
 Unlocked: `identity` is `{"key": "ed25519:...", "display": "..."}`,
 `node` the default node, and `ripening` `{"level": <0-4 or null>, "t":
-<iterations>, "next_at": <iterations or null>}` (UN-RFC 0025). `setup`
-is true while the identity or the node is still missing.
+<iterations>, "next_at": <iterations or null>, "published": <the level
+nodes know, or null>, "available": <true if this runtime can ripen>,
+"paused": <true while paused>}` (UN-RFC 0025). `setup` is true while the
+identity or the node is still missing.
+
+`POST /api/ripening` `{"paused": true | false}` pauses or resumes ripening
+in the background (UN-RFC 0025 section 7), for example on a warm phone or
+a laptop on battery, and answers the state's `ripening`. A pause lasts
+until it is resumed or the runtime stops; the next start ripens again. It
+stops only the background ripening: a post that needs a riper key still
+ripens what it needs.
 
 ## 4.2 Unlocking and Setting Up
 
@@ -338,7 +347,9 @@ section 3). Each message is one JSON object with its name in `event`:
 - `job`: `{"event": "job", "job": "<id>", "group": "<id>", "state": ...}`
   with `state` one of `ripening`, `pow`, `sent`, `reached`, `failed`, and
   `fraction` (0 to 1) with `ripening` and `pow`, `message_id` with `sent`
-  and `reached`, `error` with `failed`.
+  and `reached`, `error` with `failed`;
+- `ripening-paused`: `{"event": "ripening-paused", "paused": true | false}`
+  after `POST /api/ripening`, so every window follows.
 
 A front end that connects late asks `GET /api/state` and the groups
 again; events are not replayed.

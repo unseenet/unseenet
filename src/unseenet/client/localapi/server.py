@@ -172,6 +172,14 @@ async def refresh(request):
     return _json(_api(request).refresh())
 
 
+async def ripening(request):
+    data = await _body(request)
+    paused = data.get("paused")
+    if not isinstance(paused, bool):
+        raise web.HTTPBadRequest(text='expected {"paused": true or false}')
+    return _json(await _api(request).set_ripening_paused(paused))
+
+
 async def known_nodes(request):
     return _json(_api(request).known_nodes())
 
@@ -317,7 +325,8 @@ ROUTES = [
     ("GET", "/api/groups/{gid}", group),
     ("POST", "/api/groups/{gid}/read", read), ("POST", "/api/groups/{gid}/view", view),
     ("POST", "/api/subscribe", subscribe), ("GET", "/api/browse", browse),
-    ("POST", "/api/refresh", refresh), ("GET", "/api/known-nodes", known_nodes),
+    ("POST", "/api/refresh", refresh), ("POST", "/api/ripening", ripening),
+    ("GET", "/api/known-nodes", known_nodes),
     ("GET", "/api/group-ref", group_ref),
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
