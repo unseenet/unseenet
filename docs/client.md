@@ -720,6 +720,7 @@ unseenet --help
 | Command | What it does |
 |---|---|
 | `id-new NAME [--display NAME]` | Create an identity |
+| `id-import NAME [--display NAME]` | Add an identity from its seed, 64 hex characters read from stdin (never the command line) |
 | `whoami` | List your identities and their keys |
 | `node-add ADDRESS` | Add a node (`xyz.onion` or `host:port`) |
 | `groups [PATTERN] [--mine]` | List groups on the node; `--mine` only those your identities own |

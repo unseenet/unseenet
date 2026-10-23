@@ -20,7 +20,7 @@ from .following import *  # noqa: F403
 
 
 COMMANDS = {
-    "id-new": c_id_new, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
+    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
@@ -44,6 +44,9 @@ def client_main(argv=None) -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("id-new", help="create a new identity")
+    s.add_argument("name")
+    s.add_argument("--display", help="display name shown in From")
+    s = sub.add_parser("id-import", help="add an identity from its seed (64 hex characters on stdin)")
     s.add_argument("name")
     s.add_argument("--display", help="display name shown in From")
     sub.add_parser("whoami", help="list identities")
