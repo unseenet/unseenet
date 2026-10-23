@@ -6,9 +6,10 @@ node is open to anyone.
 
 ## What Unseenet does to make this easier
 
-- **Text only.** Posts are at most 64 KB. There are no binary files,
-  images or attachments - the thing that got many Usenet servers into
-  trouble.
+- **Text by default.** Posts are at most 64 KB. From 0.5.0 posts may carry
+  small files (pictures, PDFs), but a node carries them only if you turn
+  that on, and you can refuse any single file - binaries are what got
+  many Usenet servers into trouble. See [`[blobs]`](configuration.md#blobs).
 - **You choose what you carry.** With `new_groups = "trusted"` or
   `"manual"` you decide which groups your node accepts, and with each
   peer's `groups` pattern you decide what you pass on. See
