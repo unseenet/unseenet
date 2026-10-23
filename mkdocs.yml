@@ -106,6 +106,7 @@ nav:
           - A post's journey: guide/journey.md
           - Identity: guide/identity.md
           - Groups: guide/groups.md
+          - The node: guide/node.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
       - Gateways to other networks: gateways.md

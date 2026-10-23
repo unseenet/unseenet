@@ -23,8 +23,8 @@ for people who build nodes and clients.
 3. [Identity](identity.md) - keys, the vault, names, key ripening and profiles.
 4. [Groups](groups.md) - hierarchies, manifests, chats and posts, closed
    groups, feeds, pages and moderation.
-5. *The node* - what it stores, peering, the known-node list, files, and
-   what an operator can and cannot see. *(coming)*
+5. [The node](node.md) - what it stores, peering, the known-node list,
+   files, and what an operator can and cannot see.
 6. *The clients* - one core shared by the terminal client, the graphical
    client, the CLI and others; portable and bootable. *(coming)*
 7. *Out into the world* - web entrances, gateways to Usenet, Matrix and
