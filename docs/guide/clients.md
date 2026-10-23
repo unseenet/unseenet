@@ -86,7 +86,7 @@ through. The price is honest: the entrance sees your IP address (unless
 you use Tor Browser), your network sees you visit it, and you trust code
 served from the web. A bar at the top always says you are on the open
 web. It is for people who want the freedom - groups nobody can remove,
-posts nobody can change - more than full anonymity. Chapter 7 has more.
+posts nobody can change - more than full anonymity. [In your browser](../web.md) has more.
 
 **With pip.** `pip install unseenet` gives the terminal client and the
 command line on a computer that already has Python and Tor.
@@ -130,8 +130,7 @@ three ways in: a Python program on `Session`; a program in any language
 on the local client API; or a newsreader, for reading only. Every rule a
 client must follow is in the UN-RFCs, so a client written from scratch,
 in another language, works with everyone else's. The
-[developers' pages](../developers/index.md) show how, and chapter 9 says
-which UN-RFCs to read first.
+[developers' pages](../developers/index.md) show how.
 
 **Details:**
 [UN-RFC 0005](../spec/un-rfc-0005.md) (ONNTP),

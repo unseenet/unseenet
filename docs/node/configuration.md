@@ -31,7 +31,7 @@ groups = "*"
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `name` | `"unseenet"` (the installer uses the hostname) | The node's name, shown to clients. With old password peering it is also the user name, so it must match the `name` the other side has for you. |
-| `min_pow` | `18` | Minimum [postage](../concepts.md#postage) in bits for posts this node accepts. Each extra bit doubles the cost. Group owners can require more for their groups. |
+| `min_pow` | `18` | Minimum [postage](../guide/journey.md#3-paying-the-postage) in bits for posts this node accepts. Each extra bit doubles the cost. Group owners can require more for their groups. |
 | `min_ripe` | `0` | The lowest [key ripening](../spec/un-rfc-0025.md) level (0-4) this node accepts, or `"-"` for none. A new key reaches level 0 after a few minutes of computing on its owner's machine, so throwaway keys cost something. Riper keys pay less postage. Needs `chiavdf` (installed with Unseenet on Linux, Windows and Apple Silicon). |
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
