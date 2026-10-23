@@ -279,6 +279,8 @@ class Manifest:
             m.comments, m.comment_days = _comments(data)
             from .pins import max_pins
             max_pins(data)                                  # UN-RFC 0033 section 4.1
+            from .blobs import check_attachments_field
+            check_attachments_field(data)                   # UN-RFC 0027 section 5.1
             if "expires" in data:
                 m.expires = parse_expires(data["expires"])
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:

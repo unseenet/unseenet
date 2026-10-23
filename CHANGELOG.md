@@ -41,6 +41,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   or unpin names the one it replaces (`Supersedes`), so a quick undo is
   not decided by the rounded `Date`, and a pin follows an edit of its
   post (#361).
+- Blobs, part 1 (UN-RFC 0027, #370): blob IDs, the `Blobs` and
+  `Attachment-<n>` headers, the manifest field `attachments`, the postage
+  extra for files, and the rules every node checks. A node carries blobs
+  only when its operator turns them on in `node.toml` (`[blobs]
+  enabled = true`); it then offers `UNSEENET-BLOB`, stages uploads with
+  `BLOBPOST` per connection, keeps them when the article is posted, and
+  serves them with `BLOB`. Blobs are files in `blobs/` next to the
+  database.
 
 ### Fixed
 

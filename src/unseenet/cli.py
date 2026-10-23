@@ -88,7 +88,24 @@ def load_node_config(path: Path | None):
                       excludes=str(node.get("excludes", "")),
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
+                      blobs=_blobs_config(path, data.get("blobs", {})),
                       peers=peers)
+
+
+def _blobs_config(path: Path, b: dict) -> dict | None:
+    """[blobs] (UN-RFC 0027 section 8): off unless ``enabled = true``. The
+    recommended first setting is 1 MiB, 30 days, encrypted off, for every group."""
+    from .core import blobs as bl
+    if not b.get("enabled", False):
+        return None
+    size = b.get("max_size", bl.MIN_NODE_BLOB)
+    if isinstance(size, bool) or not isinstance(size, int) or not bl.MIN_NODE_BLOB <= size <= bl.MAX_BLOB:
+        sys.exit(f"{path}: [blobs] max_size must be {bl.MIN_NODE_BLOB} to {bl.MAX_BLOB} octets")
+    days = b.get("retention_days", 30)
+    if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+        sys.exit(f"{path}: [blobs] retention_days must be a positive number")
+    return {"max_size": size, "retention_days": days, "encrypted": bool(b.get("encrypted", False)),
+            "groups": str(b.get("groups", "*"))}
 
 
 def _max_clients(path: Path, value):
