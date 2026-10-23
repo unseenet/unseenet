@@ -15,12 +15,15 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 
 class Kept:
     def add_marker(self, art: Article, action: str, target: str, replaces=()) -> None:
+        """Remember a pin or unpin of ``target`` (UN-RFC 0033), with the markers it
+        replaces (``Supersedes``)."""
         self.db.execute("INSERT OR IGNORE INTO markers VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (art.message_id, art.group, target, action, art["Author-Key"],
                          int(parse_date(art["Date"]).timestamp()), " ".join(replaces)))
         self.db.commit()
 
     def markers(self, group_id: str) -> list[pn.Marker]:
+        """Every pin and unpin held for a group."""
         return [pn.Marker(mid, target, action, author, date, tuple(sup.split()))
                 for mid, target, action, author, date, sup in self.db.execute(
                     "SELECT message_id, target, action, author_key, date, supersedes "
@@ -88,6 +91,8 @@ class Kept:
 
     # --- sites (UN-RFC 0035): page versions as kept articles ---
     def add_page(self, art: Article, path: str, removed: bool, supersedes=()) -> None:
+        """Remember a page article of a site: its path, whether it is a removal, and the
+        versions it replaces (UN-RFC 0035)."""
         self.db.execute("INSERT OR IGNORE INTO pages VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (art.message_id, art.group, path, art["Author-Key"],
                          int(parse_date(art["Date"]).timestamp()), int(removed), " ".join(supersedes)))
@@ -100,6 +105,8 @@ class Kept:
         return (row[0], row[1]) if row else None
 
     def page_versions(self, group_id: str) -> list[pg.Version]:
+        """The page versions of a site that count: held, and not cancelled
+        (UN-RFC 0035 section 5.1)."""
         gone = self.withdrawn(group_id)                  # cancelled: they do not count (5.1)
         return [pg.Version(mid, path, author, date, bool(removed), tuple(sup.split()))
                 for mid, path, author, date, removed, sup in self.db.execute(

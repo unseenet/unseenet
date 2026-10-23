@@ -10,6 +10,9 @@ from .. import server as _s   # names tests patch on the module, read at call ti
 
 class PostingCommands:
     async def cmd_post(self, args):
+        """``POST`` (RFC 3977 6.3.1): a client's article - ``340`` send it, then ``240``
+        taken or ``441`` with the reason. Blobs staged with BLOBPOST on this connection
+        go with it (UN-RFC 0027 section 6)."""
         self.send("340 send article")
         await self.writer.drain()
         try:

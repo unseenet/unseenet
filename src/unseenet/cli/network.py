@@ -10,6 +10,8 @@ from .. import cli as _c   # names tests patch on the module, read at call time
 
 
 async def c_bridges(app: App, args) -> None:
+    """``unseenet bridges [--mode off|builtin|custom] [--line ...]``: show or set the
+    Tor bridges, for networks that block Tor."""
     if args.mode:
         lines = [ln for ln in args.line or []]
         if args.mode == "custom" and not lines:

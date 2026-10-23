@@ -11,6 +11,8 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class People:
     # --- people and safety (section 4.6) --------------------------------------
     def contact(self, data: dict) -> dict:
+        """``POST /api/contacts`` (section 4.6): add a key to your contacts with a name, or
+        remove it (``remove`` true)."""
         s = self._ready()
         key = _key(data.get("key"))
         if data.get("remove"):
@@ -21,11 +23,14 @@ class People:
         return {"ok": True}
 
     def ignored(self) -> dict:
+        """``GET /api/ignore`` (section 4.6): the keys you ignore, with their labels."""
         s = self._ready()
         return {"ignored": [{"key": k, "label": label or s.label_of(k)}
                             for k, label in s.ignored()]}
 
     def ignore(self, data: dict) -> dict:
+        """``POST /api/ignore`` (section 4.6): ignore a key (``on`` true, with a ``label``) or
+        stop ignoring it. Every open group is redrawn."""
         s = self._ready()
         key = _key(data.get("key"))
         if data.get("on", True):
@@ -42,12 +47,16 @@ class People:
             s.emit(ev.GroupUpdated(gid))
 
     async def report_targets(self, gid: str, message_id: str) -> dict:
+        """``GET /api/groups/{gid}/report?id=`` (section 4.6): who a post can be reported
+        to - moderators, the owner, the hierarchy's maintainers, the node operator."""
         s = self._ready()
         m = self._find(s, gid, message_id)
         return {"targets": [{"i": i, "who": who} for i, (who, _, _) in
                             enumerate(await s.report_targets(m))]}
 
     async def report(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/report`` (section 4.6): report a post to the chosen
+        targets (by their ``i`` from ``GET``), with a note, optionally without your name."""
         s = self._ready()
         m = self._find(s, gid, str(data.get("id", "")))
         chosen = {int(i) for i in data.get("targets", [])}
@@ -59,6 +68,8 @@ class People:
         return {"sent": sent}
 
     async def block(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/block`` (section 4.6): a hierarchy maintainer blocks a
+        key in the hierarchy the group is in (UN-RFC 0018 section 8.2). Answers the hierarchy."""
         s = self._ready()
         where = await naming.block(s, gid, _key(data.get("key")),
                                    str(data.get("reason", "")).strip())

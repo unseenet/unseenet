@@ -24,6 +24,8 @@ class Groups:
         return Manifest.from_article(Article.from_bytes(raw), stored=True) if raw else None
 
     def set_manifest(self, m: Manifest) -> None:
+        """Make a manifest the group's current one; a key-bound group's is also put in
+        the sums that reconciliation compares (UN-RFC 0040 section 4)."""
         self.db.execute("INSERT OR IGNORE INTO groups(group_id, manifest, manifest_id, serial)"
                         " VALUES (?, '{}', '', 0)", (m.group_id,))
         self.db.execute("UPDATE groups SET manifest=?, manifest_id=?, serial=? WHERE group_id=?",
@@ -53,6 +55,8 @@ class Groups:
 
     def set_epoch(self, group_id: str, epoch: int, member_key: bytes,
                   message_id: str | None = None) -> None:
+        """Record a closed group's key epoch and its member key, with the key update
+        that made it (UN-RFC 0004 section 6)."""
         self.db.execute("INSERT OR REPLACE INTO epochs VALUES (?, ?, ?)",
                         (group_id, epoch, crypto.key_to_text(member_key)))
         if message_id:
@@ -84,6 +88,8 @@ class Groups:
             "AND message_id IS NOT NULL ORDER BY at", (since,)))
 
     def close_previous(self, group_id: str, epoch: int) -> None:
+        """Note that a closed group's ``epoch`` has been replaced: posts encrypted to it
+        are no longer taken (UN-RFC 0004 section 6)."""
         self.db.execute("INSERT OR IGNORE INTO closed_epochs VALUES (?, ?)", (group_id, epoch))
         self.db.commit()
 
@@ -94,16 +100,21 @@ class Groups:
         return int(row[0] or 0)
 
     def epochs(self, group_id: str) -> dict[int, bytes]:
+        """A closed group's epochs and the member key of each (UN-RFC 0004 section 6)."""
         return {e: crypto.key_from_text(k) for e, k in self.db.execute(
             "SELECT epoch, member_key FROM epochs WHERE group_id=?", (group_id,))}
 
     # --- removal (UN-RFC 0013) ---
     def tombstone(self, group_id: str) -> str | None:
+        """Why a group is gone - ``owner`` (removed, UN-RFC 0013) or ``operator``
+        (dropped) - or None."""
         row = self.db.execute("SELECT reason FROM tombstones WHERE group_id=?", (group_id,)).fetchone()
         return row[0] if row else None
 
     def add_tombstone(self, group_id: str, reason: str, message_id: str | None = None,
                       raw: bytes | None = None) -> None:
+        """Mark a group removed - by its owner (``owner``, with the rmgroup article,
+        UN-RFC 0013) or dropped by the operator (``operator``) - so it is not taken again."""
         self.db.execute("INSERT OR REPLACE INTO tombstones VALUES (?, ?, ?, ?, ?)",
                         (group_id, int(time.time()), reason, message_id, raw))
         self.db.commit()
@@ -115,6 +126,8 @@ class Groups:
         return [r[0] for r in rows]
 
     def lift_tombstone(self, group_id: str) -> bool:
+        """Take back an operator's drop of a group, so it can be carried again; an
+        owner's removal stays. True if there was one."""
         cur = self.db.execute("DELETE FROM tombstones WHERE group_id=? AND reason='operator'", (group_id,))
         self.db.commit()
         return cur.rowcount > 0

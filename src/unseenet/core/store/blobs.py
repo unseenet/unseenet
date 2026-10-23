@@ -15,14 +15,17 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 class Blobs:
     # --- blobs (UN-RFC 0027 sections 7, 8) ---
     def note_blob(self, bid: str, size: int) -> None:
+        """Note that the node stores a blob, and since when (for retention)."""
         self.db.execute("INSERT OR IGNORE INTO blob_meta VALUES (?, ?, ?)", (bid, int(time.time()), size))
         self.db.commit()
 
     def forget_blob(self, bid: str) -> None:
+        """Forget that the node stores a blob (after its file was deleted)."""
         self.db.execute("DELETE FROM blob_meta WHERE blob_id=?", (bid,))
         self.db.commit()
 
     def blob_refs(self, message_id: str) -> list[tuple[str, int]]:
+        """The blobs an article references: ``(blob id, size)``."""
         return list(self.db.execute("SELECT blob_id, size FROM blob_refs WHERE message_id=?",
                                     (message_id,)))
 
@@ -62,20 +65,28 @@ class Blobs:
         return {"count": count, "bytes": octets, "refused": refused, "today": today}
 
     def refuse_blob(self, bid: str, reason: str = "", source: str = "operator") -> None:
+        """Refuse a blob: it is deleted and never taken again (UN-RFC 0027 section 7.3).
+        ``source`` is who refused it: the operator, or a key whose refusal list the node
+        follows."""
         self.db.execute("INSERT OR IGNORE INTO refused_blobs VALUES (?, ?, ?, ?)",
                         (bid, int(time.time()), reason[:200], source))
         self.db.commit()
 
     def blob_refused(self, bid: str) -> bool:
+        """True when this node refused the blob (UN-RFC 0027 section 7.3)."""
         return self.db.execute("SELECT 1 FROM refused_blobs WHERE blob_id=?", (bid,)).fetchone() is not None
 
     def blob_usage(self, kind: str, who: str, day: str | None = None) -> int:
+        """The octets of blobs taken today (UTC) from one key or for one group
+        (``kind`` ``key`` or ``group``), for the daily quotas (UN-RFC 0027 section 8.1)."""
         day = day or time.strftime("%Y-%m-%d", time.gmtime())
         row = self.db.execute("SELECT octets FROM blob_usage WHERE day=? AND kind=? AND who=?",
                               (day, kind, who)).fetchone()
         return row[0] if row else 0
 
     def charge_blobs(self, key: str, group: str, octets: int) -> None:
+        """Count the octets of an article's new blobs against today's quotas of its
+        author and its group; counts older than three days are dropped."""
         day = time.strftime("%Y-%m-%d", time.gmtime())
         for kind, who in (("key", key), ("group", group)):
             self.db.execute("INSERT INTO blob_usage VALUES (?, ?, ?, ?) ON CONFLICT(day, kind, who) "

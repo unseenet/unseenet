@@ -14,10 +14,13 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 class Withdrawals:
     # --- cancels ---
     def add_cancel(self, target: str, author_key: str, group_id: str) -> None:
+        """Remember a cancel of ``target`` by ``author_key`` (UN-RFC 0004 section 7), also
+        when the target has not arrived yet, so it is refused when it does."""
         self.db.execute("INSERT OR IGNORE INTO cancels VALUES (?, ?, ?)", (target, author_key, group_id))
         self.db.commit()
 
     def cancel_for(self, target: str) -> tuple[str, str] | None:
+        """The cancel remembered for ``target``: ``(author key, group)``, or None."""
         row = self.db.execute("SELECT author_key, group_id FROM cancels WHERE target=?",
                               (target,)).fetchone()
         return (row[0], row[1]) if row else None
@@ -46,6 +49,7 @@ class Withdrawals:
         return row[0] if row else None
 
     def date_of(self, message_id: str) -> int | None:
+        """The ``Date`` of an article we hold, as a Unix time, or None."""
         row = self.db.execute("SELECT date FROM articles WHERE message_id=?",
                               (message_id,)).fetchone()
         return row[0] if row else None

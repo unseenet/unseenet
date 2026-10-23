@@ -12,6 +12,9 @@ from .. import server as _s   # names tests patch on the module, read at call ti
 
 class PeeringCommands:
     async def cmd_newnews(self, args):
+        """``NEWNEWS <wildmat> <date> <time> [GMT]`` (RFC 3977 7.4): the Message-IDs of
+        articles that arrived since then; each group's state first - manifest, key updates and
+        kept articles - so a new node gets what does not expire (UN-RFC 0017)."""
         if len(args) < 3:
             self.send("501 syntax: NEWNEWS wildmat yyyymmdd hhmmss [GMT]")
             return
@@ -126,6 +129,8 @@ class PeeringCommands:
                 await self.writer.drain()
 
     async def cmd_ihave(self, args):
+        """``IHAVE <message-id>`` (RFC 3977 6.3.2, peers only): ``335`` send it, or ``435``
+        not wanted; then ``235`` taken or ``437`` refused."""
         if not args or not self._peer_allowed():
             return
         if self.node.store.seen(args[0]):
@@ -139,11 +144,15 @@ class PeeringCommands:
                   else "436 try again later" if err.reason == "later" else "437 rejected")
 
     async def cmd_check(self, args):
+        """``CHECK <message-id>`` (RFC 4644, peers only): ``238`` send it, or ``438``
+        already seen."""
         if not args or not self._peer_allowed():
             return
         self.send(f"{438 if self.node.store.seen(args[0]) else 238} {args[0]}")
 
     async def cmd_takethis(self, args):
+        """``TAKETHIS <message-id>`` (RFC 4644, peers only): an article streamed by a
+        peer - ``239`` taken, ``439`` refused, ``431`` try later (e.g. its blobs are coming)."""
         if not args:
             self.send("501 syntax")
             return

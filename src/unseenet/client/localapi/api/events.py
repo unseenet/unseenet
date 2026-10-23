@@ -15,11 +15,14 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class Events:
     # --- events (section 5) --------------------------------------------------
     def listen(self) -> asyncio.Queue:
+        """A queue of the events of section 5 for one WebSocket client; the server reads
+        it and sends each event. Give it back with ``unlisten``."""
         q: asyncio.Queue = asyncio.Queue(maxsize=500)
         self._listeners.add(q)
         return q
 
     def unlisten(self, q: asyncio.Queue) -> None:
+        """Stop sending events to a WebSocket client's queue (see ``listen``)."""
         self._listeners.discard(q)
 
     def _broadcast(self, data: dict) -> None:
@@ -59,6 +62,7 @@ class Events:
         self._broadcast(ev.Status(text).to_dict())
 
     def spawn(self, coro) -> asyncio.Task:
+        """Run a coroutine in the background, kept until done and cancelled by ``close``."""
         task = asyncio.create_task(coro)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)

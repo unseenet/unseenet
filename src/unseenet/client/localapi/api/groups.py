@@ -16,6 +16,8 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class Groups:
     # --- groups (section 4.3) --------------------------------------------------
     def groups(self) -> dict:
+        """``GET /api/groups`` (section 4.3): the groups you follow as a tree, the people you
+        chat with, and what is for you - with unread counts, as every client lists them."""
         s = self._ready()
         rt = self.runtime
         ready = bool(rt and rt.inbox_ready)
@@ -120,6 +122,9 @@ class Groups:
             return False
 
     def group(self, gid: str) -> dict:
+        """``GET /api/groups/{gid}`` (section 4.3): one group as a client shows it - its
+        head (title, view, roles, rules, write permission) and its rows, threaded or as a chat,
+        each with whether you may reply. Also the pseudo-groups of a contact and "for you"."""
         s = self._ready()
         head = self._head(s, gid)
         if head["view"] == "chat" and not gid.startswith(CONTACT) and gid != FOR_YOU:
@@ -179,6 +184,8 @@ class Groups:
         return m
 
     def mark_read(self, gid: str, ids: list) -> dict:
+        """``POST /api/groups/{gid}/read`` (section 4.3): mark posts read, by Message-ID,
+        at most ``MAX_READ`` at a time."""
         s = self._ready()
         wanted = {str(i) for i in list(ids)[:MAX_READ]}
         for m in self._pool(s, gid):
@@ -189,12 +196,15 @@ class Groups:
         return {"ok": True}
 
     def set_view(self, gid: str, view) -> dict:
+        """``POST /api/groups/{gid}/view`` (section 4.3): show a group as threads or as a
+        chat, or null for the group's own choice."""
         if view not in ("threads", "chat", None):
             raise SessionError("view is threads, chat or null")
         self._ready().set_view(gid, view)
         return {"ok": True}
 
     def subscribe(self, gid: str, on: bool) -> dict:
+        """``POST /api/subscribe`` (section 4.3): follow a group (and fetch it) or stop."""
         s = self._ready()
         s.subscribe(gid, on)
         if on:
@@ -203,6 +213,8 @@ class Groups:
         return {"ok": True}
 
     async def browse(self, pattern: str = "*") -> dict:
+        """``GET /api/browse?pattern=`` (section 4.3): the groups your nodes carry, followed
+        or not, for finding new ones."""
         s = self._ready()
         found = await s.list_groups(pattern or "*")
         avail = {g.group_id: g for g in found}
@@ -210,6 +222,8 @@ class Groups:
                            for g in found]}
 
     def refresh(self) -> dict:
+        """``POST /api/refresh`` (section 4.3): fetch every group you follow now, in the
+        background; what changes comes as events."""
         self._ready()
         if self.runtime is not None:
             self.spawn(self.runtime.refresh())
@@ -220,6 +234,8 @@ class Groups:
             await self.session.fetch_group(gid)
 
     def known_nodes(self) -> dict:
+        """``GET /api/known-nodes`` (section 4.3): the nodes a client may start with,
+        with names, descriptions and operators. Also while setting up, to choose a node."""
         s = self._unlocked()            # also during setup: that is where a node is chosen
         return {"nodes": [{"address": n.address, "name": n.name, "description": n.description,
                            "operator": n.operator} for n in s.known_nodes()]}

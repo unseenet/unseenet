@@ -46,11 +46,14 @@ class NodeBase:
         self.blob_wait: dict[str, dict] = {}
 
     def watch(self, pattern: str) -> asyncio.Queue:
+        """A queue that receives the Message-ID and group of every new article whose group
+        matches ``pattern`` (a wildmat): push for XUN-WATCH (UN-RFC 0008)."""
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._watchers.append((pattern, queue))
         return queue
 
     def unwatch(self, queue: asyncio.Queue) -> None:
+        """Stop sending new articles to a watcher's queue (see ``watch``)."""
         self._watchers = [(p, q) for p, q in self._watchers if q is not queue]
 
     def _notify_watchers(self, art: Article) -> None:
@@ -65,6 +68,7 @@ class NodeBase:
                     pass                      # a slow watcher catches up by polling
 
     def peer_config(self, name: str) -> PeerConfig | None:
+        """The configured peer of that name (``[[peer]]`` in ``node.toml``), or None."""
         for peer in self.config.peers:
             if peer.name == name:
                 return peer
@@ -77,6 +81,9 @@ class NodeBase:
         return event
 
     def node_info(self) -> dict:
+        """The node's information (UN-RFC 0011 section 4): name, software, node key, its
+        policy (new groups, postage, ripening, retention, size, blocks, profiles, pictures,
+        sites, files) and the operator's contact, as ``LIST UNSEENET-NODEINFO`` sends it."""
         cfg = self.config
         op = cfg.operator or {}
         info = {"v": 1, "name": cfg.name, "software": f"unseenet {__version__}",
@@ -109,6 +116,8 @@ class NodeBase:
     # ONNTP server
     # ------------------------------------------------------------------
     async def serve(self, host: str = "127.0.0.1", port: int = 1119) -> asyncio.base_events.Server:
+        """Listen for ONNTP connections on ``host:port``; each one is a ``Session``. Tor
+        publishes the onion service in front of it."""
         return await asyncio.start_server(self._session, host, port, limit=MAX_LINE * 200)
 
     async def _session(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

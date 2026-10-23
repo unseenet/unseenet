@@ -14,6 +14,9 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 class Articles:
     # --- articles from a program (section 4.9) ----------------------------------
     def article(self, data: dict) -> dict:
+        """``POST /api/articles`` (section 4.9): a program posts an article it built - group,
+        kind, subject, body and the headers a program may add (``X-*``, ``Gateway-*``) - signed
+        with the session's key and paid for like any post. Answers its Message-ID."""
         s = self._ready()
         gid = str(data.get("group", ""))
         kind = _kind(data)

@@ -22,7 +22,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Unlocking and setting up (section 4.2)
 
@@ -30,7 +30,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Groups (section 4.3)
 
@@ -38,7 +38,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Writing (sections 4.4, 4.5)
 
@@ -46,7 +46,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## People and safety (section 4.6)
 
@@ -54,7 +54,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Groups you run (section 4.7)
 
@@ -62,7 +62,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Who you are (section 4.8)
 
@@ -70,7 +70,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Articles from a program (section 4.9)
 
@@ -78,7 +78,7 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+
 
 ## Events (section 5)
 
@@ -86,4 +86,4 @@ find each other.
     options:
       show_root_heading: false
       heading_level: 3
-      show_if_no_docstring: true
+

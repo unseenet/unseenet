@@ -15,6 +15,8 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 class Articles:
     # --- articles ---
     def add(self, art: Article, raw: bytes) -> int:
+        """Store an article and give it the next number in its group (created if new).
+        Answers the number. The node has checked it; the store does not."""
         group = art.group
         self.db.execute("INSERT OR IGNORE INTO groups(group_id, manifest, manifest_id, serial)"
                         " VALUES (?, '{}', '', 0)", (group,))
@@ -35,6 +37,8 @@ class Articles:
         return number
 
     def get(self, message_id: str) -> bytes | None:
+        """The raw article with this Message-ID - or the rmgroup article of a removed group
+        - or None."""
         row = self.db.execute("SELECT raw FROM articles WHERE message_id=?", (message_id,)).fetchone()
         if row:
             return row[0]
@@ -42,28 +46,35 @@ class Articles:
         return row[0] if row else None
 
     def number_of(self, message_id: str) -> int | None:
+        """The article's number in its group, or None."""
         row = self.db.execute("SELECT number FROM articles WHERE message_id=?", (message_id,)).fetchone()
         return row[0] if row else None
 
     def get_meta(self, message_id: str) -> tuple[str, str] | None:
+        """The group and author key of an article we hold, or None."""
         row = self.db.execute("SELECT group_id, author_key FROM articles WHERE message_id=?",
                               (message_id,)).fetchone()
         return (row[0], row[1]) if row else None
 
     def by_number(self, group_id: str, number: int) -> tuple[str, bytes] | None:
+        """The Message-ID and raw article with this number in the group, or None."""
         row = self.db.execute("SELECT message_id, raw FROM articles WHERE group_id=? AND number=?",
                               (group_id, number)).fetchone()
         return (row[0], row[1]) if row else None
 
     def numbers(self, group_id: str) -> list[int]:
+        """The numbers of the articles a group holds, in order."""
         return [r[0] for r in self.db.execute(
             "SELECT number FROM articles WHERE group_id=? ORDER BY number", (group_id,))]
 
     def delete(self, message_id: str) -> None:
+        """Delete one article (its history entry stays, so it is not taken again)."""
         self.db.execute("DELETE FROM articles WHERE message_id=?", (message_id,))
         self.db.commit()
 
     def received_since(self, since: int) -> list[tuple[str, str]]:
+        """``(Message-ID, group)`` of the articles that arrived since a Unix time, in
+        the order they came - for push and for offering to peers."""
         return list(self.db.execute(
             "SELECT message_id, group_id FROM articles WHERE received >= ? ORDER BY received", (since,)))
 
@@ -102,5 +113,6 @@ class Articles:
 
     # --- kept articles (UN-RFC 0017 section 2.1): pins (UN-RFC 0033) ---
     def has(self, message_id: str) -> bool:
+        """True when the node holds this article (not just remembers it)."""
         return self.db.execute("SELECT 1 FROM articles WHERE message_id=?",
                                (message_id,)).fetchone() is not None

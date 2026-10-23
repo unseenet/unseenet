@@ -11,6 +11,8 @@ from .. import server as _s   # names tests patch on the module, read at call ti
 class ReadingCommands:
     # --- group navigation ---
     async def cmd_group(self, args):
+        """``GROUP <group>`` (RFC 3977 6.1.1): select a group - ``211`` with count, low
+        and high; ``411`` when the node does not carry it, or it was removed or dropped."""
         removed = self.node.store.tombstone(args[0]) if args else None
         if removed:
             self.send("411 no such group (removed by its owner)" if removed == "owner"
@@ -26,6 +28,8 @@ class ReadingCommands:
         self.send(f"211 {len(nums)} {low} {high} {self.group}")
 
     async def cmd_listgroup(self, args):
+        """``LISTGROUP [group [range]]`` (RFC 3977 6.1.2): the article numbers of the
+        selected group - ``211``."""
         if args:
             await self.cmd_group(args[:1])
             if self.group != args[0]:
@@ -81,15 +85,20 @@ class ReadingCommands:
             self.node.stats.served_one()          # how many, never which (UN-RFC 0011)
 
     async def cmd_article(self, args):
+        """``ARTICLE <message-id>|<number>`` (RFC 3977 6.2.1): the whole article - ``220``,
+        or ``430``/``423`` when there is none. The node's own headers are not sent."""
         await self._send_part(args, 220, "article")
 
     async def cmd_head(self, args):
+        """``HEAD <message-id>|<number>``: the article's headers - ``221``."""
         await self._send_part(args, 221, "head")
 
     async def cmd_body(self, args):
+        """``BODY <message-id>|<number>``: the article's body - ``222``."""
         await self._send_part(args, 222, "body")
 
     async def cmd_stat(self, args):
+        """``STAT <message-id>|<number>``: whether the article is here - ``223``."""
         await self._send_part(args, 223, "stat")
 
     # --- overview (RFC 3977 sections 8.3-8.5; UN-RFC 0005 section 2.4) ---
@@ -167,6 +176,8 @@ class ReadingCommands:
         }
 
     async def cmd_over(self, args):
+        """``OVER [range|message-id]`` (RFC 3977 8.3, also ``XOVER``): the overview of many
+        articles - ``224``, with the Unseenet fields of UN-RFC 0005 section 2.4."""
         found = self._range(args)
         if found is None:
             return
@@ -179,12 +190,16 @@ class ReadingCommands:
     cmd_xover = cmd_over
 
     async def cmd_list_overview_fmt(self, args):
+        """``LIST OVERVIEW.FMT`` (RFC 3977 8.4): the fields of OVER, with
+        Unseenet's at the end (UN-RFC 0005 section 2.4)."""
         self.send("215 order of fields in overview database")
         for field_ in self.OVERVIEW_FMT:
             self.send(field_)
         self.send(".")
 
     async def cmd_hdr(self, args, code: int = 225):
+        """``HDR <field> [range|message-id]`` (RFC 3977 8.5): one header of many
+        articles - ``225``. Unseenet headers are allowed too (UN-RFC 0005 section 2.4)."""
         if not args:
             self.send("501 syntax: HDR field [range|message-id]")
             return
@@ -211,9 +226,11 @@ class ReadingCommands:
         self.send(".")
 
     async def cmd_xhdr(self, args):
+        """``XHDR`` (RFC 2980): HDR with the old code ``221``, for older newsreaders."""
         await self.cmd_hdr(args, code=221)
 
     async def cmd_list_headers(self, args):
+        """``LIST HEADERS`` (RFC 3977 8.6): HDR takes any header (``:``)."""
         self.send("215 headers and metadata items supported")
         self.send(":")
         self.send(".")

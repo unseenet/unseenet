@@ -42,6 +42,7 @@ class StoreBase:
 
     # --- history ---
     def seen(self, message_id: str) -> bool:
+        """True when the history has this Message-ID: taken, refused or expired."""
         return self.db.execute("SELECT 1 FROM history WHERE message_id=?",
                                (message_id,)).fetchone() is not None
 
@@ -53,9 +54,12 @@ class StoreBase:
                         (message_id, peer, reason, int(time.time())))
 
     def refused_from(self, message_id: str, peer: str) -> bool:
+        """True when this article was refused when pulled from this peer (#132), so it
+        is not asked for again."""
         return self.db.execute("SELECT 1 FROM refused WHERE message_id=? AND peer=?",
                                (message_id, peer)).fetchone() is not None
 
     def remember(self, message_id: str) -> None:
+        """Remember a Message-ID in the history, so the node takes it once."""
         self.db.execute("INSERT OR IGNORE INTO history VALUES (?, ?)",
                         (message_id, int(time.time())))

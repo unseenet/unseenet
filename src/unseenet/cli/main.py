@@ -27,6 +27,8 @@ COMMANDS = {
 
 
 def client_main(argv=None) -> None:
+    """The ``unseenet`` command line: parse the arguments and run the command (an
+    entry point in ``pyproject.toml``)."""
     p = argparse.ArgumentParser(prog="unseenet", description="Unseenet client.")
     from ..portable import default_vault_path
     p.add_argument("--vault", default=str(default_vault_path()), help="encrypted vault file")
