@@ -85,3 +85,10 @@ Generated from the docstrings in the code; functions whose name starts with
     options:
       show_root_heading: false
       heading_level: 3
+
+## Files on posts
+
+::: unseenet.client.session.attachments
+    options:
+      show_root_heading: false
+      heading_level: 3

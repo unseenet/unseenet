@@ -46,67 +46,66 @@ async def c_withdraw(app: App, args) -> None:
 
 
 async def c_post(app: App, args) -> None:
-    """``unseenet post GROUP -s SUBJECT [--body ... | stdin] [--attach FILE]``: post to a
-    group. Warns first when the group has portals to other networks (UN-RFC 0023)."""
-    from ..core import portals
-    author = app.identity(args.identity)
-    entry = app.data["groups"].get(args.group, {})
-    found = portals.portals(entry.get("manifest") or {})
-    if found and not args.publish_outside_tor:      # UN-RFC 0023 section 3.5
-        sys.exit(portals.warning(args.group.rpartition("@")[0], found)
-                 + "\n\nAdd --publish-outside-tor to post anyway.")
+    """``unseenet post GROUP [-s SUBJECT] [--body ... | stdin]``: post to a group through
+    ``Session`` - a post or a chat line (``--kind``), a reply or comment
+    (``--reply-to``), a new version of your own post (``--edit``), with files
+    (``--attach``: pictures cleaned of their metadata first). Warns first when the
+    group has portals to other networks (UN-RFC 0023)."""
+    from ..client.session import KIND_CHAT, KIND_POST, SessionError
+    s = _session(app, args)
+    group = args.group
+    kind = getattr(args, "kind", None) or KIND_POST
     body = sys.stdin.read() if args.body is None else args.body
-    if getattr(args, "attach", None):
-        await _post_with_files(app, args, author, body)
-        return
-    if entry.get("type") == "closed":
-        epoch = max(int(e) for e in entry["keys"])
-        keys = crypto.GroupKeys(bytes.fromhex(entry["keys"][str(epoch)]))
-        art = encrypted_article(args.group, epoch, keys, author, from_name=app.display_name(args.identity),
-                                subject=args.subject, body=body,
-                                pow_bits=await app.bits(args.group, author))
-    else:
-        art = new_article(args.group, args.subject, body, from_name=app.display_name(args.identity))
-        art.finalize(author, await app.bits(args.group, author))
-    await app.post(art)
-
-
-async def _post_with_files(app: App, args, author, body: str) -> None:
-    """For testing nodes only (#148): upload files with BLOBPOST and post an article
-    that references them (UN-RFC 0027). Plain groups only; the clients' real
-    attachments are #149 and unseenet-gui#63, with metadata removed first."""
-    import mimetypes
-    from ..core import blobs as bl
-    if app.data["groups"].get(args.group, {}).get("type") in ("closed", "inbox"):
-        sys.exit("--attach is a test tool for open groups; encrypted files come with the clients")
-    if len(args.attach) > bl.MAX_PER_ARTICLE:
-        sys.exit(f"at most {bl.MAX_PER_ARTICLE} files")
-    files = [(Path(f).name, Path(f).read_bytes()) for f in args.attach]
-    headers = [("Blobs", " ".join(f"{bl.blob_id(d)}={len(d)}" for _, d in files))]
-    for i, (name, data) in enumerate(files, 1):
-        mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
-        headers.append((f"Attachment-{i}", f"{bl.blob_id(data)}; type={mime}; size={len(data)}; "
-                                           f"name={crypto.b64(name.encode()[:128])}"))
-    art = new_article(args.group, args.subject, body, from_name=app.display_name(args.identity),
-                      extra=headers)
-    art.finalize(author, await app.bits(args.group, author) + bl.extra_bits(art))
-    header = app.session.ripening_header()
-    if header:
-        art.set("Key-Ripening", header)
-    async with app.connect() as c:
-        for _, data in files:
-            bid = bl.blob_id(data)
-            code, text = await c.command(f"BLOBPOST {bid} {len(data)}")
-            if code == 345:
-                c.writer.write(data)
-                await c.writer.drain()
-                code, text = await c._response()
-            if code != 245:
-                sys.exit(f"The node did not take {bid}: {code} {text}")
-        code, text = await c.post(art.to_bytes())
-    if code != 240:
-        sys.exit(f"Rejected: {code} {text}")
-    print(f"Posted {art.message_id} with {len(files)} file(s)")
+    ctype = {"markdown": "text/markdown; charset=utf-8; variant=unseenet",
+             "plain": "text/plain; charset=utf-8"}.get(getattr(args, "format", None) or "")
+    try:
+        warning = s.portal_warning(group)
+        if warning:                                    # UN-RFC 0023 section 3.5
+            if not getattr(args, "publish_outside_tor", False):
+                sys.exit(warning + "\n\nAdd --publish-outside-tor to post anyway.")
+            s.accept_portals(group)
+        parent = target = None
+        wanted = getattr(args, "reply_to", None) or getattr(args, "edit", None)
+        if wanted:
+            mid = wanted if wanted.startswith("<") else f"<{wanted}>"
+            await s.fetch_group(group)
+            found = s.find_message(group, mid)
+            if found is None:
+                sys.exit(f"{mid} is not in {group} (or not on this node any more)")
+            if getattr(args, "edit", None):
+                target = found
+            else:
+                parent = found
+        files = s.prepare_files(getattr(args, "attach", None) or [])
+        for f in files:
+            if f.note:
+                print(f"Note: {f.note}", file=sys.stderr)
+        if target is not None:
+            if not s.may_edit(target):
+                sys.exit("You can only edit your own posts (and not past their number of versions).")
+            if files:
+                sys.exit("An edit keeps the files of the post it replaces; --attach is for new posts.")
+            msgid = await s.edit(target, args.subject or target.subject, body, ctype)
+        else:
+            perm = s.write_permission(group, reply_to=parent, kind=kind)
+            if not perm:
+                sys.exit(f"Not posted: {perm.reason}")
+            subject = args.subject or ""
+            if parent is not None and not subject and kind == KIND_POST:
+                subject = parent.subject if parent.subject.lower().startswith("re:") \
+                    else f"Re: {parent.subject}"
+            if kind == KIND_POST and not subject.strip():
+                sys.exit("A post needs a subject (-s); a chat line is --kind chat.")
+            msgid = await s.post(group, "" if kind == KIND_CHAT else subject, body,
+                                 references=[*parent.references, parent.message_id] if parent else None,
+                                 kind=kind, content_type=ctype, files=files)
+    except SessionError as exc:
+        sys.exit(f"Not posted: {exc}")
+    what = "Edited" if target is not None else "Posted"
+    text = f"{what} {msgid}" + (f" with {len(files)} file(s)" if files else "")
+    emit(args, text, {"message_id": msgid, "edited": target is not None,
+                      "files": [{"name": f.name, "type": f.media_type, "size": len(f.octets),
+                                 "note": f.note} for f in files]})
 
 
 async def c_read(app: App, args) -> None:
@@ -168,4 +167,4 @@ async def c_read(app: App, args) -> None:
     app.vault.save()
 
 
-__all__ = ['c_withdraw', 'c_post', '_post_with_files', 'c_read']
+__all__ = ['c_withdraw', 'c_post', 'c_read']

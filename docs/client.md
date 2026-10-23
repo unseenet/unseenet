@@ -723,14 +723,23 @@ unseenet --help
 | `whoami` | List your identities and their keys |
 | `node-add ADDRESS` | Add a node (`xyz.onion` or `host:port`) |
 | `groups [PATTERN] [--mine]` | List groups on the node; `--mine` only those your identities own |
-| `group-create NAME [--type ...]` | Create a group you own |
+| `group-create NAME [--type ...] [settings]` | Create a group you own: `--view feed\|pages\|chat`, `--poster KEY`, `--moderator KEY`, `--comments open`, `--attachments MAX_SIZE [--types image/*]`, `--max-pins`, `--max-pages`, `--home`, `--rules FILE` and more (`group-create --help`) |
+| `group-edit GROUP_ID [changes]` | Change a group you own, in one new manifest: `--add-poster`/`--remove-poster`, `--add-moderator`/`--remove-moderator`, `--ban KEY [--reason TEXT]`/`--unban`, and every setting of `group-create` |
+| `group-show GROUP_ID` | Show the group's current manifest |
 | `group-remove GROUP_ID ... [--reason TEXT] [--yes]` | Remove groups you own from the whole network ([final](#leaving-and-removing-groups)) |
 | `invite GROUP_ID KEY` | Give a key access to a closed group you own |
 | `post GROUP_ID -s SUBJECT [--body TEXT]` | Post; the body is read from stdin without `--body` |
+| `post GROUP_ID --reply-to MESSAGE_ID` | Reply, or comment in a channel; the subject is `Re:` the parent's unless you give one |
+| `post GROUP_ID --kind chat --body TEXT` | A chat line instead of a post |
+| `post GROUP_ID --edit MESSAGE_ID --body TEXT` | A new version of your own post |
+| `post ... --attach FILE` | Post with up to four files, if the group takes them; pictures are saved again without their metadata (where and when they were taken, the camera) |
+| `post ... --format markdown\|plain` | The text's format (default: your setting) |
 | `read GROUP_ID` | Read a group, with each post's Message-ID |
-| `withdraw GROUP_ID MESSAGE_ID [--yes]` | [Withdraw a post](#withdrawing-a-post): your own, or any in a group you own or moderate |
+| `withdraw GROUP_ID MESSAGE_ID ... [--yes]` | [Withdraw posts](#withdrawing-a-post): your own, or any in a group you own or moderate |
+| `withdraw GROUP_ID --all [--keep MESSAGE_ID]` | Withdraw every post in a group you own or moderate |
 | `bridges [MODE]` | Show or set [Tor bridges](tor.md) |
 
 Global options go before the command: `--vault FILE` picks the vault and
-`--identity NAME` the identity (default: the first). The passphrase is read
-from `UNSEENET_PASSPHRASE` if it is set, otherwise you are asked.
+`--identity NAME` the identity for this command (default: the first), and
+`--json` answers in JSON, for scripts. The passphrase is read from
+`UNSEENET_PASSPHRASE` if it is set, otherwise you are asked.

@@ -40,13 +40,14 @@ class PostingMixin:
         lv = None if sealed or not self.has_identity() else self.published_level()
         return rp.required_pow(node_pow, group_min or 0, lv, allow_unripe=True)
 
-    async def _post_with_postage(self, group_id: str, build) -> Article:
+    async def _post_with_postage(self, group_id: str, build, blobs=()) -> Article:
         """Build with ``build(bits)`` and post; if the node asks for more postage
-        ("need N bits"), rebuild once with N and post again. Returns the posted article."""
+        ("need N bits"), rebuild once with N and post again. Returns the posted article.
+        ``blobs``: ``(blob id, octets)`` staged before the post on the same connection."""
         bits = await self.required_pow(group_id)
         art = await self._compute(lambda: build(bits))
         try:
-            await self._post_article(art)
+            await self._post_article(art, blobs=blobs)
             return art
         except SessionError as exc:
             m = re.search(r"need (\d+) bits", str(exc))
@@ -55,7 +56,7 @@ class PostingMixin:
             need = int(m.group(1))
         self.say(f"Node wants {need} bits of postage, computing again ...")
         art = await self._compute(lambda: build(need))
-        await self._post_article(art)
+        await self._post_article(art, blobs=blobs)
         entry = self.data["groups"].get(group_id)
         if entry is not None:                      # remember it for next time
             entry.setdefault("manifest", {})
@@ -178,7 +179,7 @@ class PostingMixin:
     # ------------------------------------------------------------------
     # posting
     # ------------------------------------------------------------------
-    async def _post_article(self, art: Article, node: str | None = None) -> str:
+    async def _post_article(self, art: Article, node: str | None = None, blobs=()) -> str:
         name = self._identity_named_by(art.author_key)
         # a node from before UN-RFC 0025 gets no header: it would break the signature
         minimum = await self.node_min_ripe(node or self.node_for(art.group)) \
@@ -197,13 +198,13 @@ class PostingMixin:
             if header:                                 # outside the canonical form: signing holds
                 art.set("Key-Ripening", header)
         try:
-            return await self._send_article(art, node)
+            return await self._send_article(art, node, blobs)
         except SessionError as exc:
             if name is None or "ripening: unknown" not in str(exc) \
                     or art.group == self.ripe_group(name):
                 raise
             await self.publish_ripening(name, node)    # this node lacks our chain: send it
-            return await self._send_article(art, node)
+            return await self._send_article(art, node, blobs)
 
     async def post_article(self, art: Article, node: str | None = None,
                            sign_with: crypto.Identity | None = None) -> str:
@@ -254,14 +255,22 @@ class PostingMixin:
                 self.group_entry(group)["manifest"] = dict(m.raw)
         return await self.required_pow(group, node=node)
 
-    async def _send_article(self, art: Article, node: str | None = None) -> str:
+    async def _send_article(self, art: Article, node: str | None = None, blobs=()) -> str:
         raw = art.to_bytes()
         target = node or self.node_for(art.group)
-        code, text = await self._call(lambda c: c.post(raw), target)
+
+        async def send(c):
+            for bid, octets in blobs:              # staged on this connection (UN-RFC 0027, 6)
+                code, text = await c.blobpost(bid, octets)
+                if code != 245:
+                    return code, _blob_refusal(text)
+            return await c.post(raw)
+
+        code, text = await self._call(send, target)
         if code != 240 and node is None and "not carried" in text:
             for other in (n for n in self.nodes if n != target):   # e.g. someone's inbox elsewhere
                 try:
-                    code, text = await self._call(lambda c: c.post(raw), other)
+                    code, text = await self._call(send, other)
                 except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
                     continue
                 if code == 240:
@@ -300,11 +309,14 @@ class PostingMixin:
                    content_type: str | None = None,
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
-                   from_name: str | None = None) -> str:
+                   from_name: str | None = None, files=None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
 
         ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
-        UN-RFC 0046 section 4.9); ``from_name`` replaces your display name."""
+        UN-RFC 0046 section 4.9); ``from_name`` replaces your display name.
+        ``files`` are prepared files (``prepare_files``): checked against the group
+        first, then sent as blobs with the post, which pays their extra postage
+        (UN-RFC 0027 sections 4.5, 6)."""
         if self.portal_warning(group_id):
             # Clients ask first (portal_warning / accept_portals); this is the safety net.
             raise SessionError("this group has a portal: its posts are also published outside "
@@ -317,6 +329,14 @@ class PostingMixin:
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
+        files = list(files or [])
+        blobs, file_bits = [], 0
+        if files:
+            from ...core import blobs as bl
+            self.check_files(group_id, files)
+            edit_header += bl.attachment_headers([(f.name, f.media_type, f.octets) for f in files])
+            blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
+            file_bits = bl.extra_bits_for(sum(len(f.octets) for f in files))
         shown = from_name or self.display_name()
         author = self.identity()
         entry = self.group_entry(group_id)
@@ -341,11 +361,11 @@ class PostingMixin:
                                   from_name=shown, references=references,
                                   extra=[("Content-Type", content_type), ("Message-Kind", kind)]
                                   + ([cert] if cert else []) + edit_header)
-                return art.finalize(author, bits)
+                return art.finalize(author, bits + file_bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):
             return await self._submit(group_id, subject, build)
-        msgid = (await self._post_with_postage(group_id, build)).message_id
+        msgid = (await self._post_with_postage(group_id, build, blobs=blobs)).message_id
         self._remember_mine(msgid)
         if cert:
             naming.sent_header(self, group_id)
@@ -353,3 +373,15 @@ class PostingMixin:
         marks.append(msgid)
         self.save()
         return msgid
+
+
+def _blob_refusal(text: str) -> str:
+    """A node's 445 to BLOBPOST, as a sentence for the user (UN-RFC 0027 section 6)."""
+    word = text.split()[0] if text.split() else ""
+    return {"unsupported": "this node carries no files - post on a node that does, or ask "
+                           "its operator to turn them on",
+            "refused": "the node refused this file",
+            "size": "the file is larger than this node takes",
+            "limit": "today's limit for files on this node is reached - try tomorrow",
+            "hash": "the file was damaged on the way - try again"}.get(word, f"file: {text}")
+

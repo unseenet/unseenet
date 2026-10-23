@@ -116,6 +116,18 @@ class Client:
                 return parts[1] if len(parts) > 1 else ""
         return None
 
+    async def blobpost(self, blob_id: str, octets: bytes) -> tuple[int, str]:
+        """``BLOBPOST`` (UN-RFC 0027 section 6): stage a blob on this connection for the
+        next POST. ``245`` staged (also when the node has it already), ``445`` not
+        taken (``unsupported``: the node carries no files; ``refused``, ``size``,
+        ``limit``, ``hash``)."""
+        code, text = await self.command(f"BLOBPOST {blob_id} {len(octets)}")
+        if code == 345:
+            self.writer.write(octets)
+            await self.writer.drain()
+            code, text = await self._response()
+        return code, text
+
     async def post(self, raw: bytes) -> tuple[int, str]:
         await self.command("POST", (340,))
         self.writer.write(dot_stuff(raw))

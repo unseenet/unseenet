@@ -81,13 +81,20 @@ def client_main(argv=None) -> None:
     s.add_argument("key", help="the member's ed25519:... key")
     s = sub.add_parser("post", help="post to a group (body from --body or stdin)")
     s.add_argument("group")
-    s.add_argument("--subject", "-s", required=True)
-    s.add_argument("--body")
+    s.add_argument("--subject", "-s", help="the subject (a reply: Re: and the parent's by default)")
+    s.add_argument("--body", help="the text; without it, read from stdin")
+    s.add_argument("--kind", choices=["post", "chat"], default="post",
+                   help="a post with a subject, or a chat line (UN-RFC 0028)")
+    s.add_argument("--reply-to", metavar="MSGID", help="reply to (or comment on) this post")
+    s.add_argument("--edit", metavar="MSGID",
+                   help="a new version of your own post (UN-RFC 0042); the body replaces it")
+    s.add_argument("--format", choices=["markdown", "plain"],
+                   help="the text's format (default: your setting, Markdown unless changed)")
+    s.add_argument("--attach", action="append", metavar="FILE",
+                   help="a file to post with it, up to 4 (UN-RFC 0027); pictures are saved "
+                        "again without their metadata (GPS, time, camera)")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
-    s.add_argument("--attach", action="append", metavar="FILE",
-                   help="for testing nodes: attach a file (UN-RFC 0027), up to 4; "
-                        "metadata is NOT removed")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")
