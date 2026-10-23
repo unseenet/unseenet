@@ -61,10 +61,14 @@ to another network. Nothing encrypted ever goes through a door.
 node learns where its users are, and nobody watching your connection sees
 what you read or write. → [Tor and Tails](../tor.md)
 
+**Honest about the limits.** Unseenet hides where people and servers are,
+proves who wrote what and keeps private things private. It cannot protect
+you from what you write yourself, from a compromised computer, or from
+someone watching the whole internet - and it has not been reviewed yet.
+→ [The threat model in plain words](threats.md)
+
 ## Still to come
 
-- *The threat model in plain words* - what is hidden from whom, and what
-  Unseenet does not protect against.
 - *Build your own* - which UN-RFCs to read, in which order, to write a
   node or a client.
 
