@@ -48,6 +48,8 @@ from the key of its owner alone. They are:
 | `profile@<fp>`        | Public profile                   | UN-RFC 0022 section 5.1 |
 | `avatar@<fp>`         | Public picture                   | UN-RFC 0022 section 8.2 |
 | `ripe@<fp>`           | Key ripening chain               | UN-RFC 0025 section 3.3 |
+| `feed@<fp>`           | Personal feed (personal group)   | UN-RFC 0034 section 5   |
+| `site@<fp>`           | Personal site (personal group)   | UN-RFC 0035 section 7   |
 
 where `<fp>` is the fingerprint of the owner's key (UN-RFC 0003
 section 2). A later document that reserves a group name for a key adds
@@ -55,6 +57,54 @@ it to this table, and the group is key-bound from then on.
 
 A group with another name is an ordinary group, even if it is owned by
 the same key.
+
+## 2.1 Personal Groups
+
+Most key-bound groups exist because the identity does: a client makes
+the inbox, the ripening chain and, when asked, the profile and picture,
+and nobody reads them as groups. A **personal group** is a key-bound
+group that an identity publishes content in for others to read, and
+that exists only because its owner chose to start it: today the
+personal feed (UN-RFC 0034) and the personal site (UN-RFC 0035). They
+share these rules; their own documents only add what is particular to
+them (the view, comments, pages).
+
+- **Manifest.** `name` is the reserved name; `type` is `channel`; the
+  owner MAY list `posters`, for example a key of their own on another
+  device, and SHOULD NOT list other people, since readers take a
+  personal group to be one person's; `view` is the one the group's
+  document gives; `expires` as for every key-bound group (section 3).
+  A node MUST reject a manifest for a personal group whose `type` is not
+  `channel` or whose `view` is not that one.
+- **Starting.** A personal group is public and ties everything in it to
+  the identity. A client MUST NOT create one without the user asking
+  for it (it MAY offer to when an identity is created), and MUST tell the
+  user, as for a public profile (UN-RFC 0022 section 5.3), that what is
+  published can be kept by others and cannot be recalled, also after it
+  is changed or removed.
+- **Ending.** The owner ends one by removing the group (UN-RFC 0013) or
+  by letting it expire. Unlike the inbox, it is not renewed once removed.
+- **Lifetime.** It is renewed with the identity's other key-bound groups
+  (section 4) and expires with them (section 5); its articles expire
+  with its `retention_days`, except what is kept (UN-RFC 0017 section
+  2.1).
+- **Finding.** Wherever a client shows an identity (its profile, an
+  author's name, a mention), it SHOULD offer the identity's personal
+  groups that are current, and nothing for those that are not. It
+  learns this as it reads a profile (UN-RFC 0022 section 5.2): by asking
+  a node it uses for the group's current manifest. A node that does not
+  carry it means there is none to show, and is not an error.
+- **Following.** To follow a personal group is to subscribe to it, as to
+  any group (UN-RFC 0034 section 6): the list is kept in the user's
+  vault, never published, and followed groups are read like the others
+  so that following does not stand out. A user can also follow a
+  person, which follows all of that identity's personal groups and the
+  feeds its profile lists (UN-RFC 0034 section 6.1).
+
+A personal group for a closed circle of people is not a key-bound
+group: it is an ordinary closed group, for example with `"view": "feed"`
+(UN-RFC 0034 section 3.2). A private profile shared there (UN-RFC 0022
+section 6) is how an identity tells only that circle who it is.
 
 # 3. Lifetime
 
@@ -184,6 +234,8 @@ highest `serial` it has used for each key-bound group, in the vault.
   sub-names is a key-bound group, with section 7.
 - **UN-RFC 0022** section 5.4: replaced by a reference to this
   document.
+- **UN-RFC 0034** section 5 and **UN-RFC 0035** section 7: personal
+  feeds and sites follow the common rules of section 2.1.
 - **UN-RFC 0000** section 6: 0029 is added to the index.
 
 # 10. Rationale
