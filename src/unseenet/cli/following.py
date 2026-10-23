@@ -141,6 +141,7 @@ async def c_timeline(app: App, args) -> None:
     """``unseenet timeline [--limit N]``: the entries of every feed you follow, newest
     first, as written (UN-RFC 0034 section 7)."""
     s = _session(app, args)
+    await s.fetch_unknown_manifests()          # a feed followed but not read yet
     for gid in s.feeds_followed():
         try:
             await s.fetch_group(gid)
