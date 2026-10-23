@@ -200,3 +200,28 @@ async def test_the_timeline_in_the_next_command(setup, tmp_path, capsys):
     finally:
         if again._session is not None:
             await again._session.close()
+
+
+async def test_a_profile_from_a_restored_vault(setup, tmp_path, monkeypatch, capsys):
+    """Found making the demo's weekly run: a new vault with the same key (restored
+    from a backup, a second device, a CI run) did not know the profile's serial, began
+    at 1, and the node refused it as older. It asks the network first now."""
+    import io as _io
+    node, app = setup
+    first = await app("first")
+    seed = first.data["identities"]["first"]["seed"]
+    await cli.c_profile(first, _args(about="Once"))
+    capsys.readouterr()
+    other = cli.App(Vault.open(tmp_path / "restored.vault", "pw", **KDF))
+    other.data["nodes"][:] = first.data["nodes"]
+    monkeypatch.setattr("sys.stdin", _io.StringIO(seed + "\n"))
+    await cli.c_id_import(other, Namespace(name="first", display=None, json=True))
+    capsys.readouterr()
+    try:
+        await cli.c_profile(other, _args(about="Again, from another vault"))
+        assert _json(capsys)["profile"]["about"] == "Again, from another vault"
+        fp = other.session.identity().fingerprint
+        assert node.store.manifest(f"profile@{fp}").raw["serial"] == 2
+    finally:
+        if other._session is not None:
+            await other._session.close()

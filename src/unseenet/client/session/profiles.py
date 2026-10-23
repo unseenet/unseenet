@@ -94,6 +94,15 @@ class ProfilesMixin:
         any we used (UN-RFC 0029 section 8), and keep it so it is renewed."""
         self.mark_in_use()               # a profile or picture is using the identity
         entry = self.group_entry(group_id)
+        if not self.manifest_data(group_id):
+            # a vault that has not seen this group - restored from a backup, or a second
+            # device: the network may have a manifest with a higher serial already
+            try:
+                current = await self.fetch_manifest(group_id)
+            except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError):
+                current = None
+            if current is not None:
+                entry["manifest"] = dict(current.raw)
         serial = int(self.manifest_data(group_id).get("serial", 0)) + 1
         art = make(serial, await self.required_pow(None))
         await self._post_article(art, self.node)
