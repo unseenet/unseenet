@@ -22,6 +22,7 @@ from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate
 from ..core.groups import message_kind, parse_supersedes
 from ..core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
                            is_key_bound, make_group_id, parse_key_update, split_group_id)
+from ..core import blobs as bl
 from ..core import pins as pn
 from ..core import ripening as rp
 from ..core.store import Store
@@ -68,6 +69,18 @@ class NodeConfig:
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
     # open client connections at most (#296): a ceiling, not rationing; peers don't count
     max_clients: int | str = "auto"
+    # UN-RFC 0027 section 8: blobs are carried only when the operator turns them on.
+    # None: off. Otherwise {"max_size", "retention_days", "encrypted", "groups"}.
+    blobs: dict | None = None
+
+    def carries_blobs(self, group_id: str, encrypted: bool = False) -> bool:
+        b = self.blobs
+        return (b is not None and wildmat(b.get("groups", "*"), group_id)
+                and (not encrypted or bool(b.get("encrypted", False))))
+
+    @property
+    def max_blob(self) -> int:
+        return int((self.blobs or {}).get("max_size", bl.MIN_NODE_BLOB))
 
     def client_limit(self) -> int:
         """``max_clients`` as a number: ``"auto"`` is what memory and open files allow."""
@@ -110,9 +123,13 @@ def wildmat(pattern: str, text: str) -> bool:
 
 
 class Node:
+    blobs: bl.BlobStore          # UN-RFC 0027: the octets, next to the database
+
     def __init__(self, store: Store, config: NodeConfig | None = None,
-                 key: crypto.Identity | None = None):
+                 key: crypto.Identity | None = None, blobs: bl.BlobStore | None = None):
         self.store = store
+        # blobs as files next to the database; in memory for a store in memory (tests)
+        self.blobs = blobs or bl.BlobStore(store.path.parent / "blobs" if store.path else None)
         self.config = config or NodeConfig()
         self.client_limit = self.config.client_limit()      # worked out once (#296)
         # The node key identifies this node to its peers (UN-RFC 0016). A real node
@@ -168,7 +185,7 @@ class Node:
     # ------------------------------------------------------------------
     def accept(self, raw: bytes, source: str | None = None,
                now: datetime | None = None, from_peer: bool = False,
-               how: str | None = None) -> Article:
+               how: str | None = None, staged: dict | None = None) -> Article:
         """Validate and store an article. Raises ArticleError with an RFC 0005 reason.
 
         ``from_peer`` is true for articles pushed by another node (IHAVE/TAKETHIS),
@@ -176,7 +193,7 @@ class Node:
         ``how`` is only for the counters: "client", "peer" or "pull".
         """
         try:
-            art = self._accept(raw, source, now, from_peer)
+            art = self._accept(raw, source, now, from_peer, staged)
         except ArticleError as err:
             self.stats.rejected_one(err.reason)
             if err.reason == "later":
@@ -262,7 +279,7 @@ class Node:
         return None
 
     def _accept(self, raw: bytes, source: str | None, now: datetime | None,
-                from_peer: bool) -> Article:
+                from_peer: bool, staged: dict | None = None) -> Article:
         art = Article.from_bytes(raw)
         validate_structure(art, raw_size=len(raw), max_size=self.config.max_size, now=now)
         if self.store.seen(art.message_id):
@@ -301,8 +318,11 @@ class Node:
                     and not self._keep_old(art, manifest)):
                 raise ArticleError("date", "older than retention")
 
+        # UN-RFC 0027 section 5.2: what every node checks, carrying blobs or not
+        blobs = bl.check_article(art, None if is_manifest or manifest is None else manifest.raw)
         group_pow = manifest.min_pow if manifest is not None and not is_manifest else 0
-        required = self._required_pow(art, manifest, group_pow, source, from_peer)
+        required = (self._required_pow(art, manifest, group_pow, source, from_peer)
+                    + bl.extra_bits(art))                       # section 4.5
         if art.proven_pow() < required:
             raise ArticleError("postage", f"need {required} bits")
 
@@ -318,7 +338,10 @@ class Node:
             check_permitted(art, manifest, self.store.epochs(art.group),
                             self.store.closed_before(art.group), thread_root=self._thread_root)
             self._check_blocked(art)
+            carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)
+            for bid in carried:                         # staged on this connection: now kept
+                self.blobs.put(bid, staged.pop(bid)[0])
             if versions:
                 self._apply_edit(art, versions, held)
         self._enqueue(art, source)
@@ -557,6 +580,19 @@ class Node:
             self._accept_pin(art, manifest, raw, ctl[0], ctl[1])
         else:
             raise ArticleError("syntax", f"unknown control {ctl[0]!r}")
+
+    # --- blobs (UN-RFC 0027) ---
+    def _blobs_for(self, art: Article, blobs, from_peer: bool, staged: dict | None) -> list[str]:
+        """Section 6.2: a blob node takes a client's article only with every blob
+        stored or staged on that connection. Returns the staged ones to keep. From
+        peers, blobs follow their article later (section 6.3)."""
+        if not blobs or from_peer or not self.config.carries_blobs(art.group, bl.encrypted(art)):
+            return []
+        staged = staged or {}
+        missing = [b for b, _ in blobs if not self.blobs.has(b) and b not in staged]
+        if missing:
+            raise ArticleError("blobs", f"{len(missing)} blob(s) neither stored nor staged")
+        return [b for b, _ in blobs if b in staged and not self.blobs.has(b)]
 
     # --- pins (UN-RFC 0033): the first kind of kept articles (UN-RFC 0017, 2.1) ---
     def _accept_pin(self, art: Article, manifest: Manifest, raw: bytes, action: str,
@@ -846,6 +882,7 @@ class Session:
         self._reconcile_rounds = 0
         self._manifest_requests: list[float] = []   # times of recent XUN-MANIFESTS
         self.full = False                            # opened when the node was full (#296)
+        self.staged: dict[str, tuple[bytes, float]] = {}   # UN-RFC 0027 6.2: blob ID -> (octets, when)
 
     def send(self, line: str) -> None:
         self.writer.write(line.encode("utf-8") + b"\r\n")
@@ -900,6 +937,8 @@ class Session:
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
                     "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}"):
             self.send(cap)
+        if cfg.blobs is not None:
+            self.send(f"UNSEENET-BLOB {cfg.max_blob}")             # UN-RFC 0027 section 6.1
         self.send(".")
 
     async def cmd_date(self, args):
@@ -1359,11 +1398,62 @@ class Session:
     # --- posting ---
     def _try_accept(self, raw: bytes, from_peer: bool = False) -> ArticleError | None:
         try:
-            self.node.accept(raw, source=self.peer, from_peer=from_peer)
+            self.node.accept(raw, source=self.peer, from_peer=from_peer,
+                             staged=None if from_peer else self._fresh_staged())
             return None
         except ArticleError as err:
             log.debug("rejected: %s", err)
             return err
+
+    # --- blobs (UN-RFC 0027 section 6) ---
+    def _fresh_staged(self) -> dict:
+        """Staged blobs older than an hour are gone (section 6.2)."""
+        cutoff = time.monotonic() - bl.STAGE_SECONDS
+        for bid in [b for b, (_, at) in self.staged.items() if at < cutoff]:
+            del self.staged[bid]
+        return self.staged
+
+    async def cmd_blobpost(self, args):
+        """BLOBPOST <blob-id> <octets>: stage a blob for this connection (6.2)."""
+        cfg = self.node.config
+        if len(args) != 2 or not bl.valid_id(args[0]) or not args[1].isdigit():
+            self.send("501 syntax: BLOBPOST <blob-id> <octets>")
+            return
+        bid, size = args[0], int(args[1])
+        if cfg.blobs is None:
+            self.send("445 unsupported")
+            return
+        if self.node.blobs.has(bid) or bid in self._fresh_staged():
+            self.send("245 blob staged")
+            return
+        if not 0 < size <= cfg.max_blob:
+            self.send("445 size")
+            return
+        held = sum(len(o) for o, _ in self.staged.values())
+        if (len(self.staged) >= max(bl.STAGE_MIN_COUNT, cfg.blobs.get("stage_count", 0))
+                or held + size > max(bl.STAGE_MIN_BYTES, cfg.blobs.get("stage_bytes", 0))):
+            self.send("445 limit")
+            return
+        self.send("345 send blob")
+        await self.writer.drain()
+        octets = await asyncio.wait_for(self.reader.readexactly(size), timeout=self.IDLE_SECONDS)
+        if bl.blob_id(octets) != bid:
+            self.send("445 hash")
+            return
+        self.staged[bid] = (octets, time.monotonic())
+        self.send("245 blob staged")
+
+    async def cmd_blob(self, args):
+        """BLOB <blob-id>: the blob as raw octets (6.4). Never had and deleted are alike."""
+        if len(args) != 1 or not bl.valid_id(args[0]):
+            self.send("501 syntax: BLOB <blob-id>")
+            return
+        octets = self.node.blobs.get(args[0]) if self.node.config.blobs is not None else None
+        if octets is None:
+            self.send("430 no such blob")
+            return
+        self.send(f"226 {len(octets)} {args[0]}")
+        self.writer.write(octets)
 
     async def cmd_post(self, args):
         self.send("340 send article")
