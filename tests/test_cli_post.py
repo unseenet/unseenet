@@ -168,3 +168,19 @@ async def test_a_node_without_files_says_so(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit, match="carries no files"):
         await cli.c_post(me, _args(group=gid, subject="x", attach=[str(_photo(tmp_path))]))
     await done()
+
+
+async def test_files_in_a_group_this_vault_has_not_read(tmp_path, monkeypatch, capsys):
+    """Found on the test nodes: someone else's group whose manifest this vault has
+    not fetched yet - its rules for files are fetched before the files are checked."""
+    node, app, done = await _setup(tmp_path, monkeypatch)
+    owner, me = await app("owner"), await app("me")
+    await cli.c_group_create(owner, _args(name="dk.billeder", type="open", attachments=1048576,
+                                          types="image/*"))
+    gid = _json(capsys)["group"]
+    assert not me.session.manifest_data(gid)
+    await cli.c_post(me, _args(group=gid, subject="Fra en anden", attach=[str(_photo(tmp_path))]))
+    assert _json(capsys)["files"][0]["type"] == "image/jpeg"
+    with pytest.raises(SystemExit, match="not a group ID"):
+        await cli.c_post(me, _args(group="", subject="x"))
+    await done()

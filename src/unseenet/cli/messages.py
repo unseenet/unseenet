@@ -54,6 +54,10 @@ async def c_post(app: App, args) -> None:
     from ..client.session import KIND_CHAT, KIND_POST, SessionError
     s = _session(app, args)
     group = args.group
+    try:
+        split_group_id(group)
+    except ValueError:
+        sys.exit(f"{group!r} is not a group ID: give name@fingerprint, see 'unseenet groups'")
     kind = getattr(args, "kind", None) or KIND_POST
     body = sys.stdin.read() if args.body is None else args.body
     ctype = {"markdown": "text/markdown; charset=utf-8; variant=unseenet",
