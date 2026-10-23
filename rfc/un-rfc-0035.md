@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0035                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0008, 0011, 0012, 0017, 0027, 0029, 0031
+Updates: 0000, 0008, 0011, 0017, 0029, 0031
 
                        Unseenet: Pages and Sites
 ```
@@ -154,48 +154,31 @@ result, as with pins (UN-RFC 0033 section 4.2).
 
 # 6. Nodes
 
-## 6.1 Group State
+## 6.1 Kept Articles
 
-UN-RFC 0017 section 2 is extended. The state of a site also includes:
+The current versions of a site's pages are kept articles in the sense
+of UN-RFC 0017 section 2.1, with no markers: the page articles are the
+targets themselves.
 
-- the current version of every page in force;
-- the current version of every path whose current version is a
+- **Which:** the current version of every page in force (section 5.2),
+  and the current version of every path whose current version is a
   removal, as long as that removal is inside the group's window.
+- **How many:** `max_pages` (section 3).
+- **Order:** after the pins of UN-RFC 0033, the current versions of
+  pages by ascending path.
 
-A node MUST NOT expire state articles. When a page article leaves the
-state, because a newer version replaced it, its path was removed or
-pushed out of `max_pages`, or its author lost their role, it expires
-normally (UN-RFC 0012) and may disappear at once if it is older than
-the window. Older versions are therefore not kept, and a site does not
-grow with each edit.
+Everything else - that they do not expire, that an old current version
+is accepted so a new node receives the whole site, the blobs of pages
+and the 8 MiB of blobs per group - is UN-RFC 0017 sections 2.1 and 2.2.
+When a page article is no longer kept, because a newer version replaced
+it, its path was removed or pushed out of `max_pages`, or its author
+lost their role, it expires normally (UN-RFC 0012). Older versions are
+therefore not kept, and a site does not grow with each edit.
 
-## 6.2 Accepting Old Pages
+A page whose images a node refused (UN-RFC 0027 section 7.3) stays, and
+its images are shown by their alt text.
 
-UN-RFC 0012 section 3 is amended: a node MUST NOT reject a page article
-for being older than the window if it would be the current version of
-a page in force. It forwards such an article to its peers as usual, so
-a new node receives the whole site.
-
-## 6.3 NEWNEWS
-
-UN-RFC 0017 section 3, step 1, is refined. A node lists a site's state
-in this order: manifests, pins and unpins, pinned articles, then the
-current versions of pages by ascending path.
-
-## 6.4 Blobs
-
-UN-RFC 0027 section 7.1 is amended: a node SHOULD keep a blob as long
-as the current version of a page in force references it, also beyond
-its own blob retention.
-
-The blobs referenced by all pages in force of one site MUST NOT total
-more than 8 MiB. A node MUST reject a page article whose blobs would
-take the site above that, counted against the pages in force it holds
-when the article arrives. A node MAY set a lower limit, and MAY refuse
-blobs as UN-RFC 0027 section 7.3 allows; the page stays and its images
-are shown by their alt text.
-
-## 6.5 Carrying Sites
+## 6.2 Carrying Sites
 
 Sites are optional for nodes, like pictures (UN-RFC 0022 section 10).
 A node operator MAY:
@@ -219,11 +202,12 @@ operator turns it on. A node that does not state `sites` is taken to
 refuse them. A node MAY refuse or remove the site of an identity it
 blocks (UN-RFC 0018 section 8.2).
 
-## 6.6 Postage
+## 6.3 Postage
 
 A page article pays the postage of an article of its size (UN-RFC 0006),
 with the extra bits for blobs of UN-RFC 0027 section 4.5. Nothing else
-is charged: the limits of sections 3 and 6.4 keep a site small.
+is charged: `max_pages`, the page size of section 4.2 and the limits
+of UN-RFC 0017 section 2.2 keep a site small.
 
 # 7. Personal Sites
 
@@ -334,7 +318,8 @@ MUST let the reader see the fingerprint.
   site's current state, so that an edit from another device is not
   silently overtaken.
 - The client SHOULD warn before a change would push a page out of
-  `max_pages`, or take the site's blobs above the limit of section 6.4.
+  `max_pages`, or take the site's blobs above 8 MiB (UN-RFC 0017
+  section 2.2).
 - Images are prepared as UN-RFC 0027 section 9.1 requires.
 
 # 10. Gateways
@@ -347,13 +332,10 @@ capsules, need a document of their own.
 
 - **UN-RFC 0008** section 3.1: `view` gains the value `pages`, for open
   channel groups only (section 3).
-- **UN-RFC 0012** section 3: current versions of pages in force are
-  accepted even when older than the window (section 6.2).
-- **UN-RFC 0017** section 2 and section 3: a site's state includes its
-  current pages (section 6.1), listed after pins (section 6.3).
-- **UN-RFC 0027** section 7.1: blobs of pages in force are kept, up to
-  8 MiB per site (section 6.4).
-- **UN-RFC 0011** section 4: the policy field `sites` (section 6.5).
+- **UN-RFC 0017** section 2.1: a site's current pages are kept
+  articles (section 6.1). What that means for UN-RFC 0012 and UN-RFC
+  0027 is said there.
+- **UN-RFC 0011** section 4: the policy field `sites` (section 6.2).
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
   `site@<fp>`, personal site, this document section 7.1.
 - **UN-RFC 0031** section 3.4: links within a site and to pages
@@ -398,9 +380,9 @@ capsules, need a document of their own.
   Section 7.2 makes the client say so. Users who need to keep things
   apart SHOULD use a separate identity for a site.
 - **Abuse.** Static content that stays is more attractive for unlawful
-  material than a discussion. The limits of sections 3 and 6.4, the
+  material than a discussion. The limits of section 3 and UN-RFC 0017 section 2.2, the
   operator's freedom to carry no sites, no site images or any single
-  blob (section 6.5, UN-RFC 0027 section 7.3), and blocks within a
+  blob (section 6.2, UN-RFC 0027 section 7.3), and blocks within a
   hierarchy (UN-RFC 0018 section 8.2) apply. A site that breaks a node's rules can be dropped
   as any group can.
 - **Stale pages.** A node can serve an old version of a page, or none,
@@ -423,11 +405,11 @@ capsules, need a document of their own.
   but it exists only when its owner asks for it (section 7.2), so it
   does not grow with the number of identities as profiles do. The upper
   bound per identity is one site of at most 128 pages of 64 KiB
-  (8 MiB of text) and 8 MiB of blobs (sections 3, 4.2 and 6.4); with
-  the default `max_pages` of 32 the text is at most 2 MiB. Old versions
+  (8 MiB of text) and 8 MiB of blobs (sections 3 and 4.2, UN-RFC 0017
+  section 2.2); with the default `max_pages` of 32 the text is at most 2 MiB. Old versions
   expire (section 6.1), so editing does not make a site grow. A node
   carries sites only when its operator turns them on, and may carry
-  their text without their blobs (section 6.5), so at the design
+  their text without their blobs (section 6.2), so at the design
   targets of UN-RFC 0001 section 1.2 a node pays only for the sites it
   has chosen. A new node gets a site through the ordinary state
   transfer of UN-RFC 0017 (sections 6.2 and 6.3), with no extra round
