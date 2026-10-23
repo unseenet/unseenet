@@ -51,14 +51,18 @@ browser version and the command line all use the same core, which holds
 the keys, talks Tor and checks every signature itself.
 → [The clients](clients.md)
 
+**Doors at the edge.** A web entrance lets an ordinary browser in, at the
+price of the entrance seeing the visitor's address. Gateways bring groups
+from Usenet, Matrix and Nostr in, and portals let an owner open a group
+to another network. Nothing encrypted ever goes through a door.
+→ [Out into the world](world.md)
+
 **Tor hides who talks to whom.** Every connection goes through Tor, so no
 node learns where its users are, and nobody watching your connection sees
 what you read or write. → [Tor and Tails](../tor.md)
 
 ## Still to come
 
-- *Out into the world* - web entrances, gateways to Usenet, Matrix and
-  Nostr, and portals.
 - *The threat model in plain words* - what is hidden from whom, and what
   Unseenet does not protect against.
 - *Build your own* - which UN-RFCs to read, in which order, to write a

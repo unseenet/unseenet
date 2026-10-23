@@ -110,6 +110,7 @@ nav:
       - Groups: guide/groups.md
       - The node: guide/node.md
       - The clients: guide/clients.md
+      - Out into the world: guide/world.md
       - Tor and Tails: tor.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
