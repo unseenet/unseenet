@@ -24,7 +24,8 @@ The script:
    (the node runs its own Tor process);
 2. creates a user `unseenet` and installs Unseenet in
    `/home/unseenet/unseenet` (a git checkout with its own virtualenv);
-3. writes a starter configuration to `/home/unseenet/node.toml`;
+3. asks two questions, and writes a starter configuration to
+   `/home/unseenet/node.toml` (see [below](#pictures-and-files));
 4. generates a random passphrase for the node's onion key in
    `/etc/unseenet-node.env`;
 5. installs and starts the `unseenet-node` systemd service;
@@ -37,6 +38,26 @@ Node address: f6vnchi5p7ll4yn6yot6cz4ohzuxy3uhc3kztafuwn3zlyoup6tn64qd.onion
 That address is what clients and peers connect to. It stays the same
 as long as you keep the node's data directory (see
 [Operations](operations.md#backup)).
+
+### Pictures and files
+
+The script asks whether the node should carry **pictures and small
+files** (screenshots, photos, small PDFs in posts) and **profile
+pictures**. The recommended answer is yes. Without them, people who use
+your node see posts without their pictures, and profiles without a
+picture.
+
+They are off unless you say yes, because a node that carries them stores
+files that strangers post (for 30 days at most, 1 MiB each). You can
+delete any file and refuse it for good, and follow refusal lists from
+people you trust; see [`[blobs]`](configuration.md#blobs). Files in
+closed groups and private posts are encrypted, and are not carried
+unless you also turn on `encrypted`.
+
+To answer beforehand, for example in a script:
+`UNSEENET_BLOBS=yes UNSEENET_AVATARS=yes` before `bash`. Without a
+terminal and without these, both stay off. You can change your mind
+later in `node.toml`.
 
 ## Proxmox LXC
 

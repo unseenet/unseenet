@@ -30,13 +30,55 @@ python3 -m venv .venv
 mkdir -p ~/node-data && chmod 700 ~/node-data
 USER
 
+# Pictures and small files (UN-RFC 0027), and profile pictures (UN-RFC 0022). Off unless
+# the operator says yes: a node that carries them keeps strangers' files. Asked on the
+# terminal; UNSEENET_BLOBS=yes|no and UNSEENET_AVATARS=yes|no answer beforehand.
+ask() {   # ask "question" -> 0 for yes; the recommended answer is yes
+  local answer
+  if [ ! -r /dev/tty ]; then return 1; fi
+  read -r -p "$1 [Y/n] " answer </dev/tty || return 1
+  case "$answer" in [nN]*) return 1 ;; *) return 0 ;; esac
+}
+yes_no() {   # yes_no VALUE "question"
+  case "${1:-}" in
+    [yY]*|1|true|accept) return 0 ;;
+    [nN]*|0|false|refuse) return 1 ;;
+    *) ask "$2" ;;
+  esac
+}
 if [ ! -f /home/unseenet/node.toml ]; then
+  echo
+  echo "Pictures and small files: posts can carry screenshots, photos and small PDFs."
+  echo "A node that carries them stores files strangers post, for 30 days at most."
+  echo "Without them, people using this node see posts without their pictures."
+  if yes_no "${UNSEENET_BLOBS:-}" "Carry pictures and small files (up to 1 MiB, 30 days, not encrypted ones)?"; then
+    BLOBS_TOML='
+# UN-RFC 0027: pictures and small files. "enabled = false" to stop carrying them.
+[blobs]
+enabled = true
+max_size = 1048576
+retention_days = 30
+encrypted = false'
+  else
+    BLOBS_TOML='
+# UN-RFC 0027: pictures and small files are not carried. To carry them:
+# [blobs]
+# enabled = true
+# max_size = 1048576
+# retention_days = 30
+# encrypted = false'
+  fi
+  echo
+  echo "Profile pictures: small pictures (at most 8 KB) people choose for themselves."
+  if yes_no "${UNSEENET_AVATARS:-}" "Carry profile pictures?"; then AVATARS=accept; else AVATARS=refuse; fi
   cat > /home/unseenet/node.toml <<TOML
 [node]
 name = "$NODE_NAME"
 min_pow = 18
 retention_days = 90
 new_groups = "accept"
+avatars = "$AVATARS"
+$BLOBS_TOML
 
 # Add peers like this, then: systemctl restart unseenet-node
 # Swap onion addresses and node keys ("Node key:" in the journal) with the friend.

@@ -941,6 +941,14 @@ class Node:
         excludes = self.excludes()
         if excludes:
             info["policy"]["excludes"] = excludes
+        if cfg.blobs is not None:                   # UN-RFC 0027 section 8: carried, and how
+            b = cfg.blobs
+            info["policy"]["blobs"] = {
+                "max_size": cfg.max_blob, "retention_days": b.get("retention_days", 30),
+                "encrypted": bool(b.get("encrypted", False)),
+                "refusal_lists": bool(b.get("refusal_keys")),
+                "daily_per_key": b.get("daily_per_key", bl.DAILY_PER_KEY),
+                "daily_per_group": b.get("daily_per_group", bl.DAILY_PER_GROUP)}
         for key in ("operator", "contact", "description"):
             value = op.get("key" if key == "operator" else key)
             if value:

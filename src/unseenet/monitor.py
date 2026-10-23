@@ -52,6 +52,14 @@ RichLog { height: 1fr; }
 """
 
 
+
+def blob_line(b) -> str:
+    """Files (UN-RFC 0027): off, or what is stored, refused and fetched today."""
+    if not b:
+        return "Files  off (blobs not carried)"
+    return (f"Files  {b['count']} ({size(b['bytes'])}), today {size(b['today'])}, "
+            f"{b['refused']} refused" + (f", {b['fetching']} fetching" if b.get("fetching") else ""))
+
 def ago(t: float | None, now: float | None = None) -> str:
     if not t:
         return "never"
@@ -199,7 +207,8 @@ class MonitorApp(App):
             f"Store  {store['groups']} groups, {store['articles']} articles\n"
             f"Size   {size(store['bytes'])}, {size(store.get('disk_free'))} free\n"
             f"Rules  {policy.get('min_pow', '?')} bits, {policy.get('retention_days', '?')} days, "
-            f"new: {policy.get('new_groups', '?')}")
+            f"new: {policy.get('new_groups', '?')}\n"
+            + blob_line(snap.get("blobs")))
         per = traffic["per_minute"]
         totals = {"accepted": sum(traffic["accepted"].values()), "sent": traffic["sent"],
                   "served": traffic["served"], "rejected": sum(traffic["rejected"].values())}

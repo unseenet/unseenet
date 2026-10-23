@@ -449,6 +449,15 @@ class Store:
                 out.update(self.blob_refs(mid))
         return out
 
+    def blob_stats(self) -> dict:
+        """For the monitor: stored blobs, their octets, refused ones, today's use."""
+        count, octets = self.db.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM blob_meta").fetchone()
+        refused = self.db.execute("SELECT COUNT(*) FROM refused_blobs").fetchone()[0]
+        day = time.strftime("%Y-%m-%d", time.gmtime())
+        today = self.db.execute("SELECT COALESCE(SUM(octets), 0) FROM blob_usage WHERE day=? AND kind='group'",
+                                (day,)).fetchone()[0]
+        return {"count": count, "bytes": octets, "refused": refused, "today": today}
+
     def refuse_blob(self, bid: str, reason: str = "", source: str = "operator") -> None:
         self.db.execute("INSERT OR IGNORE INTO refused_blobs VALUES (?, ?, ?, ?)",
                         (bid, int(time.time()), reason[:200], source))

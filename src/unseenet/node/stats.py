@@ -234,6 +234,9 @@ class Stats:
                       "disk_free": disk_free,
                       "busiest": sorted(counts.items(), key=lambda kv: -kv[1])[:10],
                       "removed_groups": store.tombstone_count()},
+            # UN-RFC 0027: None when the node carries no blobs
+            "blobs": None if cfg.blobs is None else {**store.blob_stats(),
+                                                     "fetching": len(node.blob_wait)},
         }
         snap["warnings"] = warnings(snap)
         return snap
