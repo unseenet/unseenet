@@ -43,14 +43,58 @@ def is_markdown(content_type: str | None) -> bool:
 
 
 @lru_cache(maxsize=1)
+def _emoji_data() -> dict:
+    return json.loads(resources.files("unseenet").joinpath("emoji.json").read_text("utf-8"))
+
+
 def emoji_table() -> dict[str, str]:
     """The shortcode table: gemoji 4.1.0's aliases (section 5.2)."""
-    data = json.loads(resources.files("unseenet").joinpath("emoji.json").read_text("utf-8"))
-    return data["emoji"]
+    return _emoji_data()["emoji"]
 
 
 def emoji(name: str) -> str | None:
     return emoji_table().get(name)
+
+
+# --- for pickers (#362): the same in every client --------------------------------
+def emoji_categories() -> list[dict]:
+    """gemoji's categories in its order, ``[{"name", "codes"}]``, one shortcode
+    per emoji (the first alias)."""
+    return _emoji_data()["categories"]
+
+
+def emoji_names() -> dict[str, str]:
+    """Search words for each category shortcode: description, tags, other aliases."""
+    return _emoji_data()["names"]
+
+
+def find_emoji(query: str, limit: int = 8) -> list[str]:
+    """Shortcodes for a search or a ``:ta`` being typed: those starting with it
+    first (shortest first), then those containing it, then those with a word of
+    the name starting with it. One per glyph, at most ``limit``."""
+    q = query.strip().strip(":").lower()
+    if not q or limit <= 0:
+        return []
+    table, names = emoji_table(), emoji_names()
+    starts, inside, named = [], [], []
+    for code in table:
+        if code.startswith(q):
+            starts.append(code)
+        elif q in code:
+            inside.append(code)
+        elif any(w.startswith(q) for w in names.get(code, "").split()):
+            named.append(code)
+    starts.sort(key=lambda c: (len(c), c))
+    seen: set[str] = set()
+    out: list[str] = []
+    for code in starts + inside + named:
+        if table[code] in seen:
+            continue
+        seen.add(table[code])
+        out.append(code)
+        if len(out) >= limit:
+            break
+    return out
 
 
 @lru_cache(maxsize=2)

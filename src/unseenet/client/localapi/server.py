@@ -131,6 +131,10 @@ async def about(request):
     return _json(_api(request).about())
 
 
+async def emoji(request):
+    return _json(_api(request).emoji())
+
+
 async def unlock(request):
     data = await _body(request)
     return _json(await _api(request).unlock(str(data.get("passphrase", ""))))
@@ -334,6 +338,7 @@ async def events(request):
 
 ROUTES = [
     ("GET", "/api/state", state), ("GET", "/api/about", about),
+    ("GET", "/api/emoji", emoji),
     ("POST", "/api/unlock", unlock), ("POST", "/api/setup", setup),
     ("GET", "/api/groups", groups), ("POST", "/api/groups", create),
     ("GET", "/api/groups/{gid}", group),

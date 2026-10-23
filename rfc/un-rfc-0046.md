@@ -263,6 +263,18 @@ portals (UN-RFC 0023 section 3.5) before it sends: a group with a portal
 answers `400` with the warning until the post carries
 `"publish_outside_tor": true`.
 
+`GET /api/emoji`, also while locked, is what a front end needs for an
+emoji picker and for completing `:ta` while typing (UN-RFC 0031 section
+5.2): `{"table": {"<shortcode>": "<glyph>", ...}, "categories": [{"name",
+"codes": [...]}, ...], "names": {"<shortcode>": "<search words>", ...}}`.
+`categories` lists each emoji once, by its first shortcode; `names` has
+its name, tags and other shortcodes, for searching. It does not change
+while the runtime runs, so a front end loads it once. A picker puts the
+`:shortcode:` in the text, not the glyph, so the text stays readable in
+every client. The order to suggest in is that of the core's
+`find_emoji()`: shortcodes that start with what was typed (shortest
+first), then those containing it, then by a word of the name.
+
 ## 4.5 Your Own Posts
 
 - `POST /api/groups/<id>/edit` `{"id": "<Message-ID>", "subject": "...", "body": "..."}`:

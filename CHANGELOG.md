@@ -27,6 +27,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `site@<fp>` are key-bound personal groups (UN-RFC 0029 section 2.1):
   nodes accept them only as channels with that view, and do not list
   them (#359). **Nodes must be updated** before clients create them.
+- Emoji for pickers, the same in every client (#362): `emoji.json` also
+  has gemoji's categories and names, `markup.emoji_categories()`,
+  `emoji_names()` and `find_emoji()` rank suggestions, and the local client
+  API serves them as `GET /api/emoji` (UN-RFC 0046 section 4.4).
+  `tools/emoji_data.py` makes the file from gemoji's database.
 
 ### Fixed
 
