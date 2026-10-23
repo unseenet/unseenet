@@ -455,7 +455,7 @@ class LocalAPI:
             await self.session.fetch_group(gid)
 
     def known_nodes(self) -> dict:
-        s = self._ready()
+        s = self._unlocked()            # also during setup: that is where a node is chosen
         return {"nodes": [{"address": n.address, "name": n.name, "description": n.description,
                            "operator": n.operator} for n in s.known_nodes()]}
 

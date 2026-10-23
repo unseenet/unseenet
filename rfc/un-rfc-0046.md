@@ -214,7 +214,9 @@ hierarchy the group is in, so you may block people there (section 4.6).
 - `GET /api/browse?pattern=<wildmat>`: `{"groups": [<GroupInfo dict>, ...]}`,
   what the node lists.
 - `GET /api/known-nodes`: `{"nodes": [{"address", "name", "description",
-  "operator"}, ...]}` (UN-RFC 0010), for choosing a node.
+  "operator"}, ...]}` (UN-RFC 0010), for choosing a node. It answers as
+  soon as the vault is unlocked, also while `setup` is true, since that is
+  where a new user chooses one.
 - `GET /api/group-ref?ref=<#name@fp or #name>`: `{"groups": [...]}`, what a
   `#group` reference in a post can mean, each with a `warning` for people
   where the name is not the hierarchy's (UN-RFC 0018).
