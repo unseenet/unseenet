@@ -49,6 +49,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `BLOBPOST` per connection, keeps them when the article is posted, and
   serves them with `BLOB`. Blobs are files in `blobs/` next to the
   database.
+- Blobs follow their article (UN-RFC 0027 section 6.3, #374): a blob node
+  that gets an article with blobs from a peer fetches them from that peer,
+  then from others carrying the group, before passing the article on, and
+  after 10 minutes passes it on without them. `BLOB` answers `436 try
+  later` meanwhile.
 
 ### Fixed
 

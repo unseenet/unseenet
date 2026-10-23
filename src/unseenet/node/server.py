@@ -47,6 +47,9 @@ class PeerConfig:
         return crypto.key_from_text(self.key) if self.key else None
 
 
+BLOB_WAIT_SECONDS = 600.0      # UN-RFC 0027 6.3: forward without the blobs after this
+
+
 @dataclass
 class NodeConfig:
     name: str = "unseenet"              # how this node introduces itself to peers
@@ -148,6 +151,9 @@ class Node:
         self.reconcile_wanted: set[str] = set()
         # UN-RFC 0025 section 3.4: each key's chain and how many segments are verified
         self._ripe_cache: dict[bytes, tuple[rp.Chain, int]] = {}
+        # UN-RFC 0027 section 6.3: articles from peers whose blobs we are fetching,
+        # Message-ID -> {"group", "source", "missing": {blob ID: octets}, "until"}
+        self.blob_wait: dict[str, dict] = {}
 
     def watch(self, pattern: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -344,6 +350,11 @@ class Node:
                 self.blobs.put(bid, staged.pop(bid)[0])
             if versions:
                 self._apply_edit(art, versions, held)
+            if self._wait_for_blobs(art, blobs, source, from_peer):
+                self._enqueue(art, source, not_before=time.time() + BLOB_WAIT_SECONDS)
+                self._notify_watchers(art)
+                log.info("accepted %s in %s; fetching its blobs", art.message_id, art.group)
+                return art
         self._enqueue(art, source)
         self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
@@ -594,6 +605,32 @@ class Node:
             raise ArticleError("blobs", f"{len(missing)} blob(s) neither stored nor staged")
         return [b for b, _ in blobs if b in staged and not self.blobs.has(b)]
 
+    def _wait_for_blobs(self, art: Article, blobs, source: str | None, from_peer: bool) -> bool:
+        """Section 6.3: an article from a peer whose blobs we carry but lack is not
+        passed on until we have fetched them, or at most BLOB_WAIT_SECONDS."""
+        if not blobs or not from_peer or not self.config.carries_blobs(art.group, bl.encrypted(art)):
+            return False
+        missing = {b: n for b, n in blobs if n <= self.config.max_blob and not self.blobs.has(b)}
+        if not missing:
+            return False
+        self.blob_wait[art.message_id] = {"group": art.group, "source": source, "missing": missing,
+                                          "until": time.time() + BLOB_WAIT_SECONDS}
+        return True
+
+    def fetching(self, bid: str) -> bool:
+        return any(bid in w["missing"] for w in self.blob_wait.values())
+
+    def blobs_done(self, message_id: str) -> None:
+        """The blobs came, or we gave up: pass the article on with the usual delay."""
+        w = self.blob_wait.pop(message_id, None)
+        if w is None:
+            return
+        manifest = self.store.manifest(w["group"])
+        lo, hi = (0.0, 0.0) if manifest is not None and manifest.low_latency else self.config.forward_delay
+        self.store.reschedule(message_id, lambda _peer: time.time() + random.uniform(lo, hi))
+        for event in self._listeners:
+            event.set()
+
     # --- pins (UN-RFC 0033): the first kind of kept articles (UN-RFC 0017, 2.1) ---
     def _accept_pin(self, art: Article, manifest: Manifest, raw: bytes, action: str,
                     target: str) -> None:
@@ -785,7 +822,8 @@ class Node:
             self.store.remember(art.message_id)
             raise ArticleError("permission", "article was cancelled")
 
-    def _enqueue(self, art: Article, source: str | None, force: bool = False) -> None:
+    def _enqueue(self, art: Article, source: str | None, force: bool = False,
+                 not_before: float | None = None) -> None:
         manifest = self.store.manifest(art.group)
         if not force and manifest is not None and manifest.local:
             return                       # local groups never leave this node (UN-RFC 0009, 4)
@@ -798,7 +836,7 @@ class Node:
             ripe = m.message_id if m is not None else None
         for peer in self.config.peers:
             if peer.name != source and wildmat(peer.groups, art.group):
-                at = time.time() + random.uniform(lo, hi)
+                at = not_before or time.time() + random.uniform(lo, hi)
                 if ripe:                       # first, so the peer can check the article
                     self.store.enqueue(peer.name, ripe, at - 0.001)
                 self.store.enqueue(peer.name, art.message_id, at)
@@ -1450,7 +1488,7 @@ class Session:
             return
         octets = self.node.blobs.get(args[0]) if self.node.config.blobs is not None else None
         if octets is None:
-            self.send("430 no such blob")
+            self.send("436 try later" if self.node.fetching(args[0]) else "430 no such blob")
             return
         self.send(f"226 {len(octets)} {args[0]}")
         self.writer.write(octets)
