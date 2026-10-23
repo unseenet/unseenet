@@ -22,6 +22,7 @@ from ..core.article import MAX_SIZE, Article, ArticleError, parse_date, validate
 from ..core.groups import message_kind, parse_supersedes
 from ..core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
                            is_key_bound, make_group_id, parse_key_update, split_group_id)
+from ..core import pins as pn
 from ..core import ripening as rp
 from ..core.store import Store
 from ..nntp import (MANIFESTS_ANSWER_BYTES, MANIFESTS_MAX, MAX_LINE, RECONCILE_MAX_BYTES,
@@ -296,7 +297,8 @@ class Node:
             if manifest.local and from_peer:
                 raise ArticleError("group", "local group: never accepted from peers")
             retention = min(self.config.retention_days, manifest.retention_days)
-            if parse_date(art["Date"]) < now - timedelta(days=retention):
+            if (parse_date(art["Date"]) < now - timedelta(days=retention)
+                    and not self._keep_old(art, manifest)):
                 raise ArticleError("date", "older than retention")
 
         group_pow = manifest.min_pow if manifest is not None and not is_manifest else 0
@@ -547,11 +549,59 @@ class Node:
                     # manifests, key updates, cancels: never cancelled (UN-RFC 0004, 7.1)
                     raise ArticleError("permission", "control articles cannot be cancelled")
                 self.store.delete(target)
-            else:
-                self.store.add_cancel(target, art["Author-Key"], art.group)
+            # remembered also when the target was held: a pin of it is then not in
+            # force (UN-RFC 0033 section 4.2, step 2)
+            self.store.add_cancel(target, art["Author-Key"], art.group)
             self.store.add(art, raw)
+        elif ctl[0] in (pn.PIN, pn.UNPIN) and len(ctl) == 2:
+            self._accept_pin(art, manifest, raw, ctl[0], ctl[1])
         else:
             raise ArticleError("syntax", f"unknown control {ctl[0]!r}")
+
+    # --- pins (UN-RFC 0033): the first kind of kept articles (UN-RFC 0017, 2.1) ---
+    def _accept_pin(self, art: Article, manifest: Manifest, raw: bytes, action: str,
+                    target: str) -> None:
+        """Section 3: valid when by the owner or a moderator, in a group that can
+        have pins, with a short note (none in closed groups), and - if we hold the
+        target - in its group and not of a control article. One that comes before
+        its target is kept as pending (UN-RFC 0017 section 2.1)."""
+        if not (target.startswith("<") and target.endswith(">")):
+            raise ArticleError("syntax", "a pin names a Message-ID")
+        if manifest.type == "inbox" or manifest.local:
+            raise ArticleError("permission", "no pins in inboxes or local groups")
+        author = art.author_key
+        if author != manifest.owner and author not in manifest.moderators:
+            raise ArticleError("permission", "only the owner or a moderator may pin")
+        note = art.body.strip()
+        if manifest.type == "closed" and note:
+            raise ArticleError("syntax", "a pin in a closed group has no note")
+        if len(note) > pn.MAX_NOTE:
+            raise ArticleError("syntax", f"a pin's note is at most {pn.MAX_NOTE} characters")
+        meta = self.store.get_meta(target)
+        if meta is not None:
+            if meta[0] != art.group:
+                raise ArticleError("permission", "a pin is in the group of its target")
+            if Article.from_bytes(self.store.get(target)).control:
+                raise ArticleError("permission", "control articles cannot be pinned")
+        self.store.add(art, raw)
+        self.store.add_marker(art, action, target)
+
+    def _keep_old(self, art: Article, manifest: Manifest) -> bool:
+        """An article older than the window that would be kept (UN-RFC 0017 section
+        2.1): a pin that would be in force, or a target a pin in force names."""
+        ctl = art.control or []
+        if ctl and ctl[0] == pn.PIN and len(ctl) == 2:
+            try:
+                me = pn.Marker(art.message_id, ctl[1], pn.PIN, art["Author-Key"],
+                               int(parse_date(art["Date"]).timestamp()))
+            except (KeyError, ValueError):
+                return False
+            return any(p.message_id == art.message_id
+                       for p in self.store.pins_in_force(art.group, manifest, [me]))
+        if ctl:
+            return False
+        return any(p.target == art.message_id
+                   for p in self.store.pins_in_force(art.group, manifest))
 
     # --- maintainers' blocks (UN-RFC 0018 sections 5.4 and 8.2) ---
     BLOCKS_TTL = 300.0

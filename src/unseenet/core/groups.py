@@ -277,6 +277,8 @@ class Manifest:
                 message_id=art.message_id, raw=data,
             )
             m.comments, m.comment_days = _comments(data)
+            from .pins import max_pins
+            max_pins(data)                                  # UN-RFC 0033 section 4.1
             if "expires" in data:
                 m.expires = parse_expires(data["expires"])
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:

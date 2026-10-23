@@ -32,6 +32,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `emoji_names()` and `find_emoji()` rank suggestions, and the local client
   API serves them as `GET /api/emoji` (UN-RFC 0046 section 4.4).
   `tools/emoji_data.py` makes the file from gemoji's database.
+- Nodes keep pinned posts (UN-RFC 0033) beyond the group's window, the
+  first kind of kept articles (UN-RFC 0017 section 2.1): `Control: pin`
+  and `unpin` by the owner or a moderator, the manifest field `max_pins`
+  (0-25, default 5), and a pin that arrives before its post. Kept articles
+  are not expired, are listed with the group's state, and are accepted
+  when older than the window, so a new node gets them by pulling (#361).
 
 ### Fixed
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from .reconcile import FULL, MOD, item_hash, item_key, item_value
 from . import crypto
 from .article import Article, parse_date
+from . import pins as pn
 from .groups import (KEY_BOUND_NAMES, MAX_LIFETIME, REMOVE_AFTER, Manifest, is_key_bound,
                      stored_expires)
 
@@ -81,6 +82,17 @@ CREATE TABLE IF NOT EXISTS epoch_articles (   -- key updates that define an epoc
     epoch      INTEGER NOT NULL,
     message_id TEXT PRIMARY KEY
 );
+
+CREATE TABLE IF NOT EXISTS markers (          -- pins and unpins (UN-RFC 0033), kept-article markers
+    message_id TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    target     TEXT NOT NULL,
+    action     TEXT NOT NULL,                   -- "pin" or "unpin"
+    author_key TEXT NOT NULL,
+    date       INTEGER NOT NULL                 -- the marker's Date, unix seconds
+);
+CREATE INDEX IF NOT EXISTS markers_group ON markers(group_id);
+CREATE INDEX IF NOT EXISTS markers_target ON markers(target);
 
 CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pulled from a peer
     peer       TEXT PRIMARY KEY,
@@ -232,14 +244,26 @@ class Store:
         deleted = 0
         for group_id, manifest in list(self.db.execute("SELECT group_id, manifest FROM groups")):
             days = min(default_days, json.loads(manifest).get("retention_days", default_days))
-            # the group's state - current manifest, live key updates - never expires
+            # the group's state - current manifest, live key updates, kept articles
+            # (UN-RFC 0017 section 2) - never expires
+            kept = self.kept_ids(group_id, window_days=days, now=now)
+            self.db.execute("CREATE TEMP TABLE IF NOT EXISTS keep_now (message_id TEXT PRIMARY KEY)")
+            self.db.execute("DELETE FROM keep_now")
+            self.db.executemany("INSERT OR IGNORE INTO keep_now VALUES (?)", [(k,) for k in kept])
             cur = self.db.execute(
                 "DELETE FROM articles WHERE group_id=? AND date < ? AND message_id NOT IN "
                 "(SELECT manifest_id FROM groups) AND message_id NOT IN "
                 "(SELECT message_id FROM epoch_articles WHERE group_id=? AND epoch >= "
-                " (SELECT MAX(epoch) - 1 FROM epoch_articles WHERE group_id=?))",
+                " (SELECT MAX(epoch) - 1 FROM epoch_articles WHERE group_id=?)) "
+                "AND message_id NOT IN (SELECT message_id FROM keep_now)",
                 (group_id, now - days * 86400, group_id, group_id))
             deleted += cur.rowcount
+            # markers of no use any more: their article is gone, or a pending one
+            # waited longer than the window for its target
+            self.db.execute(
+                "DELETE FROM markers WHERE group_id=? AND (message_id NOT IN "
+                "(SELECT message_id FROM articles) OR date < ?) AND message_id NOT IN "
+                "(SELECT message_id FROM keep_now)", (group_id, now - days * 86400))
         self.kb_sweep(now)
         self.remove_expired_key_bound(now)
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))
@@ -348,7 +372,64 @@ class Store:
             "SELECT e.message_id FROM epoch_articles e JOIN articles a USING (message_id) "
             "WHERE e.group_id=? AND e.epoch >= (SELECT MAX(epoch) - 1 FROM epoch_articles "
             "WHERE group_id=?) ORDER BY e.epoch", (group_id, group_id))]
+        out += [k for k in self.kept_ids(group_id) if self.has(k) and k not in out]
         return out
+
+    # --- kept articles (UN-RFC 0017 section 2.1): pins (UN-RFC 0033) ---
+    def has(self, message_id: str) -> bool:
+        return self.db.execute("SELECT 1 FROM articles WHERE message_id=?",
+                               (message_id,)).fetchone() is not None
+
+    def add_marker(self, art: Article, action: str, target: str) -> None:
+        self.db.execute("INSERT OR IGNORE INTO markers VALUES (?, ?, ?, ?, ?, ?)",
+                        (art.message_id, art.group, target, action, art["Author-Key"],
+                         int(parse_date(art["Date"]).timestamp())))
+        self.db.commit()
+
+    def markers(self, group_id: str) -> list[pn.Marker]:
+        return [pn.Marker(*row) for row in self.db.execute(
+            "SELECT message_id, target, action, author_key, date FROM markers WHERE group_id=?",
+            (group_id,))]
+
+    def withdrawn(self, group_id: str) -> set[str]:
+        """Targets withdrawn by a valid cancel (UN-RFC 0033 section 4.2, step 2)."""
+        return {r[0] for r in self.db.execute("SELECT target FROM cancels WHERE group_id=?",
+                                              (group_id,))}
+
+    def pins_in_force(self, group_id: str, manifest: Manifest | None = None,
+                      extra: list[pn.Marker] = ()) -> list[pn.Marker]:
+        """The pins in force (UN-RFC 0033 section 4.2), newest first, also those whose
+        target has not arrived yet (pending). ``extra``: markers not stored yet."""
+        m = manifest or self.manifest(group_id)
+        if m is None or m.type in ("inbox",) or m.local:
+            return []
+        try:
+            limit = pn.max_pins(m.raw)
+        except ValueError:
+            return []
+        return pn.in_force([*self.markers(group_id), *extra], owner=crypto.key_to_text(m.owner),
+                           moderators=[crypto.key_to_text(k) for k in m.moderators],
+                           limit=limit, withdrawn=self.withdrawn(group_id))
+
+    def kept_ids(self, group_id: str, *, window_days: int | None = None,
+                 now: float | None = None) -> list[str]:
+        """The group's kept articles in listing order (UN-RFC 0017 sections 2.1, 3):
+        pins in force, the latest unpin of a target while inside the window, then
+        the pinned targets. At most 256 targets (section 2.2)."""
+        if not self.db.execute("SELECT 1 FROM markers WHERE group_id=? LIMIT 1",
+                               (group_id,)).fetchone():
+            return []                    # most groups: nothing kept, nothing to work out
+        m = self.manifest(group_id)
+        if m is None:
+            return []
+        pins = self.pins_in_force(group_id, m)
+        days = m.retention_days if window_days is None else window_days
+        since = (now or time.time()) - days * 86400
+        unpins = sorted((u for u in pn.latest(self.markers(group_id)).values()
+                         if u.action == pn.UNPIN and u.date >= since),
+                        key=lambda u: u.order, reverse=True)
+        targets = [p.target for p in pins][:pn.KEPT_PER_GROUP]
+        return [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
 
     def removals_since(self, since: int) -> list[tuple[str, str]]:
         """(rmgroup Message-ID, group) for groups their owner removed since ``since``."""
