@@ -85,6 +85,8 @@ class ProfilesMixin:
         return self.manifest_data(gid).get("profile") or None
 
     def has_published_profile(self) -> bool:
+        """True when this client has the manifest of your profile group, i.e. your
+        profile has been published (UN-RFC 0022)."""
         return bool(self.manifest_data(prof.profile_id(self.identity().public_key)))
 
     async def _publish_key_bound(self, group_id: str, make) -> dict:
@@ -142,4 +144,5 @@ class ProfilesMixin:
         self.save()
 
     def profile_hidden(self, key_text: str) -> bool:
+        """True when you hid this key's profile for yourself (see ``hide_profile``)."""
         return key_text in self.data.get("hidden_profiles", [])

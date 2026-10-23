@@ -57,6 +57,8 @@ class GroupsMixin:
     # groups
     # ------------------------------------------------------------------
     def group_entry(self, group_id: str) -> dict:
+        """The vault's entry for a group (created empty if missing): type, ownership,
+        keys of closed groups, the node it is read on, and what the client remembers."""
         return self.data["groups"].setdefault(group_id, {"type": None, "owner": False, "keys": {}})
 
     async def list_groups(self, pattern: str = "*", node: str | None = None) -> list[GroupInfo]:
@@ -235,6 +237,8 @@ class GroupsMixin:
 
     # --- moderation (UN-RFC 0004 section 5, UN-RFC 0009 section 3) ---
     def moderates(self, group_id: str) -> bool:
+        """True when you own or moderate the group, by the manifest or because the vault
+        says you own it - the client's view, for showing moderation tools."""
         me = self.identity().key_text
         data = self.manifest_data(group_id)
         return bool(self.data["groups"].get(group_id, {}).get("owner")) \
@@ -273,6 +277,8 @@ class GroupsMixin:
         return art.message_id
 
     def was_submitted(self, group_id: str, message_id: str) -> bool:
+        """True when you sent this post to the group's moderators and it waits for them
+        (UN-RFC 0009 section 3)."""
         return message_id in self.group_entry(group_id).get("submitted", [])
 
     def submissions(self) -> list[tuple["Message", Article]]:
@@ -319,6 +325,8 @@ class GroupsMixin:
         self._moderation_done(msg)
 
     async def reject_submission(self, msg: "Message", reason: str = "") -> None:
+        """Moderator: turn a submission down (UN-RFC 0009 section 3). With a ``reason``,
+        the author gets it as a private post, if they can be answered."""
         if reason.strip() and (msg.reply_inbox or msg.sender_key):
             target = self.reply_target(msg)
             if target:
@@ -354,6 +362,8 @@ class GroupsMixin:
         return portals.warning(name, found)
 
     def accept_portals(self, group_id: str) -> None:
+        """Accept the group's current portals (UN-RFC 0023 section 3.5): the client stops
+        warning that posts here also reach other networks, until the portals change."""
         from ...core import portals
         self.group_entry(group_id)["portals_ok"] = portals.fingerprint(self.group_portals(group_id))
         self.save()
@@ -429,6 +439,7 @@ class GroupsMixin:
                 for b in self.manifest_data(group_id).get("banned", []) if isinstance(b, dict)]
 
     def is_banned(self, group_id: str, key_text: str | None) -> bool:
+        """True when the group's current manifest bans this key (UN-RFC 0004 section 5.1)."""
         return bool(key_text) and any(k == key_text for k, _ in self.banned(group_id))
 
     async def ban(self, group_id: str, key_text: str, reason: str = "") -> None:
@@ -447,6 +458,7 @@ class GroupsMixin:
         await self.update_group(group_id, banned=current + [entry])
 
     async def unban(self, group_id: str, key_text: str) -> None:
+        """Owner: lift a ban (a new manifest without that key)."""
         current = [b for b in self.manifest_data(group_id).get("banned", [])
                    if isinstance(b, dict) and b.get("key") != key_text]
         await self.update_group(group_id, banned=current)
@@ -459,6 +471,8 @@ class GroupsMixin:
         return self.data.setdefault("rules_seen", {}).get(group_id, 0) < int(data.get("serial", 1))
 
     def mark_rules_seen(self, group_id: str) -> None:
+        """Note that the user has seen the group's rules in their current version, so the
+        client stops showing them until the owner changes them."""
         self.data.setdefault("rules_seen", {})[group_id] = int(self.manifest_data(group_id).get("serial", 1))
         self.save()
 
@@ -487,6 +501,8 @@ class GroupsMixin:
         self.emit(ev.GroupsChanged())
 
     async def invite(self, group_id: str, member_key: str) -> None:
+        """Owner of a closed group: give ``member_key`` the group's current key (a key
+        update granting access, UN-RFC 0004 section 6) and note them as a member."""
         entry = self.data["groups"].get(group_id)
         if not entry or not entry.get("owner") or entry.get("type") != "closed":
             raise SessionError("you can only invite to closed groups you own")
@@ -606,6 +622,8 @@ class GroupsMixin:
         return (await self.fetch_manifests([group_id], node)).get(group_id)
 
     def moderates_or_owns(self, group_id: str) -> bool:
+        """True when the group's current manifest names you as owner or moderator: who
+        may withdraw others' posts (UN-RFC 0004 section 7)."""
         me = self.identity().key_text
         manifest = self.manifest_data(group_id)
         return manifest.get("owner") == me or me in manifest.get("moderators", [])

@@ -30,15 +30,19 @@ class PeopleMixin:
         self.save()
 
     def remove_contact(self, key_text: str) -> None:
+        """Remove a key from your contacts."""
         self.data["contacts"].pop(key_text, None)
         self.save()
 
     def contact_name(self, key_text: str | None) -> str | None:
+        """The name the user gave this key in their contacts, or None."""
         entry = self.data["contacts"].get(key_text or "")
         return entry["name"] if entry else None
 
     # --- ignoring people: the reader's own killfile, never sent anywhere (#72) ---
     def ignore(self, key_text: str, label: str = "") -> None:
+        """Ignore a key: its posts are hidden from you everywhere. Only this vault knows;
+        nothing is sent (#72). ``label`` is how the list shows it."""
         crypto.key_from_text(key_text)
         if key_text == self.identity().key_text:
             raise SessionError("that is your own key")
@@ -48,10 +52,12 @@ class PeopleMixin:
         self.save()
 
     def unignore(self, key_text: str) -> None:
+        """Stop ignoring a key."""
         self.data["ignored"].pop(key_text, None)
         self.save()
 
     def is_ignored(self, key_text: str | None) -> bool:
+        """True when you ignore this key (see ``ignore``)."""
         return bool(key_text) and key_text in self.data["ignored"]
 
     def ignored(self) -> list[tuple[str, str]]:
@@ -66,6 +72,8 @@ class PeopleMixin:
         del mine[:-2000]
 
     def my_message_ids(self) -> set[str]:
+        """The Message-IDs of posts by any identity in this vault, for finding replies
+        to you (#109)."""
         keys = {self.identity(n).key_text for n in self.data["identities"]}
         ids = set(self.data.get("mine", []))
         for msgs in self.cache.values():
@@ -117,6 +125,8 @@ class PeopleMixin:
                       reverse=True)
 
     def for_you_count(self, group_id: str) -> int:
+        """How many posts in the group are for you - replies to you and mentions - and
+        not read yet (the total of ``for_you_counts``)."""
         return self.for_you_counts(group_id).total
 
     def for_you_counts(self, group_id: str | None = None) -> "ForYouCount":
@@ -145,6 +155,8 @@ class PeopleMixin:
         return {"send": True, "receive": True, **self.data.get("mention_notices", {})}
 
     def set_notice_settings(self, send: bool | None = None, receive: bool | None = None) -> None:
+        """Whether you send mention notices, and whether you take them (UN-RFC 0032).
+        ``None`` leaves a setting as it is."""
         st = self.data.setdefault("mention_notices", {})
         if send is not None:
             st["send"] = bool(send)
@@ -346,6 +358,8 @@ class PeopleMixin:
 
     @staticmethod
     def is_notice(m: "Message") -> bool:
+        """True when a private post is a mention notice (UN-RFC 0032): it names the post
+        and group that mention you."""
         return bool(m.private and m.mention_of and m.mention_group)
 
     def _notice_states(self) -> dict:
@@ -486,6 +500,8 @@ class PeopleMixin:
         return [(blocked[k][0], blocked[k][1], n) for k, n in count.items()]
 
     def set_show_blocked(self, on: bool) -> None:
+        """Whether posts by keys a hierarchy's maintainers block are shown anyway
+        (UN-RFC 0018 section 8.2)."""
         self.data["show_blocked"] = bool(on)
         self.save()
 
@@ -502,6 +518,7 @@ class PeopleMixin:
         return bool((hit.get("profile") or {}).get("bot") is True)
 
     def hide_bots(self) -> bool:
+        """True when the user chose to hide posts by bots (UN-RFC 0022 section 4)."""
         return bool(self.data.get("hide_bots"))
 
     def set_hide_bots(self, on: bool) -> None:
