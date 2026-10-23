@@ -15,6 +15,7 @@ reads and posts. Clients use the one class; its code is split by area:
     people.py     contacts, ignoring, for you and mentions, notices, bots, reporting
     reading.py    following, fetching, threads and views, the offline cache, read marks
     posting.py    posting, postage, editing and withdrawing
+    attachments.py  files on posts: preparing and checking them (UN-RFC 0027)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -343,9 +344,10 @@ from .profiles import ProfilesMixin  # noqa: E402
 from .people import PeopleMixin  # noqa: E402
 from .reading import ReadingMixin  # noqa: E402
 from .posting import PostingMixin  # noqa: E402
+from .attachments import AttachmentsMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

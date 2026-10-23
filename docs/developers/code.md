@@ -67,6 +67,7 @@ A new table goes in the schema in `__init__.py`, its code in the file of its are
 | `threads.py`, `grouptree.py`, `groupfilter.py` | laying out a group, the group tree, search - the same in every client |
 | `naming.py` | names of groups and identities in the client (UN-RFC 0018, 0019) |
 | `headless.py` | a session for a service with only a key |
+| `media.py` | what a file is from its content, and pictures saved again without their metadata |
 | `localapi/` | the local client API (UN-RFC 0046) - see below and [its page](localapi.md) |
 | `tui.py`, `richtext.py` | the terminal client |
 
@@ -85,6 +86,7 @@ A new table goes in the schema in `__init__.py`, its code in the file of its are
 | `people.py` | contacts, ignoring, for you and mentions, notices, bots, reporting |
 | `reading.py` | following, fetching, threads and views, the offline cache, read marks |
 | `posting.py` | posting, postage, editing and withdrawing |
+| `attachments.py` | files on posts: preparing and checking them (UN-RFC 0027) |
 
 A new function goes in the file whose docstring says it belongs there; a new
 area gets a file of its own, added to `Session` in `__init__.py`. Every public

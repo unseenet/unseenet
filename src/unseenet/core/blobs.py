@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from .article import Article, ArticleError
-from .encoding import DS, H, b32, b64decode
+from .encoding import DS, H, b32, b64, b64decode
 
 PREFIX = "blob1:"
 MAX_BLOB = 4 * 1024 * 1024            # section 3.2
@@ -161,13 +161,36 @@ def check_article(art: Article, manifest_data: dict | None) -> list[tuple[str, i
     return blobs
 
 
+def attachment_headers(files) -> list[tuple[str, str]]:
+    """The ``Blobs`` and ``Attachment-<n>`` headers (sections 4.1-4.3) for a plain
+    article's files, given as ``(name, media type, octets)``; the name is sent as
+    base64 of its first 128 octets."""
+    files = list(files)
+    if not files:
+        return []
+    if len(files) > MAX_PER_ARTICLE:
+        raise ValueError(f"at most {MAX_PER_ARTICLE} files on a post")
+    if sum(len(d) for _, _, d in files) > MAX_TOTAL:
+        raise ValueError(f"at most {MAX_TOTAL // (1024 * 1024)} MiB of files on a post")
+    headers = [("Blobs", " ".join(f"{blob_id(d)}={len(d)}" for _, _, d in files))]
+    for i, (name, media_type, data) in enumerate(files, 1):
+        headers.append((f"Attachment-{i}", f"{blob_id(data)}; type={media_type}; size={len(data)}; "
+                                           f"name={b64(name.encode()[:128])}"))
+    return headers
+
+
+def extra_bits_for(total: int) -> int:
+    """Section 4.5 for ``total`` octets of blobs: one bit per doubling above 64 KiB."""
+    return 0 if total <= FREE_TOTAL else math.ceil(math.log2(total / FREE_TOTAL))
+
+
 def extra_bits(art: Article) -> int:
     """Section 4.5: one more bit of postage per doubling above 64 KiB."""
     try:
         total = sum(n for _, n in parse_blobs(art))
     except ArticleError:
         return 0
-    return 0 if total <= FREE_TOTAL else math.ceil(math.log2(total / FREE_TOTAL))
+    return extra_bits_for(total)
 
 
 class BlobStore:

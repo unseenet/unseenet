@@ -17,6 +17,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   for the run without changing the vault's default. `Session` gains
   `withdraw()`, `withdraw_all()` and the manifest fields of 0.5.0 in
   `create_group()`/`update_group()`.
+- Writing from the command line goes through `Session` (#387, part 2):
+  `unseenet post` with `--reply-to` (replies, and comments in channels),
+  `--kind chat`, `--edit`, `--format`, and `--attach` for real: up to four
+  files, checked against the group, sent as blobs with the post. Pictures
+  are saved again without their metadata first - GPS, time, camera, owner,
+  comments, colour profile - turned the way they were shown, animations
+  kept (`client.media`, the same for every client). `Session.post(files=)`
+  and `prepare_files()`; Pillow is a new dependency. A node that carries no
+  files, or a group that takes none, is said plainly.
 - Background ripening can be paused and resumed: `ClientRuntime.pause_ripening()`
   and `resume_ripening()`, and in the local client API `POST /api/ripening`,
   `"paused"` in the state's `ripening` and a `ripening-paused` event
