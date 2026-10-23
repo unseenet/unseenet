@@ -53,7 +53,7 @@ Unseenet brings that model back, with what we have learned since:
 
 Posts are signed, groups are owned by a key, spam costs a little
 proof-of-work, and the wire protocol is a strict profile of NNTP. How it
-all fits together: [Concepts](https://unseenet.org/concepts/).
+all fits together: [How it works](https://unseenet.org/guide/).
 
 ## The specification
 

@@ -45,10 +45,18 @@ also block an identity across the hierarchy, on the nodes that choose to
 honour such blocks. A maintainer cannot post in, change or remove anyone
 else's group.
 
-Some top-level names are held back: the Usenet "Big 8" (`comp`, `sci`,
-`rec` and so on) for communities that want to revive them, and names
-such as `usenet.*`, `matrix.*` and `nostr.*` for groups that come
-through gateways from other networks.
+| Hierarchy | Who decides the names |
+|-----------|-----------------------|
+| `unseenet` | the project |
+| `alt`, `test` | nobody: anyone can create anything |
+| `dk`, `de`, `se`, ... (country codes) | nobody, until a community there asks for a maintainer |
+| `comp`, `sci`, `rec`, ... (the Usenet "Big 8") | held back for communities that want to revive them |
+| `usenet`, `matrix`, `nostr`, ... | held back for groups that come through gateways from other networks |
+| anything else | nobody, until someone asks for it |
+
+A new hierarchy is asked for with the
+[hierarchy request form](https://github.com/unseenet/unseenet/issues/new?template=hierarchy-request.yml),
+or by writing to the project's inbox on Unseenet.
 
 ## Who may write: the type
 
@@ -127,6 +135,22 @@ The owner hands the secret to new members sealed to their own keys.
 When someone is removed, the owner starts a new **epoch** with a new
 secret. The removed member keeps what they already had - no system can
 take back what someone has read - but cannot read anything new.
+
+## Inboxes
+
+An inbox is the opposite of a closed group: anyone can write, only the
+owner can read. Every identity has a personal one, `inbox@<fingerprint>`,
+so knowing someone's key is enough to write to them privately. Each
+message is sealed to the owner's key, and the outside of it is signed
+with a key used only once, so nodes see neither what it says nor who
+sent it. Inside, the sender signs with their real key, so the owner knows
+who wrote.
+
+Inboxes are also how you reach a node's operator, and how posts reach the
+moderators of a moderated group.
+
+A group can also be **local**: it then exists on one node only and is
+never passed on - used for things like a node operator's contact inbox.
 
 ## Rules, pins and how long things last
 

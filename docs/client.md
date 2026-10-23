@@ -304,7 +304,7 @@ that slower, and withdraw posts you do not want (see below).
 ## Blocked in a hierarchy
 
 A hierarchy can have a **maintainer** - for example an organisation that
-runs `dk.*` ([concepts](concepts.md#hierarchies)). A maintainer can block
+runs `dk.*` ([how it works](guide/groups.md#names-and-hierarchies)). A maintainer can block
 someone in its whole hierarchy, with a public reason - say a person who
 posts threats in group after group. A maintainer it has given a part of
 the hierarchy to, such as `dk.snak.*`, can block within that part.

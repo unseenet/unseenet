@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install mkdocs-material "mkdocstrings[python]" ruff
+      - run: pip install mkdocs-material "mkdocstrings[python]" mkdocs-redirects ruff
       - run: tools/build_docs.sh
         env:
           GITHUB_TOKEN: ${{ github.token }}   # the front page asks for the newest releases

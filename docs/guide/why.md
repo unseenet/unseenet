@@ -132,8 +132,17 @@ articles as threads, so nothing is lost - only the layout.
 
 ## What "nobody controls it" means, precisely
 
-"Nobody controls it" is easy to say and easy to oversell. Here is exactly
-who can do what:
+"Nobody controls it" is easy to say and easy to oversell. Control is split
+between several parties, so that nobody rules alone:
+
+| Party | Decides |
+|-------|---------|
+| **Group owner** | the group's type, who may post, who may read a closed group, the moderators, the rules |
+| **Node operator** | which groups and peers their node carries, how long it keeps posts, how much postage it asks |
+| **Hierarchy maintainer** | which group a name in its hierarchy means, and blocks of identities across it |
+| **Reader** | what they see: which groups and feeds they follow |
+
+In detail:
 
 - **The author** can withdraw or edit their own post. Withdrawing is best
   effort: nodes delete it and stop passing it on, but people who already

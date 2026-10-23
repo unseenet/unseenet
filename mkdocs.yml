@@ -39,6 +39,10 @@ hooks:
 
 plugins:
   - search
+  # Old addresses keep working after pages move.
+  - redirects:
+      redirect_maps:
+        concepts.md: guide/index.md
   # The developers' reference is generated from the docstrings (docs/developers/),
   # read from the source without importing it.
   - mkdocstrings:
@@ -98,16 +102,14 @@ nav:
       - Updating: updating.md
       - Getting help: help.md
   - How it works:
-      - Concepts: concepts.md
+      - Unseenet on one page: guide/index.md
+      - Why it matters: guide/why.md
+      - A post's journey: guide/journey.md
+      - Identity: guide/identity.md
+      - Groups: guide/groups.md
+      - The node: guide/node.md
+      - The clients: guide/clients.md
       - Tor and Tails: tor.md
-      - The guide:
-          - About the guide: guide/index.md
-          - Why it matters: guide/why.md
-          - A post's journey: guide/journey.md
-          - Identity: guide/identity.md
-          - Groups: guide/groups.md
-          - The node: guide/node.md
-          - The clients: guide/clients.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
       - Gateways to other networks: gateways.md

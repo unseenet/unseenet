@@ -258,7 +258,7 @@ Pick what you want to do. Each path lists the pages in the order to read them.
   <h3 class="un-path__title">Understand how it works</h3>
   <p class="un-path__lede">What the network promises, and what it does not.</p>
   <ol class="un-path__steps">
-    <li><a href="concepts/">Concepts</a>: nodes, identities, names, groups, postage</li>
+    <li><a href="guide/">How it works</a>: Unseenet on one page, then chapter by chapter</li>
     <li><a href="tor/">Tor and Tails</a></li>
     <li><a href="project/keys/">The project's keys</a> and <a href="project/nodes/">nodes</a></li>
     <li><a href="spec/un-rfc-0001/">UN-RFC 0001: Architecture</a></li>
