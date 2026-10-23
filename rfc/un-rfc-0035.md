@@ -74,7 +74,7 @@ A site's manifest MAY contain:
 
 | Field       | Type    | Default   | Meaning                                       |
 |-------------|---------|-----------|-----------------------------------------------|
-| `max_pages` | integer | `32`      | How many pages may be in force (1-128)        |
+| `max_pages` | integer | `32`      | How many pages may be in force (1-100)        |
 | `home`      | string  | `"index"` | The path of the home page (section 4.1)       |
 
 A value outside these ranges makes the manifest invalid (UN-RFC 0004
@@ -199,7 +199,7 @@ targets themselves.
   removal is inside the group's window.
 - **How many:** `max_pages` (section 3) current versions, and one
   previous version each: the limit of this kind in UN-RFC 0017 section
-  2.2 is twice `max_pages`, at most 256.
+  2.2 is twice `max_pages`, at most 200, which leaves room for pins.
 - **Order:** after the pins of UN-RFC 0033, the current versions of
   pages by ascending path.
 
@@ -458,8 +458,8 @@ capsules, need a document of their own.
 - **Scale.** A personal site is one more key-bound group per identity,
   but it exists only when its owner asks for it (section 7.2), so it
   does not grow with the number of identities as profiles do. The upper
-  bound per identity is one site of at most 128 pages of 64 KiB, each
-  with one previous version (16 MiB of text), and 8 MiB of blobs
+  bound per identity is one site of at most 100 pages of 64 KiB, each
+  with one previous version (12.5 MiB of text), and 8 MiB of blobs
   (sections 3, 4.2 and 6.1, UN-RFC 0017 section 2.2); with the default
   `max_pages` of 32 the text is at most 4 MiB. Older versions expire
   (section 6.1), so editing does not make a site grow. A node
