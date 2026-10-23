@@ -291,7 +291,8 @@ on the linked page - a bio, a pinned post, a web page:
 unseenet:<fingerprint of the identity's key>
 ```
 
-for example `unseenet:ph5fc5hop5232qsz`. The profile, signed by the key,
+for example `unseenet:ph5fc5hop5232qsz`: the identity's address
+(UN-RFC 0031 section 3.4.1). The profile, signed by the key,
 points at the page, and the page points back at the key; together they
 show that one person controls both. No signature is needed on the page,
 which keeps the string short enough for bios with tight limits.
