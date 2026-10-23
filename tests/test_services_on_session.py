@@ -134,6 +134,33 @@ async def test_stopping_ends_a_segment_at_once(tmp_path):
     rp.scale_for_tests(16)
 
 
+async def test_pausing_and_resuming_the_background_ripening(tmp_path, monkeypatch):
+    """#337: pause stops it and waits for it; resume goes on from where the key is.
+    Quick pause/resume in a row must not let an old run remove the new one's file."""
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    ident = crypto.Identity.generate()
+    s = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
+    s.add_node(addr)
+    rt = ClientRuntime(s, ripen_to=2)
+    await rt.pause_ripening()                       # before the inbox is ready: nothing starts
+    rt._background_started = True
+    rt._start_ripening()
+    assert rt.ripening_paused and rt._ripen_task is None
+    await rt.resume_ripening()
+    assert not rt.ripening_paused and rt._ripen_task is not None
+    for _ in range(3):
+        await asyncio.sleep(0.05)
+        await rt.pause_ripening()
+        assert rt._ripen_task is None and rt._run_file is None
+        await rt.resume_ripening()
+    await asyncio.wait_for(rt._ripen_task, 60)
+    assert s.ripening().level == 2 and s.published_level() == 2
+    await rt.stop()
+    await s.close()
+    server.close()
+
+
 async def test_the_ripen_command(tmp_path, monkeypatch, capsys):
     from unseenet.cli import ripen_command
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
