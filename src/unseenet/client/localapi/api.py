@@ -275,6 +275,12 @@ class LocalAPI:
     def about(self) -> dict:
         return about_text.as_dict(__version__)
 
+    @staticmethod
+    def emoji() -> dict:
+        """For a picker (section 4.4, #362): static, so a front end loads it once."""
+        return {"table": markup.emoji_table(), "categories": markup.emoji_categories(),
+                "names": markup.emoji_names()}
+
     # --- groups (section 4.3) --------------------------------------------------
     def groups(self) -> dict:
         s = self._ready()
