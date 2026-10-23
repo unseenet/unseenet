@@ -16,6 +16,8 @@ from .. import session as _s   # names tests patch on the module, read at call t
 
 class ReadingMixin:
     def subscribe(self, group_id: str, on: bool = True, node: str | None = None) -> None:
+        """Follow a group (or stop, ``on=False``). It is read on ``node`` if given, else on
+        the default node. Emits ``GroupsChanged`` when the list changed."""
         split_group_id(group_id)
         subs = self.data["subscribed"]
         if on and node:
@@ -274,6 +276,8 @@ class ReadingMixin:
         return loaded
 
     def save_offline(self) -> None:
+        """Write the offline cache - the newest articles of each group, encrypted with
+        the vault's key - so the client can show them before it is connected."""
         groups = {}
         for gid, raws in self._raw.items():
             keep = sorted(raws)[-MAX_CACHED_PER_GROUP:]
@@ -367,12 +371,16 @@ class ReadingMixin:
     # read marks
     # ------------------------------------------------------------------
     def is_read(self, msg: Message) -> bool:
+        """True when you have read this post, or an earlier version of it - an edit of a
+        read post stays read (UN-RFC 0042)."""
         marks = self.data["read"].get(msg.group, [])
         # an edit of a post you read stays read (UN-RFC 0042): seeing it changed is
         # what "(edited)" is for, not a new post
         return msg.message_id in marks or any(v in marks for v in msg.versions)
 
     def mark_read(self, msg: Message, save: bool = True) -> None:
+        """Mark a post read. Each group keeps the newest marks only (``MAX_READ_MARKS``);
+        ``save=False`` when marking many at once and saving after."""
         marks = self.data["read"].setdefault(msg.group, [])
         if msg.message_id not in marks:
             marks.append(msg.message_id)
@@ -381,5 +389,7 @@ class ReadingMixin:
                 self.save()
 
     def unread_count(self, group_id: str) -> int:
+        """How many posts in the group you have not read, among those shown (not ignored
+        or blocked), from what this client has fetched."""
         return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
                    if not self.is_read(m))

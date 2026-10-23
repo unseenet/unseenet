@@ -57,6 +57,8 @@ class BaseMixin:
     # ------------------------------------------------------------------
     @property
     def data(self) -> dict:
+        """The vault's contents (a dict): identities, nodes, groups, settings. Change it
+        and call ``save()``; clients should prefer the functions that do that for them."""
         return self.vault.data
 
     @classmethod
@@ -68,6 +70,7 @@ class BaseMixin:
         return cls(KeyStore(identity, state_path, name, display), status=status)
 
     def save(self) -> None:
+        """Write the vault to disk (encrypted, UN-RFC 0007)."""
         self.vault.save()
 
     def change_passphrase(self, old: str, new: str) -> None:
@@ -78,6 +81,7 @@ class BaseMixin:
         self.vault.change_passphrase(old, new)
 
     def has_identity(self) -> bool:
+        """True when the vault has at least one identity."""
         return bool(self.data["identities"])
 
     # --- events (unseenet #139) ---
@@ -92,6 +96,8 @@ class BaseMixin:
         return off
 
     def emit(self, event: ev.Event) -> None:
+        """Tell every listener (``on``) about an event (``client.events``). A listener
+        that raises is logged and skipped, so a front end's bug cannot stop the session."""
         for callback in list(self._listeners):
             try:
                 callback(event)
@@ -129,6 +135,8 @@ class BaseMixin:
         return None
 
     def default_identity_name(self) -> str:
+        """The name of the identity in use: the one ``act_as`` chose for this run, else
+        the vault's default, else the first. ``SessionError`` if there is none yet."""
         ids = self.data["identities"]
         if not ids:
             raise SessionError("no identity yet")
@@ -143,6 +151,8 @@ class BaseMixin:
         self._acting_as = name
 
     def identity(self, name: str | None = None) -> crypto.Identity:
+        """An identity's key pair (``crypto.Identity``), by name; by default the one in
+        use (``default_identity_name``)."""
         entry = self.data["identities"][name or self.default_identity_name()]
         return crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
 
@@ -152,14 +162,19 @@ class BaseMixin:
                      for e in self.data["identities"].values())
 
     def display_name(self, name: str | None = None) -> str:
+        """The display name (``From``) of an identity, by default the one in use."""
         return self.data["identities"][name or self.default_identity_name()]["display"]
 
     def signature_template(self, name: str | None = None) -> str:
         # no "signature" yet: the default; one set to "" by the user: none
+        """An identity's signature template: the default until the user sets one, and
+        empty when they chose none."""
         return self.data["identities"][name or self.default_identity_name()].get(
             "signature", DEFAULT_SIGNATURE)
 
     def set_signature(self, template: str, name: str | None = None) -> None:
+        """Set an identity's signature template (at most ``MAX_SIG_LINES`` lines;
+        ``{name}`` and ``{key}`` are filled in). An empty template means none."""
         lines = template.strip("\n").split("\n") if template.strip() else []
         if len(lines) > MAX_SIG_LINES:
             raise SessionError(f"a signature has at most {MAX_SIG_LINES} lines")
@@ -178,6 +193,8 @@ class BaseMixin:
         return template
 
     def new_identity(self, name: str, display: str | None = None) -> crypto.Identity:
+        """Make a new identity, with ``display`` as its name in ``From`` (default: its
+        name) and the default signature. The first one becomes the vault's default."""
         ident = crypto.Identity.generate()
         self.data["identities"][name] = {"seed": ident.seed.hex(), "display": display or name,
                                          "signature": DEFAULT_SIGNATURE}
@@ -191,5 +208,6 @@ class BaseMixin:
         return PLAIN_TYPE if self.data.get("plain_text") else MARKDOWN_TYPE
 
     def set_markdown(self, on: bool) -> None:
+        """Whether you write in Markdown (UN-RFC 0031) or plain text."""
         self.data["plain_text"] = not on
         self.save()

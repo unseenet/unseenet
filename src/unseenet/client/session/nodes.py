@@ -22,6 +22,9 @@ class NodesMixin:
     # groups and your inbox go to the default node, the first in the list.
     # ------------------------------------------------------------------
     def add_node(self, address: str, default: bool = False) -> None:
+        """Add a node address (``xyz.onion`` or ``host:port``) to the vault. ``default``
+        puts it first, so new groups and your inbox go there; an address already known
+        only moves. A node added on purpose is tried at once, whatever its backoff."""
         address = address.strip()
         if not address:
             raise SessionError("no address given")
@@ -58,6 +61,7 @@ class NodesMixin:
 
     @property
     def nodes(self) -> list[str]:
+        """The vault's node addresses, the default first."""
         return list(self.data["nodes"])
 
     @property
@@ -352,6 +356,8 @@ class NodesMixin:
     # Tor bridges, for networks that block Tor
     # ------------------------------------------------------------------
     def bridge_setting(self) -> dict:
+        """The Tor bridge setting as stored: ``{"mode": "off"}``, or the mode and the
+        bridges the user gave (see ``set_bridges``)."""
         return dict(self.data.get("tor") or {"mode": "off"})
 
     def tor_in_use(self) -> Socks | None:
@@ -401,6 +407,8 @@ class NodesMixin:
         await self.close()
 
     async def close(self) -> None:
+        """Close every node connection and stop the Tor this session started. Call it
+        when the client ends; the vault itself needs no closing."""
         for client in list(self._clients.values()):
             try:
                 await client.quit()

@@ -22,6 +22,7 @@ class PrivateMixin:
     # ------------------------------------------------------------------
     @property
     def my_inbox(self) -> str:
+        """The Group ID of your personal inbox (UN-RFC 0009): ``inbox@<fingerprint>``."""
         return personal_inbox_id(self.identity().public_key)
 
     async def ensure_inbox(self) -> str:
@@ -77,6 +78,8 @@ class PrivateMixin:
         return False
 
     def key_bound_lifetime(self, name: str | None = None) -> timedelta:
+        """How long a key-bound group of this identity lives when started or renewed:
+        short until the identity is in use, the full lifetime after (UN-RFC 0029 section 4)."""
         return MAX_LIFETIME if self.in_use(name) else FIRST_LIFETIME
 
     def note_opened(self, today: date | None = None) -> None:
@@ -305,6 +308,8 @@ class PrivateMixin:
             [m for m in self.sent_messages() if kind is None or m.kind == kind])
 
     def unread_from(self, key_text: str, kind: str | None = None) -> int:
+        """How many private posts from this key you have not read; ``kind`` ``chat`` or
+        ``post`` counts only those."""
         return sum(1 for m in self.cache.get(self.my_inbox, {}).values()
                    if m.sender_key == key_text and (kind is None or m.kind == kind)
                    and not self.is_read(m))
@@ -338,6 +343,7 @@ class PrivateMixin:
         return [m for m in self.private_messages() if self._in_private_posts(m)]
 
     def unread_private_posts(self) -> int:
+        """How many private posts (not chats or notices) you have not read."""
         return sum(1 for m in self.visible(list(self.cache.get(self.my_inbox, {}).values()))
                    if self._in_private_posts(m) and not self.is_read(m))
 

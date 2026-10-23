@@ -27,6 +27,8 @@ class RipeningMixin:
         return rp.Chain([rp.Segment.from_dict(s) for s in self._ripening_entry(name)["segments"]])
 
     def ripe_group(self, name: str | None = None) -> str:
+        """The Group ID where an identity publishes its ripening chain:
+        ``ripe@<fingerprint>`` (UN-RFC 0025)."""
         return make_group_id(rp.GROUP_NAME, self.identity(name).public_key)
 
     def published_level(self, name: str | None = None) -> int | None:
@@ -69,6 +71,8 @@ class RipeningMixin:
         return self.data.get("private_min_ripe")
 
     def set_private_min_ripe(self, level: int | None) -> None:
+        """The lowest ripening level a sender of private posts must have for you to see
+        them (UN-RFC 0025 section 3.5); ``None`` takes everybody."""
         if level is not None:
             rp.parse_min(level)                       # 0-4, or raises
         self.data["private_min_ripe"] = level

@@ -289,6 +289,8 @@ class PostingMixin:
                                supersedes=versions)
 
     def may_edit(self, msg: Message) -> bool:
+        """True when you may publish a new version of this post (UN-RFC 0042): your own,
+        public, readable, and not past the number of versions an edit may name."""
         return (not msg.private and msg.readable and bool(msg.author_key)
                 and msg.author_key == self.identity().key_text
                 and len(msg.versions) + 1 <= MAX_SUPERSEDES)
