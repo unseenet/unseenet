@@ -81,6 +81,7 @@ A profile is a JSON object in canonical JSON (UN-RFC 0004 section 3):
 | `links` | array of objects | no   | At most 16 links (4.2)                          |
 | `lang`  | array of strings | no   | Languages the identity writes, as BCP 47 tags (`da`, `en`), at most 8 |
 | `bot`   | boolean          | no   | `true`: the identity posts automatically (UN-RFC 0030 section 6) |
+| `feeds` | array of strings | no   | Group IDs of feeds that are the identity's own, at most 16 (4.5) |
 
 Unknown fields MUST be preserved and ignored. A profile with neither
 `about` nor `links` is empty; clients show it as no profile, except
@@ -163,6 +164,22 @@ example a `facebook` link to another domain), but MUST still show it.
 
 A profile in canonical JSON MUST NOT exceed 8192 octets. Nodes MAY
 refuse a manifest whose `profile` is larger; clients MUST ignore one.
+
+## 4.5 Feeds
+
+`feeds` lists the Group IDs of feeds (UN-RFC 0034) the identity wants
+those who follow it to follow too (UN-RFC 0034 section 6.1): for
+example a project's announcements it writes, or a feed it runs for a
+club. At most 16, each a valid Group ID, none twice. Its own personal
+groups (UN-RFC 0029 section 2.1) need not be listed; they are found from
+the key.
+
+Anybody can list any Group ID, so a client counts a listed feed only if
+the group's current manifest has `"view": "feed"` and names the
+identity's key as `owner`, a moderator or a poster. Others it ignores,
+and it SHOULD NOT show them. A client reads a listed feed's manifest as
+it reads a profile (section 5.2); a feed its node does not carry is not
+shown, and that is not an error.
 
 # 5. Public Profiles
 
@@ -440,6 +457,9 @@ fingerprint (UN-RFC 0019 section 8), never instead of it.
 - It SHOULD cache profiles and MAY read the profiles of all authors in a
   group the user reads, rather than one at a time (section 13).
 - It SHOULD let the user hide the profile of a key.
+- It SHOULD show the identity's personal groups and the feeds of
+  section 4.5 that count, and SHOULD offer to follow the identity
+  (UN-RFC 0034 section 6.1).
 
 # 10. Nodes
 
@@ -578,6 +598,8 @@ inner article.
 - UN-RFC 0011 section 4: the policy fields `profiles` and `avatars`
   (section 10).
 - UN-RFC 0031: `about` may be Markdown without images (section 4.1).
+- UN-RFC 0034 section 6.1: following an identity follows the feeds its
+  profile lists (section 4.5).
 - UN-RFC 0000 section 6: 0022 is added to the index.
 
 # Copyright Notice
