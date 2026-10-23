@@ -889,14 +889,7 @@ class NamesDialog(Dialog):
             self.notify("Type the name first", severity="warning")
 
 
-PROFILE_WARNING = (
-    "Anybody who sees this identity's posts can read its profile.\n\n"
-    "A link ties this identity - everything it has posted and will post - to that "
-    "account.\n\n"
-    "A published profile cannot be fully taken back: others may already have kept a "
-    "copy.\n\n"
-    "If you only want certain people to know, keep a separate identity for that, or "
-    "leave the profile out.")
+PROFILE_WARNING = prof.PROFILE_WARNING        # the same in every client (unseenet#320)
 
 
 def identicon_text(key_text: str):

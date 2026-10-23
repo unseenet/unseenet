@@ -275,6 +275,20 @@ async def profile(request):
     return _json(await _api(request).profile(request.query.get("key")))
 
 
+async def profile_hide(request):
+    data = await _body(request)
+    return _json(_api(request).hide_profile(str(data.get("key", "")), bool(data.get("hidden", True))))
+
+
+async def passphrase(request):
+    data = await _body(request)
+    try:
+        return _json(await _api(request).change_passphrase(str(data.get("old", "")),
+                                                           str(data.get("new", ""))))
+    except OSError as exc:                     # the old passphrase still works: the core keeps it
+        return _json({"error": f"Could not save the vault: {exc}"}, status=500)
+
+
 async def names(request):
     if request.method == "POST":
         return _json(await _api(request).name_action(await _body(request)))
@@ -342,6 +356,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/role", role), ("POST", "/api/groups/{gid}/ban", ban),
     ("GET", "/api/moderation", moderation), ("POST", "/api/moderation", moderation),
     ("GET", "/api/profile", profile), ("POST", "/api/profile", profile),
+    ("POST", "/api/profile/hide", profile_hide), ("POST", "/api/passphrase", passphrase),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),
     ("POST", "/api/articles", articles), ("POST", "/api/groups/{gid}/manifest", manifest),

@@ -157,6 +157,11 @@ ripens what it needs.
 - `POST /api/setup` `{"display": "...", "node": "..."}`: the first start
   of a new vault. It makes the identity and adds the node, then the
   runtime starts (UN-RFC 0025: a new key ripens in the background).
+- `POST /api/passphrase` `{"old": "...", "new": "..."}`: a new passphrase
+  for this vault file, answering `{"ok": true}`. A wrong `old` or a `new`
+  shorter than 4 characters is `400`; if the file cannot be written it is
+  `500` and the old passphrase still works. Copies of the vault elsewhere
+  keep the old one. Not for a service (section 3.2).
 
 ## 4.3 Groups
 
@@ -211,10 +216,21 @@ or the plain text, and MUST NOT put a post's text into a page as HTML.
 (UN-RFC 0030 section 6): show a mark. `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
-`portal_warning`, and for its owner or a moderator `roles` (section 4.7):
+`portal_warning`, `write`, and for its owner or a moderator `roles` (section 4.7):
 `{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
 closed group's owner, `members`; `maintainer` is true when you maintain a
 hierarchy the group is in, so you may block people there (section 4.6).
+
+`write` says whether you may write here, before you write:
+`{"post": <permission>, "chat": <permission>}`, and in a real group each
+row has `reply`, whether you may answer that post. A permission is
+`{"allowed": true | false, "reason": "<for people>", "code": "ok" |
+"own_inbox" | "kind" | "banned" | "blocked" | "not_member" | "channel" |
+"channel_thread" | "comments_closed"}`, from the cached manifest: the kinds
+a group takes (UN-RFC 0028), bans and blocks (UN-RFC 0004, 0018),
+posters and members, and channel comments (UN-RFC 0030). A front end
+SHOULD make what is not allowed unavailable up front and show `reason`;
+the node still has the last word.
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | null}`:
@@ -302,9 +318,22 @@ not (you do not own or moderate the group).
 ## 4.8 Who You Are
 
 - `GET /api/profile?key=<key>` (yours without `key`): a public profile
-  (UN-RFC 0022) or `null`, as `{"key", "profile", "about_tree"}`; `POST /api/profile` with a profile object
-  publishes yours, `null` removes it. A program's profile says
-  `"bot": true` (UN-RFC 0030 section 6).
+  (UN-RFC 0022) or `null`, as `{"key", "profile", "about_tree", "label",
+  "mine", "hidden", "link_kinds"}`. `hidden` is true when you hid this
+  key's profile (UN-RFC 0022 section 9.2); then it is not even fetched.
+  Before fetching someone's, the runtime reads the profiles of the authors
+  it has together with it, so a node cannot tell whose you open (UN-RFC 0022
+  section 13). Yours adds `published` (whether one is published yet) and
+  `warning`, the text to show before the first is published (section 9.1),
+  the same in every client.
+- `POST /api/profile` with a profile object publishes yours, `null`
+  removes it; `{"edit": {"about": "...", "links": [{"kind", "value",
+  "label"}], "lang": ["da", ...], "markdown": true}}` builds the object from
+  a form's fields and keeps the bot mark you have. It answers as `GET`,
+  with `published`. A program's profile says `"bot": true` (UN-RFC 0030
+  section 6).
+- `POST /api/profile/hide` `{"key": "...", "hidden": true | false}`: hide
+  or show someone's profile, for you alone; answers `{"key", "hidden"}`.
 - `GET /api/names` lists your names, waiting claims and the names you give
   under yours (UN-RFC 0019); `POST /api/names` `{"action": "claim" |
   "renew" | "give" | "revoke" | "approve" | "refuse", ...}` answers
