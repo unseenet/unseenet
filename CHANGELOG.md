@@ -104,6 +104,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - The command line is split into files by area (`cli/`: node, basics,
   groups, messages, network, services, main), each with a docstring saying
   what belongs there (#396). Code moved only.
+- The node's store is split into files by area (`core/store/`: base,
+  articles, groups, key-bound, kept, blobs, withdrawals, peers, stats),
+  each with a docstring saying what belongs there (#398). Code moved only.
 
 ## [0.4.4] - 2026-10-23
 
