@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0033                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0004, 0012, 0017, 0027
+Updates: 0004, 0017
 
                    Unseenet: Pinned Posts
 ```
@@ -106,47 +106,30 @@ expires with the group's window.
 
 # 5. Nodes
 
-## 5.1 Group State
+## 5.1 Kept Articles
 
-UN-RFC 0017 section 2 is extended. The state of a group also includes:
+Pins keep articles in the sense of UN-RFC 0017 section 2.1: pins and
+unpins are its **markers**, the pinned articles its **targets**.
 
-- the pins in force, and the latest unpin of each target that has one
-  and is still inside the window;
-- the pinned articles;
-- in a closed group, carried copies (section 6) that are pinned.
+- **Which:** the pins in force (section 4.2), the latest unpin of each
+  target that has one and is still inside the window, and the targets
+  of the pins in force; in a closed group these targets are the carried
+  copies (section 6).
+- **How many:** `max_pins` (section 4.1).
+- **Order:** pins and unpins, then pinned articles.
 
-A node MUST NOT expire state articles (UN-RFC 0017 section 2). When an
-article leaves the state, because it was unpinned, because a newer pin
-pushed it past `max_pins`, or because its pinner lost their role, it
-expires normally (UN-RFC 0012) and may disappear at once if it is older
-than the window.
+Everything else - that kept articles do not expire, that an old pinned
+article is accepted, pending pins, the blobs of pinned articles, and the
+limits shared with other kept articles - is UN-RFC 0017 sections 2.1
+and 2.2. When an article is no longer kept, because it was unpinned, a
+newer pin pushed it past `max_pins` or its pinner lost their role, it
+expires normally (UN-RFC 0012).
 
-## 5.2 Accepting Pins and Targets
+## 5.2 Accepting Pins
 
-- A node MUST reject a pin or unpin that is not valid (section 3) when
-  it holds the target.
-- A node that receives a pin before its target SHOULD remember it as a
-  *pending* pin, as it does with pending cancels (UN-RFC 0004 section
-  7.2), and MAY forget it after the group's window.
-- UN-RFC 0012 section 3 is amended: a node MUST NOT reject an article
-  for being older than the window if it holds a pin in force, or a
-  pending pin that would be in force, naming that article. It forwards
-  such an article to its peers as usual.
-
-## 5.3 NEWNEWS
-
-UN-RFC 0017 section 3, step 1, is refined. A node lists a group's
-state in this order: manifests, key updates by ascending epoch, pins
-and unpins, then pinned articles. A node that fetches in order thus has
-each pin before its target and accepts the target even if it is old.
-
-## 5.4 Blobs
-
-UN-RFC 0027 section 7.1 is amended: a node SHOULD keep a blob as long
-as a pinned article references it, also beyond its own blob retention.
-A node MAY still refuse to keep blobs that would break its quotas
-(UN-RFC 0027 section 8); a client then shows the attachment as no
-longer available.
+A node MUST reject a pin or unpin that is not valid (section 3) when
+it holds the target. One that arrives before its target is a pending
+marker (UN-RFC 0017 section 2.1).
 
 # 6. Closed Groups
 
@@ -235,19 +218,16 @@ it. It SHOULD NOT send any notice outside the group for a pin.
 # 8. Changes to Other Documents
 
 - UN-RFC 0004 section 3.1: the manifest field `max_pins` (section 4.1).
-- UN-RFC 0012 section 3: pinned articles are exempt from the window
-  (section 5.2).
-- UN-RFC 0017 section 2 and 3: pins and pinned articles are part of the
-  state and are listed after key updates (sections 5.1, 5.3).
-- UN-RFC 0027 section 7.1: blobs of pinned articles are kept with them
-  (section 5.4).
+- UN-RFC 0017 section 2.1: pins and pinned articles are kept articles
+  (section 5.1). What that means for UN-RFC 0012 and UN-RFC 0027 is said
+  there.
 
 # 9. Security and Privacy Considerations
 
-- **Storage:** a group can make nodes keep at most 25 articles beyond
-  the window, plus their unpins and blobs. Articles keep their normal
-  size limit, and blobs their quotas. Pinning is no way to store more
-  than that.
+- **Storage:** a group can make nodes keep at most 25 pinned articles
+  beyond the window, plus their pins and unpins, within the limits all
+  kept articles share (UN-RFC 0017 section 2.2). Pinning is no way to
+  store more than that.
 - **Authority:** only the owner and the group's current moderators can
   pin. A removed moderator's pins stop counting at once (section 4.2),
   so a rogue moderator cannot leave pins behind.
