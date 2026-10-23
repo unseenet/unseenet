@@ -25,8 +25,8 @@ for people who build nodes and clients.
    groups, feeds, pages and moderation.
 5. [The node](node.md) - what it stores, peering, the known-node list,
    files, and what an operator can and cannot see.
-6. *The clients* - one core shared by the terminal client, the graphical
-   client, the CLI and others; portable and bootable. *(coming)*
+6. [The clients](clients.md) - one core shared by the terminal client, the
+   graphical client, the CLI and others; portable and bootable.
 7. *Out into the world* - web entrances, gateways to Usenet, Matrix and
    Nostr, and portals. *(coming)*
 8. *The threat model in plain words* - what is hidden from whom, and what

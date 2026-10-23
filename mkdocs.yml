@@ -107,6 +107,7 @@ nav:
           - Identity: guide/identity.md
           - Groups: guide/groups.md
           - The node: guide/node.md
+          - The clients: guide/clients.md
   - More ways to use it:
       - Other newsreaders: other-clients.md
       - Gateways to other networks: gateways.md
