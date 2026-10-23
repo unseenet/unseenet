@@ -184,3 +184,22 @@ async def test_files_in_a_group_this_vault_has_not_read(tmp_path, monkeypatch, c
     with pytest.raises(SystemExit, match="not a group ID"):
         await cli.c_post(me, _args(group="", subject="x"))
     await done()
+
+
+async def test_files_after_the_owner_allowed_them(tmp_path, monkeypatch, capsys):
+    """Also found on the test nodes: this vault has the group's manifest from before
+    its owner allowed files - the current one is fetched before saying no."""
+    node, app, done = await _setup(tmp_path, monkeypatch)
+    owner, me = await app("owner"), await app("me")
+    await cli.c_group_create(owner, _args(name="dk.foto", type="open"))
+    gid = _json(capsys)["group"]
+    me.session.subscribe(gid)
+    await me.session.fetch_group(gid)                  # me reads the group, and its manifest
+    assert me.session.manifest_data(gid) and "attachments" not in me.session.manifest_data(gid)
+    await cli.c_group_edit(owner, _args(group=gid, add_poster=None, remove_poster=None,
+                                        add_moderator=None, remove_moderator=None, ban=None,
+                                        unban=None, reason=None, attachments=1048576))
+    capsys.readouterr()
+    await cli.c_post(me, _args(group=gid, subject="Med billede", attach=[str(_photo(tmp_path))]))
+    assert _json(capsys)["files"][0]["type"] == "image/jpeg"
+    await done()
