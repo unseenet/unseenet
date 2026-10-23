@@ -16,6 +16,8 @@ reads and posts. Clients use the one class; its code is split by area:
     reading.py    following, fetching, threads and views, the offline cache, read marks
     posting.py    posting, postage, editing and withdrawing
     attachments.py  files on posts: preparing and checking them (UN-RFC 0027)
+    kept.py       pinned posts and the pages of sites (UN-RFC 0033, 0035)
+    personal.py   an identity's personal feed and site (UN-RFC 0029 section 2.1)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -197,6 +199,8 @@ class Message:
     edited: datetime | None = None        # shown version is an edit, made then (0042, 4.2)
     versions: list[str] = field(default_factory=list)     # earlier versions this one replaced
     sender_ripening: str | None = None    # a private post: the sender's Key-Ripening (0025, 3.5)
+    page: str | None = None               # a page article of a site: its path (UN-RFC 0035)
+    page_removed: bool = False            # ... a removal of that path
 
     @property
     def author_fp(self) -> str:
@@ -345,9 +349,11 @@ from .people import PeopleMixin  # noqa: E402
 from .reading import ReadingMixin  # noqa: E402
 from .posting import PostingMixin  # noqa: E402
 from .attachments import AttachmentsMixin  # noqa: E402
+from .kept import KeptMixin  # noqa: E402
+from .personal import PersonalMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

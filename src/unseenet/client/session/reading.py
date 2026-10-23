@@ -315,6 +315,17 @@ class ReadingMixin:
             entry.setdefault("cancels", {}).setdefault(ctl[1], {
                 "by": art["Author-Key"], "date": art.get("Date", "")})
             return None
+        if ctl and ctl[0] in ("pin", "unpin") and len(ctl) == 2:
+            # whose pins count is worked out from the manifest when shown (kept.py)
+            try:
+                when = int(parse_date(art["Date"]).timestamp())
+                replaces = parse_supersedes(art, control_ok=True)   # pins name pins (0033, 3.1)
+            except (ArticleError, TypeError, ValueError):
+                return None
+            entry.setdefault("markers", {})[art.message_id] = {
+                "target": ctl[1], "action": ctl[0], "by": art["Author-Key"], "date": when,
+                "supersedes": replaces, "note": art.body.strip()[:256]}
+            return None
         if ctl:
             return None
         msg = Message(n, art.message_id, group_id, author_key=art["Author-Key"],
@@ -346,6 +357,9 @@ class ReadingMixin:
             msg.subject, msg.from_name, msg.body = art.get("Subject", ""), art["From"], art.body
             msg.kind = message_kind(art)                     # UN-RFC 0028
             msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
+            if art.get("Page") is not None:                  # a site's page (UN-RFC 0035)
+                msg.page = art["Page"].strip()
+                msg.page_removed = (art.get("Page-Removed") or "").strip().lower() == "yes"
             naming.note_certificate(self, msg.author_key, art.get(names.HEADER))
         return msg
 

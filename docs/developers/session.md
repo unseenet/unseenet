@@ -92,3 +92,17 @@ Generated from the docstrings in the code; functions whose name starts with
     options:
       show_root_heading: false
       heading_level: 3
+
+## Pins and pages
+
+::: unseenet.client.session.kept
+    options:
+      show_root_heading: false
+      heading_level: 3
+
+## Personal feeds and sites
+
+::: unseenet.client.session.personal
+    options:
+      show_root_heading: false
+      heading_level: 3

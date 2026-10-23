@@ -9,6 +9,7 @@ does goes through ``Session`` (``unseenet.client.session``). Split by area:
     messages.py   post, withdraw, read
     network.py    tor, bridges, gateways
     services.py   ripen, serve (for services, bots and gateways)
+    kept.py       pin, pins, page-put, page-remove, pages, feed-start, site-start
     main.py       the `unseenet` parser and which function each command runs
 
 This file holds what the parts share - the ``App`` around the vault and its ``Session``,
@@ -212,8 +213,9 @@ from .groups import *  # noqa: E402,F401,F403
 from .messages import *  # noqa: E402,F401,F403
 from .network import *  # noqa: E402,F401,F403
 from .services import *  # noqa: E402,F401,F403
+from .kept import *  # noqa: E402,F401,F403
 from .main import *  # noqa: E402,F401,F403
-from . import node, basics, groups, messages, network, services, main  # noqa: E402
+from . import node, basics, groups, messages, network, services, kept, main  # noqa: E402
 
 # the parts' names belong to the module too (cli.c_post, cli.node_main, ...)
-__all__ += [n for p in (node, basics, groups, messages, network, services, main) for n in p.__all__]
+__all__ += [n for p in (node, basics, groups, messages, network, services, kept, main) for n in p.__all__]

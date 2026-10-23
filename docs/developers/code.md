@@ -87,6 +87,8 @@ A new table goes in the schema in `__init__.py`, its code in the file of its are
 | `reading.py` | following, fetching, threads and views, the offline cache, read marks |
 | `posting.py` | posting, postage, editing and withdrawing |
 | `attachments.py` | files on posts: preparing and checking them (UN-RFC 0027) |
+| `kept.py` | pinned posts and the pages of sites, as the nodes keep them (UN-RFC 0033, 0035) |
+| `personal.py` | an identity's personal feed and site (UN-RFC 0029 section 2.1) |
 
 A new function goes in the file whose docstring says it belongs there; a new
 area gets a file of its own, added to `Session` in `__init__.py`. Every public
@@ -133,7 +135,8 @@ of its area.
 ## cli: the command line
 
 `node.py` is `unseenet-node`; the `unseenet` client's commands are by area in
-`basics.py`, `groups.py`, `messages.py`, `network.py` and `services.py`, and
+`basics.py`, `groups.py`, `messages.py`, `network.py`, `services.py` and
+`kept.py` (pins, pages, personal groups), and
 `main.py` holds the parser and which function each command runs.
 
 ## Around them

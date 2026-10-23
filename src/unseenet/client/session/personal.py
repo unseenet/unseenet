@@ -1,0 +1,68 @@
+"""Personal groups (UN-RFC 0029 section 2.1): an identity's own feed and site.
+
+Belongs here: the Group IDs of an identity's personal feed (``feed@<fp>``, UN-RFC
+0034 section 5) and site (``site@<fp>``, UN-RFC 0035 section 7), starting one when
+the user asks for it, and the warning a client must show first. Once started they
+are renewed with the identity's other key-bound groups (private.py) and ended by
+removing them (groups.py, ``remove_group``).
+
+Not here: posting in a feed (posting.py), the pages of a site (kept.py), following
+someone's feed (coming with following).
+
+Part of ``Session`` (see __init__.py)."""
+
+from __future__ import annotations
+
+from . import *  # noqa: F403  - the module's names, as when this was one file
+from .. import session as _s   # names tests patch on the module, read at call time
+
+# UN-RFC 0029 section 2.1: told before a personal group is made
+PERSONAL_GROUP_WARNING = (
+    "A personal {what} is public and tied to this identity: anyone who knows your key or "
+    "your name can find and read it.\n\n"
+    "What you publish there can be kept by others and cannot be recalled - not when you "
+    "change it, and not when you remove the {what}.\n\n"
+    "For a few people only, use a closed group instead.")
+PERSONAL_KINDS = {"feed": "feed", "site": "site"}
+
+
+class PersonalMixin:
+    def personal_group(self, kind: str, name: str | None = None) -> str:
+        """The Group ID of an identity's personal feed or site (``kind`` ``feed`` or
+        ``site``), started or not: ``feed@<fingerprint>``, ``site@<fingerprint>``."""
+        if kind not in PERSONAL_KINDS:
+            raise SessionError("a personal group is a feed or a site")
+        return make_group_id(kind, self.identity(name).public_key)
+
+    def personal_group_warning(self, kind: str) -> str:
+        """What the user must be told before a personal feed or site is started."""
+        return PERSONAL_GROUP_WARNING.format(what=kind)
+
+    async def start_personal_group(self, kind: str, *, comments: str = "open",
+                                   title: str = "") -> str:
+        """Start this identity's personal feed or site - only when the user asked for it,
+        after showing ``personal_group_warning``. A feed takes comments unless
+        ``comments="none"`` (UN-RFC 0034 section 5.2); a site is a channel shown as
+        pages. If it exists already, it is followed again. Returns its Group ID."""
+        from ...core.groups import PERSONAL_GROUPS
+        gid = self.personal_group(kind)
+        try:
+            current = await self.fetch_manifest(gid)
+        except (SessionError, OSError, ConnectionError, NNTPError):
+            current = None
+        entry = self.group_entry(gid)
+        if current is None or current.expired():
+            serial = max(int(self.manifest_data(gid).get("serial", 0)),
+                         current.serial if current else 0) + 1
+            art = make_manifest(self.identity(), kind, "channel", view=PERSONAL_GROUPS[kind],
+                                title=title, serial=serial, min_pow=_s.DEFAULT_POW,
+                                comments=comments if kind == "feed" else None,
+                                pow_bits=await self.required_pow(gid),
+                                lifetime=self.key_bound_lifetime())
+            await self._post_article(art)
+            entry["manifest"] = json.loads(art.body)
+        else:
+            entry["manifest"] = dict(current.raw)
+        entry.update({"type": "channel", "owner": True})
+        self.subscribe(gid)
+        return gid
