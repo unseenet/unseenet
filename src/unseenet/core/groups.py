@@ -111,7 +111,7 @@ MESSAGE_KINDS = (KIND_CHAT, KIND_POST)
 MAX_SUPERSEDES = 32       # earlier versions an edit may name (UN-RFC 0042 section 2)
 
 
-def parse_supersedes(art: Article) -> list[str]:
+def parse_supersedes(art: Article, *, control_ok: bool = False) -> list[str]:
     """The earlier versions an edit names, newest first (UN-RFC 0042 section 2);
     [] for an article that is not an edit. Raises ArticleError('syntax') if the
     header is malformed, names more than 32, the article itself or one twice."""
@@ -125,7 +125,7 @@ def parse_supersedes(art: Article) -> list[str]:
         raise ArticleError("syntax", f"Supersedes names more than {MAX_SUPERSEDES} versions")
     if len(set(ids)) != len(ids) or art.message_id in ids:
         raise ArticleError("syntax", "Supersedes names a version twice, or the edit itself")
-    if art.control:
+    if art.control and not control_ok:     # pins may name pins (UN-RFC 0033 section 3.1)
         raise ArticleError("syntax", "a control article cannot be an edit")
     return ids
 
@@ -277,6 +277,8 @@ class Manifest:
                 message_id=art.message_id, raw=data,
             )
             m.comments, m.comment_days = _comments(data)
+            from .pins import max_pins
+            max_pins(data)                                  # UN-RFC 0033 section 4.1
             if "expires" in data:
                 m.expires = parse_expires(data["expires"])
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
