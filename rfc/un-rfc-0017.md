@@ -99,7 +99,7 @@ defines it:
 
 | Limit | Value |
 |---|---|
-| Targets kept per kind | the manifest field of that kind (for example `max_pins` 0-25, `max_pages` 1-128) |
+| Targets kept per kind | what the kind's document derives from its manifest field (for example `max_pins`, 0-25; twice `max_pages`, a current and a previous version of up to 128 pages) |
 | Targets kept in one group, all kinds | 256 |
 | Blobs of kept articles in one group | 8 MiB |
 
