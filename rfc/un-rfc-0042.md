@@ -75,6 +75,25 @@ Inboxes (UN-RFC 0009) are left out for now: a sealed article does not
 show its sender to the node, so a node cannot check that an edit comes
 from the same author. A private post cannot be edited.
 
+## 2.1 Versions of Other Things
+
+`Supersedes` is the one way in Unseenet to say "a new version of this".
+Another document MAY use it for its own kind of article, such as a page
+of a site (UN-RFC 0035), and then MUST say:
+
+- **who** may write a new version, instead of rule 2 (the same author);
+- **which** earlier versions a new version names, if not every one:
+  for example those the writer knows, newest first, at most 32, when
+  something else (a page's path) already ties the versions together;
+- whether rule 5 applies.
+
+Everything else in this document holds for such versions too: nodes
+withdraw the versions a valid new version names (section 3.1), and
+section 5.2 decides which version is current when two name the same
+earlier one. Section 3.1's check that the earlier version is "by the
+same author" is then the other document's rule for who may write a new
+version.
+
 # 3. Nodes
 
 ## 3.1 Accepting an Edit
@@ -170,6 +189,13 @@ one with the later `Date` (and on a tie, the lower Message-ID), and
 treats the other as a replaced version too. Nodes keep both, since each
 is a valid edit of the earlier one.
 
+In general, of a set of versions the **current** one is a version no
+other valid version names in `Supersedes`; if there are several, the
+one with the latest `Date`, and on a tie the lower Message-ID. Every
+node and client holding the same articles comes to the same result.
+Documents that use `Supersedes` for their own articles (section 2.1)
+use this rule.
+
 # 6. Gateways
 
 A gateway MAY import an edit from another network as an Unseenet edit
@@ -215,6 +241,11 @@ first Message-ID of `Supersedes`, as RFC 5536 allows one.
   threaded without the versions in between.
 - **Why 32?** Enough for any real correction; a small, fixed bound on
   what one post can make a node remember.
+- **Why one header for posts and pages?** A page edited by several
+  people and a post corrected by its author are both "a new version of
+  this". With one header, nodes withdraw old versions, and clients pick
+  the current one, by the same code; a version number would be a second
+  way to say the same (section 2.1).
 - **Why not inboxes?** A node cannot see the sender of a sealed article.
   A later document can let the recipient's client check edits of
   private posts, since only it can open them.
