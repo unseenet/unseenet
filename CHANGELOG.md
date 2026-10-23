@@ -59,9 +59,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 - Stopping and starting ripening quickly could let the old run remove the
   new run's file, so the new segment stopped at once (#337).
+
+## [0.4.4] - 2026-10-23
+
+A fix for front ends of the local client API, from the new `release/0.4`
+branch. Nodes can stay on 0.4.0.
+
+### Fixed
+
 - `GET /api/known-nodes` answers during setup too, so a new user of a front
   end like the graphical client can choose a node from the list instead of
-  only typing an address (UN-RFC 0046 section 4.3).
+  only typing an address (UN-RFC 0046 section 4.3, #372).
 
 ## [0.4.3] - 2026-10-23
 
@@ -916,7 +924,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/unseenet/unseenet/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/unseenet/unseenet/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/unseenet/unseenet/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/unseenet/unseenet/compare/v0.4.0...v0.4.1
