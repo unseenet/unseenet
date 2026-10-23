@@ -113,6 +113,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   global name a function in a package uses exists in its file.
 - Every public `Session` function has a docstring - what it does, what it
   returns, when a client uses it - and a test keeps it so (#402).
+- The site has a Developers section (#405): how to write a client on
+  `Session` or the local client API, a map of the code and where new code
+  goes, and a Session and local API reference generated from the
+  docstrings (mkdocstrings).
 
 ## [0.4.4] - 2026-10-23
 

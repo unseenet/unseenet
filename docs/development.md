@@ -20,38 +20,15 @@ about the implementation and the reasoning around it.
 
 ## Repository Layout
 
+What is where in the repository. The package itself is mapped in
+[The code](developers/code.md), and each of its files says at the top what
+belongs in it.
+
 ```
 rfc/                    The UN-RFC series (normative spec)
 docs/development.md     This file
-src/unseenet/
-  core/
-    encoding.py         b32/b64, H(), DS()                  UN-RFC 0003 §1
-    crypto.py           identities, signatures, AEAD, sealed boxes, group keys  0003
-    article.py          parse/serialize, canonical form, Message-ID, validation 0002
-    pow.py              postage                              0006
-    groups.py           group IDs, manifests, rules, closed groups              0004
-    store.py            SQLite: articles, history, groups, epochs, peer queues, key-bound index
-    reconcile.py        range-based reconciliation of key-bound state   0040 §4
-    tor.py              own tor process + control port + SOCKS                  0005 §1, 0007 §3
-    vault.py            encrypted client vault               0007 §2
-  node/
-    server.py           acceptance pipeline + ONNTP server   0002 §5, 0004, 0005, 0041
-    peering.py          streaming feeds, node-key authentication      0005 §5.2, 0016
-    pulling.py          catch-up: XUN-RECONCILE, then NEWNEWS/ARTICLE  0017, 0040 §6
-  client/
-    session.py          vault, persistent node connection, reading/posting, read marks
-    threads.py          threads and the contact:/for-you: pseudo groups, for every client
-    tui.py              `unseenet-tui` (Textual)
-  known_nodes.py        the shipped node list and its parser      0010
-  nodes.json            the project's node list (posted to unseenet.nodes)
-  hierarchies.py        root list of hierarchies: parse and check  0018 §4
-  hierarchies.json      the project's root list (posted to unseenet.hierarchies)
-  names.py              names for identities: syntax, certificates, claims  0019
-  registrar.py          `unseenet-registrar`: one replica of a registrar      0019 §6
-  nntp.py               dot-stuffing, block reading, async client
-  cli.py                `unseenet-node` and `unseenet`
-  launcher.py           the one program of the portable builds; --self-test
-  portable.py           data/ beside the program, bundled Tor
+src/unseenet/           the package: core, client, node, cli - mapped file by file
+                        in docs/developers/code.md ("The code" on the site)
 deploy/                 install-node.sh and the systemd unit
 tools/build_portable.py portable zips with the verified Tor Expert Bundle
 tools/portable/         launchers and README.txt for the zips
@@ -343,8 +320,9 @@ Working:
 Missing / rough:
 
 - Feeds are not pipelined; one CHECK at a time.
-- The command-line client (`cli.py`) predates `client/session.py` and
-  should be moved onto it.
+- The command line (`cli/`) goes through `Session` for groups, manifests
+  and withdrawing (#389); posting and reading follow with the 0.5.0
+  commands (#387).
 - Argon2id "moderate" needs ~256 MiB RAM while unlocking; fine on a PC,
   worth tuning for small nodes.
 - Portable builds are not code-signed (Windows SmartScreen, macOS

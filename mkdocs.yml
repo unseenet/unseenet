@@ -37,6 +37,24 @@ theme:
 hooks:
   - tools/docs_hooks.py
 
+plugins:
+  - search
+  # The developers' reference is generated from the docstrings (docs/developers/),
+  # read from the source without importing it.
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            members_order: source
+            filters: ["!^_"]
+            show_source: false
+            show_bases: false
+            show_signature_annotations: true
+            separate_signature: true
+            docstring_section_style: list
+            merge_init_into_class: true
+
 exclude_docs: |
   assets/asciinema/README.md
 
@@ -155,4 +173,9 @@ nav:
       - Running a registrar replica: project/registrar.md
       - The project's nodes: project/nodes.md
       - Network statistics: https://stats.unseenet.org/
-  - Development: development.md
+  - Developers:
+      - Write a client: developers/index.md
+      - The code: developers/code.md
+      - Session reference: developers/session.md
+      - Local client API: developers/localapi.md
+      - Decisions and principles: development.md
