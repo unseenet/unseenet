@@ -236,6 +236,36 @@ reading the client does anyway.
 - A client MAY let a user follow any feed, not only personal ones: a
   news channel, a community feed, a bot.
 
+## 6.1 Following a Person
+
+A user can also follow a **person**: an identity, given by its key or
+by a name that leads to one (UN-RFC 0019), such as `andreas@lorensen`.
+It is how people follow one another on Mastodon or Facebook, without
+anybody being told.
+
+- **What it follows.** To follow an identity is to follow every feed
+  that is its own: its personal feed (section 5) and, when they exist,
+  its other personal groups (UN-RFC 0029 section 2.1), and the feeds it
+  lists in its public profile (UN-RFC 0022 section 4.5). A client
+  subscribes to each of them as in section 6, and their entries come
+  into the timeline (section 7).
+- **New feeds.** A client reads the profiles of the identities a user
+  follows as it reads other profiles (UN-RFC 0022 section 9.2), and
+  when it finds a personal group or a listed feed it did not follow
+  before, it follows it too. A feed the identity no longer lists, or
+  whose group has expired, it stops following, unless the user also
+  follows that feed on its own.
+- **The key, not the name.** A client resolves a name to a key when the
+  user follows, and from then on follows the key. If the name later
+  leads to another key (UN-RFC 0019), the client keeps following the
+  first and tells the user, who may follow the new key instead.
+- **Private, as all following.** The list of identities a user follows
+  is kept in the vault with the rest of section 6, and the same rules
+  apply: it MUST NOT be published or sent to anyone, and the identity is
+  not told. Section 8 is unchanged.
+- **Unfollowing** an identity unsubscribes from the feeds that were
+  followed only because of it.
+
 # 7. The Timeline
 
 A client SHOULD offer a timeline: one feed view (section 4) built from
