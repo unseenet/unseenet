@@ -15,6 +15,7 @@ from .groups import *  # noqa: F403
 from .messages import *  # noqa: F403
 from .network import *  # noqa: F403
 from .services import *  # noqa: F403
+from .kept import *  # noqa: F403
 
 
 COMMANDS = {
@@ -23,6 +24,8 @@ COMMANDS = {
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
+    "pin": c_pin, "pins": c_pins, "page-put": c_page_put, "page-remove": c_page_remove,
+    "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
 }
 
 
@@ -95,6 +98,30 @@ def client_main(argv=None) -> None:
                         "again without their metadata (GPS, time, camera)")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
+    s = sub.add_parser("pin", help="owner or moderator: pin a post at the top of a group")
+    s.add_argument("group")
+    s.add_argument("message_id", help="the post's Message-ID")
+    s.add_argument("--note", help="a short note shown with the pin")
+    s.add_argument("--unpin", action="store_true", help="unpin it instead")
+    s = sub.add_parser("pins", help="the posts pinned in a group")
+    s.add_argument("group")
+    s = sub.add_parser("page-put", help="write a page of a site (UN-RFC 0035)")
+    s.add_argument("group", help="the site's Group ID")
+    s.add_argument("path", help="e.g. index, about, guides/start")
+    s.add_argument("file", help="the page as Markdown (.txt: plain text), - for stdin")
+    s.add_argument("--title", help="the page's title (default: its path)")
+    s = sub.add_parser("page-remove", help="remove a page from a site")
+    s.add_argument("group")
+    s.add_argument("path")
+    s = sub.add_parser("pages", help="the pages of a site")
+    s.add_argument("group")
+    for kind in ("feed", "site"):
+        s = sub.add_parser(f"{kind}-start", help=f"start your personal {kind} (public, tied to your key)")
+        s.add_argument("--title")
+        if kind == "feed":
+            s.add_argument("--comments", choices=["open", "none"], default="open",
+                           help="whether readers may comment (default open)")
+        s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")

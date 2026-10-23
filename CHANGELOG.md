@@ -26,6 +26,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   kept (`client.media`, the same for every client). `Session.post(files=)`
   and `prepare_files()`; Pillow is a new dependency. A node that carries no
   files, or a group that takes none, is said plainly.
+- Pins, sites and personal groups from the command line (#387, part 3):
+  `pin`, `pins`, `page-put`, `page-remove`, `pages`, `feed-start` and
+  `site-start`. In the core, new parts of `Session`: `kept.py` (`pins()`,
+  `pin()`, `site()`, `put_page()`, `remove_page()`, worked out with the
+  rules the nodes use, from markers and page articles now kept as they are
+  read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
+  0029 asks for). The core of #193 and #212 for every client.
 - Background ripening can be paused and resumed: `ClientRuntime.pause_ripening()`
   and `resume_ripening()`, and in the local client API `POST /api/ripening`,
   `"paused"` in the state's `ripening` and a `ripening-paused` event

@@ -734,6 +734,13 @@ unseenet --help
 | `post GROUP_ID --edit MESSAGE_ID --body TEXT` | A new version of your own post |
 | `post ... --attach FILE` | Post with up to four files, if the group takes them; pictures are saved again without their metadata (where and when they were taken, the camera) |
 | `post ... --format markdown\|plain` | The text's format (default: your setting) |
+| `pin GROUP_ID MESSAGE_ID [--note TEXT] [--unpin]` | Owner or moderator: pin a post at the top of the group, kept beyond its window |
+| `pins GROUP_ID` | The posts pinned in a group |
+| `page-put SITE_ID PATH FILE [--title TEXT]` | Write a page of a site you write in, from a Markdown file; a new version replaces the old one, which is kept as the previous version |
+| `page-remove SITE_ID PATH` | Remove a page from a site |
+| `pages SITE_ID` | A site's pages, the home page first |
+| `feed-start [--comments open\|none] [--yes]` | Start your personal feed - public and tied to your key, so you are told first |
+| `site-start [--yes]` | Start your personal site, the same way |
 | `read GROUP_ID` | Read a group, with each post's Message-ID |
 | `withdraw GROUP_ID MESSAGE_ID ... [--yes]` | [Withdraw posts](#withdrawing-a-post): your own, or any in a group you own or moderate |
 | `withdraw GROUP_ID --all [--keep MESSAGE_ID]` | Withdraw every post in a group you own or moderate |
