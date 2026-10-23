@@ -86,6 +86,9 @@ of a site (UN-RFC 0035), and then MUST say:
   for example those the writer knows, newest first, at most 32, when
   something else (a page's path) already ties the versions together;
 - whether rule 5 applies;
+- whether rule 3 applies: a document MAY let its own control articles
+  name earlier ones of the same kind, as pins and unpins do (UN-RFC
+  0033);
 - whether replaced versions are **kept** for a while instead of
   withdrawn, and how many (for example the previous version of a page,
   so that it can come back, UN-RFC 0035).
