@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0033                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0004, 0017
+Updates: 0004, 0017, 0042
 
                    Unseenet: Pinned Posts
 ```
@@ -51,7 +51,9 @@ A pin or unpin is an article (UN-RFC 0002) with:
 - `Newsgroups:` the group of the target;
 - `Author-Key:` the owner's or a moderator's key;
 - an empty body, or in open, moderated and channel groups a short note
-  for readers (at most 256 characters), such as "Read this first".
+  for readers (at most 256 characters), such as "Read this first";
+- `Supersedes:` the earlier pin or unpin of the same target that it
+  replaces, when the writer knows one (section 3.1).
 
 Like cancels (UN-RFC 0004 section 7.5), pins and unpins are **never
 encrypted**, also in closed groups: nodes must read the `Control`
@@ -71,6 +73,26 @@ target is known; section 5.2 says what a node does before that.
 Pins and unpins are control articles, so they cannot be cancelled
 (UN-RFC 0004 section 7.1). A pin is undone with an unpin.
 
+## 3.1 Replacing a Pin or Unpin
+
+`Date` is rounded (UN-RFC 0002), so a pin and an unpin written within
+minutes of each other may have the same `Date`; ordering them by date
+would make a quick "pin, no, unpin" come out either way. A pin or unpin
+therefore says which marker it replaces, with `Supersedes` (UN-RFC
+0042), under the rules UN-RFC 0042 section 2.1 lets this document set:
+
+- **Who:** the owner or any moderator, not only the author of the marker
+  it replaces.
+- **Which:** the latest pin or unpin of the same target the writer
+  knows, and MAY name earlier ones, at most 32. Every Message-ID named
+  MUST be a pin or unpin of the same target in the same group. The first
+  marker of a target names none.
+- Rule 3 of UN-RFC 0042 does not apply: pins and unpins are control
+  articles that name control articles. Rule 5 does not apply.
+- Replaced markers are **not withdrawn**: they expire normally (UN-RFC
+  0012), so that a marker whose author loses their role can give way to
+  the one it replaced (section 4.2).
+
 # 4. Which Pins Are in Force
 
 ## 4.1 Manifest Field
@@ -86,19 +108,23 @@ step 3). `0` turns pinning off for the group.
 
 ## 4.2 Working It Out
 
-For each target, only the **latest** valid pin or unpin counts: the one
-with the latest `Date`, and of equal dates the one whose Message-ID is
-greatest in code point order. The target is pinned if that article is
-a pin. Then:
+For each target, the pins and unpins that **count** are the valid ones
+whose author is owner or moderator in the **current** manifest. Of
+them, the one that decides is the **current** marker as UN-RFC 0042
+section 5.2 picks it: one that no other counting marker names in
+`Supersedes`; of several, the one with the latest `Date`, and on a tie
+the lower Message-ID. The target is pinned if that marker is a pin.
+Then:
 
-1. Pins whose author is no longer owner or moderator in the current
-   manifest are not in force. Removing a moderator therefore removes
-   their pins; a client SHOULD tell the owner which pins will go and
-   offer to pin them again under the owner's key.
+1. Removing a moderator therefore removes their pins and unpins: what
+   they replaced counts again. A client SHOULD tell the owner which pins
+   will go and offer to pin them again under the owner's key.
 2. Pins whose target has been withdrawn with a valid cancel are not in
-   force.
-3. Of the rest, the `max_pins` latest (same order as above) are in
-   force; older ones are not.
+   force. A target that was **edited** (UN-RFC 0042) is not withdrawn
+   for this: the pin counts for the post's current version (UN-RFC 0042
+   section 5.2), which is the article nodes keep (section 5.1).
+3. Of the rest, the `max_pins` latest by the date of their current
+   marker (same order as above) are in force; older ones are not.
 
 Every node and client that holds the same articles comes to the same
 result. A pin that is not in force stays stored like any article and
@@ -111,10 +137,10 @@ expires with the group's window.
 Pins keep articles in the sense of UN-RFC 0017 section 2.1: pins and
 unpins are its **markers**, the pinned articles its **targets**.
 
-- **Which:** the pins in force (section 4.2), the latest unpin of each
+- **Which:** the pins in force (section 4.2), the current unpin of each
   target that has one and is still inside the window, and the targets
-  of the pins in force; in a closed group these targets are the carried
-  copies (section 6).
+  of the pins in force - for an edited post, its current version; in a
+  closed group these targets are the carried copies (section 6).
 - **How many:** `max_pins` (section 4.1).
 - **Order:** pins and unpins, then pinned articles.
 
@@ -218,6 +244,9 @@ it. It SHOULD NOT send any notice outside the group for a pin.
 # 8. Changes to Other Documents
 
 - UN-RFC 0004 section 3.1: the manifest field `max_pins` (section 4.1).
+- UN-RFC 0042 section 2.1: pins and unpins use `Supersedes` to name the
+  marker they replace, are written by any owner or moderator, and are
+  not withdrawn when replaced (section 3.1).
 - UN-RFC 0017 section 2.1: pins and pinned articles are kept articles
   (section 5.1). What that means for UN-RFC 0012 and UN-RFC 0027 is said
   there.
