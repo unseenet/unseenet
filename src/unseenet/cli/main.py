@@ -129,6 +129,9 @@ def client_main(argv=None) -> None:
         if kind == "feed":
             s.add_argument("--comments", choices=["open", "none"], default="open",
                            help="whether readers may comment (default open)")
+        s.add_argument("--attachments", type=int, metavar="MAX_SIZE",
+                       help="let it carry files up to this many octets (pictures)")
+        s.add_argument("--types", help="with --attachments: e.g. image/*")
         s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("profile", help="show or publish your profile (public), or --of someone's")
     s.add_argument("--of", metavar="WHO", help="show this person's profile (key, fingerprint or name)")

@@ -134,8 +134,14 @@ async def _start(app: App, args, kind: str) -> None:
         if input(f"Start your personal {kind}? [y/N] ").strip().lower() not in ("y", "yes"):
             sys.exit("Not started.")
     try:
+        size = getattr(args, "attachments", None)
+        att = None
+        if size:
+            att = {"max_size": size}
+            if getattr(args, "types", None):
+                att["types"] = args.types.split(",")
         gid = await s.start_personal_group(kind, comments=getattr(args, "comments", None) or "open",
-                                           title=getattr(args, "title", None) or "")
+                                           title=getattr(args, "title", None) or "", attachments=att)
     except SessionError as exc:
         sys.exit(f"Not started: {exc}")
     emit(args, f"Your {kind}: {gid}", {"group": gid})
