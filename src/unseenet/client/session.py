@@ -1601,7 +1601,7 @@ class Session:
         if not data.get("rules"):
             data.pop("rules_type", None)          # no text, no type
         if data.get("view", "threads") not in VIEWS:
-            raise SessionError("view must be threads or chat")
+            raise SessionError("view must be one of " + ", ".join(VIEWS))
         try:
             _comments(data)
         except ValueError as exc:

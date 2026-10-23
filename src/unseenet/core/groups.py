@@ -170,7 +170,9 @@ def _comments(data: dict) -> tuple[str, int | None]:
 
 # --- key-bound groups (UN-RFC 0029) --------------------------------------
 
-KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar", "ripe")   # UN-RFC 0029 section 2
+KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar", "ripe", "feed", "site")  # UN-RFC 0029, 2
+# personal groups (UN-RFC 0029 section 2.1): channels with this view, started by choice
+PERSONAL_GROUPS = {"feed": "feed", "site": "pages"}
 # UN-RFC 0040 section 9: the largest manifest article of each key-bound group, in
 # octets (feed@, attest@ and site@ for when they become key-bound groups).
 KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 1024,
@@ -283,6 +285,12 @@ class Manifest:
             raise ArticleError("syntax", "bad manifest fields")
         if crypto.fingerprint(owner) != fp or owner != art.author_key:
             raise ArticleError("permission", "manifest not signed by group owner")
+        if m.view == "pages" and m.type != "channel":       # UN-RFC 0035 section 3
+            raise ArticleError("syntax", "only a channel can be shown as pages")
+        if is_key_bound(art.group) and name in PERSONAL_GROUPS and (
+                m.type != "channel" or m.view != PERSONAL_GROUPS[name]):
+            raise ArticleError("syntax", f"{name}@ is a channel with view "
+                               f"{PERSONAL_GROUPS[name]} (UN-RFC 0029 section 2.1)")
         if is_key_bound(art.group):                         # UN-RFC 0029 section 3
             if m.expires is None and not stored:
                 raise ArticleError("syntax", "a key-bound group's manifest needs expires")
@@ -366,7 +374,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 
 
 MAX_RULES = 8192
-VIEWS = ("threads", "chat", "data")      # UN-RFC 0008 section 3.1
+VIEWS = ("threads", "chat", "data", "feed", "pages")   # UN-RFC 0008 3.1, 0034 3.1, 0035 3
 
 
 def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits: int = 18,
