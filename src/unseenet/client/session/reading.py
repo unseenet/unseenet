@@ -363,6 +363,8 @@ class ReadingMixin:
                     msg.blobs = tuple(b for b, _ in bl.parse_blobs(art))
                 except ArticleError:
                     msg.blobs = ()
+                msg.attachments = tuple(a for a in bl.shown_attachments(art.headers)
+                                        if a["blob"] in msg.blobs)
             if art.get("Page") is not None:                  # a site's page (UN-RFC 0035)
                 msg.page = art["Page"].strip()
                 msg.page_removed = (art.get("Page-Removed") or "").strip().lower() == "yes"

@@ -134,6 +134,8 @@ def _clean_after_update() -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from .client import decode
+    decode.run_if_asked()                     # the portable build decodes pictures as itself
     args = list(sys.argv[1:] if argv is None else argv)
     _clean_after_update()
     if args[:1] == ["cli"]:

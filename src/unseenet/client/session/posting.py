@@ -343,7 +343,8 @@ class PostingMixin:
                 if m is not None:
                     self.group_entry(group_id)["manifest"] = dict(m.raw)
             self.check_files(group_id, files)
-            edit_header += bl.attachment_headers([(f.name, f.media_type, f.octets) for f in files])
+            edit_header += bl.attachment_headers([(f.name, f.media_type, f.octets, f.alt, f.dim)
+                                                  for f in files])
             blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
             file_bits = bl.extra_bits_for(sum(len(f.octets) for f in files))
         shown = from_name or self.display_name()

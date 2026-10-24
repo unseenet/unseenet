@@ -12,6 +12,7 @@ RECONCILE_MAX_BYTES = 16 * 1024 * 1024    # one XUN-RECONCILE message, either wa
 MANIFESTS_MAX = 256                       # lines in one XUN-MANIFESTS request (UN-RFC 0041)
 MANIFESTS_ANSWER_BYTES = 1024 * 1024      # articles in one XUN-MANIFESTS answer (2.3)
 MANIFEST_MAX_BYTES = 128 * 1024           # one manifest article, read defensively
+BLOB_MAX_BYTES = 4 * 1024 * 1024 + 40     # one blob, encrypted ones 40 octets more (UN-RFC 0027)
 
 
 def dot_stuff(raw: bytes) -> bytes:
@@ -127,6 +128,24 @@ class Client:
             await self.writer.drain()
             code, text = await self._response()
         return code, text
+
+    async def blob(self, blob_id: str) -> bytes | None:
+        """``BLOB`` (UN-RFC 0027 section 6.4): the octets the node sends for a blob, or
+        None when it has not got it (``430``). ``NNTPError`` 436 while the node is still
+        fetching it from a peer. Checking the octets against the ID is the caller's
+        (section 9.2): until then they are nothing."""
+        code, text = await self.command(f"BLOB {blob_id}")
+        if code == 430:
+            return None
+        if code != 226:
+            raise NNTPError(code, text)
+        try:
+            size = int(text.split()[0])
+        except (IndexError, ValueError):
+            raise ConnectionError(f"unexpected reply to BLOB: {text[:40]!r}") from None
+        if not 0 < size <= BLOB_MAX_BYTES:
+            raise ConnectionError(f"a blob of {size} octets is not possible")
+        return await self.reader.readexactly(size)
 
     async def post(self, raw: bytes) -> tuple[int, str]:
         await self.command("POST", (340,))

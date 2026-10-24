@@ -9,6 +9,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Files on posts can be read, not only sent (#442, UN-RFC 0027 sections 6.4
+  and 9.2): `BLOB` for readers (`Client.blob`), `Session.fetch_blob()`, which
+  checks a file against its blob ID and size before anything else, and
+  `Session.picture()`, which decodes a picture in a separate process with
+  limits on memory, CPU time and open files and no files written, refuses
+  more than 50 megapixels or 1000 frames, and saves it again in the same
+  format (`client.decode`). SVG and PDF are never decoded; pictures by people
+  you ignore are not decoded unless you ask. A post now knows its files
+  (`Message.attachments`: name, type, size, alternative text, size in
+  pixels), and `Session.node_files()` says whether a group's node carries
+  files. Posted files carry their alternative text and size in pixels
+  (`Prepared.alt`, `dim`). The TUI lists a post's files with their
+  alternative text, and `f` saves them in your Downloads folder, unopened.
 - The CLI is one more client on `Session`, like the TUI and the GUI
   (#387, part 1): `group-create` with views, posters, moderators, files,
   pins and site settings; `group-edit` for roles, bans and settings in one

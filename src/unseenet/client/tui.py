@@ -1158,9 +1158,39 @@ class EditGroupDialog(Dialog):
         self.dismiss(changes)
 
 
+def attachments_text(attachments) -> Text:
+    """The files of a post as a terminal shows them (UN-RFC 0027 section 9.2): what the
+    author says each is, its type and size - a terminal does not draw pictures here,
+    and f saves them."""
+    out = Text("Files - f saves them:\n", style="bold")
+    for i, a in enumerate(attachments, 1):
+        kind = "picture" if a["type"].startswith("image/") else a["type"]
+        size = f"{a['size'] / 1024:.0f} KiB" if a["size"] >= 1024 else f"{a['size']} octets"
+        dim = f", {a['dim'][0]}×{a['dim'][1]}" if a.get("dim") else ""
+        line = f"  {i}. {a.get('name') or 'file'} - {kind}, {size}{dim}"
+        out.append(line, style="dim")
+        if a.get("alt"):
+            out.append(f"\n     {a['alt']}")
+        out.append("\n")
+    return out
+
+
+def save_name(folder: Path, name: str) -> Path:
+    """A file name in ``folder`` that is not taken, from the name a post gives (never
+    a path: only its last part, and nothing hidden)."""
+    base = (name or "file").replace("\\", "/").rsplit("/", 1)[-1].lstrip(".") or "file"
+    stem, dot, ext = base.rpartition(".")
+    stem, ext = (stem, "." + ext) if dot and stem else (base, "")
+    path, n = folder / base, 1
+    while path.exists():
+        n += 1
+        path = folder / f"{stem} ({n}){ext}"
+    return path
+
+
 class ReadScreen(Screen):
     """One message on the whole screen. r replies, m writes privately, n and p
-    go to the next and previous message, Esc goes back."""
+    go to the next and previous message, f saves its files, Esc goes back."""
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("q", "back", "Back", show=False),
@@ -1170,6 +1200,7 @@ class ReadScreen(Screen):
         Binding("p", "previous", "Previous"),
         Binding("space", "page", "Page down", show=False),
         Binding("number_sign", "group_ref", "#group", show=False),
+        Binding("f", "save_files", "Save files", show=False),
     ]
     CSS = """
     ReadScreen #read-head { padding: 0 1; background: $boost; color: $text; }
@@ -1203,6 +1234,29 @@ class ReadScreen(Screen):
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    async def action_save_files(self) -> None:
+        """Save the files of this post in your Downloads folder (else your home), as
+        the node sent them and checked against their blob IDs. They are not opened:
+        a program outside Unseenet may go to the internet without Tor."""
+        if not self.msg.attachments:
+            self.app.notify("This post has no files", severity="warning")
+            return
+        folder = Path.home() / "Downloads"
+        folder = folder if folder.is_dir() else Path.home()
+        saved = []
+        for a in self.msg.attachments:
+            try:
+                octets = await self.app.session.fetch_blob(self.msg.group, a["blob"])
+            except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+                self.app.notify(f"{a.get('name') or 'A file'}: {exc}", severity="error")
+                continue
+            path = save_name(folder, a.get("name") or "")
+            path.write_bytes(octets)
+            saved.append(path.name)
+        if saved:
+            self.app.notify(f"Saved in {folder}: {', '.join(saved)}. Opening them in another "
+                            "program happens outside Unseenet and Tor.", timeout=10)
 
     def action_reply(self) -> None:
         self.app.action_reply()
@@ -2531,6 +2585,9 @@ class UnseenetApp(App):
             if sig is not None:
                 body.append("\n\n")
                 body.append(SIG_SEPARATOR + sig, style="dim")
+            if msg.attachments:                              # UN-RFC 0027 section 9.2
+                body.append("\n\n")
+                body.append(attachments_text(msg.attachments))
         else:
             body = Text("\n" + (msg.error or msg.subject))
         return head, body
