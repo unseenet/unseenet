@@ -80,6 +80,8 @@ async def test_a_site_its_pages_and_versions(tmp_path, monkeypatch):
     about = next(p for p in site["pages"] if p["path"] == "about")
     assert about["title"] == "Om mig" and about["previous"] is True
 
+    pre = api.write_page(gid, {"path": "news/one", "text": "[op](../index)", "preview": True})
+    assert list(_links(pre["tree"])) == [f"unseenet:{gid}?p=index"]   # nothing written
     home = api.page(gid)                                       # the home page by default
     assert home["path"] == "index" and home["title"] == "Velkommen"
     links = list(_links(home["row"]["tree"]))

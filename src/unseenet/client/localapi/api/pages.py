@@ -87,9 +87,20 @@ class Pages:
         """``POST /api/groups/{gid}/page`` (section 4.15): write a page - ``{"path",
         "title", "text", "markdown": true, "files"}`` - remove it (``{"path", "remove":
         true}``), or publish its previous version again (``{"path", "restore": true}``,
-        UN-RFC 0035 section 10.4). A job, as a post is (section 4.4)."""
+        UN-RFC 0035 section 10.4). A job, as a post is (section 4.4). With ``"preview":
+        true`` nothing is written: the answer is the page's ``tree`` as readers will
+        see it (UN-RFC 0035 section 9.2)."""
         s = self._ready()
         site = self._site_data(s, gid)
+        if data.get("preview"):
+            path = str(data.get("path", "")).strip().strip("/") or "index"
+            ctype = None if data.get("markdown", True) else "text/plain; charset=utf-8"
+
+            def resolve(href: str) -> str | None:
+                target = pg.resolve_link(path, href) if pg.valid_path(path) else None
+                return _a_page(gid, target) if target else None
+            return {"tree": markup.page_body(str(data.get("text", ""))[:pg.MAX_BODY],
+                                             ctype or "text/markdown", resolve)}
         if not self._may_write(s, site):
             raise SessionError("only the site's writers write its pages")
         path = str(data.get("path", "")).strip().strip("/")

@@ -646,7 +646,9 @@ section 5):
   `{"path", "title", "text", "markdown": true, "files": [...]}` (files as in
   section 4.10, pictures pointed at by blob ID), `{"path", "remove": true}`
   removes it, and `{"path", "restore": true}` publishes its previous version
-  again (UN-RFC 0035 section 10.4). The runtime reads the site first, so the
+  again (UN-RFC 0035 section 10.4). `{"path", "text", "markdown", "preview":
+  true}` writes nothing and answers `{"tree"}`, the page as readers will see
+  it, for a preview (UN-RFC 0035 section 9.2). The runtime reads the site first, so the
   new version names the current one (section 9.2). Refused with 400 for a
   path that is not valid (section 4.1) or when you do not write the site.
 
