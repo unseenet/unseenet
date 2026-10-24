@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- The demo (#385, #388): the project's list of its groups endorses the demo's
+  groups `unseenet.demo.*`, owned by the demo key (unseenet-demo); new and
+  existing clients start following the demo's site and its shared feed
+  (starter groups, version 3).
 - The TUI writes pages (#212, UN-RFC 0035 section 9.2), as unseenet-gui does: in a
   site, `n` writes a new page and `e` a new version of the selected one, with
   its path, title, Markdown and pictures, and a preview (Ctrl+O) as readers

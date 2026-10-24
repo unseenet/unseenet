@@ -1,7 +1,7 @@
 {
   "v": 1,
   "hierarchy": "unseenet",
-  "updated": "2026-10-21",
+  "updated": "2026-10-24",
   "groups": [
     {"group": "unseenet@ph5fc5hop5232qsz", "note": "talk about Unseenet"},
     {"group": "unseenet.chat@ph5fc5hop5232qsz", "note": "chat, also the Matrix room #unseenet:unseenet.org"},
@@ -16,6 +16,11 @@
     {"group": "unseenet.checkgroups@ph5fc5hop5232qsz", "note": "data: this list"},
     {"group": "unseenet.names@ph5fc5hop5232qsz", "note": "data: name certificates"},
     {"group": "unseenet.canary@ph5fc5hop5232qsz", "note": "data: connection checks"},
-    {"group": "unseenet.gateways@ph5fc5hop5232qsz", "note": "data: the gateway directory"}
+    {"group": "unseenet.gateways@ph5fc5hop5232qsz", "note": "data: the gateway directory"},
+    {"group": "unseenet.demo@lcgptqqjydt2sevj", "note": "demo: discussion, owned by the demo key, reset every Monday"},
+    {"group": "unseenet.demo.chat@lcgptqqjydt2sevj", "note": "demo: chat room, demo key, reset every Monday"},
+    {"group": "unseenet.demo.feed@lcgptqqjydt2sevj", "note": "demo: shared feed with comments, demo key, reset every Monday"},
+    {"group": "unseenet.demo.photos@lcgptqqjydt2sevj", "note": "demo: pictures, demo key, reset every Monday"},
+    {"group": "unseenet.demo.site@lcgptqqjydt2sevj", "note": "demo: the demo's site, demo key, reset every Monday"}
   ]
 }

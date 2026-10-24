@@ -56,6 +56,7 @@ STARTER_GROUP_VERSIONS = (
     ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP, HELP_GROUP,          # 1
      "unseenet.test@ph5fc5hop5232qsz"),
     ("unseenet.chat@ph5fc5hop5232qsz",),                                # 2 (#388)
+    ("unseenet.demo.site@lcgptqqjydt2sevj", "unseenet.demo.feed@lcgptqqjydt2sevj"),      # 3: the demo (#385, #388)
 )
 STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version)
 
