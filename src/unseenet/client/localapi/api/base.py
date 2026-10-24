@@ -23,6 +23,7 @@ class ApiBase:
         self.session: Session | None = None
         self.runtime: ClientRuntime | None = None
         self.status = "Locked"
+        self.status_idle = False          # status only names the node (#518)
         self.connected = False
         self._refresh_seconds = refresh_seconds
         self._ripen_to = ripen_to if ripen_to is not None else (

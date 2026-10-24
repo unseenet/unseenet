@@ -393,6 +393,19 @@ class ClientRuntime:
                     self._start_ripening()
             await asyncio.sleep(self.refresh_seconds)
 
+    def nodes_changed(self) -> None:
+        """After a node was added, removed or made the default (#518): stop watching
+        nodes that are gone, watch new ones, and read their groups at once."""
+        for node, task in list(self._watching.items()):
+            if node not in self.session.nodes:
+                task.cancel()
+                del self._watching[node]
+        if self.inbox_ready:
+            for node in self.session.nodes:
+                if node not in self._watching:
+                    self._watching[node] = self._spawn(self.watch_node(node))
+        self._spawn(self.refresh())
+
     def _spawn(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
         self._tasks.add(task)

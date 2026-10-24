@@ -9,6 +9,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Nodes by name** (#518): a node is shown by its name on the signed
+  known-node list; else by its own name from its node information, marked
+  *(unlisted)* because anyone can choose any name; else by the start of its
+  onion address (`Session.node_name`, `node_label`, `node_entries`). A node
+  not on the list is asked its name once while connecting, and the name is
+  kept in the vault, cleaned. The TUI's subtitle, *Your nodes*, the group
+  list and notices use it, and the status line says *Connected to
+  unseenet-node1*. Local client API (UN-RFC 0046 section 4.17): `GET
+  /api/nodes` (with `?info=1` to ask each node), `POST /api/nodes` to add,
+  remove or make a node the default - the runtime starts and stops watching
+  at once - and `node_label`, `node_names` and `status_idle` in `/api/state`
+  (`idle` on `status` events), so a graphical client can change node and
+  need not repeat the node in its status bar.
 - Close a chat (UN-RFC 0044 section 4.2, `closed_chats`, amended): it leaves the
   list of chats on all your devices, the messages stay, and it comes back by
   itself with the next chat line from or to the person (sending opens it

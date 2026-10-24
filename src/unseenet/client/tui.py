@@ -89,12 +89,6 @@ def for_you_news(before, now) -> str | None:
     return "  ·  ".join(parts) + ". See 'For you' at the top of your groups."
 
 
-def node_label(address: str) -> str:
-    """A short name for a node address: the start of its onion name."""
-    host = address.split(":")[0]
-    return host[:8] if host.endswith(".onion") else address
-
-
 def sess_default_pow() -> int:
     return _session_module.DEFAULT_POW
 
@@ -1685,10 +1679,12 @@ class AboutDialog(Dialog):
 class NodesDialog(Dialog):
     """Your nodes. Your key is in the vault, so you are the same person on all of them."""
 
-    def __init__(self, nodes: list[str], infos: dict, counts: dict[str, int], known: list | None = None):
+    def __init__(self, nodes: list[str], infos: dict, counts: dict[str, int], known: list | None = None,
+                 labels: dict[str, str] | None = None):
         super().__init__()
         self.nodes, self.infos, self.counts = nodes, infos, counts
         self.known = {n.address: n for n in (known or [])}
+        self.labels = labels or {}    # the session's names: listed, else marked unlisted (#518)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog list"):
@@ -1711,7 +1707,7 @@ class NodesDialog(Dialog):
         for i, address in enumerate(self.nodes):
             info = self.infos.get(address)
             known = self.known.get(address)
-            name = (info or {}).get("name", "") or (known.name if known else "")
+            name = self.labels.get(address) or (known.name if known else "") or (info or {}).get("name", "")
             state = "unreachable" if info is None else "ok"
             short = address if len(address) <= 34 else address[:16] + "…" + address[-14:]
             table.add_row("♦" if i == 0 else "", Text(name), Text(short),
@@ -1996,7 +1992,7 @@ class BrowseDialog(Dialog):
         icons = group_icons(g.type, data)
         where = ""
         if len(self.app.session.nodes) > 1 and g.nodes:
-            where = f"   @ {node_label(g.nodes[0])}" + (f" +{len(g.nodes) - 1}" if len(g.nodes) > 1 else "")
+            where = f"   @ {self.app.session.node_label(g.nodes[0])}" + (f" +{len(g.nodes) - 1}" if len(g.nodes) > 1 else "")
         return Text(f"{mark} {icons} {self.app.session.group_label(g.group_id, self.known)}   {g.description}{where}")
 
     def on_mount(self) -> None:
@@ -2069,7 +2065,7 @@ class BrowseDialog(Dialog):
         if warning:
             lines.append(("Name:   " if warning.startswith("Endorsed") else "! ") + warning)
         if len(g.nodes) > 1 or len(self.app.session.nodes) > 1:
-            lines.append("On:     " + ", ".join(node_label(n) for n in g.nodes))
+            lines.append("On:     " + ", ".join(self.app.session.node_label(n) for n in g.nodes))
         if data.get("type") == "closed":
             lines.append("Members only: you need an invitation from the owner to read it.")
         if self._not_mine_inbox(g):
@@ -2406,7 +2402,7 @@ class UnseenetApp(App):
             ripe += " (ripening paused)"                                      # #358
         elif ripe and s.ripening_limit is not None:
             ripe += " (as ripe as this machine allows)"                       # #440
-        self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node}{more}{ripe}")
+        self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node_label(s.node)}{more}{ripe}")
 
     # --- groups ---
     def _groups_from_vault(self, available: dict[str, GroupInfo] | None = None) -> dict[str, GroupInfo]:
@@ -2454,7 +2450,7 @@ class UnseenetApp(App):
             self.query_one("#threads-title", Static).update(
                 "No groups yet - press g to browse the node's groups, or Ctrl+P to create one")
         where = f"{len(s.nodes)} nodes" if len(s.nodes) > 1 else "node"
-        down = f" - not reachable: {', '.join(node_label(n) for n in s.unreachable)}" if s.unreachable else ""
+        down = f" - not reachable: {', '.join(s.node_label(n) for n in s.unreachable)}" if s.unreachable else ""
         self.set_status(f"{result.available} groups on {where}, {len(groups)} subscribed{down}")
 
     async def _render_groups(self) -> None:
@@ -3872,8 +3868,9 @@ class UnseenetApp(App):
             await asyncio.gather(*(ask(n) for n in s.nodes))
             self.set_status("")
             counts = {n: sum(1 for g in s.data["subscribed"] if s.node_for(g) == n) for n in s.nodes}
-            result = await self.push_screen_wait(NodesDialog(s.nodes, infos, counts,
-                                                             s.known_nodes()))
+            result = await self.push_screen_wait(NodesDialog(
+                s.nodes, infos, counts, s.known_nodes(),
+                labels={n: s.node_label(n) for n in s.nodes}))
             if not result:
                 return
             action, address = result
@@ -3881,14 +3878,14 @@ class UnseenetApp(App):
                 value = await self.push_screen_wait(AddNodeDialog(s.known_nodes(), s.nodes))
                 if value:
                     s.add_node(value)
-                    self.notify(f"Added {value} - its groups are now in the group list (g)")
+                    self.notify(f"Added {s.node_label(value)} - its groups are now in the group list (g)")
                     self._start_watches()
                     self._update_subtitle()
                     self.refresh_groups()
             elif action == "default":
                 s.add_node(address, default=True)
                 self._update_subtitle()
-                self.notify(f"New groups and your inbox now go to {node_label(address)}")
+                self.notify(f"New groups and your inbox now go to {s.node_label(address)}")
             elif action == "remove":
                 if not await self.push_screen_wait(ConfirmDialog(
                         "Stop using this node?",
@@ -3906,7 +3903,7 @@ class UnseenetApp(App):
                 self.refresh_groups()
             elif action == "info":
                 if infos.get(address) is None:
-                    self.notify(f"{node_label(address)} does not answer right now", severity="warning")
+                    self.notify(f"{s.node_label(address)} does not answer right now", severity="warning")
                     continue
                 if await self.push_screen_wait(NodeInfoDialog(infos[address], address)):
                     break

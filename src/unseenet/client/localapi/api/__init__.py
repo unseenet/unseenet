@@ -19,6 +19,7 @@ The code follows the sections of UN-RFC 0046, one file each:
     articles.py   4.9  articles and manifests from a program
     files.py      4.10 files on posts: pictures to show, files to save, files to post
     pictures.py   4.11 pictures and identicons of people, and your own picture
+    nodes.py      4.17 your nodes: by name, add, remove, the default
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -125,10 +126,11 @@ from .pictures import Pictures  # noqa: E402
 from .addresses import Addresses  # noqa: E402
 from .feeds import Feeds  # noqa: E402
 from .pages import Pages  # noqa: E402
+from .nodes import Nodes  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses, Feeds, Pages):
+               Files, Pictures, Addresses, Feeds, Pages, Nodes):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

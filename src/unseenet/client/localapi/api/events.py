@@ -32,14 +32,18 @@ class Events:
 
     def _on_event(self, e: ev.Event) -> None:
         if isinstance(e, ev.Status):
-            self.status = e.text
+            self.status, self.status_idle = e.text, False
         elif isinstance(e, ev.Refreshed):
             self.connected = e.error is None
         self._broadcast(e.to_dict())
         if isinstance(e, ev.Refreshed) and self.session is not None:
-            # the status line every front end shows after a round (as the TUI's)
-            self._say(f"Offline ({e.error}) - showing saved posts" if e.error
-                      else f"Connected to {self.session.node}")
+            # the status line every front end shows after a round (as the TUI's); when all
+            # is well it only names the node, so a front end that shows the node elsewhere
+            # may leave it out (``idle``, #518)
+            if e.error:
+                self._say(f"Offline ({e.error}) - showing saved posts")
+            else:
+                self._say(f"Connected to {self.session.node_label(self.session.node)}", idle=True)
         if self._job is not None:            # progress of the job being sent
             job, group = self._job
             if isinstance(e, ev.PowProgress) and not e.done:
@@ -57,9 +61,9 @@ class Events:
     def _job_event(self, job: str, group: str, state: str, **more) -> None:
         self._broadcast({"event": "job", "job": job, "group": group, "state": state, **more})
 
-    def _say(self, text: str) -> None:
-        self.status = text
-        self._broadcast(ev.Status(text).to_dict())
+    def _say(self, text: str, idle: bool = False) -> None:
+        self.status, self.status_idle = text, idle
+        self._broadcast({**ev.Status(text).to_dict(), "idle": idle})
 
     def spawn(self, coro) -> asyncio.Task:
         """Run a coroutine in the background, kept until done and cancelled by ``close``."""

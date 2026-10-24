@@ -341,6 +341,26 @@ NAME_MENTION_RE = re.compile(
     r"(?![\w@-]|\.\w)", re.IGNORECASE)
 
 
+def short_node(address: str) -> str:
+    """A node address in a few characters: ``f6vnchi5….onion``, or ``host:port`` as it is."""
+    host = address.strip().split(":")[0]
+    return host[:8] + "….onion" if host.endswith(".onion") else address.strip()
+
+
+NODE_NAME_MAX = 64
+
+
+def clean_node_name(name) -> str | None:
+    """A node's own name (UN-RFC 0011) made safe to show: one line, no control or
+    format characters, at most ``NODE_NAME_MAX`` characters. None if nothing is left."""
+    import unicodedata
+    if not isinstance(name, str):
+        return None
+    text = "".join(ch for ch in name if unicodedata.category(ch)[0] not in "CZ" or ch == " ")
+    text = " ".join(text.split())[:NODE_NAME_MAX].strip()
+    return text or None
+
+
 def default_vault_path() -> Path:
     """``unseenet.vault`` in the current directory, or in ``data/`` of a portable build."""
     from ...portable import default_vault_path as portable_default

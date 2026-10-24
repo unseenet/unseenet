@@ -140,7 +140,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         assert status == 200 and not state["setup"] and state["identity"]["display"] == "Andreas"
         await _until(ws, lambda e: e["event"] == "refreshed")
         said = await _until(ws, lambda e: e["event"] == "status")
-        assert said["text"] == f"Connected to {addr}"
+        assert said["text"] == f"Connected to {api.session.node_label(addr)}" and said["idle"]
 
         assert (await r.post("/api/subscribe", {"id": g, "on": True}))[0] == 200
         await _until(ws, lambda e: e["event"] == "group-updated" and e["group_id"] == g)
