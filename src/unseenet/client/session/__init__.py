@@ -49,7 +49,7 @@ from ...core.backoff import Backoff
 from ...core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ...core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
 from ...core.groups import MAX_SUPERSEDES, parse_supersedes
-from ...core.groups import (INBOX_NAME, INBOX_SCHEME, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
+from ...core.groups import (INBOX_NAME, INBOX_SCHEME, INBOX_SCHEMES, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_group_id, make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id,
@@ -71,6 +71,7 @@ from ...core import ripening as rp
 
 DEFAULT_POW = 20
 MAX_READ_MARKS = 5000
+MAX_SENT_COPIES = 100             # sent posts findable from other devices, in the state (0044, 6.2)
 MAX_CACHED_PER_GROUP = 2000
 SIG_SEPARATOR = "-- \n"         # the Usenet signature delimiter (RFC 3676, 4.3): dash dash space
 MAX_SIG_LINES = 4               # the old netiquette limit

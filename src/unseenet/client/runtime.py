@@ -120,6 +120,10 @@ class ClientRuntime:
             return None
         if s.data["subscribed"] != before:
             s.emit(ev.GroupsChanged())
+        try:                                       # posts you sent from another device (6.2)
+            await s.fetch_sent_copies()
+        except (SessionError, *NETWORK_ERRORS) as exc:
+            log.info("sent copies not fetched now (%s)", exc)
         return result
 
     async def _fetch(self, group_ids) -> set[str]:

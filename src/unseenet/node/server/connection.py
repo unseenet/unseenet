@@ -88,7 +88,8 @@ class ConnectionBase:
                     f"UNSEENET-MAXSIZE {cfg.max_size}", f"UNSEENET-MINPOW {cfg.min_pow}",
                     "UNSEENET-MINRIPE " + ("-" if cfg.min_ripe is None else str(cfg.min_ripe)),
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
-                    "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}"):
+                    "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}",
+                    "UNSEENET-SEALEDBOX2"):                      # UN-RFC 0009 section 2.4
             self.send(cap)
         if cfg.blobs is not None:
             self.send(f"UNSEENET-BLOB {cfg.max_blob}")             # UN-RFC 0027 section 6.1

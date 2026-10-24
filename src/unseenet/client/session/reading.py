@@ -339,7 +339,7 @@ class ReadingMixin:
             return None
         msg = Message(n, art.message_id, group_id, author_key=art["Author-Key"],
                       references=(art.get("References") or "").split())
-        if art.get("Encrypted", "").strip() != INBOX_SCHEME:   # not in inboxes (0042, 2)
+        if art.get("Encrypted", "").strip() not in INBOX_SCHEMES:   # not in inboxes (0042, 2)
             try:
                 msg.supersedes = parse_supersedes(art)
             except ArticleError:
@@ -348,7 +348,7 @@ class ReadingMixin:
             msg.date = parse_date(art["Date"])
         except (TypeError, ValueError):
             pass
-        if art.get("Encrypted", "").strip() == INBOX_SCHEME:
+        if art.get("Encrypted", "").strip() in INBOX_SCHEMES:
             msg.encrypted = msg.private = True
             self._open_private(msg, art, group_id)
         elif "Encrypted" in art:
