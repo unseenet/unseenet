@@ -146,9 +146,11 @@ identity or the node is still missing.
 `POST /api/ripening` `{"paused": true | false}` pauses or resumes ripening
 in the background (UN-RFC 0025 section 7), for example on a warm phone or
 a laptop on battery, and answers the state's `ripening`. A pause lasts
-until it is resumed or the runtime stops; the next start ripens again. It
-stops only the background ripening: a post that needs a riper key still
-ripens what it needs.
+until it is resumed, also over a restart: the runtime keeps it with the
+key's ripening in the vault, on this device only - it is not part of your
+state in the network (UN-RFC 0044), so pausing on a phone does not pause
+another device. It stops only the background ripening: a post that needs
+a riper key still ripens what it needs.
 
 ## 4.2 Unlocking and Setting Up
 

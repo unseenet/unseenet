@@ -26,6 +26,28 @@ class RipeningMixin:
         """The chain this identity has computed so far, in the vault (section 3.2)."""
         return rp.Chain([rp.Segment.from_dict(s) for s in self._ripening_entry(name)["segments"]])
 
+    def ripening_kept_paused(self, name: str | None = None) -> bool:
+        """True when the user paused ripening this key on this device, until they resume
+        it (#337): kept with the key's chain in this vault, not with your state, so a
+        warm phone pausing does not pause the desktop."""
+        if not self.has_identity():
+            return False
+        return bool(self._ripening_entry(name).get("paused"))
+
+    def set_ripening_kept_paused(self, paused: bool, name: str | None = None) -> None:
+        """Remember (or forget) that ripening this key is paused on this device, and save;
+        the client runtime calls it from ``pause_ripening`` and ``resume_ripening``."""
+        if not self.has_identity():
+            return
+        entry = self._ripening_entry(name)
+        if bool(entry.get("paused")) == paused:
+            return
+        if paused:
+            entry["paused"] = True
+        else:
+            entry.pop("paused", None)
+        self.save()
+
     def ripe_group(self, name: str | None = None) -> str:
         """The Group ID where an identity publishes its ripening chain:
         ``ripe@<fingerprint>`` (UN-RFC 0025)."""
