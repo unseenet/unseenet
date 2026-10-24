@@ -25,7 +25,7 @@ COMMANDS = {
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
-    "pin": c_pin, "pins": c_pins, "page-put": c_page_put, "page-remove": c_page_remove,
+    "pin": c_pin, "pins": c_pins, "react": c_react, "page-put": c_page_put, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
     "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
     "timeline": c_timeline, "address": c_address, "open": c_open,
@@ -111,6 +111,12 @@ def client_main(argv=None) -> None:
     s.add_argument("message_id", help="the post's Message-ID")
     s.add_argument("--note", help="a short note shown with the pin")
     s.add_argument("--unpin", action="store_true", help="unpin it instead")
+    s = sub.add_parser("react", help="react to a post, comment or chat line with an emoji "
+                                     "(again: take it back)")
+    s.add_argument("group")
+    s.add_argument("message_id", help="the post's Message-ID")
+    s.add_argument("emoji", help="one emoji the group takes, e.g. 👍")
+    s.add_argument("--who", action="store_true", help="list who gave this emoji instead")
     s = sub.add_parser("pins", help="the posts pinned in a group")
     s.add_argument("group")
     s = sub.add_parser("page-put", help="write a page of a site (UN-RFC 0035)")

@@ -257,10 +257,13 @@ contacts. It MUST make clear what it counts.
 
 # 8. Closed Groups and Inboxes
 
-In closed groups `Message-Kind`, `Reaction`, `Subject`, `References` and
-the body are in the encrypted inner article (UN-RFC 0004 section 6);
-`Reaction` MUST NOT appear in the outer article. Nodes cannot tell a
-reaction from any other article there, and cannot count or enforce.
+In closed groups `Message-Kind`, `Reaction`, `Subject` and the body are
+in the encrypted inner article (UN-RFC 0004 section 6); `Reaction` MUST
+NOT appear in the outer article. `References` stays in the outer
+article, as for every article of a closed group, so nodes see what a
+reaction answers as they see what a reply answers, but not that it is a
+reaction. Nodes cannot tell a reaction from any other article there, and
+cannot count or enforce.
 
 Clients of members enforce the reaction set: a reaction whose emoji is
 not in it, or which breaks section 3 or 5, is not counted. A client MUST

@@ -53,7 +53,9 @@ class Accepting:
         """Keep a comment aside until its thread arrives, at most an hour. The
         sender is told to try again anyway, so dropping one here loses nothing."""
         try:
-            root = Article.from_bytes(raw).get("References", "").split()[0]
+            refs = Article.from_bytes(raw)
+            # a reaction waits for its target, a comment for its thread (UN-RFC 0048, 6.1)
+            root = refs.get("References", "").split()[-1 if rx.is_reaction(refs) else 0]
         except (ArticleError, ValueError, IndexError):
             return
         now = time.monotonic()
@@ -188,6 +190,11 @@ class Accepting:
             self._check_superseded(art)
             check_permitted(art, manifest, self.store.epochs(art.group),
                             self.store.closed_before(art.group), thread_root=self._thread_root)
+            if "Encrypted" not in art and rx.is_reaction(art):      # UN-RFC 0048 section 5
+                mine = self.store.reaction_by(rx.target(art), art["Author-Key"])
+                if mine and mine not in versions:
+                    raise ArticleError("permission", "this key has reacted to that article "
+                                       "already; a change names it in Supersedes")
             self._check_blocked(art)
             carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)

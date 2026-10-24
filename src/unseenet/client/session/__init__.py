@@ -20,6 +20,7 @@ reads and posts. Clients use the one class; its code is split by area:
     personal.py   an identity's personal feed and site (UN-RFC 0029 section 2.1)
     following.py  following feeds and people, the timeline (UN-RFC 0034 sections 6, 7)
     state.py      your state in the network, encrypted, merged and written (UN-RFC 0044)
+    reactions.py  reactions under articles: counting, reacting (UN-RFC 0048)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -196,6 +197,7 @@ class Message:
     to_key: str | None = None             # a private message you sent: its recipient
     content_type: str = ""                # private messages: the inner Content-Type
     kind: str = KIND_POST               # private messages: a chat or a post (UN-RFC 0028)
+    reaction: str = ""                    # kind reaction: its emoji (UN-RFC 0048)
     mention_group: str | None = None      # a mention notice: where the post is (UN-RFC 0032)
     mention_of: str | None = None         # ... and its Message-ID
     notices_for: str | None = None        # a bundle of notices for a submission (0032, 4.3)
@@ -363,9 +365,10 @@ from .kept import KeptMixin  # noqa: E402
 from .personal import PersonalMixin  # noqa: E402
 from .following import FollowingMixin  # noqa: E402
 from .state import StateMixin  # noqa: E402
+from .reactions import ReactionsMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

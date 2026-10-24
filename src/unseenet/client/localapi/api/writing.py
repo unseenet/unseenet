@@ -1,6 +1,6 @@
 """Writing (UN-RFC 0046 sections 4.4, 4.5): posts and private posts as jobs, and your own posts.
 
-Belongs here: posting, private posts, editing and withdrawing, each a job whose
+Belongs here: posting, private posts, editing, reacting (UN-RFC 0048) and withdrawing, each a job whose
 progress (postage, ripening) arrives as events; and mentions of you.
 
 Part of ``LocalAPI`` (see __init__.py)."""
@@ -139,6 +139,28 @@ class Writing:
 
         async def after(msgid: str) -> None:
             await s.fetch_group(m.group)
+        return {"job": self._new_job(gid, send, after)}
+
+    def react(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/react`` (section 4.5, UN-RFC 0048): react to a post,
+        comment or chat line with ``emoji``, as a job. The emoji you already gave takes
+        it back, another changes it. ``who: true`` instead answers who gave ``emoji``."""
+        s = self._ready()
+        m = self._find(s, gid, str(data.get("id", "")))
+        emoji = str(data.get("emoji", "")).strip()
+        if data.get("who"):
+            return {"who": s.who_reacted(m, emoji)}
+        allowed = s.react_permission(m.group, m)
+        if not allowed:
+            raise SessionError(allowed.reason)
+        if not s.reaction_set(m.group).takes(emoji):
+            raise SessionError("this group does not take that reaction")
+
+        async def send() -> str:
+            return await s.react(m, emoji) or ""
+
+        async def after(msgid: str) -> None:
+            s.emit(ev.GroupUpdated(m.group))
         return {"job": self._new_job(gid, send, after)}
 
     async def withdraw(self, gid: str, message_id: str) -> dict:

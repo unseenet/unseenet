@@ -112,7 +112,8 @@ def parse_canonical_json(body: str) -> dict:
 # --- chats and posts (UN-RFC 0028) ---------------------------------------
 
 KIND_CHAT, KIND_POST = "chat", "post"
-MESSAGE_KINDS = (KIND_CHAT, KIND_POST)
+MESSAGE_KINDS = (KIND_CHAT, KIND_POST)     # what ``kinds`` may name (UN-RFC 0028, 4.1)
+KIND_REACTION = "reaction"                 # UN-RFC 0048: never in ``kinds``
 
 
 MAX_SUPERSEDES = 32       # earlier versions an edit may name (UN-RFC 0042 section 2)
@@ -141,6 +142,8 @@ def message_kind(art: Article) -> str:
     """The kind of a message (UN-RFC 0028 section 3.1): of a plain article, or of the
     inner article of a closed group or an inbox. Without the header, a post."""
     value = art.get("Message-Kind", "").strip().lower()
+    if value == KIND_REACTION and art.control is None:     # UN-RFC 0048 section 3.1
+        return KIND_REACTION
     return KIND_CHAT if value == KIND_CHAT else KIND_POST
 
 
@@ -289,6 +292,9 @@ class Manifest:
             m.comments, m.comment_days = _comments(data)
             from .pins import max_pins
             max_pins(data)                                  # UN-RFC 0033 section 4.1
+            from .reactions import check_field as check_reactions
+            if data.get("type") != "inbox":                 # ignored there (0048, 4.3)
+                check_reactions(data)                       # UN-RFC 0048 section 4.1
             from .blobs import check_attachments_field
             check_attachments_field(data)                   # UN-RFC 0027 section 5.1
             if data.get("view") == "pages":                 # UN-RFC 0035 section 3
@@ -362,7 +368,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   rules_type: str | None = None, lifetime: timedelta | None = None,
                   extra: dict | None = None) -> Article:
     """``extra``: further manifest fields - ``attachments`` (UN-RFC 0027), ``max_pins``
-    (0033), ``max_pages``, ``home`` and ``index`` (0035) - checked as nodes check them."""
+    (0033), ``max_pages``, ``home`` and ``index`` (0035), ``reactions`` (0048) - checked
+    as nodes check them."""
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -406,17 +413,21 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 
 
 # manifest fields of the 0.5.0 documents, set through ``extra`` and Session.update_group
-EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index")
+EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reactions")
 
 
 def check_extra_fields(data: dict) -> None:
-    """ValueError if ``attachments``, ``max_pins``, ``max_pages``, ``home`` or ``index`` are not
-    as UN-RFC 0027 section 5.1, 0033 section 4.1 and 0035 section 3 say."""
+    """ValueError if ``attachments``, ``max_pins``, ``max_pages``, ``home``, ``index`` or
+    ``reactions`` are not as UN-RFC 0027 section 5.1, 0033 section 4.1, 0035 section 3
+    and 0048 section 4.1 say."""
     from .blobs import check_attachments_field
     from .pages import check_manifest_fields
     from .pins import max_pins
+    from .reactions import check_field as check_reactions
     check_attachments_field(data)
     max_pins(data)
+    if data.get("type") != "inbox":
+        check_reactions(data)                              # UN-RFC 0048 section 4.1
     if data.get("view") == "pages":
         check_manifest_fields(data)
     elif "max_pages" in data or "home" in data or "index" in data:
@@ -544,10 +555,11 @@ def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author:
     """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption.
     ``extra``: outer headers nodes must read, e.g. Supersedes (UN-RFC 0042, 2) or
     ``Blobs``; ``inner_extra``: headers only members read, e.g. ``Attachment-<n>``
-    with the file keys (UN-RFC 0027 section 4.3)."""
-    if kind not in MESSAGE_KINDS:
+    with the file keys (UN-RFC 0027 section 4.3). A reaction (UN-RFC 0048, 8) has
+    kind ``reaction`` and its ``Reaction`` header in ``inner_extra``."""
+    if kind not in MESSAGE_KINDS + (KIND_REACTION,):
         raise ValueError(f"unknown message kind: {kind}")
-    inner = Article([("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
+    inner = Article([("From", from_name), ("Subject", subject if kind == KIND_POST else ""),
                      ("Content-Type", content_type or "text/plain; charset=utf-8"),
                      ("Message-Kind", kind)] + list(inner_extra or []), body)
     blob = crypto.aead_encrypt(keys.enc_key, inner.to_bytes(), _aad(group_id, epoch))
@@ -737,6 +749,9 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
     if "Encrypted" in art:
         raise ArticleError("permission", "encryption only allowed in closed groups")
     kind = message_kind(art)                               # UN-RFC 0028, section 5
+    if kind == KIND_REACTION:                              # UN-RFC 0048 section 6.1
+        _check_reaction(art, manifest, thread_root)
+        return
     if art.control is None and kind not in manifest.kinds:
         raise ArticleError("permission", "this group takes " + " and ".join(
             {"chat": "chat lines", "post": "posts with a subject"}[k] for k in manifest.kinds)
@@ -749,6 +764,27 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         _check_comment(art, manifest, thread_root)
         return
     raise ArticleError("permission", f"not allowed to post in {manifest.type} group")
+
+
+def _check_reaction(art: Article, manifest: Manifest, thread_root: ThreadRoot | None) -> None:
+    """UN-RFC 0048 section 6.1: well formed, an emoji the group takes, and an ordinary
+    article of this group that the node holds. Not a comment: channels take it
+    whatever ``comments`` says, moderated groups without the queue."""
+    from .reactions import check_form, is_reaction, reaction_set, target
+    e = check_form(art)
+    if not reaction_set(manifest.raw).takes(e):
+        raise ArticleError("permission", "this group does not take that reaction")
+    tgt = thread_root(target(art)) if thread_root is not None else None
+    if tgt is None:
+        raise ArticleError("later", "the article reacted to is not on this node yet")
+    if tgt.group != art.group or tgt.control is not None or is_reaction(tgt):
+        raise ArticleError("permission", "a reaction is to an ordinary article in this group")
+    if manifest.type == "channel" and manifest.comment_days is not None:   # section 4.4
+        root_id = (art.get("References") or "").split()[0]
+        root = tgt if root_id == tgt.message_id else thread_root(root_id)
+        if root is not None and parse_date(art["Date"]) > (
+                parse_date(root["Date"]) + timedelta(days=manifest.comment_days)):
+            raise ArticleError("permission", "reactions on this thread have closed")
 
 
 def _check_comment(art: Article, manifest: Manifest, thread_root: ThreadRoot | None) -> None:

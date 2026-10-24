@@ -541,6 +541,7 @@ class PrivateMixin:
         msg.subject, msg.body = inner.get("Subject", ""), inner.body
         msg.content_type = inner.get("Content-Type", "")
         msg.kind = message_kind(inner)
+        msg.reaction = (inner.get("Reaction") or "").strip()     # UN-RFC 0048 section 4.3
         msg.reply_inbox = inner.get("Reply-Inbox")
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032

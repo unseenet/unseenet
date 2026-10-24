@@ -11,6 +11,7 @@ split by area:
     kept.py         kept articles: pins and pages
     blobs.py        blob references, deletion, refusal, quotas
     withdrawals.py  cancels and edits
+    reactions.py    reactions and the article each is to (UN-RFC 0048)
     peers.py        peer queues, pull and reconcile state
     stats.py        numbers for the operator's monitor
 
@@ -88,6 +89,14 @@ CREATE TABLE IF NOT EXISTS supersedes (       -- UN-RFC 0042: an earlier version
     first_date INTEGER                -- Date of the earliest version known, unix seconds
 );
 CREATE INDEX IF NOT EXISTS supersedes_new ON supersedes(new);
+
+CREATE TABLE IF NOT EXISTS reactions (        -- UN-RFC 0048: a reaction -> its article
+    message_id TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    target     TEXT NOT NULL,
+    author_key TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reactions_target ON reactions(target, author_key);
 
 CREATE TABLE IF NOT EXISTS tombstones (       -- UN-RFC 0013
     group_id   TEXT PRIMARY KEY,
@@ -211,10 +220,12 @@ from .kept import Kept  # noqa: E402
 from .blobs import Blobs  # noqa: E402
 from .withdrawals import Withdrawals  # noqa: E402
 from .peers import Peers  # noqa: E402
+from .reactions import Reactions  # noqa: E402
 from .stats import Stats  # noqa: E402
 
 
-class Store(StoreBase, Articles, Groups, KeyBound, Kept, Blobs, Withdrawals, Peers, Stats):
+class Store(StoreBase, Articles, Groups, KeyBound, Kept, Blobs, Withdrawals, Peers, Reactions,
+            Stats):
     """The node's store.
 
     Split into parts by area (core/store/*.py, see above)."""

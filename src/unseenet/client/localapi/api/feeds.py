@@ -45,6 +45,7 @@ class Feeds:
             row.update(self._feed_row(s, m.group, m), group_label=s.group_label(m.group),
                        address=_addr.post_address(s, m.group, m.message_id))
             out.append(row)
+        self._add_reactions(s, out, rows)       # UN-RFC 0048 section 7.2
         if self.runtime is not None:            # a feed followed but not read yet
             self.spawn(self._unknown_manifests())
         return {"group": head, "rows": out}

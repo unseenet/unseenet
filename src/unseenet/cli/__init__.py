@@ -6,7 +6,7 @@ does goes through ``Session`` (``unseenet.client.session``). Split by area:
     node.py       unseenet-node: node.toml, the node key, running a node
     basics.py     id-new, whoami, node-add
     groups.py     groups, group-create, group-edit, group-show, group-remove, invite
-    messages.py   post, withdraw, read
+    messages.py   post, withdraw, read, react
     network.py    tor, bridges, gateways
     services.py   ripen, serve (for services, bots and gateways)
     kept.py       pin, pins, page-put, page-remove, pages, feed-start, site-start
