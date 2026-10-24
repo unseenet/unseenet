@@ -230,6 +230,67 @@ class ProfilesMixin:
         m = await self.fetch_manifest(prof.avatar_id(pk))
         return prof.picture_from_manifest(m) if m else None
 
+    # --- private profiles (section 6) ---
+    async def share_profile(self, to: str, profile: dict | None = None) -> str:
+        """Share a profile with one person (their inbox) or a closed group, where only
+        they can read it (section 6): by default your public one, or another made for
+        them - with a picture inline if you like (8.3). Returns the Message-ID."""
+        if profile is None:
+            profile = dict(self.my_profile() or {"v": 1})
+            pic = self.my_picture()
+            if pic and "avatar" not in profile:
+                profile["avatar"] = {k: v for k, v in pic.items() if k in ("type", "data", "alt")}
+        try:
+            obj = prof.check_profile(profile, private=True)
+        except prof.ProfileError as exc:
+            raise SessionError(str(exc)) from exc
+        body = prof.canonical_json(obj) + "\n"
+        if split_group_id(to)[0] == INBOX_NAME:
+            if to == self.my_inbox:
+                raise SessionError("share your profile with someone else's inbox")
+            return await self.send_private(to, "Profile", body, content_type=prof.PRIVATE_TYPE,
+                                           remember=False)
+        if self.group_entry(to).get("type") != "closed":
+            raise SessionError("a private profile goes to a person or a closed group; "
+                               "for everyone, publish your profile")
+        return await self.post(to, "Profile", body, content_type=prof.PRIVATE_TYPE)
+
+    async def withdraw_shared_profile(self, to: str) -> str:
+        """Take back the profile you shared there (an empty one, section 6)."""
+        return await self.share_profile(to, {"v": 1})
+
+    def _keep_private_profile(self, msg: "Message", context: str) -> None:
+        """A private profile read in a context ("me": sent to you; or a closed group's
+        ID): kept as the newest for that key there, or withdrawn. The post itself is not
+        shown among the others."""
+        msg.private_profile = True
+        try:
+            obj = prof.check_profile(json.loads(msg.body), private=True)
+        except (ValueError, prof.ProfileError):
+            return
+        store = self.data.setdefault("private_profiles", {}).setdefault(context, {})
+        key = msg.author_key
+        when = msg.date.isoformat() if msg.date else ""
+        old = store.get(key)
+        # Date is rounded to 10 minutes: of two the same, the one the node got later
+        if old and (old.get("date", ""), old.get("number", 0)) >= (when, msg.number):
+            return                                   # an older one, read later
+        if old and old.get("msgid") == msg.message_id:
+            return
+        mark = {"date": when, "number": msg.number, "msgid": msg.message_id}
+        store[key] = {"withdrawn": True, **mark} if prof.withdraws(obj) else {"profile": obj, **mark}
+
+    def private_profile(self, key_text: str, context: str) -> dict | None:
+        """The profile this key shared in this context (\"me\", or a closed group's ID), or
+        None. Never one from another context (section 6)."""
+        got = self.data.get("private_profiles", {}).get(context, {}).get(key_text)
+        return got.get("profile") if got and not got.get("withdrawn") else None
+
+    def shared_contexts(self, key_text: str) -> list[str]:
+        """The contexts in which this key has shared a profile you can see."""
+        return [c for c, keys in self.data.get("private_profiles", {}).items()
+                if keys.get(key_text) and not keys[key_text].get("withdrawn")]
+
     def hide_profile(self, key_text: str, hidden: bool = True) -> None:
         """Section 9.2: the user may hide the profile of a key."""
         hidden_set = set(self.data.setdefault("hidden_profiles", []))

@@ -32,6 +32,13 @@ MIN_PX, MAX_PX = 32, 128
 MAX_PICTURE = 8192                       # octets of the image file
 MAX_ALT = 128
 MAX_PRIVATE_AVATAR = 11264               # octets of the `avatar` field in a private profile
+PRIVATE_TYPE = "application/x-unseenet-profile"   # a private profile's Content-Type (section 6)
+
+
+def withdraws(obj: dict) -> bool:
+    """A private profile with neither ``about`` nor ``links`` withdraws the earlier one in
+    its context (section 6)."""
+    return not obj.get("about") and not obj.get("links")
 
 
 # Shown before someone publishes their first profile, the same in every client

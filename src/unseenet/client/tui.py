@@ -971,10 +971,11 @@ class ProfileDialog(Dialog):
     """Someone's profile (UN-RFC 0022 section 9.2): names, short form, about, lang, links."""
 
     def __init__(self, key_text: str, label: str, profile, mine: bool = False,
-                 hidden: bool = False):
+                 hidden: bool = False, shared: str | None = None):
         super().__init__()
         self.key_text, self.label, self.profile = key_text, label, profile
         self.mine, self.hidden = mine, hidden
+        self.shared = shared             # "with you" / "with this group": private (0022, 6)
 
     def compose(self) -> ComposeResult:
         p = self.profile
@@ -983,6 +984,9 @@ class ProfileDialog(Dialog):
             yield Label(title, classes="title", markup=False)
             yield Static(identicon_text(self.key_text))
             yield Label(self.key_text, classes="hint", markup=False)
+            if self.shared:
+                yield Label(f"Shared {self.shared} - not public, and shown only here",
+                            classes="hint", markup=False)
             if p is None or prof.is_empty(p.raw or {}):
                 yield Static("No public profile." if not self.hidden else
                              "You have hidden this profile.", markup=False)
@@ -3747,10 +3751,76 @@ class UnseenetApp(App):
             self.notify(f"Could not read the profile: {exc}", severity="error")
             return
         label = s.identity_label(key, m.from_name if m and m.author_key == key else "")
-        answer = await self.push_screen_wait(ProfileDialog(key, label, p, mine, hidden))
+        gid = self.current_group or ""
+        context = ("me" if (m is not None and m.private) or gid.startswith(CONTACT)
+                   or gid == s.my_inbox else
+                   gid if s.group_entry(gid).get("type") == "closed" else None)
+        shared = None
+        private = s.private_profile(key, context) if context and not mine else None
+        if private is not None:                         # in its own context only (0022, 6)
+            p = prof.Profile.from_object(crypto.key_from_text(key), private)
+            shared = "with you" if context == "me" else "with this group"
+        answer = await self.push_screen_wait(ProfileDialog(key, label, p, mine, hidden, shared))
         if answer in ("hide", "show"):
             s.hide_profile(key, answer == "hide")
             self.notify("Profile hidden" if answer == "hide" else "Profile shown")
+
+    async def _share_target(self) -> tuple[str, str] | None:
+        """Where a shared profile goes: this closed group, or a contact's inbox."""
+        s = self.session
+        gid = self.current_group or ""
+        if s.group_entry(gid).get("type") == "closed" and gid in self.groups:
+            return gid, f"the members of {s.group_label(gid)}"
+        people = s.contacts()
+        if not people:
+            self.notify("Open a closed group, or add a contact, to share your profile with",
+                        severity="warning", timeout=6)
+            return None
+        key = await self.push_screen_wait(KeyListDialog(
+            "Share your profile with", "Only they can read it, and it is shown only to them.",
+            people, "Choose"))
+        if not key:
+            return None
+        return personal_inbox_id(crypto.key_from_text(key)), s.contact_name(key) or key[:20]
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_share_profile(self) -> None:
+        """A profile for one person or a closed group only (UN-RFC 0022 section 6) - for
+        those who want no public profile, or another one for friends."""
+        s = self.session
+        target = await self._share_target()
+        if target is None:
+            return
+        to, who = target
+        dlg = EditProfileDialog(s.my_profile())
+        answer = await self.push_screen_wait(dlg)
+        if not answer or answer == "remove":
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Share your profile", f"Only {who} can read it, and it is shown only there - "
+                "your public profile, if you have one, stays as it is. You can take it back "
+                "later.", "Share")):
+            return
+        try:
+            await s.share_profile(to, answer)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Not shared: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"Profile shared with {who}", timeout=5)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_unshare_profile(self) -> None:
+        """Take back a profile shared with someone or a closed group (an empty one)."""
+        target = await self._share_target()
+        if target is None:
+            return
+        to, who = target
+        try:
+            await self.session.withdraw_shared_profile(to)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Not taken back: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"Shared profile taken back from {who}", timeout=5)
 
     @work(group="dialog", exit_on_error=False)
     async def action_edit_profile(self) -> None:
@@ -3879,6 +3949,10 @@ class UnseenetApp(App):
             ("Following", "The people you follow - stop following one", self.action_following),
             ("Start my feed", "Your own feed, public, where anyone can comment - or open it",
              self.action_start_feed),
+            ("Share my profile", "With one person or this closed group only - not public",
+             self.action_share_profile),
+            ("Take back my shared profile", "From a person or this closed group",
+             self.action_unshare_profile),
             ("Private posts from new keys",
              ("Hidden: only contacts and keys ripened an hour or more reach you - show all"
               if self.session.private_min_ripe() is not None else

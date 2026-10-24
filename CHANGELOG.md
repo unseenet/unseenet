@@ -132,6 +132,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (⌂), each with its path; choosing one shows it, Markdown and all; `v`
   switches a site between pages and threads. Writing pages stays with the
   command line (`unseenet page-put`) for now.
+- **Private profiles** (UN-RFC 0022 section 6, #182): share a profile with one
+  person or a closed group only - for those who want no public profile, or
+  another one for friends. It is read only by them, shown only there, marked
+  "shared with you" or "with this group", never elsewhere; an empty one takes
+  it back. `Session.share_profile`, `withdraw_shared_profile`,
+  `private_profile(key, context)`; in the TUI, "Share my profile" and "Take
+  back my shared profile" in the palette.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the
