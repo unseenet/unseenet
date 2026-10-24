@@ -36,6 +36,7 @@ from ..console import console_css
 from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
+from ..core import addresses as addr
 from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
                            personal_inbox_id, short_group_id, split_group_id)
 from . import session as _session_module
@@ -152,6 +153,7 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
 # Windows console with Consolas - and one cell wide each.
 ICONS = {"threads": "≡", "chat": "»", "data": "¤", "moderated": "√", "channel": "►",
          "closed": "∩", "inbox": "@", "local": "⌂", "unknown": "·"}
+_ONION = re.compile(r"^[a-z2-7]{56}\.onion(:\d{1,5})?$")   # what an n= hint may be
 PIN_MARK = "[P]"                 # a pinned post (UN-RFC 0033 section 7.2): no emoji in WGL4
 ICON_LEGEND = ("≡ posts  » chat  ¤ data for programs  √ moderated  ► channel  ∩ closed  "
                "@ inbox  ⌂ local (one node)  · not known yet")
@@ -3192,18 +3194,87 @@ class UnseenetApp(App):
             self.notify(f"Invite failed: {exc}", severity="error", timeout=8)
             return
         await self.push_screen_wait(InfoDialog(
-            "Invitation sent - share this with them", f"unseenet:join?g={g.group_id}&n={self.session.node_for(g.group_id)}"))
+            "Invitation sent - share this with them", self._group_address(g.group_id)))
+
+    def _hints(self, gid: str) -> list[str]:
+        """The node this client reads a group from, as an n= hint: only an onion
+        address, which is what others can reach (UN-RFC 0031 section 3.4.1)."""
+        node = self.session.node_for(gid)
+        return [node] if node and _ONION.match(node.lower()) else []
+
+    def _group_address(self, gid: str) -> str:
+        return addr.group_address(gid, self._hints(gid))
+
+    def action_post_address(self) -> None:
+        """The selected post's unseenet: address, to give to others (UN-RFC 0031)."""
+        m = self.current_message
+        if m is None or not m.message_id or not self.current_group or m.private \
+                or self.current_group not in self.groups:
+            self.notify("Select a post in a group first", severity="warning")
+            return
+        self._show_address("The post's address - others open it with j",
+                           addr.post_address(self.current_group, m.message_id,
+                                             self._hints(self.current_group)))
+
+    def action_group_address(self) -> None:
+        gid = self.current_group
+        if not gid or gid not in self.groups or gid == FOR_YOU or gid.startswith(CONTACT):
+            self.notify("Select a group first", severity="warning")
+            return
+        self._show_address("The group's address - others open it with j", self._group_address(gid))
+
+    def _show_address(self, title: str, text: str) -> None:
+        self.copy_to_clipboard(text)          # where the terminal lets it (OSC 52)
+        self.push_screen(InfoDialog(title, text))
+
+    def _key_for_fingerprint(self, fp: str) -> str | None:
+        """A key this client has met with that fingerprint: yours, a contact's, or an
+        author of what you have read."""
+        s = self.session
+        known = [s.identity(n).key_text for n in s.data["identities"]]
+        known += list(s.data.get("contacts", {}))
+        known += [m.author_key for g in s.cache.values() for m in g.values()]
+        for key in dict.fromkeys(k for k in known if k):
+            try:
+                if crypto.fingerprint(crypto.key_from_text(key)) == fp:
+                    return key
+            except crypto.CryptoError:
+                continue
+        return None
 
     @work(group="dialog", exit_on_error=False)
     async def action_join(self) -> None:
+        """Join a group or open what an unseenet: address names - a group, a post or a
+        person; the older forms too (UN-RFC 0031 section 3.4.1)."""
         value = await self.push_screen_wait(InputDialog(
-            "Join a group", "Paste a group ID or an unseenet:join link.", "dk.snak@... or unseenet:join?g=..."))
+            "Join a group or open an address", "Paste a group ID or an unseenet: address.",
+            "dk.snak@... or unseenet:..."))
         if not value:
             return
-        gid, node = value, None
-        if value.startswith("unseenet:join?"):
-            params = dict(p.split("=", 1) for p in value.split("?", 1)[1].split("&") if "=" in p)
-            gid, node = params.get("g", ""), params.get("n") or None
+        value = value.strip()
+        try:
+            a = addr.parse(value if value.lower().startswith(addr.SCHEME)
+                           else addr.SCHEME + value)
+        except addr.AddressError as exc:
+            self.notify(f"That is not an address: {exc}", severity="error")
+            return
+        if a.kind == "identity":
+            key = self._key_for_fingerprint(a.fingerprint)
+            if key:
+                self.action_show_profile(key)
+            else:
+                self.notify(f"Someone this client has not met yet: fingerprint {a.fingerprint}",
+                            timeout=8)
+            return
+        if a.kind == "page":
+            self.notify("That is a page; this client does not show pages yet", severity="warning")
+        gid, node = a.group_id, (a.nodes[0] if a.nodes else None)
+        if gid in self.groups:
+            self.current_group = gid
+            self.select_group(gid)
+            if a.kind == "post":
+                await self._select_post(a.message_id)
+            return
         if node and node not in self.session.nodes:
             if await self.push_screen_wait(ConfirmDialog(
                     "The group is on another node",
@@ -3221,6 +3292,21 @@ class UnseenetApp(App):
             return
         self.current_group = gid
         self.refresh_groups()
+        if a.kind == "post":
+            self.select_group(gid)
+            await self._select_post(a.message_id)
+
+    async def _select_post(self, msgid: str) -> None:
+        """Select a post of the open group once it is read, or say it is not there."""
+        for _ in range(200):
+            if msgid in self.messages:
+                break
+            await asyncio.sleep(0.05)
+        if msgid in self.messages:
+            self.current_message = self.messages[msgid]
+        else:
+            self.notify("The post is not there - it may have been withdrawn or have expired",
+                        timeout=8)
 
     @work(group="dialog", exit_on_error=False)
     async def action_group_ref(self, text: str = "") -> None:
@@ -3380,9 +3466,9 @@ class UnseenetApp(App):
                     f"hour; the answer comes to your private messages, and {done}.", timeout=12)
 
     @work(group="dialog", exit_on_error=False)
-    async def action_show_profile(self) -> None:
-        m = self.current_message
-        key = m.author_key if m and m.readable and m.author_key else ""
+    async def action_show_profile(self, key: str = "") -> None:
+        m = None if key else self.current_message
+        key = key or (m.author_key if m and m.readable and m.author_key else "")
         if not key:
             key = await self.push_screen_wait(InputDialog(
                 "Whose profile?", "Select a post first, or give a key.", "ed25519:..."))
@@ -3530,7 +3616,12 @@ class UnseenetApp(App):
              self.action_create_group),
             ("Invite to closed group", "Give someone access to a closed group you own",
              self.action_invite),
-            ("Join group", "Subscribe by group ID or unseenet:join link  [j]", self.action_join),
+            ("Join group or open an address", "Subscribe by group ID, or open an unseenet: "
+             "address of a group, a post or a person  [j]", self.action_join),
+            ("Address of this post", "The selected post's unseenet: address, to give to others",
+             self.action_post_address),
+            ("Address of this group", "The group's unseenet: address, to give to others",
+             self.action_group_address),
             ("Nodes", "Your nodes: add, remove, default, who runs them, write to an operator  [o]",
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",

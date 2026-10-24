@@ -109,7 +109,7 @@ else is in the command palette, ++ctrl+p++:
 | ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
 | `@` | Your names: claim a name such as `@lorensen`, see the ones you hold |
-| ++j++ | Join a group by ID or `unseenet:join` link |
+| ++j++ | Join a group by ID, or open an `unseenet:` address of a group, a post or a person |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
 | ++s++ | Edit your signature |
@@ -637,8 +637,8 @@ Press ++o++ for **Your nodes**:
 Each group is read from one node, shown as *Read from* when you press
 ++question-mark++. If that node stops carrying a group, or cannot be reached,
 the client reads it from another of your nodes that does. An
-`unseenet:join` link names the group's node; if you do not use it yet,
-the client offers to add it.
+`unseenet:` address can name the group's node (`n=`); if you do not use it
+yet, the client offers to add it.
 
 Using the same key on several nodes lets those nodes see that it is the
 same person. If you want to keep two parts of your life apart, use two
@@ -666,14 +666,26 @@ If the operator has set up a contact inbox, **Write to operator** sends
 them a private message. Use it to report abuse, ask for a group to be
 carried, or just say thanks.
 
+## Addresses
+
+Every group, post and person has an `unseenet:` address
+([UN-RFC 0031](spec/un-rfc-0031.md) section 3.4.1) to give to others:
+`unseenet:dk.snak@abcd...` for a group, `?m=` added for a post, and
+`unseenet:` with a fingerprint for a person. In the command palette
+(++ctrl+p++), **Address of this post** and **Address of this group** show
+one, and copy it where the terminal allows. Paste one after ++j++ to open
+it: a group you do not follow yet is joined, a post is selected in its
+group, and a person's profile opens if the client has met their key. The
+older forms (`unseenet:join?g=...`) work too.
+
 ## Joining a closed group
 
 Closed groups are end-to-end encrypted, so you need to be invited:
 
 1. Press ++k++ and send your key to the group's owner (any way you like).
 2. The owner selects the group, opens the command palette (++ctrl+p++), chooses **Invite to closed group** and pastes your key.
-3. The owner sends you the `unseenet:join?...` link it shows.
-4. You press ++j++ and paste the link.
+3. The owner sends you the `unseenet:<group-id>?n=...` address it shows.
+4. You press ++j++ and paste the address.
 
 A minute or so later, when the invitation has reached your node, the
 posts become readable.

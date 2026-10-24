@@ -10,8 +10,11 @@ Part of ``unseenet.cli`` (see __init__.py)."""
 
 from __future__ import annotations
 
+import re
+
 from . import *  # noqa: F403  - the shared names, as when this was one file
 from .. import cli as _c   # names tests patch on the module, read at call time
+from ..core.addresses import group_address
 
 
 async def c_groups(app: App, args) -> None:
@@ -173,8 +176,9 @@ async def c_invite(app: App, args) -> None:
     member = crypto.key_from_text(args.key)
     await app.post(make_key_update(owner, args.group, epoch, keys, [member], grant_only=True,
                                    pow_bits=await app.bits(args.group, owner)))
-    print(f"Invite sent. Share this with the new member:\n  unseenet:join?g={args.group}"
-          f"&n={app.data['nodes'][0]}")
+    node = app.data["nodes"][0] if app.data["nodes"] else None
+    hints = [node] if node and re.match(r"^[a-z2-7]{56}\.onion(:\d{1,5})?$", node.lower()) else []
+    print(f"Invite sent. Share this with the new member:\n  {group_address(args.group, hints)}")
 
 
 def _group_options(s, *, create: bool) -> None:
