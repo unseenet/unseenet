@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -77,9 +78,13 @@ def run_if_asked(argv: list[str] | None = None) -> None:
 
 
 def _flags() -> dict:
-    if sys.platform == "win32":                      # no console window from a windowed client
-        return {"creationflags": subprocess.CREATE_NO_WINDOW}
-    return {}
+    """How the process is started: with an empty environment (nothing of the client's
+    is handed over), and on Windows without a console window, keeping only what
+    Python needs there to start at all."""
+    if sys.platform == "win32":
+        env = {k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}
+        return {"env": env, "creationflags": subprocess.CREATE_NO_WINDOW}
+    return {"env": {}}
 
 
 def _answer(code: int | None, out: bytes, err: bytes, media_type: str) -> Picture:
@@ -101,7 +106,7 @@ def picture(octets: bytes, declared: str | None = None) -> Picture:
     media_type = _check(octets, declared)
     try:
         done = subprocess.run(_command(), input=octets, capture_output=True, timeout=TIMEOUT,
-                              env={}, **_flags())
+                              **_flags())
     except subprocess.TimeoutExpired:
         raise DecodeError("this picture took too long to read") from None
     return _answer(done.returncode, done.stdout, done.stderr, media_type)
@@ -112,7 +117,7 @@ async def picture_async(octets: bytes, declared: str | None = None) -> Picture:
     media_type = _check(octets, declared)
     proc = await asyncio.create_subprocess_exec(
         *_command(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE, env={}, **_flags())
+        stderr=asyncio.subprocess.PIPE, **_flags())
     try:
         out, err = await asyncio.wait_for(proc.communicate(octets), TIMEOUT)
     except asyncio.TimeoutError:
