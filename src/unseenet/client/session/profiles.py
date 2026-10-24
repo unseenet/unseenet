@@ -2,7 +2,10 @@
 
 Belongs here: reading profiles (``profile_of``, read in batches so a node cannot tell
 whose you open, ``prefetch_profiles``), publishing your own and your picture
-(``publish_profile``, ``publish_picture``), and hiding someone's profile for yourself.
+(``publish_profile``, ``publish_picture``), hiding someone's profile for yourself, and
+the pictures of many keys at once, read together and decoded in a separate process
+before they are shown (``pictures``, UN-RFC 0022 section 8, UN-RFC 0027 section 9.2),
+with a switch to show identicons only (``show_pictures``).
 
 Not here: private profiles shared in a group or a private post (#182, coming), labels
 (labels.py).
@@ -134,6 +137,7 @@ class ProfilesMixin:
                 prof.check_picture(picture)
             except prof.ProfileError as exc:
                 raise SessionError(str(exc)) from exc
+        self.__dict__.get("_picture_cache", {}).pop(ident.key_text, None)
         return await self._publish_key_bound(
             prof.avatar_id(ident.public_key),
             lambda serial, bits: prof.avatar_manifest(ident, picture, serial=serial,
@@ -143,15 +147,82 @@ class ProfilesMixin:
         """Publish a picture from a file as this identity's profile picture: the middle
         square, at most 128 pixels and 8 KiB, saved again without metadata
         (``client.media.avatar``, section 8.1). Returns the published manifest data."""
-        from .. import media
         try:
-            data, ctype, px = media.avatar(Path(path).read_bytes())
-            picture = prof.make_picture(data, ctype, px, alt.strip()[:prof.MAX_ALT])
+            octets = Path(path).read_bytes()
         except OSError as exc:
             raise SessionError(f"cannot read {Path(path).name}: {exc.strerror or exc}") from exc
+        return await self.publish_picture(self.make_picture(octets, alt))
+
+    @staticmethod
+    def make_picture(octets: bytes, alt: str = "") -> dict:
+        """The picture object that would be published from a picture's octets: the middle
+        square, at most 128 pixels and 8 KiB, saved again without metadata (section
+        8.1). A client shows it before publishing it (8.5)."""
+        from .. import media
+        try:
+            data, ctype, px = media.avatar(octets)
+            return prof.make_picture(data, ctype, px, alt.strip()[:prof.MAX_ALT])
         except (ValueError, prof.ProfileError) as exc:
             raise SessionError(str(exc)) from exc
-        return await self.publish_picture(picture)
+
+    def my_picture(self) -> dict | None:
+        """This identity's published picture object, or None."""
+        return self.manifest_data(prof.avatar_id(self.identity().public_key)).get("avatar") or None
+
+    def show_pictures(self) -> bool:
+        """False when the user chose identicons only (section 8.5)."""
+        return self.data.get("show_pictures") is not False
+
+    def set_show_pictures(self, on: bool) -> None:
+        """Show people's pictures (True) or identicons only (False); kept in the vault."""
+        self.data["show_pictures"] = bool(on)
+        self.save()
+
+    async def pictures(self, keys) -> dict:
+        """The pictures of many keys, read together so a node cannot tell whose you look
+        at (sections 8.2, 13): key -> ``{"type", "px", "octets", "alt"}`` or None. Each
+        is decoded and saved again in a separate process and kept only if it is the
+        square still picture it says (8.1); none for a key you hid or ignore, or when
+        pictures are off - then the identicon is shown (8.5). Kept in memory a day."""
+        from .. import decode
+        cache = self.__dict__.setdefault("_picture_cache", {})
+        now = datetime.now(timezone.utc).timestamp()
+        mine = self.identity().key_text
+        out: dict = {}
+        todo: dict[str, str] = {}
+        for key in dict.fromkeys(str(k).strip() for k in keys if k):
+            if key != mine and (not self.show_pictures() or self.profile_hidden(key)
+                                or self.is_ignored(key)):
+                out[key] = None
+                continue
+            hit = cache.get(key)
+            if hit and now - hit[0] <= self.PROFILE_CACHE_SECONDS:
+                out[key] = hit[1]
+                continue
+            try:
+                todo[prof.avatar_id(crypto.key_from_text(key))] = key
+            except crypto.CryptoError:
+                out[key] = None
+        if todo:
+            try:
+                found = await self.fetch_manifests(list(todo))
+            except OSError:                     # node away: identicons now, ask again later
+                return {**out, **dict.fromkeys(todo.values())}
+            for gid, key in todo.items():
+                m = found.get(gid)
+                obj = prof.picture_from_manifest(m) if m is not None else None
+                pic = None
+                if obj is not None:
+                    try:
+                        shown = await decode.picture_async(prof.check_picture(obj), obj["type"])
+                    except (decode.DecodeError, prof.ProfileError):
+                        shown = None
+                    if shown and shown.width == shown.height == obj["px"] and shown.frames == 1:
+                        pic = {"type": shown.media_type, "px": obj["px"], "octets": shown.octets,
+                               "alt": obj.get("alt", "")}
+                cache[key] = (now, pic)
+                out[key] = pic
+        return out
 
     async def picture_of(self, key_text: str) -> dict | None:
         """The picture of a key, if its node carries avatar groups (section 8.2)."""

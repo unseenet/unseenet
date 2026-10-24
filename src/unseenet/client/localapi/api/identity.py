@@ -23,8 +23,12 @@ class Identity:
         key = (key or "").strip() or me
         base = {"label": s.label_of(key), "link_kinds": list(prof.LINK_KINDS)}
         if key == me:
+            from .pictures import _shown
             return {**self._profile(me, s.my_profile()), **base, "mine": True, "hidden": False,
-                    "published": s.has_published_profile(), "warning": prof.PROFILE_WARNING}
+                    "published": s.has_published_profile(), "warning": prof.PROFILE_WARNING,
+                    # your picture (UN-RFC 0022 section 8.5): what is published, and what
+                    # to tell before the first (section 4.11)
+                    "picture": _shown(s.my_picture()), "picture_warning": prof.PICTURE_WARNING}
         key = _key(key)
         if s.profile_hidden(key):                         # hidden: not even asked for
             return {**self._profile(key, None), **base, "mine": False, "hidden": True}
@@ -178,14 +182,15 @@ class Identity:
         return {"signature": s.signature_template(), "signature_preview": s.signature(),
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
                 "private_min_ripe": s.private_min_ripe(),
-                "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots()}
+                "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
+                "pictures": s.show_pictures()}
 
     def set_settings(self, data: dict) -> dict:
         """``POST /api/settings`` (section 4.8): change your settings - signature,
         Markdown, notices, the ripening level private senders need, blocked posts, bots."""
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
-                               "show_blocked", "hide_bots"}
+                               "show_blocked", "hide_bots", "pictures"}
         if unknown:
             raise SessionError(f"unknown setting {sorted(unknown)[0]}")
         level = data.get("private_min_ripe")
@@ -206,5 +211,7 @@ class Identity:
             s.set_show_blocked(bool(data["show_blocked"]))
         if "hide_bots" in data:
             s.set_hide_bots(bool(data["hide_bots"]))
+        if "pictures" in data:
+            s.set_show_pictures(bool(data["pictures"]))
         self._redraw_all(s)
         return self.settings()

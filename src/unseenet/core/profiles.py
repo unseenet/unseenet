@@ -46,6 +46,18 @@ PROFILE_WARNING = (
     "leave the profile out.")
 
 
+# Shown before someone publishes their first picture, the same in every client
+# (section 8.5).
+PICTURE_WARNING = (
+    "Anybody who sees this identity's posts can see its picture.\n\n"
+    "A photo of yourself, or a picture you also use elsewhere, can be found with a "
+    "reverse image search and ties this identity to you or to your other accounts.\n\n"
+    "A published picture cannot be fully taken back: others may already have kept a "
+    "copy.\n\n"
+    "A drawing, or no picture at all - your identicon is shown then - keeps you "
+    "harder to find.")
+
+
 class ProfileError(ValueError):
     pass
 

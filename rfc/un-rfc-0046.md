@@ -213,7 +213,8 @@ rendered for showing (UN-RFC 0031): Markdown or plain by the post's
 "v": "..."}` in which HTML is always text. A front end MUST draw the tree,
 or the plain text, and MUST NOT put a post's text into a page as HTML.
 `bot` is true when the author's profile says it posts automatically
-(UN-RFC 0030 section 6): show a mark. `groups` are the `#group` references in it; `notice` is set for a mention
+(UN-RFC 0030 section 6): show a mark. `identicon` is the author's identicon
+(section 4.11). `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
 `portal_warning`, `write`, `files` and `node_files` (section 4.10), and for its owner or a moderator `roles` (section 4.7):
@@ -343,7 +344,8 @@ not (you do not own or moderate the group).
   it has together with it, so a node cannot tell whose you open (UN-RFC 0022
   section 13). Yours adds `published` (whether one is published yet) and
   `warning`, the text to show before the first is published (section 9.1),
-  the same in every client.
+  the same in every client, and `picture` (yours as published, section
+  4.11, or null) with `picture_warning`, the text to show before the first.
 - `POST /api/profile` with a profile object publishes yours, `null`
   removes it; `{"edit": {"about": "...", "links": [{"kind", "value",
   "label"}], "lang": ["da", ...], "markdown": true}}` builds the object from
@@ -362,7 +364,8 @@ not (you do not own or moderate the group).
   `private_min_ripe` (a level or null, UN-RFC 0025 section 3.5),
   `show_blocked` (true or false: show posts a hierarchy blocked,
   UN-RFC 0018), `hide_bots` (true or false: leave out posts by keys whose
-  profile says `bot`, UN-RFC 0030 section 6). Both answer all settings, with `signature_preview` (the
+  profile says `bot`, UN-RFC 0030 section 6), `pictures` (true or false:
+  false shows identicons only, section 4.11). Both answer all settings, with `signature_preview` (the
   template filled in). An unknown setting is `400`.
 
 ## 4.9 Articles from a Program
@@ -446,6 +449,51 @@ pixels in `dim`, and `alt` in the header. It checks them against the
 group before any postage is computed and answers `400` with the reason
 for people when the group takes no files, not of this type or size, or
 more than four or 8 MiB together. A request may be at most 12 MiB.
+
+## 4.11 Pictures of People
+
+Every identity has an identicon and may have a picture (UN-RFC 0022
+section 8). The runtime gives both ready to draw, and the page never
+gets a picture the runtime has not checked.
+
+An identicon is `{"hue": <degrees>, "cells": [[true, false, ...], ...],
+"colour": "#rrggbb"}`: five rows of five cells, filled cells in the
+colour (saturation 55 %, lightness 50 %; a front end MAY change the
+lightness for its theme but MUST keep the hue). It is shown together
+with the short form of the fingerprint, never instead of it (UN-RFC 0022
+section 8.4). Each row of a group (section 4.3) has the author's.
+
+`GET /api/pictures?keys=<key>,<key>,...` (at most 255) answers
+
+```
+{"pictures": {"<key>": {"identicon": {...},
+                         "picture": {"type": "image/webp", "px": 96, "alt": "...",
+                                     "data": "data:image/webp;base64,..."} or null}}}
+```
+
+The runtime reads the avatar groups of these keys together with those of
+the other authors it has, so a node cannot tell whose pictures are
+looked at (UN-RFC 0022 section 13), and keeps them for a day. It decodes
+each picture and saves it again in a separate process (UN-RFC 0027
+section 9.2) and treats it as absent unless it is the square, still
+picture of `px` pixels it says it is (UN-RFC 0022 section 8.1). A key
+whose profile you hid, a key you ignore, or every key while the setting
+`pictures` is false, gets `null`: show its identicon. `alt` is text the
+owner wrote: show it as text. A picture is shown next to the names and
+the short form, never instead of them and never as part of a post.
+
+`POST /api/profile/picture` sets your own:
+
+- `{"data": "<base64>", "alt": "...", "preview": true}` makes the picture
+  from a file the person chose - the middle square, at most 128 pixels
+  and 8 KiB, saved again without metadata - and answers it as it would
+  be published, `{"picture": {...}, "published": <whether one is
+  published already>}`, without publishing anything. A front end MUST
+  show it so before publishing (UN-RFC 0022 section 8.5), and before the
+  first one it MUST show `picture_warning` from `GET /api/profile`.
+- The same without `preview` publishes it and answers `{"picture": {...},
+  "published": true}`.
+- `{"remove": true}` removes yours; what others kept cannot be taken back.
 
 # 5. Events
 

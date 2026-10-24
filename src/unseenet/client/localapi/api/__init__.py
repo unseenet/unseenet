@@ -18,6 +18,7 @@ The code follows the sections of UN-RFC 0046, one file each:
     identity.py   4.8  profiles, names, the passphrase, settings
     articles.py   4.9  articles and manifests from a program
     files.py      4.10 files on posts: pictures to show, files to save, files to post
+    pictures.py   4.11 pictures and identicons of people, and your own picture
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -77,6 +78,16 @@ class Status(Exception):
         self.status, self.fields = status, fields
 
 
+def _identicon(key: str | None) -> dict | None:
+    """A key's identicon for a front end to draw (UN-RFC 0022 section 8.4): ``hue``,
+    the 5 x 5 ``cells`` (row by row), and ``colour`` at lightness 50 %."""
+    try:
+        icon = prof.identicon(crypto.key_from_text(key or ""))
+    except (crypto.CryptoError, ValueError):
+        return None
+    return {"hue": icon.hue, "cells": [list(r) for r in icon.cells], "colour": icon.hex()}
+
+
 def _perm(p) -> dict:
     """``Session.write_permission`` for a front end: greyed out, with the reason (#181)."""
     return {"allowed": bool(p.allowed), "reason": p.reason, "code": p.code}
@@ -109,10 +120,11 @@ from .running import Running  # noqa: E402
 from .identity import Identity  # noqa: E402
 from .articles import Articles  # noqa: E402
 from .files import Files  # noqa: E402
+from .pictures import Pictures  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files):
+               Files, Pictures):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).
