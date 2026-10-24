@@ -40,6 +40,8 @@ class Groups:
                 "inbox": {"id": s.my_inbox if ready else None,
                           "unread": s.unread_private_posts() if ready else 0},
                 "for_you": {"id": FOR_YOU, "replies": c.replies, "mentions": c.mentions},
+                # the timeline, when you follow a feed (UN-RFC 0034 section 7)
+                "timeline": {"id": TIMELINE, "feeds": len(s.feeds_followed())},
                 "moderation": len(s.submissions()), "name_requests": self._name_requests(s)}
 
     @staticmethod
@@ -79,6 +81,8 @@ class Groups:
             g = GroupInfo(gid, "Replies to your posts and posts that name you, from all your groups",
                           view="threads", replies=c.replies, mentions=c.mentions)
             return {**g.to_dict(), "label": "For you", "hierarchy": "", "may_post": False}
+        if gid == TIMELINE:
+            return self._timeline_head(s)
         if gid == s.my_inbox:
             g = s.group_info(gid)
             g.type = "inbox"
@@ -164,6 +168,8 @@ class Groups:
         head (title, view, roles, rules, write permission) and its rows, threaded or as a chat,
         each with whether you may reply. Also the pseudo-groups of a contact and "for you"."""
         s = self._ready()
+        if gid == TIMELINE:
+            return self._timeline_group(s)
         head = self._head(s, gid)
         if head["view"] == "chat" and not gid.startswith(CONTACT) and gid != FOR_YOU:
             # read as a chat: every line in the order it came (UN-RFC 0008 section 3.1)
@@ -181,6 +187,9 @@ class Groups:
             for row, (m, _) in zip(out, rows):
                 row["pinned"] = m.message_id in pinned
                 row["address"] = _addr.post_address(s, gid, m.message_id)
+            if head["view"] == "feed":          # a comment is a chat line (UN-RFC 0034, 4.2)
+                for row, (m, _) in zip(out, rows):
+                    row["comment"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_CHAT))
         return {"group": head, "rows": out}
 
     @staticmethod
@@ -216,7 +225,7 @@ class Groups:
     def _pool(s: Session, gid: str) -> list[Message]:
         if gid == s.my_inbox or gid.startswith(CONTACT):
             return s.private_messages()
-        if gid == FOR_YOU:
+        if gid in (FOR_YOU, TIMELINE):
             return [m for msgs in s.cache.values() for m in msgs.values()]
         return list(s.cache.get(gid, {}).values())
 
@@ -239,10 +248,10 @@ class Groups:
         return {"ok": True}
 
     def set_view(self, gid: str, view) -> dict:
-        """``POST /api/groups/{gid}/view`` (section 4.3): show a group as threads or as a
-        chat, or null for the group's own choice."""
-        if view not in ("threads", "chat", None):
-            raise SessionError("view is threads, chat or null")
+        """``POST /api/groups/{gid}/view`` (section 4.3): show a group as threads, as a
+        chat or as a feed (UN-RFC 0034), or null for the group's own choice."""
+        if view not in ("threads", "chat", "feed", None):
+            raise SessionError("view is threads, chat, feed or null")
         self._ready().set_view(gid, view)
         return {"ok": True}
 

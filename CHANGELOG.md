@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
+  0034): a group can be shown as a feed, with `comment` on each row (may you
+  answer it with a chat line); the timeline as the pseudo-group `timeline:`,
+  every followed feed's entries newest first with their comments under them;
+  `GET/POST /api/following` to follow and stop following people and feeds;
+  `GET/POST /api/feed` to start your own feed after the warning; and a
+  profile says whose feed it is and whether you follow them. A group shown
+  as a feed is laid out by `Session.feed_rows()` in every client: each note its
+  own entry, entries newest first by date, comments under them.
 - Addresses in the local client API (#442, UN-RFC 0046 section 4.13, UN-RFC
   0031 section 3.4.1): a group's head, each of its posts and every profile
   carry their `unseenet:` address, and `GET /api/address` says what any
