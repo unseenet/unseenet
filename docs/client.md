@@ -109,7 +109,7 @@ else is in the command palette, ++ctrl+p++:
 | ++o++ | Your nodes: add, remove, default, who runs them, write to an operator |
 | ++k++ | Show your key (share it to get private messages or invitations) |
 | `@` | Your names: claim a name such as `@lorensen`, see the ones you hold |
-| ++j++ | Join a group by ID or `unseenet:join` link |
+| ++j++ | Join a group by ID, or open an `unseenet:` address of a group, a post or a person |
 | ++f5++ | Refresh (also happens every 30 seconds) |
 | ++q++ | Quit |
 | ++s++ | Edit your signature |
@@ -347,6 +347,32 @@ to them by others stay, so a discussion does not lose its middle.
 Only you know: the list is kept in your vault and never sent anywhere,
 and the person is not told. **People you ignore** in the command palette
 shows the list, and shows someone again.
+
+## Pinned posts
+
+The owner and moderators of a group can pin posts at the top of it, for
+example a welcome post or the rules ([UN-RFC 0033](spec/un-rfc-0033.md)).
+Nodes keep a pinned post beyond the group's window until it is unpinned.
+
+In the threads view, the pins are in a **Pinned** section above the
+threads, newest pin first, with their notes. A pinned post is also marked
+`[P]` in its place. Press ++enter++ on the section's head to fold it away
+or open it again; the client remembers this per group. In the chat view, a
+line above the chat shows the newest pin, and **Next pin** in the command
+palette shows the next. Pinned lines are marked `[P]` in the chat.
+**Pinned posts** lists them all, and choosing one opens it.
+
+To pin, select a post and choose **Pin or unpin post** in the command
+palette (++ctrl+p++). In a chat, you choose the line from a list. You can
+add a note that is shown with the pin. A group shows at most its
+`max_pins` pins (5 unless its owner set another number): when it is full,
+the client tells you which pin stops counting. Choosing the command on a
+pinned post unpins it. A post older than the group keeps posts disappears
+from the nodes as soon as it is unpinned, and the client says so first.
+Pinning is not on a key, on purpose: it is rare.
+
+Only pins by the owner and moderators of the group's current manifest
+count, and your client checks this itself, as it does for withdrawals.
 
 ## Withdrawing a post
 
@@ -611,8 +637,8 @@ Press ++o++ for **Your nodes**:
 Each group is read from one node, shown as *Read from* when you press
 ++question-mark++. If that node stops carrying a group, or cannot be reached,
 the client reads it from another of your nodes that does. An
-`unseenet:join` link names the group's node; if you do not use it yet,
-the client offers to add it.
+`unseenet:` address can name the group's node (`n=`); if you do not use it
+yet, the client offers to add it.
 
 Using the same key on several nodes lets those nodes see that it is the
 same person. If you want to keep two parts of your life apart, use two
@@ -640,14 +666,26 @@ If the operator has set up a contact inbox, **Write to operator** sends
 them a private message. Use it to report abuse, ask for a group to be
 carried, or just say thanks.
 
+## Addresses
+
+Every group, post and person has an `unseenet:` address
+([UN-RFC 0031](spec/un-rfc-0031.md) section 3.4.1) to give to others:
+`unseenet:dk.snak@abcd...` for a group, `?m=` added for a post, and
+`unseenet:` with a fingerprint for a person. In the command palette
+(++ctrl+p++), **Address of this post** and **Address of this group** show
+one, and copy it where the terminal allows. Paste one after ++j++ to open
+it: a group you do not follow yet is joined, a post is selected in its
+group, and a person's profile opens if the client has met their key. The
+older forms (`unseenet:join?g=...`) work too.
+
 ## Joining a closed group
 
 Closed groups are end-to-end encrypted, so you need to be invited:
 
 1. Press ++k++ and send your key to the group's owner (any way you like).
 2. The owner selects the group, opens the command palette (++ctrl+p++), chooses **Invite to closed group** and pastes your key.
-3. The owner sends you the `unseenet:join?...` link it shows.
-4. You press ++j++ and paste the link.
+3. The owner sends you the `unseenet:<group-id>?n=...` address it shows.
+4. You press ++j++ and paste the address.
 
 A minute or so later, when the invitation has reached your node, the
 posts become readable.

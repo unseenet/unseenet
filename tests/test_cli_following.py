@@ -225,3 +225,28 @@ async def test_a_profile_from_a_restored_vault(setup, tmp_path, monkeypatch, cap
     finally:
         if other._session is not None:
             await other._session.close()
+
+
+async def test_labels_for_personal_feeds_and_people_followed(setup, tmp_path, capsys):
+    """#423: a personal feed is named after its owner, and a followed person keeps
+    the name seen in their posts across commands - not "feed" and "?~abcd"."""
+    node, app = setup
+    alice, bob = await app("alice"), await app("bob")
+    await cli.c_feed_start(alice, _args())
+    feed = _json(capsys)["group"]
+    await cli.c_post(alice, _args(group=feed, subject="Hej"))
+    await cli.c_follow(bob, _args(target=alice.session.identity().fingerprint))
+    capsys.readouterr()
+    await cli.c_timeline(bob, _args())
+    entry = _json(capsys)["entries"][0]
+    assert entry["feed_label"] == "alice~" + alice.session.identity().fingerprint[:4] + "'s feed" \
+        or entry["feed_label"].endswith("'s feed")
+    again = cli.App(Vault.open(tmp_path / "bob.vault", "pw", **KDF))   # the next command
+    again.data["nodes"][:] = bob.data["nodes"]
+    try:
+        await cli.c_following(again, _args())
+        label = _json(capsys)["people"][0]["label"]
+        assert not label.startswith("?") and "alice" in label
+    finally:
+        if again._session is not None:
+            await again._session.close()

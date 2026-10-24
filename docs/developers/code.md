@@ -91,6 +91,7 @@ A new table goes in the schema in `__init__.py`, its code in the file of its are
 | `kept.py` | pinned posts and the pages of sites, as the nodes keep them (UN-RFC 0033, 0035) |
 | `personal.py` | an identity's personal feed and site (UN-RFC 0029 section 2.1) |
 | `following.py` | following feeds and people, the timeline (UN-RFC 0034 sections 6, 7) |
+| `state.py` | your state in the network, encrypted, merged and written (UN-RFC 0044) |
 
 A new function goes in the file whose docstring says it belongs there; a new
 area gets a file of its own, added to `Session` in `__init__.py`. Every public

@@ -14,6 +14,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   carry their `unseenet:` address, and `GET /api/address` says what any
   address names - an identity, a group, a post or a page, the older
   `unseenet:join?g=` form too - and whether your nodes have it.
+- `unseenet:` addresses in the terminal client and the command line (#357,
+  UN-RFC 0031 section 3.4.1): invitations are written as
+  `unseenet:<group-id>?n=<onion>`; Join (j) takes every form - a group ID, a
+  group's, a post's (selected in its group) or a person's address (their
+  profile, if the client has met the key), and the older `unseenet:join?g=`;
+  Address of this post and Address of this group in the command palette show
+  the address and copy it where the terminal allows.
+- Pinned posts in the terminal client (#442, UN-RFC 0033 section 7): a Pinned
+  section above the threads, newest pin first with its note, folded away with
+  Enter on its head; pinned posts and chat lines marked `[P]`; a pinned line
+  above a chat with "Next pin"; and in the command palette "Pin or unpin
+  post", "Pinned posts" and "Show or hide the pins". Pinning warns when the
+  group is full, and unpinning a post older than the window that it then
+  disappears from the nodes.
 - Pinned posts in the local client API (#442, UN-RFC 0046 section 4.12,
   UN-RFC 0033): a group's head lists the pins in force with each pinned
   post's subject and author, `max_pins` and `may_pin`, every row says
@@ -72,6 +86,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- A personal feed or site is named after its owner - "Andreas~42e5's feed",
+  not "feed" - and a followed person keeps the name seen in their posts
+  across commands and restarts, not "?~42e5" (#423).
 - CI: the tests run on main and on pull requests - no longer a second time for
   every pushed branch - and not for changes to the docs or RFCs only (#392).
   The portables, the bootable image, Docker and the docs already built only
@@ -84,6 +101,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- **Your state follows you** (UN-RFC 0044, #257 step 3): the groups and people
+  you follow, contacts, ignored keys, hidden profiles, settings and read marks
+  are kept, encrypted with a key from your seed, in `state@<fp>` - padded to
+  4, 8 or 16 KiB - and merged with what the network has whenever a client
+  starts and refreshes; written at most once an hour, and not for read marks
+  alone. A new stick or phone with the same key looks like the old one after
+  one fetch; its own defaults never overwrite what was set elsewhere. Per
+  identity it can be kept local (`Session.set_state_kept_local`), which
+  removes the group. `core/state.py`, `client/session/state.py`,
+  `ClientRuntime.sync_state`.
+- Nodes carry `state@<fp>`, an identity's encrypted state (UN-RFC 0044, #257
+  step 2): a key-bound group of the new type `state` that has only its
+  owner's manifest - at most 24 KiB, at most once an hour (`441 too soon`),
+  no articles - accepted whatever the node's policy for new groups.
 - Key ripening keeps within the machine's memory (#440): proving a segment
   takes about 0.7 octets an iteration, so clients ripen to **level 3** by
   default (where the surcharge ends; level 4 needs several GB), choose

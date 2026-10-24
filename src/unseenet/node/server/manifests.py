@@ -51,12 +51,17 @@ class Manifests:
             if m.type != current.type or m.owner != current.owner or m.local != current.local:
                 raise ArticleError("permission", "manifest may not change type, owner or locality")
         elif (not self.store.known_group(art.group) and not self._is_profile_group(art.group)
-              and not self._allow_new_group(m)):
+              and self._group_name(art.group) != "state" and not self._allow_new_group(m)):
             # profile and avatar groups are accepted whatever new_groups says (UN-RFC 0022, 10)
             # an expired key-bound group is not new: its renewal is accepted (UN-RFC 0029)
             raise ArticleError("group", "node does not accept this new group")
         if m.expired():
             raise ArticleError("group", "key-bound group has expired")
+        if m.type == "state" and current is not None:            # UN-RFC 0044 section 7.1
+            old = self.store.get(current.message_id)
+            if old is not None and (parse_date(art["Date"]) - parse_date(Article.from_bytes(old)["Date"])
+                                    < self.STATE_EVERY):
+                raise ArticleError("rate", "too soon: a state at most once an hour (UN-RFC 0044 7.1)")
         if m.view == "pages" and self.config.sites != "accept":     # UN-RFC 0035 section 6.2
             raise ArticleError("group", "this node carries no sites")
         self._check_profile_content(m)

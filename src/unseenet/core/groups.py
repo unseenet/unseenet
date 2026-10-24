@@ -13,7 +13,7 @@ from . import crypto
 from .article import Article, ArticleError, format_date, new_article, parse_date
 from .encoding import DS, H, b32, b64, b64decode
 
-GROUP_TYPES = ("open", "moderated", "channel", "closed", "inbox")
+GROUP_TYPES = ("open", "moderated", "channel", "closed", "inbox", "state")
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+_-]*(\.[a-z0-9][a-z0-9+_-]*)*$")
 _FP_RE = re.compile(r"^[a-z2-7]{16}$")
 ENC_SCHEME = "xchacha20poly1305"
@@ -174,12 +174,15 @@ def _comments(data: dict) -> tuple[str, int | None]:
 
 # --- key-bound groups (UN-RFC 0029) --------------------------------------
 
-KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar", "ripe", "feed", "site")  # UN-RFC 0029, 2
+KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar", "ripe", "feed", "site",  # UN-RFC 0029, 2
+                   "state")
+STATE_NAME = "state"              # state@<fp>: the owner's state, encrypted (UN-RFC 0044)
+STATE_MAX = 22 * 1024             # the state field: 16 KiB of plaintext, encrypted, in base64
 # personal groups (UN-RFC 0029 section 2.1): channels with this view, started by choice
 PERSONAL_GROUPS = {"feed": "feed", "site": "pages"}
 # UN-RFC 0040 section 9: the largest manifest article of each key-bound group, in
 # octets (feed@, attest@ and site@ for when they become key-bound groups).
-KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 1024,
+KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 1024, "state": 24 * 1024,
                           "avatar": 12 * 1024, "ripe": 24 * 1024, "names": 64 * 1024, "attest": 64 * 1024,
                           "site": 64 * 1024}
 MAX_LIFETIME = timedelta(days=730)       # expires at most this long after Date (section 3)
@@ -302,6 +305,12 @@ class Manifest:
                 m.type != "channel" or m.view != PERSONAL_GROUPS[name]):
             raise ArticleError("syntax", f"{name}@ is a channel with view "
                                f"{PERSONAL_GROUPS[name]} (UN-RFC 0029 section 2.1)")
+        if (m.type == "state") != (is_key_bound(art.group) and name == STATE_NAME):
+            raise ArticleError("syntax", "state@ is the one group of type state (UN-RFC 0044)")
+        if m.type == "state":                               # UN-RFC 0044 section 3
+            st = data.get("state")
+            if not isinstance(st, str) or not 0 < len(st) <= STATE_MAX:
+                raise ArticleError("syntax", "a state group's manifest carries its state")
         if is_key_bound(art.group):                         # UN-RFC 0029 section 3
             if m.expires is None and not stored:
                 raise ArticleError("syntax", "a key-bound group's manifest needs expires")
