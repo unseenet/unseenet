@@ -9,6 +9,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Pictures where they were forgotten (#496): a new personal feed or site
+  takes pictures by default (up to 4 MiB each; `feed-start`/`site-start
+  --no-files` for none), and the TUI offers it once for one made before.
+  Creating and editing an open group or a channel in the TUI has a *Files*
+  choice: none, pictures, or pictures and PDFs (`core.blobs.FILE_CHOICES`).
+  Chat lines carry files (UN-RFC 0028 section 6.1): `send_chat(files=...)`,
+  and in the TUI Ctrl+F in a chat attaches files to the next line; a chat line
+  names its files.
 - Your own feed where people look for it (#495): the TUI lists **My feed** at
   the top of the group list, under For you and Timeline (and not again further
   down), or a dimmed **Start my feed** until you have one. Profiles get buttons:
@@ -335,6 +343,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- Editing a post with files (UN-RFC 0042) dropped them: the new version now
+  carries the files of the earlier one unless new ones are given (#496).
 - The TUI's Join (`j`) opens a page address at its page, instead of saying the
   client does not show pages (they are shown since #473).
 - Stopping and starting ripening quickly could let the old run remove the

@@ -135,7 +135,7 @@ async def _start(app: App, args, kind: str) -> None:
             sys.exit("Not started.")
     try:
         size = getattr(args, "attachments", None)
-        att = None
+        att = {} if getattr(args, "no_files", False) else None   # None: pictures (#496)
         if size:
             att = {"max_size": size}
             if getattr(args, "types", None):

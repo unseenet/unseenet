@@ -24,6 +24,25 @@ MAX_NAME, MAX_ALT = 128, 512          # octets before b64 (section 4.2)
 DAILY_PER_KEY = 32 * 1024 * 1024      # section 8.1, RECOMMENDED
 DAILY_PER_GROUP = 256 * 1024 * 1024
 MAX_KEPT_PER_GROUP = 8 * 1024 * 1024  # blobs of kept articles in one group (UN-RFC 0017 2.2)
+# The choices clients offer for a group's files (#496), as manifest ``attachments``
+# (section 5.1). ``None``: the group takes no files.
+PICTURES = {"max_size": MAX_BLOB, "types": ["image/*"]}
+PICTURES_AND_PDF = {"max_size": MAX_BLOB, "types": ["image/*", "application/pdf"]}
+FILE_CHOICES = {"none": None, "pictures": PICTURES, "pictures+pdf": PICTURES_AND_PDF}
+
+
+def file_choice(attachments) -> str:
+    """Which of ``FILE_CHOICES`` a manifest's ``attachments`` is, or ``custom`` for
+    other limits (kept as they are when a client edits the group)."""
+    if not isinstance(attachments, dict):
+        return "none"
+    for name, att in FILE_CHOICES.items():
+        if att is not None and attachments.get("max_size") == att["max_size"] \
+                and sorted(attachments.get("types") or []) == sorted(att["types"]):
+            return name
+    return "custom"
+
+
 _ID_RE = re.compile(r"^blob1:[a-z2-7]{52}$")
 _ATTACHMENT_RE = re.compile(r"^Attachment-([1-9][0-9]*)$", re.IGNORECASE)
 
