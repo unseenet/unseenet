@@ -14,9 +14,9 @@ from unseenet.node.server import Node, NodeConfig
 KDF = {"ops": 1, "mem": 8192 * 1024}
 
 
-async def _setup(tmp_path, monkeypatch):
+async def _setup(tmp_path, monkeypatch, **node_config):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0), **node_config))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
 
@@ -95,6 +95,24 @@ async def test_ignore_names_and_members(tmp_path, monkeypatch):
     epoch = (await api.remove_member(gid, {"key": key}))["epoch"]
     assert epoch >= 2 and key not in owner.members(gid)
     assert api.group(gid)["group"]["roles"]["maintainer"] is False
+    await owner.close()
+    await other.close()
+    server.close()
+
+
+async def test_a_group_created_and_edited_with_a_files_choice(tmp_path, monkeypatch):
+    """#496: ``files`` when creating a group and in its settings (UN-RFC 0046 4.7)."""
+    from unseenet.core import blobs as bl
+    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    gid = (await api.create_group({"name": "dk.foto", "type": "open", "files": "pictures"}))["id"]
+    assert owner.manifest_data(gid)["attachments"] == bl.PICTURES
+    assert api.group(gid)["group"]["files"]
+    await api.group_settings(gid, {"files": "pictures+pdf"})
+    assert owner.manifest_data(gid)["attachments"] == bl.PICTURES_AND_PDF
+    await api.group_settings(gid, {"files": "none"})
+    assert "attachments" not in owner.manifest_data(gid)
+    with pytest.raises(SessionError, match="files is none"):
+        await api.create_group({"name": "dk.x", "type": "open", "files": "everything"})
     await owner.close()
     await other.close()
     server.close()

@@ -11,6 +11,15 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import api as _a   # LocalAPI itself, joined after the parts
 
 
+def _file_choice(name) -> dict | None:
+    """``files`` as a front end gives it - ``none``, ``pictures`` or ``pictures+pdf``
+    (``core.blobs.FILE_CHOICES``, #496) - as a manifest's ``attachments``."""
+    from ....core import blobs as bl
+    if name not in bl.FILE_CHOICES:
+        raise SessionError("files is none, pictures or pictures+pdf")
+    return bl.FILE_CHOICES[name]
+
+
 class Running:
     # --- groups you run (section 4.7) -------------------------------------------
     async def create_group(self, data: dict) -> dict:
@@ -27,11 +36,13 @@ class Running:
         if kinds not in KINDS:
             raise SessionError("kinds is both, post or chat")
         view = data.get("view")
+        att = _file_choice(data.get("files", "none"))
         gid = await s.create_group(
             name, gtype, title=str(data.get("title", "")).strip(),
             description=str(data.get("description", "")).strip(),
             view=view if view in ("threads", "chat") else None,
-            low_latency=bool(data.get("fast")), kinds=KINDS[kinds])
+            low_latency=bool(data.get("fast")), kinds=KINDS[kinds],
+            extra={"attachments": att} if att else None)
         await self._fetch(gid)
         s.emit(ev.GroupsChanged())
         return {"id": gid}
@@ -45,6 +56,8 @@ class Running:
         if unknown:
             raise SessionError(f"{sorted(unknown)[0]} cannot be changed here")
         changes = dict(data)
+        if "files" in changes:                  # what files it takes (#496, UN-RFC 0027 5.1)
+            changes["attachments"] = _file_choice(changes.pop("files"))
         if "kinds" in changes:
             if changes["kinds"] not in KINDS:
                 raise SessionError("kinds is both, post or chat")

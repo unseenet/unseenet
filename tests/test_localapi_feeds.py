@@ -88,9 +88,9 @@ async def test_any_group_may_be_shown_as_a_feed(tmp_path, monkeypatch):
 
 
 async def test_groups_lists_my_feed_at_the_top_once_started(tmp_path, monkeypatch):
-    """#495: ``GET /api/groups`` gives ``my_feed``, and leaves your started feed out
-    of the hierarchies, where every client then shows it as "My feed"."""
-    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    """#495: ``GET /api/groups`` gives ``my_feed`` and ``my_site``, and leaves them out
+    of the hierarchies once started, where every client shows them as "My feed/site"."""
+    server, owner, other, api = await _setup(tmp_path, monkeypatch, sites="accept")
     g = api.groups()
     assert g["my_feed"] == {"id": api.my_feed()["id"], "started": False, "unread": 0}
     gid = (await api.start_feed({"comments": "open"}))["id"]
@@ -102,6 +102,11 @@ async def test_groups_lists_my_feed_at_the_top_once_started(tmp_path, monkeypatc
         for c in folder["children"]:
             yield from ids(c)
     assert all(gid not in ids(h["tree"]) for h in g["hierarchies"])
+    assert g["my_site"]["started"] is False
+    site = (await api.start_feed({}, "site"))["id"]
+    g = api.groups()
+    assert g["my_site"] == {"id": site, "started": True, "unread": 0}
+    assert all(site not in ids(h["tree"]) for h in g["hierarchies"])
     await owner.close()
     await other.close()
     server.close()

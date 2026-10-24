@@ -60,6 +60,8 @@ from .threads import CONTACT, FOR_YOU, TIMELINE   # the session's pseudo groups 
 ACROSS = (FOR_YOU, TIMELINE)             # views across groups: act in the post's own group
 FEED_MARK = "≡"                          # the timeline in the group list (UN-RFC 0034)
 START_FEED = ("action", "start-feed")    # "Start my feed" at the top of the group list (#495)
+START_SITE = ("action", "start-site")    # ... and "Start my site", the same way
+SITE_MARK = "▤"                          # your site in the group list (UN-RFC 0035)
 from .runtime import ClientRuntime
 from . import events as ev
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
@@ -1082,12 +1084,14 @@ class ProfileDialog(Dialog):
 
     def __init__(self, key_text: str, label: str, profile, mine: bool = False,
                  hidden: bool = False, shared: str | None = None,
-                 feed_started: bool = False, following: bool = False):
+                 feed_started: bool = False, following: bool = False,
+                 site_started: bool = False):
         super().__init__()
         self.key_text, self.label, self.profile = key_text, label, profile
         self.mine, self.hidden = mine, hidden
         # the feed and follow buttons (#495): your own feed, or following them
         self.feed_started, self.following = feed_started, following
+        self.site_started = site_started
         self.shared = shared             # "with you" / "with this group": private (0022, 6)
 
     def compose(self) -> ComposeResult:
@@ -1126,6 +1130,8 @@ class ProfileDialog(Dialog):
                 if self.mine:
                     yield Button("My feed" if self.feed_started else "Start my feed",
                                  id="my-feed")
+                    yield Button("My site" if self.site_started else "Start my site",
+                                 id="my-site")
                 else:
                     yield Button("Following" if self.following else "Follow", id="follow")
                     yield Button("Their feed", id="their-feed")
@@ -1134,6 +1140,10 @@ class ProfileDialog(Dialog):
     @on(Button.Pressed, "#hide")
     def _hide(self) -> None:
         self.dismiss("show" if self.hidden else "hide")
+
+    @on(Button.Pressed, "#my-site")
+    def _my_site(self) -> None:
+        self.dismiss("my-site")
 
     @on(Button.Pressed, "#my-feed")
     def _my_feed(self) -> None:
@@ -2364,9 +2374,11 @@ class UnseenetApp(App):
             was_open, known = set(), set()
         mine = [g for g in groups if g.group_id == self.session.my_inbox]
         my_feed = self.session.personal_group("feed")
+        my_site = self.session.personal_group("site")
         on_top = list(mine)                              # not listed again further down
-        if not searching and self.session.has_personal_group("feed"):
-            on_top += [g for g in groups if g.group_id == my_feed]   # "My feed" (#495)
+        for kind, gid_ in (("feed", my_feed), ("site", my_site)):   # "My feed", "My site" (#495)
+            if not searching and self.session.has_personal_group(kind):
+                on_top += [g for g in groups if g.group_id == gid_]
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
             nodes[g.group_id] = node
@@ -2378,16 +2390,18 @@ class UnseenetApp(App):
             nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
             if self.session.feeds_followed():            # UN-RFC 0034 section 7
                 nodes[TIMELINE] = tree.root.add_leaf(Text(f"{FEED_MARK} Timeline"), data=TIMELINE)
-            # your own feed, or a way to start it, where people look for it (#495)
-            if self.session.has_personal_group("feed"):
-                unread = self.session.unread_count(my_feed)
-                mine_text = Text(f"{FEED_MARK} My feed" + (f" ({unread})" if unread else ""))
-                if unread:
-                    mine_text.stylize("bold")
-                nodes[my_feed] = tree.root.add_leaf(mine_text, data=my_feed)
-            else:
-                nodes[START_FEED] = tree.root.add_leaf(
-                    Text(f"{FEED_MARK} Start my feed", style="dim"), data=START_FEED)
+            # your own feed and site, or a way to start them, where people look (#495)
+            for kind, gid_, mark, start in (("feed", my_feed, FEED_MARK, START_FEED),
+                                            ("site", my_site, SITE_MARK, START_SITE)):
+                if self.session.has_personal_group(kind):
+                    unread = self.session.unread_count(gid_)
+                    mine_text = Text(f"{mark} My {kind}" + (f" ({unread})" if unread else ""))
+                    if unread:
+                        mine_text.stylize("bold")
+                    nodes[gid_] = tree.root.add_leaf(mine_text, data=gid_)
+                else:
+                    nodes[start] = tree.root.add_leaf(
+                        Text(f"{mark} Start my {kind}", style="dim"), data=start)
         self._for_you_seen = getattr(self, "_for_you_seen", None) or for_you
         # one chat per person: your contacts, and anyone else you have chatted with
         # (UN-RFC 0028, 6.2); posts are in Private posts
@@ -2469,6 +2483,8 @@ class UnseenetApp(App):
     def _group_selected(self, event: Tree.NodeSelected) -> None:
         if event.node.data == START_FEED:
             self.action_start_feed()
+        elif event.node.data == START_SITE:
+            self.action_start_site()
         elif isinstance(event.node.data, str):
             self.select_group(event.node.data)
             self._offer_pictures(event.node.data)
@@ -3411,7 +3427,7 @@ class UnseenetApp(App):
         """Start your own site (UN-RFC 0035 section 7), after saying it is public - or go to it."""
         s = self.session
         gid = s.personal_group("site")
-        if gid in s.data["subscribed"] and s.data["groups"].get(gid, {}).get("owner"):
+        if s.has_personal_group("site"):
             self.select_group(gid)
             return
         if not await self.push_screen_wait(ConfirmDialog(
@@ -4336,12 +4352,15 @@ class UnseenetApp(App):
             shared = "with you" if context == "me" else "with this group"
         answer = await self.push_screen_wait(ProfileDialog(
             key, label, p, mine, hidden, shared, feed_started=s.has_personal_group("feed"),
+            site_started=s.has_personal_group("site"),
             following=not mine and s.is_following(key)))
         if answer in ("hide", "show"):
             s.hide_profile(key, answer == "hide")
             self.notify("Profile hidden" if answer == "hide" else "Profile shown")
         elif answer == "my-feed":
             self.action_start_feed()                # opens it, or starts it after the warning
+        elif answer == "my-site":
+            self.action_start_site()
         elif answer == "follow":
             await self._follow(key)
         elif answer == "unfollow":
