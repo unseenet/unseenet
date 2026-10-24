@@ -25,7 +25,7 @@ class Writing:
             self._job_event(job, group, "pow", fraction=0.0)
             try:
                 msgid = await send()
-            except (*NETWORK_ERRORS, ValueError) as exc:
+            except (*NETWORK_ERRORS, ValueError, SessionError) as exc:
                 self._job_event(job, group, "failed", error=str(exc) or type(exc).__name__)
                 return
             finally:

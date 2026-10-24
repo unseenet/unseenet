@@ -230,6 +230,22 @@ async def feed(request):
     return _json(await _api(request).start_feed(await _body(request)))
 
 
+async def site_(request):
+    if request.method == "GET":
+        return _json(_api(request).my_feed("site"))
+    return _json(await _api(request).start_feed(await _body(request), "site"))
+
+
+async def group_site(request):
+    return _json(_api(request).site(_gid(request)))
+
+
+async def page(request):
+    if request.method == "GET":
+        return _json(_api(request).page(_gid(request), request.query.get("path")))
+    return _json(_api(request).write_page(_gid(request), await _body(request)))
+
+
 async def pin(request):
     return _json(await _api(request).pin(_gid(request), await _body(request)))
 
@@ -388,6 +404,9 @@ ROUTES = [
     ("GET", "/api/group-ref", group_ref), ("GET", "/api/address", address),
     ("GET", "/api/following", following), ("POST", "/api/following", following),
     ("GET", "/api/feed", feed), ("POST", "/api/feed", feed),
+    ("GET", "/api/site", site_), ("POST", "/api/site", site_),
+    ("GET", "/api/groups/{gid}/site", group_site),
+    ("GET", "/api/groups/{gid}/page", page), ("POST", "/api/groups/{gid}/page", page),
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),

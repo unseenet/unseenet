@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextvars import ContextVar
 from functools import lru_cache
 from importlib import resources
 
@@ -131,6 +132,21 @@ def plain(text: str) -> list[dict]:
 def body(text: str, content_type: str | None, kind: str = "post") -> list[dict]:
     """A message's text as a tree, by its Content-Type."""
     return parse(text, kind) if is_markdown(content_type) else plain(text)
+
+
+# a page's links without a scheme lead within its site (UN-RFC 0035 section 8)
+_RELATIVE: ContextVar = ContextVar("relative_links", default=None)
+
+
+def page_body(text: str, content_type: str | None, resolve) -> list[dict]:
+    """A page's text as a tree (UN-RFC 0035): as a post's, but a link without a scheme
+    is a path in the same site - ``resolve(href)`` gives its address, or None to show
+    it as text like any refused link."""
+    token = _RELATIVE.set(resolve)
+    try:
+        return body(text, content_type)
+    finally:
+        _RELATIVE.reset(token)
 
 
 MAX_TYPE = 128                        # a text type field (about_type, rules_type)
@@ -281,6 +297,9 @@ def _inline(children) -> list[dict]:
                 stack.pop(); marks.pop()
         elif t == "link_open":
             href = tok.attrGet("href") or ""
+            resolve = _RELATIVE.get()
+            if resolve is not None and not _scheme(href) and not href.startswith("//"):
+                href = resolve(href) or href           # within the site (UN-RFC 0035, 8)
             if _scheme(href) in LINK_SCHEMES:
                 node = {"t": "link", "href": href, "c": []}
                 cur.append(node); stack.append(node["c"]); marks.append(node)

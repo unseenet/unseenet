@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Sites and pages in the local client API (#442, UN-RFC 0046 section 4.15,
+  UN-RFC 0035): a site's pages in force with the home page first; one page
+  with its links within the site resolved to `unseenet:` addresses; writing,
+  removing and restoring the previous version of a page, as a job;
+  `GET/POST /api/site` for your personal site; `pages` as a view of a site.
+  `core.pages.resolve_link` and `core.markup.page_body` give every client the
+  same links within a site. A job that the core refuses now ends as failed.
 - Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
   0034): a group can be shown as a feed, with `comment` on each row (may you
   answer it with a chat line); the timeline as the pseudo-group `timeline:`,
