@@ -79,6 +79,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- Nodes carry `state@<fp>`, an identity's encrypted state (UN-RFC 0044, #257
+  step 2): a key-bound group of the new type `state` that has only its
+  owner's manifest - at most 24 KiB, at most once an hour (`441 too soon`),
+  no articles - accepted whatever the node's policy for new groups.
 - Key ripening keeps within the machine's memory (#440): proving a segment
   takes about 0.7 octets an iteration, so clients ripen to **level 3** by
   default (where the surcharge ends; level 4 needs several GB), choose
