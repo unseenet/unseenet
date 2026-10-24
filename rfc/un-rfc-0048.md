@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0048                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0002, 0028, 0030, 0031, 0034, 0046
+Updates: 0002, 0009, 0028, 0030, 0031, 0034, 0046
 
                        Unseenet: Reactions
 ```
@@ -88,7 +88,8 @@ lets the user type `:+1:` converts it with the gemoji table before
 sending.
 
 A reaction with anything else in `Reaction` (text, two emoji, a
-shortcode, nothing) is invalid.
+shortcode, nothing) is invalid, except that an empty one takes a
+reaction back in an inbox (section 4.3.1).
 
 ## 3.3 What Can Be Reacted To
 
@@ -138,8 +139,59 @@ change existing groups, so a later document may only add a new value.
 
 Inbox manifests do not carry `reactions`; a node MUST ignore it there.
 In private chats and private posts (UN-RFC 0009, UN-RFC 0028) any emoji
-may be used. A reaction to a private message is a private message: it
-is sealed to the inbox of the person reacted to, like any other.
+may be used. A client SHOULD offer the default set (section 4.2) first
+and any other emoji besides.
+
+A reaction to a private message is a private message: it is sealed to
+the inbox of the person reacted to, like any other (UN-RFC 0009 section
+2.3). Its headers (section 3.1), `References` included, are in the
+sealed inner article, next to `Sender-Key`; the outer article shows
+nothing of them.
+
+### 4.3.1 Changing and Taking Back
+
+Inbox articles take no edits (UN-RFC 0042 section 2), and a node cannot
+check who sent a cancel there, because the outer article is signed by a
+one-time key. So in inboxes:
+
+- **Changing** a reaction is sending a new one to the same message. The
+  recipient's client counts, per verified `Sender-Key`, only the latest
+  reaction to a message, by `Date`, and among equal dates the one with
+  the greatest Message-ID (section 5).
+- **Taking back** is sending a reaction whose `Reaction` header is
+  **empty** and whose body is empty. It counts as that sender's latest
+  reaction to the message, so the message then shows none from them.
+  An empty `Reaction` is valid in inbox articles only; everywhere else
+  it is invalid (section 3.2).
+- A reaction without a verified `Sender-Key` (an anonymous private
+  message, UN-RFC 0009) is not counted: nobody could change or take it
+  back.
+
+The reactions a node holds in an inbox expire with the inbox's
+retention, like the private messages they answer.
+
+### 4.3.2 Postage
+
+A sealed reaction is priced like every sealed private post: as an
+unripe key (UN-RFC 0025 section 3.5). It costs more than a reaction in
+a group. That is on purpose - a cheap private reaction would be a cheap
+way to fill someone's inbox - and a client SHOULD compute it in the
+background, showing the reaction at once (section 7.3).
+
+### 4.3.3 Your Own Reactions
+
+The reactions you gave live in the other person's inbox, not in yours.
+A client keeps them as it keeps your sent private posts: in the vault,
+and with the second envelope and the `sent` list of UN-RFC 0044 section
+6, so that your other clients see what you gave. A client that cannot
+use the second envelope keeps them in the vault only.
+
+### 4.3.4 Team Inboxes
+
+In a team inbox (UN-RFC 0047) every reader sees the reactions sent to
+it. A reader who reacts on the inbox's behalf to a message the team
+received signs with the team key, as for a reply (UN-RFC 0047), so the
+reaction shows the team, never the person.
 
 ## 4.4 Relation to Other Fields
 
@@ -338,12 +390,19 @@ counted once.
   thumbs down buries what it is given to; here reactions never order or
   hide anything (section 7.2), so it is only a counter. Owners who do
   not want it leave it out of their set.
+- **Why an empty reaction to take one back in inboxes?** A cancel there
+  cannot be checked by the node, and an edit is not allowed. A reaction
+  that says "none" needs no new mechanism: the latest from a sender
+  counts, as it does everywhere.
 - **Why may a channel take reactions but no comments?** An announcement
   wants to know it was read and liked, not to be answered.
 
 # 12. Changes to Other Documents
 
 - **UN-RFC 0002** section 2.3: the header `Reaction` is added.
+- **UN-RFC 0009** section 2.3: the inner article of an inbox message may
+  be a reaction, with an empty `Reaction` taking one back (section
+  4.3.1).
 - **UN-RFC 0028** section 3.1: `Message-Kind` gains the value
   `reaction`, defined in this document; section 3.3: a reaction's
   `Subject` is empty; section 4.1: `kinds` never contains `reaction`.
