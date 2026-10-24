@@ -38,7 +38,7 @@ from ..core.vault import Vault, VaultError
 from ..nntp import NNTPError
 from ..core import crypto
 from ..core import addresses as addr
-from ..core.groups import (INBOX_NAME, KIND_CHAT, KIND_POST, group_refs,
+from ..core.groups import (INBOX_NAME, make_group_id, KIND_CHAT, KIND_POST, group_refs,
                            personal_inbox_id, short_group_id, split_group_id)
 from . import session as _session_module
 from . import naming
@@ -58,6 +58,7 @@ REPO_URL, DOCS_URL = about.REPO_URL, about.DOCS_URL
 from .threads import CONTACT, FOR_YOU, TIMELINE   # the session's pseudo groups (#139)
 ACROSS = (FOR_YOU, TIMELINE)             # views across groups: act in the post's own group
 FEED_MARK = "≡"                          # the timeline in the group list (UN-RFC 0034)
+START_FEED = ("action", "start-feed")    # "Start my feed" at the top of the group list (#495)
 from .runtime import ClientRuntime
 from . import events as ev
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
@@ -1068,10 +1069,13 @@ class ProfileDialog(Dialog):
     """Someone's profile (UN-RFC 0022 section 9.2): names, short form, about, lang, links."""
 
     def __init__(self, key_text: str, label: str, profile, mine: bool = False,
-                 hidden: bool = False, shared: str | None = None):
+                 hidden: bool = False, shared: str | None = None,
+                 feed_started: bool = False, following: bool = False):
         super().__init__()
         self.key_text, self.label, self.profile = key_text, label, profile
         self.mine, self.hidden = mine, hidden
+        # the feed and follow buttons (#495): your own feed, or following them
+        self.feed_started, self.following = feed_started, following
         self.shared = shared             # "with you" / "with this group": private (0022, 6)
 
     def compose(self) -> ComposeResult:
@@ -1107,12 +1111,29 @@ class ProfileDialog(Dialog):
                     yield Static(out, id="profile-text", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
-                if not self.mine:
+                if self.mine:
+                    yield Button("My feed" if self.feed_started else "Start my feed",
+                                 id="my-feed")
+                else:
+                    yield Button("Following" if self.following else "Follow", id="follow")
+                    yield Button("Their feed", id="their-feed")
                     yield Button("Show" if self.hidden else "Hide", id="hide")
 
     @on(Button.Pressed, "#hide")
     def _hide(self) -> None:
         self.dismiss("show" if self.hidden else "hide")
+
+    @on(Button.Pressed, "#my-feed")
+    def _my_feed(self) -> None:
+        self.dismiss("my-feed")
+
+    @on(Button.Pressed, "#follow")
+    def _follow(self) -> None:
+        self.dismiss("unfollow" if self.following else "follow")
+
+    @on(Button.Pressed, "#their-feed")
+    def _their_feed(self) -> None:
+        self.dismiss("their-feed")
 
 
 class EditProfileDialog(Dialog):
@@ -2315,6 +2336,10 @@ class UnseenetApp(App):
             groups = self.session.filter_groups(groups, self.group_query)
             was_open, known = set(), set()
         mine = [g for g in groups if g.group_id == self.session.my_inbox]
+        my_feed = self.session.personal_group("feed")
+        on_top = list(mine)                              # not listed again further down
+        if not searching and self.session.has_personal_group("feed"):
+            on_top += [g for g in groups if g.group_id == my_feed]   # "My feed" (#495)
         for g in mine:                                   # private messages always first
             node = tree.root.add_leaf(label(g), data=g.group_id)
             nodes[g.group_id] = node
@@ -2326,6 +2351,16 @@ class UnseenetApp(App):
             nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
             if self.session.feeds_followed():            # UN-RFC 0034 section 7
                 nodes[TIMELINE] = tree.root.add_leaf(Text(f"{FEED_MARK} Timeline"), data=TIMELINE)
+            # your own feed, or a way to start it, where people look for it (#495)
+            if self.session.has_personal_group("feed"):
+                unread = self.session.unread_count(my_feed)
+                mine_text = Text(f"{FEED_MARK} My feed" + (f" ({unread})" if unread else ""))
+                if unread:
+                    mine_text.stylize("bold")
+                nodes[my_feed] = tree.root.add_leaf(mine_text, data=my_feed)
+            else:
+                nodes[START_FEED] = tree.root.add_leaf(
+                    Text(f"{FEED_MARK} Start my feed", style="dim"), data=START_FEED)
         self._for_you_seen = getattr(self, "_for_you_seen", None) or for_you
         # one chat per person: your contacts, and anyone else you have chatted with
         # (UN-RFC 0028, 6.2); posts are in Private posts
@@ -2353,7 +2388,7 @@ class UnseenetApp(App):
                 if unread:
                     text.stylize("bold")
                 nodes[CONTACT + key] = cnode.add_leaf(text, data=CONTACT + key)
-        for top, items in by_hierarchy([g for g in groups if g not in mine]):
+        for top, items in by_hierarchy([g for g in groups if g not in on_top]):
             if not top:                          # a hierarchy of one: no folder, full name
                 for g in items:
                     nodes[g.group_id] = tree.root.add_leaf(label(g), data=g.group_id)
@@ -2405,7 +2440,9 @@ class UnseenetApp(App):
 
     @on(Tree.NodeSelected, "#groups")
     def _group_selected(self, event: Tree.NodeSelected) -> None:
-        if isinstance(event.node.data, str):
+        if event.node.data == START_FEED:
+            self.action_start_feed()
+        elif isinstance(event.node.data, str):
             self.select_group(event.node.data)
 
     @work(exclusive=True, group="fetch", exit_on_error=False)
@@ -3162,6 +3199,11 @@ class UnseenetApp(App):
             "nobody can see whom you follow.", "ed25519:... or a name", default))
         if not target:
             return
+        await self._follow(target)
+
+    async def _follow(self, target: str) -> None:
+        """Follow a person given by key, name or address, and say what came of it."""
+        s = self.session
         self.set_status("Following ...")
         try:
             got = await s.follow_person(target)
@@ -3204,7 +3246,7 @@ class UnseenetApp(App):
         """Start your own feed (UN-RFC 0034 section 5), after saying it is public."""
         s = self.session
         gid = s.personal_group("feed")
-        if gid in s.data["subscribed"] and s.data["groups"].get(gid, {}).get("owner"):
+        if s.has_personal_group("feed"):
             self.select_group(gid)
             return
         if not await self.push_screen_wait(ConfirmDialog(
@@ -4147,10 +4189,45 @@ class UnseenetApp(App):
         if private is not None:                         # in its own context only (0022, 6)
             p = prof.Profile.from_object(crypto.key_from_text(key), private)
             shared = "with you" if context == "me" else "with this group"
-        answer = await self.push_screen_wait(ProfileDialog(key, label, p, mine, hidden, shared))
+        answer = await self.push_screen_wait(ProfileDialog(
+            key, label, p, mine, hidden, shared, feed_started=s.has_personal_group("feed"),
+            following=not mine and s.is_following(key)))
         if answer in ("hide", "show"):
             s.hide_profile(key, answer == "hide")
             self.notify("Profile hidden" if answer == "hide" else "Profile shown")
+        elif answer == "my-feed":
+            self.action_start_feed()                # opens it, or starts it after the warning
+        elif answer == "follow":
+            await self._follow(key)
+        elif answer == "unfollow":
+            try:
+                await s.unfollow_person(key)
+            except (SessionError, ValueError) as exc:
+                self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+                return
+            self.notify(f"Not following {label} any more", timeout=4)
+            self.refresh_groups()
+        elif answer == "their-feed":
+            await self._open_feed_of(key, label)
+
+    async def _open_feed_of(self, key: str, label: str) -> None:
+        """Open someone's personal feed from their profile - if they have started one."""
+        s = self.session
+        gid = make_group_id("feed", crypto.key_from_text(key))
+        if gid not in s.data["subscribed"]:
+            self.set_status("Looking for their feed ...")
+            try:
+                m = await s.fetch_manifest(gid)
+            except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+                self.set_status("")
+                self.notify(f"Could not look: {exc}", severity="error", timeout=8)
+                return
+            self.set_status("")
+            if m is None:
+                self.notify(f"{label} has not started a feed", timeout=6)
+                return
+            s.group_entry(gid)["manifest"] = dict(m.raw)
+        self.select_group(gid)
 
     async def _share_target(self) -> tuple[str, str] | None:
         """Where a shared profile goes: this closed group, or a contact's inbox."""

@@ -160,6 +160,14 @@ class FollowingMixin:
         self.save()
         return gone
 
+    def is_following(self, key: str) -> bool:
+        """Whether you follow this person, given by key (for a Follow/Following button)."""
+        try:
+            fp = crypto.fingerprint(crypto.key_from_text(key.strip()))
+        except (crypto.CryptoError, ValueError):
+            return False
+        return fp in self._following()
+
     def following(self) -> list[dict]:
         """The people you follow: ``{"fingerprint", "key", "name", "label", "feeds"}``,
         ``feeds`` those followed because of them."""
