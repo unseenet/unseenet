@@ -154,6 +154,7 @@ The protocol is designed to be extended without breaking old software:
 | 0045 | Spam Reports                                  | Standards Track |
 | 0046 | The Local Client API                          | Standards Track |
 | 0047 | Team Inboxes                                  | Standards Track |
+| 0048 | Reactions                                     | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
