@@ -1657,3 +1657,40 @@ async def test_tui_publishes_a_profile_picture(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: node.store.manifest(f"avatar@{fp}") is not None, 400)
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_shows_a_site_as_its_pages(tmp_path, monkeypatch):
+    """#212 in the TUI: a site is a list of its pages, the home page first (⌂), each
+    with its path; choosing one shows it."""
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0), sites="accept"))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    me.data["starter_groups"] = 99
+    await me.ensure_inbox()
+    await me.close()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    owner = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    owner.new_identity("o", "Owner"); owner.add_node(addr)
+    gid = await owner.create_group("dk.wiki", "channel", view="pages", min_pow=10)
+    await owner.fetch_group(gid)
+    await owner.put_page(gid, "about", "# Om os\n\nVi er en lille landsby.\n", "Om os")
+    await owner.fetch_group(gid)
+    await owner.put_page(gid, "index", "# Velkommen\n\nSe [om os](about).\n", "Velkommen")
+    await owner.close()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.session.subscribe(gid)
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
+        table = app.query_one("#threads")
+        rows = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
+        assert rows[0].startswith("⌂ Velkommen") and rows[0].endswith("/index")
+        assert "Om os" in rows[1] and rows[1].endswith("/about")
+        await pilot.press("q")
+    server.close()
