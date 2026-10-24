@@ -178,11 +178,11 @@ async def test_a_page_with_a_picture(setup, tmp_path, capsys):
 
 
 async def test_a_personal_feed_with_pictures(setup, capsys):
-    """Found by the demo: a personal feed took no files. feed-start --attachments
-    makes one that does, and gives an existing one the setting."""
+    """Found by the demo: a personal feed took no files. Now a new one takes pictures
+    unless --no-files (#496); feed-start --attachments gives an existing one the setting."""
     node, app = setup
     me = await app("me")
-    await cli.c_feed_start(me, _args())
+    await cli.c_feed_start(me, _args(no_files=True))
     feed = _json(capsys)["group"]
     assert "attachments" not in node.store.manifest(feed).raw
     await cli.c_feed_start(me, _args(attachments=1048576, types="image/*"))

@@ -1508,9 +1508,9 @@ async def test_tui_shows_your_chat_line_while_it_is_sent(tmp_path, monkeypatch):
         await pilot.pause(0.3)
         real = app.session.send_chat
         go = asyncio.Event()
-        async def slow(g, text):
+        async def slow(g, text, files=None):
             await go.wait()
-            return await real(g, text)
+            return await real(g, text, files=files)
         monkeypatch.setattr(app.session, "send_chat", slow)
         def lines():
             return [str(line.text) for line in app.query_one("#chat-log").lines]
@@ -1520,7 +1520,7 @@ async def test_tui_shows_your_chat_line_while_it_is_sent(tmp_path, monkeypatch):
         go.set()
         assert await wait_for(pilot, lambda: not any("(sending" in ln for ln in lines())
                               and sum("You: Hej" in ln for ln in lines()) == 1, 400)
-        async def fail(g, text):
+        async def fail(g, text, files=None):
             raise SessionError("the node is away")
         monkeypatch.setattr(app.session, "send_chat", fail)
         await pilot.press(*"Igen", "enter")

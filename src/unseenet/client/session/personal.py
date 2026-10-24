@@ -41,6 +41,20 @@ class PersonalMixin:
         return (gid in self.data["subscribed"]
                 and bool(self.data["groups"].get(gid, {}).get("owner")))
 
+    def personal_group_without_files(self, kind: str) -> bool:
+        """Your personal feed or site is started but takes no files - made before they
+        took pictures by default (#496); clients offer to turn pictures on, once."""
+        if not self.has_personal_group(kind):
+            return False
+        gid = self.personal_group(kind)
+        return (not isinstance(self.manifest_data(gid).get("attachments"), dict)
+                and not self.group_entry(gid).get("files_offered"))
+
+    async def allow_pictures(self, group_id: str) -> None:
+        """Let a group you own carry pictures (``blobs.PICTURES``)."""
+        from ...core import blobs as bl
+        await self.update_group(group_id, attachments=bl.PICTURES)
+
     def personal_group_warning(self, kind: str) -> str:
         """What the user must be told before a personal feed or site is started."""
         return PERSONAL_GROUP_WARNING.format(what=kind)
@@ -51,9 +65,13 @@ class PersonalMixin:
         after showing ``personal_group_warning``. A feed takes comments unless
         ``comments="none"`` (UN-RFC 0034 section 5.2); a site is a channel shown as
         pages. ``attachments`` (``{"max_size": ..., "types": [...]}``, UN-RFC 0027
-        section 5.1) lets it carry pictures. If it exists already, it is followed again,
-        and given ``attachments`` if it has other or none. Returns its Group ID."""
+        section 5.1) is what files it carries; a new one takes pictures unless told
+        otherwise (#496), ``{}`` for none. If it exists already, it is followed again,
+        and given ``attachments`` if they are given and differ. Returns its Group ID."""
+        from ...core import blobs as bl
         from ...core.groups import PERSONAL_GROUPS
+        given, attachments = attachments, (bl.PICTURES if attachments is None
+                                           else attachments or None)
         gid = self.personal_group(kind)
         try:
             current = await self.fetch_manifest(gid)
@@ -75,7 +93,7 @@ class PersonalMixin:
         else:
             entry["manifest"] = dict(current.raw)
             entry.update({"type": "channel", "owner": True})
-            if attachments and current.raw.get("attachments") != attachments:
+            if given is not None and current.raw.get("attachments") != attachments:
                 await self.update_group(gid, attachments=attachments)
         self.subscribe(gid)
         return gid

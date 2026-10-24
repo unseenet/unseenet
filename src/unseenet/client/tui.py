@@ -48,6 +48,7 @@ from .grouptree import fingerprint_suffix, group_tree
 from ..core import markup
 from ..core import about
 from ..core import profiles as prof
+from ..core.blobs import FILE_CHOICES, file_choice
 from .. import names as nm
 from .session import MAX_MENTION_NOTICES
 from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session, SessionError,
@@ -693,6 +694,11 @@ KINDS = {"both": None, "post": ["post"], "chat": ["chat"]}
 
 COMMENTS_CHOICES = [("Only you and your posters write", "none"),
                     ("Readers may comment on posts", "open")]
+# what files a group carries (UN-RFC 0027 section 5.1, #496): core.blobs.FILE_CHOICES
+FILES_CHOICES = [("No files", "none"),
+                 ("Pictures, up to 4 MiB each", "pictures"),
+                 ("Pictures and PDFs, up to 4 MiB each", "pictures+pdf")]
+FILES_GROUP_TYPES = ("open", "channel")   # encrypted files (closed, inbox, moderated): #497
 
 
 def comments_label(d: dict) -> str:
@@ -725,6 +731,7 @@ class CreateGroupDialog(Dialog):
             yield Select(DELIVERY_CHOICES, value="threads", allow_blank=False, id="view")
             yield Select(KINDS_CHOICES, value="both", allow_blank=False, id="kinds")
             yield Select(COMMENTS_CHOICES, value="none", allow_blank=False, id="comments")
+            yield Select(FILES_CHOICES, value="none", allow_blank=False, id="files")
             yield Input(placeholder="Title (optional; keep it vague for closed groups)", id="title")
             yield Label("Rules (optional) - shown to people before they post:", classes="hint")
             yield TextArea("", id="rules", soft_wrap=True)
@@ -741,6 +748,8 @@ class CreateGroupDialog(Dialog):
     def _type_changed(self, event: Select.Changed) -> None:
         # only a channel can be opened for comments (UN-RFC 0030)
         self.query_one("#comments", Select).display = event.value == "channel"
+        # files only where they are not encrypted, for now (#497)
+        self.query_one("#files", Select).display = event.value in FILES_GROUP_TYPES
 
     @on(Input.Changed, "#name")
     def _check_name(self, event: Input.Changed) -> None:
@@ -771,7 +780,10 @@ class CreateGroupDialog(Dialog):
                           self.query_one("#rules", TextArea).text),
                       "view": view, "low_latency": fast,
                       "kinds": KINDS[self.query_one("#kinds", Select).value],
-                      "comments": self.query_one("#comments", Select).value})
+                      "comments": self.query_one("#comments", Select).value,
+                      "attachments": (FILE_CHOICES[self.query_one("#files", Select).value]
+                                      if self.query_one("#type", Select).value
+                                      in FILES_GROUP_TYPES else None)})
 
 
 class InputDialog(Dialog):
@@ -1292,6 +1304,11 @@ class EditGroupDialog(Dialog):
                              id="comments")
                 yield Input(value=str(d.get("comment_days") or ""), id="comment_days",
                             placeholder="Days a thread takes comments (empty: always)")
+            if d.get("type") in FILES_GROUP_TYPES:      # #496
+                choice = file_choice(d.get("attachments"))
+                choices = FILES_CHOICES + ([("Files as they are now (limits set elsewhere)",
+                                             "custom")] if choice == "custom" else [])
+                yield Select(choices, value=choice, allow_blank=False, id="files")
             yield Input(value=str(d.get("min_pow", 0)), placeholder="Minimum postage in bits (16-24)",
                         id="min_pow")
             yield Label("Rules - shown to people before their first post:", classes="hint")
@@ -1326,6 +1343,10 @@ class EditGroupDialog(Dialog):
                 return
             changes["comments"] = self.query_one("#comments", Select).value
             changes["comment_days"] = int(days) if days else None
+        if self.query("#files"):
+            choice = self.query_one("#files", Select).value
+            if choice != "custom":                       # custom limits are kept as they are
+                changes["attachments"] = FILE_CHOICES[choice]
         self.dismiss(changes)
 
 
@@ -1950,6 +1971,7 @@ class UnseenetApp(App):
         # (first, so the footer always has room for them)
         Binding("escape", "leave_input", "Shortcuts"),
         Binding("enter", "write", "Write"),
+        Binding("ctrl+f", "attach_to_chat", "Attach"),   # files on the next chat line (#496)
         Binding("n", "new_post", "New post"),
         Binding("r", "reply", "Reply"),
         Binding("g", "browse", "Groups"),
@@ -1995,6 +2017,8 @@ class UnseenetApp(App):
                 or getattr(self.focused, "id", None) == "groups-filter"
         if action == "write":
             return chat and not typing
+        if action == "attach_to_chat":
+            return chat and group and self._chat_takes_files(gid)
         shown = self.view_of(gid) if group else "threads"
         if action in ("next_unread", "read"):     # the keys of a list (#490)
             return bool(gid) and not chat and not typing and (action == "next_unread" or m is not None)
@@ -2047,7 +2071,9 @@ class UnseenetApp(App):
             box.disabled, box.placeholder = True, p.reason
         else:
             box.disabled = False
-            box.placeholder = "Write a message - Enter sends, Esc for the shortcuts"
+            box.placeholder = "Write a message - Enter sends, Esc for the shortcuts" + (
+                ", Ctrl+F attaches files" if gid and self._chat_takes_files(gid) else "")
+        self._show_chat_files(gid)
 
     def _focus_view(self, gid: str) -> None:
         if self.view_of(gid) != "chat":
@@ -2063,6 +2089,7 @@ class UnseenetApp(App):
         self.session: Session | None = None
         self.runtime: ClientRuntime | None = None
         self.pending: dict[str, list[dict]] = {}   # your chat lines on their way, per group (#325)
+        self.chat_files: dict[str, list[str]] = {}  # files for the next chat line, per group (#496)
         self.groups: dict[str, GroupInfo] = {}
         self.current_group: str | None = None
         self.messages: dict[str, Message] = {}
@@ -2444,6 +2471,29 @@ class UnseenetApp(App):
             self.action_start_feed()
         elif isinstance(event.node.data, str):
             self.select_group(event.node.data)
+            self._offer_pictures(event.node.data)
+
+    @work(group="dialog", exit_on_error=False)
+    async def _offer_pictures(self, gid: str) -> None:
+        """Your feed or site made before they took pictures by default: offer it, once (#496)."""
+        s = self.session
+        kind = next((k for k in ("feed", "site") if gid == s.personal_group(k)), None)
+        if kind is None or not s.personal_group_without_files(kind):
+            return
+        s.group_entry(gid)["files_offered"] = True
+        s.save()
+        if not await self.push_screen_wait(ConfirmDialog(
+                f"Pictures in your {kind}?",
+                f"Your {kind} takes no pictures yet - it was started before they were on by "
+                "default. Let it carry pictures, up to 4 MiB each? You can change it later in "
+                "Edit group.", "Allow pictures")):
+            return
+        try:
+            await s.allow_pictures(gid)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify(f"Your {kind} takes pictures now", timeout=5)
 
     @work(exclusive=True, group="fetch", exit_on_error=False)
     async def select_group(self, gid: str) -> None:
@@ -2640,6 +2690,11 @@ class UnseenetApp(App):
                 line.append(self._indented(m, text, len(when) + len(who) + 3, first=False))
             if m.edited:
                 line.append(f"  (edited {edited_when(m)})", style="dim")
+            if m.readable and m.attachments:             # files on a chat line (#496)
+                names = ", ".join(a.get("name") or ("picture" if a["type"].startswith("image/")
+                                                    else a["type"]) for a in m.attachments)
+                line.append(f"\n{' ' * (len(when) + 1)}+ {names}", style="dim")
+                line.append("  (v to threads, f to read and save)", style="dim italic")
             log.write(line)
             if not self.session.is_read(m):
                 self.session.mark_read(m, save=False)
@@ -2753,13 +2808,52 @@ class UnseenetApp(App):
         if not text or not self.current_group or event.input.disabled:
             return
         event.input.value = ""
-        self.send_chat(self.current_group, text)
+        files = self.chat_files.pop(self.current_group, [])
+        self._show_chat_files(self.current_group)
+        self.send_chat(self.current_group, text, files)
+
+    def _chat_takes_files(self, gid: str) -> bool:
+        """Whether a chat line here may carry files (UN-RFC 0028 section 6.1, #496)."""
+        if not gid or gid.startswith(CONTACT) or gid in ACROSS:
+            return False                        # private chats: encrypted files, #497
+        data = self.session.manifest_data(gid)
+        g = self.groups.get(gid)
+        gtype = data.get("type") or (g.type if g else None)
+        return isinstance(data.get("attachments"), dict) and gtype in FILES_GROUP_TYPES
+
+    def _show_chat_files(self, gid: str | None) -> None:
+        """What goes with the next chat line, under the chat input."""
+        box = self.query_one("#chat-input", Input)
+        files = self.chat_files.get(gid or "", [])
+        box.border_subtitle = (f"+ {len(files)} file{'s' if len(files) > 1 else ''}: "
+                               + ", ".join(Path(f).name for f in files)
+                               + "  (Ctrl+F changes)") if files else ""
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_attach_to_chat(self) -> None:
+        """Files to send with the next chat line in this group (#496)."""
+        gid = self.current_group or ""
+        if not self._chat_takes_files(gid):
+            self.notify("This group takes no files - its owner can allow them",
+                        severity="warning")
+            return
+        files = await self.push_screen_wait(InputDialog(
+            "Files with your next chat line",
+            "Paths, comma between. Pictures are cleaned of their metadata - place, camera, "
+            "time - before they are sent. Empty: none.",
+            "~/garden.jpg, ~/map.pdf", ", ".join(self.chat_files.get(gid, []))))
+        if files is None:
+            return
+        self.chat_files[gid] = [p.strip() for p in files.split(",") if p.strip()]
+        self._show_chat_files(gid)
+        self.query_one("#chat-input").focus()
 
     @work(group="post", exit_on_error=False)
-    async def send_chat(self, gid: str, text: str) -> None:
+    async def send_chat(self, gid: str, text: str, files: list[str] | None = None) -> None:
         self.set_status("Sending (computing postage) ...")
         waiting = [p for p in self.pending.get(gid, []) if p["state"] != "failed"]
-        entry = {"text": text, "state": "sending"}           # shown at once, dimmed (#325)
+        shown = text + (f"  (+ {len(files)} file{'s' if len(files) > 1 else ''})" if files else "")
+        entry = {"text": shown, "state": "sending"}          # shown at once, dimmed (#325)
         self.pending[gid] = waiting + [entry]
         if self.current_group == gid:
             self._render_threads()
@@ -2774,7 +2868,9 @@ class UnseenetApp(App):
                     if self.current_group == gid:
                         self._render_threads()
                     return
-                msgid = await self.session.send_chat(gid, text)   # UN-RFC 0028
+                prepared = (self.session.prepare_files([Path(p).expanduser() for p in files])
+                            if files else None)       # cleaned and checked here (#149, #496)
+                msgid = await self.session.send_chat(gid, text, files=prepared)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
                     self.notify("Sent to the moderators for approval", timeout=8)
                 if self.session.notice_settings()["send"] and self.session.may_notify(gid):
@@ -2788,6 +2884,9 @@ class UnseenetApp(App):
             entry["state"] = "failed"
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             self.query_one("#chat-input", Input).value = text       # give the text back
+            if files:
+                self.chat_files[gid] = files                        # and the files
+                self._show_chat_files(gid)
             if self.current_group == gid:
                 self._render_threads()
             return
@@ -3846,6 +3945,8 @@ class UnseenetApp(App):
                 rules=result["rules"], rules_type=result.get("rules_type"),
                 view=result["view"], low_latency=result["low_latency"],
                 kinds=result.get("kinds"), comments=result.get("comments"),
+                extra=({"attachments": result["attachments"]} if result.get("attachments")
+                       else None),
                 min_pow=16 if result["low_latency"] else sess_default_pow())
         except (SessionError, ValueError, OSError, ConnectionError) as exc:
             self.notify(f"Could not create group: {exc}", severity="error", timeout=8)
