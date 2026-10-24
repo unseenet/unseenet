@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- `unseenet:` addresses in the terminal client and the command line (#357,
+  UN-RFC 0031 section 3.4.1): invitations are written as
+  `unseenet:<group-id>?n=<onion>`; Join (j) takes every form - a group ID, a
+  group's, a post's (selected in its group) or a person's address (their
+  profile, if the client has met the key), and the older `unseenet:join?g=`;
+  Address of this post and Address of this group in the command palette show
+  the address and copy it where the terminal allows.
 - Pinned posts in the terminal client (#442, UN-RFC 0033 section 7): a Pinned
   section above the threads, newest pin first with its note, folded away with
   Enter on its head; pinned posts and chat lines marked `[P]`; a pinned line

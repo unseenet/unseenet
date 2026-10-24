@@ -12,7 +12,7 @@ project's channel group ``unseenet.nodes`` (UN-RFC 0010). That list is:
   nobody sees a request to GitHub or anywhere else.
 
 It is a starting point, not a directory: anyone can run a node, and a client
-can use any node it is told about (an ``unseenet:join`` link names one).
+can use any node it is told about (an ``unseenet:`` address can name one).
 """
 
 from __future__ import annotations
