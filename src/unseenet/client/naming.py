@@ -132,6 +132,10 @@ async def refresh(s: "Session") -> bool:
         await renew_given(s)
     except Exception:  # noqa: BLE001  renewal is retried at the next refresh
         pass
+    try:
+        await renew_held(s)                     # your own registered names (#424)
+    except Exception:  # noqa: BLE001  likewise
+        pass
     changed = repr(st) != before
     if changed:
         s.save()
@@ -646,6 +650,27 @@ async def renew_given(s: "Session") -> int:
             await give_subname(s, c.name, c.key, c.expires - c.issued)
             n += 1
     return n
+
+
+async def renew_held(s: "Session") -> list[str]:
+    """Renew your registered names that run out within 30 days (``RENEW_BEFORE``), by
+    themselves, as key-bound groups are (#424) - so nobody loses ``@lorensen``, and every
+    name under it, by forgetting. A ``renew`` claim to the registrar (UN-RFC 0019 section
+    6.3) at most once per name per run, and none while one sent is still on its way.
+    Domain names need nothing: the registrar renews them while their DNS record is
+    there. Returns the names a claim was sent for."""
+    now = datetime.now(timezone.utc)
+    tried = s.__dict__.setdefault("_renew_tried", set())
+    waiting = {p[0] for p in pending(s) if p[1] == "renew"}
+    sent = []
+    for c in my_names(s):
+        if (c.kind != "registered" or c.expires - now >= RENEW_BEFORE or c.name in tried
+                or c.name in waiting):
+            continue
+        tried.add(c.name)
+        await claim(s, c.name, "renew")
+        sent.append(c.name)
+    return sent
 
 
 def sent_header(s: "Session", group_id: str, now: datetime | None = None) -> None:
