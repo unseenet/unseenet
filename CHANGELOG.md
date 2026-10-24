@@ -114,6 +114,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   feed** (after saying it is public). The rows come from the core
   (`Session.feed_rows`, the pseudo group `TIMELINE`), so the GUI can show the
   same.
+- TUI: files and pictures (#149, #155). Where a group takes files, the compose
+  dialog has a Files field (paths, comma between); pictures are cleaned of
+  their metadata before they are sent. Edit profile takes a picture file,
+  published as your profile picture - the middle square, at most 128 px, no
+  metadata. Reading and saving files (f) was there already.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the

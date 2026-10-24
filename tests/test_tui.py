@@ -1573,3 +1573,87 @@ async def test_tui_follows_a_person_and_shows_the_timeline_and_a_feed(tmp_path, 
         assert rows[0].endswith("Første indlæg") and "↳ En kommentar" in rows[1]
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_sends_a_picture_cleaned_of_its_metadata(tmp_path, monkeypatch):
+    """#149 in the TUI: the compose dialog takes files where the group does; a picture
+    is cleaned of its metadata before it is sent."""
+    import io
+    from PIL import Image
+    import unseenet.client.session as sess
+    from unseenet.client.tui import ComposeDialog
+    from unseenet.core import blobs as bl
+    from unseenet.core.blobs import BlobStore
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    node.config.blobs = {"max_size": 1048576}
+    node.blobs = BlobStore()
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    me.data["starter_groups"] = 99
+    gid = await me.create_group("dk.foto", "open", min_pow=9,
+                                extra={"attachments": {"max_size": 1048576, "types": ["image/*"]}})
+    await me.close()
+    img = Image.new("RGB", (40, 30), (200, 100, 50))
+    ex = Image.Exif(); ex[0x010F] = "SecretCam"
+    buf = io.BytesIO(); img.save(buf, "JPEG", exif=ex)
+    (tmp_path / "have.jpg").write_bytes(buf.getvalue())
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert await wait_for(pilot, lambda: gid in app.groups, 300)
+        app.compose_post(app.groups[gid])
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ComposeDialog), 100)
+        app.screen.query_one("#subject").value = "Haven"
+        app.screen.query_one("#body").text = "Se her\n"
+        app.screen.query_one("#files").value = str(tmp_path / "have.jpg")
+        app.screen.action_send()
+        def sent():
+            return [a for a in node.store.db.execute("SELECT message_id FROM articles")]
+        assert await wait_for(pilot, lambda: any(b"Blobs:" in (node.store.get(r[0]) or b"")
+                                                 for r in sent()), 400)
+        raw = next(node.store.get(r[0]) for r in sent() if b"Blobs:" in (node.store.get(r[0]) or b""))
+        from unseenet.core.article import Article
+        (bid, _), = bl.parse_blobs(Article.from_bytes(raw))
+        assert node.blobs.get(bid) and b"SecretCam" not in node.blobs.get(bid)
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_publishes_a_profile_picture(tmp_path, monkeypatch):
+    """#155 in the TUI: Edit profile takes a picture file, published cleaned (avatar@)."""
+    from PIL import Image
+    import unseenet.client.session as sess
+    from unseenet.client.tui import ConfirmDialog, EditProfileDialog
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0), profiles="accept",
+                                    avatars="accept"))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    me.data["starter_groups"] = 99
+    await me.ensure_inbox()
+    fp = me.identity().fingerprint
+    await me.close()
+    Image.new("RGB", (300, 200), (10, 120, 200)).save(tmp_path / "me.png")
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 45)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.action_edit_profile()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 100)
+        app.screen.query_one("#ok").press()                       # the profile is public
+        assert await wait_for(pilot, lambda: isinstance(app.screen, EditProfileDialog), 100)
+        app.screen.query_one("#about").text = "Hej"
+        app.screen.query_one("#picture").value = str(tmp_path / "me.png")
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: node.store.manifest(f"avatar@{fp}") is not None, 400)
+        await pilot.press("q")
+    server.close()
