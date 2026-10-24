@@ -462,7 +462,7 @@ class PeopleMixin:
         """Leave out messages from people you ignore (your own are always shown), and
         show only the newest version of an edited post (UN-RFC 0042). With
         private_min_ripe set, private posts from unripe strangers are left out too."""
-        msgs = resolve_edits(msgs)
+        msgs = [m for m in resolve_edits(msgs) if not m.private_profile]   # not posts (0022, 6)
         if self.private_min_ripe() is not None:
             msgs = [m for m in msgs if self.sender_shown(m)]
         if self.hide_bots():                            # bots out of sight (UN-RFC 0030, 6)
