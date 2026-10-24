@@ -58,7 +58,11 @@ class Addresses:
             a = addr.parse(str(text or ""))
         except addr.AddressError as exc:
             raise SessionError(f"not an address: {exc}") from None
-        out: dict = {"kind": a.kind, "address": str(a), "nodes": list(a.nodes)}
+        try:
+            web = addr.web_address(a)
+        except addr.AddressError:
+            web = None
+        out: dict = {"kind": a.kind, "address": str(a), "web": web, "nodes": list(a.nodes)}
         if a.kind == "identity":
             key = self._key_for_fingerprint(s, a.fingerprint)
             return {**out, "fingerprint": a.fingerprint, "key": key,

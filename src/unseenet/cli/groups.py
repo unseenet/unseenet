@@ -89,7 +89,7 @@ def _group_fields(args) -> tuple[dict, dict]:
     if getattr(args, "attachments", None) is not None:
         extra["attachments"] = None if args.attachments == 0 else (
             {"max_size": args.attachments} | ({"types": args.types.split(",")} if args.types else {}))
-    for opt in ("max_pins", "max_pages", "home"):
+    for opt in ("max_pins", "max_pages", "home", "index"):
         if getattr(args, opt, None) is not None:
             extra[opt] = getattr(args, opt)
     return fields, extra
@@ -201,6 +201,9 @@ def _group_options(s, *, create: bool) -> None:
     s.add_argument("--max-pins", type=int, help="pins in force, 0-25 (UN-RFC 0033)")
     s.add_argument("--max-pages", type=int, help="sites: pages in force, 1-100 (UN-RFC 0035)")
     s.add_argument("--home", help="sites: the path of the home page")
+    s.add_argument("--index", choices=("yes", "no"),
+                   help="sites: may search engines index the site when an entrance shows it on "
+                        "the web (UN-RFC 0035; default no - copies outlive expiry)")
 
 
 __all__ = ['c_groups', 'c_group_remove', '_group_fields', 'c_group_show', 'c_group_edit', 'c_group_create', 'c_invite', '_group_options']

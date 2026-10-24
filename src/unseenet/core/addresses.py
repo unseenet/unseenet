@@ -6,8 +6,12 @@
     unseenet:<group-id>?p=<path>            a page of a site (UN-RFC 0035)
 
 ``n=<onion address>`` may be added to any of them, a node that carries it, as a hint.
-``parse`` also reads the older forms (``unseenet:join?g=...``, ``unseenet:<fp>/<path>``);
-``format`` writes only the current one. Every client reads and writes addresses here.
+``parse`` also reads the older forms (``unseenet:join?g=...``, ``unseenet:<fp>/<path>``),
+``web+unseenet:<...>`` (the scheme a browser may register) and the web form
+``https://<any host>/a/<...>`` - the same address with the scheme moved into a path, on
+any web entrance (section 3.4.1). The host is only a hint and is never trusted: the
+address is opened in the network, over Tor. ``format_address`` writes only the current
+form, ``web_address`` the web form. Every client reads and writes addresses here.
 """
 
 from __future__ import annotations
@@ -20,6 +24,10 @@ from .groups import split_group_id
 from .pages import valid_path
 
 SCHEME = "unseenet:"
+WEB_SCHEME = "web+unseenet:"          # read as unseenet:, never written (section 3.4.1)
+WEB_PATH = "/a/"                      # the web form: https://<host>/a/<what follows unseenet:>
+_WEB = re.compile(r"^https?://[^/\s?#]+/a/(?P<rest>[^\s#]+)$", re.IGNORECASE)
+_HOST = re.compile(r"^[A-Za-z0-9.\-\[\]:]+$")
 _FP = re.compile(r"^[a-z2-7]{16}$")
 _ONION = re.compile(r"^[a-z2-7]{56}\.onion(:\d{1,5})?$")
 
@@ -63,6 +71,36 @@ def format_address(a: Address) -> str:
     return SCHEME + head + ("?" + "&".join(f"{k}={_value(v)}" for k, v in params) if params else "")
 
 
+def web_address(a: "Address | str", host: str | None = None) -> str:
+    """The web form of an address, ``https://<host>/a/...``, on ``host`` - by default the
+    first web entrance the client came with (UN-RFC 0043 section 8.1). ``n=`` hints are
+    left out: they help nobody who reads the address on the web (section 3.4.1).
+    ``AddressError`` when there is no host to write it on."""
+    if isinstance(a, str):
+        a = parse(a)
+    host = (host or default_web_host() or "").strip()
+    host = re.sub(r"^https?://", "", host, flags=re.IGNORECASE).rstrip("/")
+    if not host or not _HOST.match(host):
+        raise AddressError("no web entrance to write the address on")
+    plain = Address(a.kind, fingerprint=a.fingerprint, group_id=a.group_id,
+                    message_id=a.message_id, path=a.path)
+    return f"https://{host}{WEB_PATH}" + format_address(plain)[len(SCHEME):]
+
+
+def default_web_host() -> str | None:
+    """The host of the first listed web entrance with an open-web address, or None."""
+    from ..known_nodes import builtin_entrances
+    for e in builtin_entrances():
+        if e["url"]:
+            return re.sub(r"^https://", "", e["url"]).rstrip("/")
+    return None
+
+
+def is_web_form(text: str) -> bool:
+    """Whether ``text`` is the web form of an address (on any host)."""
+    return bool(_WEB.match(text.strip()))
+
+
 def identity_address(fingerprint: str, nodes=()) -> str:
     return format_address(Address("identity", fingerprint=fingerprint, nodes=tuple(nodes)))
 
@@ -84,9 +122,16 @@ def parse(text: str) -> Address:
     """An address read: the current form, or one of the older forms (read as their
     current meaning). Unknown parameters are ignored. ``AddressError`` otherwise."""
     text = text.strip()
-    if not text.lower().startswith(SCHEME):
-        raise AddressError("an address starts with unseenet:")
-    rest = text[len(SCHEME):]
+    web = _WEB.match(text)
+    if web:                                              # https://<any host>/a/<...>
+        rest = web.group("rest")
+    elif text.lower().startswith(WEB_SCHEME):            # web+unseenet: is unseenet:
+        rest = text[len(WEB_SCHEME):]
+    elif text.lower().startswith(SCHEME):
+        rest = text[len(SCHEME):]
+    else:
+        raise AddressError("an address starts with unseenet:, or is its web form "
+                           "https://<entrance>/a/...")
     head, _, query = rest.partition("?")
     params = dict(parse_qsl(query, keep_blank_values=True))
     nodes = tuple(v for k, v in parse_qsl(query) if k == "n" and _ONION.match(v.lower()))

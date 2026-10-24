@@ -62,7 +62,12 @@ async def test_tui_addresses(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: isinstance(app.screen, InfoDialog)), stack(app)
         assert await wait_for(pilot, lambda: laid_out(app, "#value"))
         assert app.screen.query_one("#value", Input).value == addr.post_address(mine, welcome)
+        assert app.screen.query_one("#web", Input).value == addr.web_address(
+            addr.post_address(mine, welcome))                         # and its web form
         app.pop_screen()
+
+        await join(pilot, app, addr.web_address(addr.group_address(theirs), "example.org"))
+        assert await wait_for(pilot, lambda: app.current_group == theirs, 300), stack(app)
 
         await join(pilot, app, addr.post_address(theirs, there))      # not followed yet: joined
         assert await wait_for(pilot, lambda: app.current_message is not None

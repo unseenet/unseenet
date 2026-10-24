@@ -131,4 +131,14 @@ def builtin_list() -> tuple[str, list[KnownNode]]:
     return parse_node_list(resources.files("unseenet").joinpath("nodes.json").read_text())
 
 
+def builtin_entrances() -> list[dict]:
+    """The web entrances that came with this version of the client (UN-RFC 0043 8.1);
+    an empty list if the built-in list cannot be read."""
+    try:
+        return parse_entrance_list(
+            resources.files("unseenet").joinpath("entrances.json").read_text())[1]
+    except (OSError, ValueError):
+        return []
+
+
 KNOWN_NODES: tuple[KnownNode, ...] = tuple(builtin_list()[1])
