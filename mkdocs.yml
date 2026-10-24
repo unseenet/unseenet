@@ -182,6 +182,7 @@ nav:
       - "0045 Spam reports": spec/un-rfc-0045.md
       - "0046 The local client API": spec/un-rfc-0046.md
       - "0047 Team inboxes": spec/un-rfc-0047.md
+      - "0048 Reactions": spec/un-rfc-0048.md
   - The project:
       - People: project/people.md
       - The project's keys: project/keys.md
