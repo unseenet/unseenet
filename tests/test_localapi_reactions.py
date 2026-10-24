@@ -32,6 +32,7 @@ async def test_reactions_on_rows_and_reacting(tmp_path, monkeypatch):
                                        "any": False}
     row = _row(g, mid)
     assert row["reactions"] == [] and row["react"]["allowed"]
+    assert row["react_offered"] == g["group"]["reactions"]
 
     job = api.react(gid, {"id": mid, "emoji": "👍"})
     assert job["job"]

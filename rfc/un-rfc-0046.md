@@ -250,8 +250,10 @@ order to offer them (with `any`, the default set first and any other
 emoji besides); `offered` is empty when the group takes none. In a real
 group and in the timeline, each row has `reactions`, `[{"emoji": "👍",
 "count": 3, "mine": true}, ...]` in the order they were first given, one
-per key, and `react`, a permission whose further codes are `"private"`,
-`"target"` and `"no_reactions"`. Reactions are never rows themselves.
+per key, `react`, a permission whose further codes are `"private"`,
+`"target"` and `"no_reactions"`, and `react_offered`, the set of the row's
+own group as in the head (the timeline mixes groups). Reactions are never
+rows themselves.
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" |

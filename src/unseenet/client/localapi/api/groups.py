@@ -215,18 +215,23 @@ class Groups:
 
     @staticmethod
     def _add_reactions(s: Session, out: list[dict], rows) -> None:
-        """Each row's ``reactions`` - [{emoji, count, mine}] in the order first given -
-        and ``react``, whether you may react to it (UN-RFC 0048 sections 7.2, 7.3)."""
+        """Each row's ``reactions`` - [{emoji, count, mine}] in the order first given -,
+        ``react``, whether you may react to it, and ``react_offered``, its own group's
+        set - rows of the timeline come from many groups (UN-RFC 0048 sections 7.2, 7.3)."""
         me = s.identity().key_text
         counts: dict[str, dict] = {}
+        policy: dict[str, dict] = {}
         for row, (m, _) in zip(out, rows):
             if m.group not in counts:
                 counts[m.group] = s.all_reactions(m.group)
+                r = s.reaction_set(m.group)
+                policy[m.group] = {"offered": list(r.offered), "any": r.any}
             c = counts[m.group].get(m.message_id)
             mine = c.of(me) if c else None
             row["reactions"] = [{"emoji": e, "count": len(keys), "mine": e == mine}
                                 for e, keys in (c.by_emoji.items() if c else ())]
             row["react"] = _perm(s.react_permission(m.group, m))
+            row["react_offered"] = policy[m.group]
 
     @staticmethod
     def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:
