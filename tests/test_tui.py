@@ -1751,6 +1751,7 @@ async def test_tui_copies_and_opens_addresses(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.current_group == gid and len(app.messages) == 2, 400)
         table = app.query_one("#threads")
         assert await wait_for(pilot, lambda: table.cursor_row == table.get_row_index(mid), 200)
-        assert app.current_address() == link                    # and back again
+        # the post under the cursor follows its highlight event: wait for it, too
+        assert await wait_for(pilot, lambda: app.current_address() == link, 200)   # and back
         await pilot.press("q")
     server.close()
