@@ -30,7 +30,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (`Session.set_inbox_files`). The TUI attaches files when writing a private
   post, and with Ctrl+F in a chat with a person; the local client API takes
   `files` on `POST /api/private` (UN-RFC 0046 section 4.4). Encrypted blobs
-  are carried only by nodes whose operator turned on `encrypted`.
+  are carried only by nodes whose operator turned on `encrypted`. (Reviewed
+  in #502, but landed on main inside the squash merge of #503, commit
+  f39bfbb, whose title names only "Add my entrance".)
 - Pictures where they were forgotten (#496): a new personal feed or site
   takes pictures by default (up to 4 MiB each; `feed-start`/`site-start
   --no-files` for none), and the TUI offers it once for one made before.
