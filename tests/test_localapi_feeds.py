@@ -111,3 +111,23 @@ async def test_groups_lists_my_feed_at_the_top_once_started(tmp_path, monkeypatc
     await owner.close()
     await other.close()
     server.close()
+
+
+async def test_a_feed_read_without_following_it(tmp_path, monkeypatch):
+    """#506: opening someone's feed from their profile fetches it, without following."""
+    import asyncio
+    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    gid = (await api.start_feed({"comments": "open"}))["id"]
+    await owner.post(gid, "", "Til alle\n", kind="chat")
+    theirs = LocalAPI(session=other)
+    profile = await theirs.profile(owner.identity().key_text)   # where you find it
+    assert profile["theirs"]["feed"] == gid
+    first = theirs.group(gid)
+    assert first["rows"] == []                                  # not here yet: fetched now
+    await asyncio.gather(*list(theirs._tasks))
+    rows = theirs.group(gid)["rows"]
+    assert [r["message"]["text"].strip() for r in rows] == ["Til alle"]
+    assert gid not in other.data["subscribed"]                  # looking is not following
+    await owner.close()
+    await other.close()
+    server.close()

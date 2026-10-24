@@ -34,16 +34,22 @@ class PersonalMixin:
             raise SessionError("a personal group is a feed or a site")
         return make_group_id(kind, self.identity(name).public_key)
 
-    async def personal_groups_of(self, key: str) -> dict:
+    async def personal_groups_of(self, key: str, keep: bool = False) -> dict:
         """Someone's personal feed and site, if they have started them: ``{"feed":
         <Group ID or None>, "site": ...}``, from their manifests, read in one request
         (UN-RFC 0041) - so a profile can offer to look at them without following.
-        Nothing is kept in the vault: looking is not following."""
+        ``keep``: their manifests are kept, so the groups can be opened at once;
+        either way nothing is followed."""
         pk = crypto.key_from_text(key.strip())
         gids = {kind: make_group_id(kind, pk) for kind in PERSONAL_KINDS}
         found = await self.fetch_manifests(list(gids.values()))
-        return {kind: gid if found.get(gid) is not None and not found[gid].expired() else None
-                for kind, gid in gids.items()}
+        out = {}
+        for kind, gid in gids.items():
+            m = found.get(gid)
+            out[kind] = gid if m is not None and not m.expired() else None
+            if out[kind] and keep:
+                self.group_entry(gid)["manifest"] = dict(m.raw)
+        return out
 
     def has_personal_group(self, kind: str) -> bool:
         """Whether this identity has started its personal feed or site in this vault:

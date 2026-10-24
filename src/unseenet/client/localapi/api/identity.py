@@ -57,7 +57,7 @@ class Identity:
         # their feed and site, if they have them: to look at without following (#506)
         theirs = {"feed": None, "site": None}
         with contextlib.suppress(*NETWORK_ERRORS):
-            theirs = await s.personal_groups_of(key)
+            theirs = await s.personal_groups_of(key, keep=True)   # so they open at once
         return {**self._profile(key, None if p is None else (p.raw or {"about": p.about})),
                 **base, "mine": False, "hidden": False, "theirs": theirs}
 
