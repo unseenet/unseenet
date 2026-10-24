@@ -66,18 +66,27 @@ class ReadingMixin:
         return (cached if int(cached.get("serial", 0)) > int(data.get("serial", 0)) else data), count
 
     def subscribe_starter_groups(self) -> bool:
-        """Subscribe to the project's groups once per vault (a new client has
-        something to read). Groups unsubscribed later are not added again."""
-        if self.data.get("starter_groups") or not self.node:
+        """Follow the project's starter groups (a new client has something to read):
+        each version of the list once per vault, so groups added later reach those
+        who started earlier too. A group left later is never added again - only the
+        groups of versions this vault has not taken yet are. True if any were added."""
+        from ...known_nodes import STARTER_GROUP_VERSIONS
+        if not self.node:
             return False
-        from ...known_nodes import STARTER_GROUPS
-        for gid in STARTER_GROUPS:
-            if gid not in self.data["subscribed"]:
-                self.data["subscribed"].append(gid)
-                self.group_entry(gid).setdefault("node", self.node)
-        self.data["starter_groups"] = True
+        have = self.data.get("starter_groups")
+        taken = 1 if have is True else int(have or 0)        # True: version 1, before #388
+        if taken >= len(STARTER_GROUP_VERSIONS):
+            return False
+        added = False
+        for version in STARTER_GROUP_VERSIONS[taken:]:
+            for gid in version:
+                if gid not in self.data["subscribed"]:
+                    self.data["subscribed"].append(gid)
+                    self.group_entry(gid).setdefault("node", self.node)
+                    added = True
+        self.data["starter_groups"] = len(STARTER_GROUP_VERSIONS)
         self.save()
-        return True
+        return added
 
     # --- how a client lays out a group (unseenet #139) ---
     def subscribed_groups(self, available: dict[str, GroupInfo] | None = None, *,
