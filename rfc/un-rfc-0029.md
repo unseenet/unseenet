@@ -50,6 +50,7 @@ from the key of its owner alone. They are:
 | `ripe@<fp>`           | Key ripening chain               | UN-RFC 0025 section 3.3 |
 | `feed@<fp>`           | Personal feed (personal group)   | UN-RFC 0034 section 5   |
 | `site@<fp>`           | Personal site (personal group)   | UN-RFC 0035 section 7   |
+| `state@<fp>`          | The owner's state, encrypted     | UN-RFC 0044 section 3   |
 
 where `<fp>` is the fingerprint of the owner's key (UN-RFC 0003
 section 2). A later document that reserves a group name for a key adds

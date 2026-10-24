@@ -31,6 +31,9 @@ but implementations are expected to follow it.
 All client state — identities, group secrets, subscriptions, cached
 articles, settings — SHOULD be kept in a single encrypted **vault**
 file, so that the stick holds nothing readable without the passphrase.
+Since UN-RFC 0044, what is not a key or a group secret is also kept,
+encrypted, in the network, so the vault's own copy of it is a local copy
+that the network can restore; the format is unchanged.
 The recommended format is:
 
 ```

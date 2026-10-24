@@ -304,6 +304,7 @@ larger than:
 | `profile@`   | 10 KiB                   | Follows from the profile's 8192 octets (UN-RFC 0022 section 4.4) |
 | `avatar@`    | 12 KiB                   | Follows from the picture's 8192 octets (UN-RFC 0022 section 8.1) |
 | `ripe@`      | 24 KiB                   | 64 segments of 208 octets in base64 (UN-RFC 0025 section 3.3) |
+| `state@`     | 24 KiB                   | A state of at most 16 KiB, encrypted, in base64 (UN-RFC 0044 section 5) |
 | `names@`     | 64 KiB                   | Issuers only (UN-RFC 0019)                    |
 | `attest@`    | 64 KiB                   | Issuers only; revocations are sharded (UN-RFC 0036 section 7) |
 | `site@`      | 64 KiB                   | Only where the operator carries sites (UN-RFC 0035) |

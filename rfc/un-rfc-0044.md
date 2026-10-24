@@ -97,13 +97,32 @@ The plaintext is canonical JSON (UN-RFC 0004):
 {"v": 1, "updated": "2026-10-20T20:10:00Z",
  "subscribed": {"unseenet.test@ph5fc5hop5232qsz": "2026-10-16T21:00:00Z"},
  "unsubscribed": {"alt.old@abcd...": "2026-10-19T08:00:00Z"},
+ "following": {"<fingerprint>": {"key": "ed25519:...", "name": "andreas@lorensen",
+               "feeds": ["feed@..."], "skip": [], "at": "..."}},
+ "unfollowed": {"<fingerprint>": "..."},
+ "starter": 2,
  "contacts": {"ed25519:...": {"name": "Sonia", "at": "2026-10-18T19:00:00Z"}},
  "ignored": {"ed25519:...": {"label": "", "at": "..."}},
- "settings": {"signature": "...", "markdown": true, "at": "..."},
+ "hidden": {"ed25519:...": "..."},
+ "settings": {"signature": "...", "markdown": true, "notices": {"send": true, "take": true},
+              "private_min_ripe": 0, "hide_bots": false, "show_blocked": false,
+              "at": "..."},
  "read": {"unseenet.test@ph5fc5hop5232qsz": {"to": "2026-10-20T19:00:00Z",
           "also": ["<abc@unseenet>"]}},
  "sent": [{"msgid": "<def@unseenet>", "inbox": "inbox@...", "at": "..."}]}
 ```
+
+- `following` / `unfollowed`: the people followed (UN-RFC 0034 section
+  6.1), by fingerprint, with the feeds followed because of them and the
+  ones the user stopped following; who you follow stays private this way
+  too, since only you can read the state.
+- `starter`: the version of the starter groups this identity has taken,
+  so a new client does not follow again a starter group the user left.
+- `hidden`: keys whose profiles the user hides (UN-RFC 0022).
+- `settings`: the user's settings that are not about one device - the
+  signature, Markdown, mention notices (UN-RFC 0032), the ripening level
+  private senders need (UN-RFC 0025 section 3.5), hiding bots, showing
+  blocked posts.
 
 Every entry carries the time it last changed (`at`), so that two
 clients can merge (section 7).
@@ -123,7 +142,8 @@ state small enough for section 5.
 
 Bodies of posts, drafts, cached articles, group secrets, passphrases,
 and anything about other people beyond their key and the name you gave
-them.
+them. Drafts stay on the device: they change often and would push the
+state past its size (section 5).
 
 # 5. Size and Padding
 
@@ -199,6 +219,9 @@ its own, so that two clients never undo each other:
 - `subscribed` / `unsubscribed`, `contacts`, `ignored`, `settings`:
   per entry, the newer `at` wins; a group is followed if its newest
   entry is in `subscribed`.
+- `following` / `unfollowed`, `hidden`: per person, the newer `at`
+  wins, as for subscriptions.
+- `starter`: the higher version.
 - `read`: per group, the later `to`; the union of `also`, trimmed.
 - `sent`: the union, by Message-ID.
 
@@ -210,6 +233,16 @@ When a client starts with an identity, it fetches `state@`, merges it
 into its local copy, and only then shows groups. A vault opened
 somewhere new therefore looks the same as everywhere else after one
 fetch. Without a network it shows the local copy.
+
+## 7.4 Keeping It Local
+
+An identity can keep its state out of the network, as before this
+document: for an identity that should leave no trace of activity at
+all, not even an encrypted one. A client MUST offer this as a setting
+per identity, on by default (the state goes to the network). With it
+off, the client writes no `state@` manifest and keeps everything in the
+vault; turning it off removes the identity's state group (UN-RFC 0013),
+so the last state written does not linger.
 
 # 8. The Vault
 
@@ -261,11 +294,12 @@ without copying caches.
 
 # 11. Open Questions
 
-1. Should the state keep a short list of drafts?
-2. Should a client be able to turn the state off and keep everything
-   local, as today (for an identity that should leave no trace of
-   activity at all)?
-3. 16 KiB or 32 KiB as the largest size?
+None. Decided by the maintainer, 24 Oct 2026:
+
+1. Drafts are not in the state (section 4.4).
+2. The state can be kept local, per identity (section 7.4).
+3. 16 KiB is the largest size (section 5): a key-bound manifest is at
+   most 24 KiB (UN-RFC 0040 section 9), so 32 KiB would not fit.
 
 # 12. Changes to Other Documents
 

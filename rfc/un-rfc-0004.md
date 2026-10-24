@@ -47,6 +47,7 @@ hierarchies; they are only a convention for browsing.
 | `moderated` | owner, moderators; others only with a valid approval | anyone       |
 | `channel`   | owner, moderators, and listed posters                | anyone       |
 | `closed`    | holders of the current group secret                  | members only |
+| `state`     | nobody: it has only the owner's manifest (UN-RFC 0044) | the owner only (encrypted) |
 
 The type is fixed at creation. A later manifest MUST NOT change it;
 nodes MUST reject a manifest that does.
