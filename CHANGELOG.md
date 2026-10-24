@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Private profiles in the local client API (#442, UN-RFC 0046 section 4.16,
+  UN-RFC 0022 section 6): `POST /api/profile/share` shares a profile with one
+  person or a closed group, or takes it back; `GET /api/profile` with
+  `context` gives the profile shared there, never one from another context.
 - Sites and pages in the local client API (#442, UN-RFC 0046 section 4.15,
   UN-RFC 0035): a site's pages in force with the home page first; one page
   with its links within the site resolved to `unseenet:` addresses; writing,

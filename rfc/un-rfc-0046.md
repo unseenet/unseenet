@@ -343,7 +343,7 @@ not (you do not own or moderate the group).
 
 - `GET /api/profile?key=<key>` (yours without `key`): a public profile
   (UN-RFC 0022) or `null`, as `{"key", "profile", "about_tree", "label",
-  "mine", "hidden", "link_kinds"}`. `hidden` is true when you hid this
+  "mine", "hidden", "link_kinds"}` (and `shared`, section 4.16). `hidden` is true when you hid this
   key's profile (UN-RFC 0022 section 9.2); then it is not even fetched.
   Before fetching someone's, the runtime reads the profiles of the authors
   it has together with it, so a node cannot tell whose you open (UN-RFC 0022
@@ -654,6 +654,29 @@ section 5):
 
 `GET /api/site` and `POST /api/site` `{"title"}` are your personal site, as
 `/api/feed` is your feed (section 4.14, UN-RFC 0035 section 7).
+
+## 4.16 Private Profiles
+
+A profile can be shared with one person or a closed group, where only
+they can read it and it is shown only there (UN-RFC 0022 section 6) - for
+someone who wants no public profile, or another one for friends.
+
+- `POST /api/profile/share` `{"to": "<key> | <closed group id>",
+  "profile": {...} | {"edit": {...}}}` shares one: without `profile` your
+  public profile (with your picture inline, UN-RFC 0022 section 8.3), or
+  another, given as for `POST /api/profile`. A key's goes to their
+  personal inbox; anything but a key or a closed group is refused, for a
+  public profile is published, not shared. `{"to": ..., "withdraw": true}`
+  takes back the one you shared there. It answers `{"ok": true, "id":
+  "<Message-ID>"}` and publishes nothing.
+- `GET /api/profile?key=<key>&context=<where>` adds `shared`: the profile
+  that key shared where it is opened, as `{"key", "profile", "about_tree",
+  "context", "context_label"}`, or null. `context` is a closed group's ID,
+  or `me` - your private posts, your inbox or a chat with them (`contact:`,
+  section 4.3), which are all one context. Anything else has no shared
+  profile. A runtime MUST NOT answer one shared in another context, and a
+  front end shows it in that context only, saying it was shared with you or
+  with the group.
 
 # 5. Events
 
