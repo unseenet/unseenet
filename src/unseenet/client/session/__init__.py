@@ -352,7 +352,7 @@ from .profiles import ProfilesMixin  # noqa: E402
 from .people import PeopleMixin  # noqa: E402
 from .reading import ReadingMixin  # noqa: E402
 from .posting import PostingMixin  # noqa: E402
-from .attachments import AttachmentsMixin  # noqa: E402
+from .attachments import AttachmentsMixin, FileUnavailable  # noqa: E402,F401
 from .kept import KeptMixin  # noqa: E402
 from .personal import PersonalMixin  # noqa: E402
 from .following import FollowingMixin  # noqa: E402

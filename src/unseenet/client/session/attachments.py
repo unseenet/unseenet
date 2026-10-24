@@ -26,6 +26,16 @@ from .. import session as _s   # names tests patch on the module, read at call t
 BLOB_CACHE_OCTETS = 64 * 1024 * 1024     # checked blobs kept in memory while the client runs
 
 
+class FileUnavailable(SessionError):
+    """A file a post carries that cannot be had now. ``why`` is ``none`` (the node
+    carries no files), ``later`` (it is still fetching it), ``gone`` (it has not got
+    it) or ``wrong`` (it sent another file than the post names)."""
+
+    def __init__(self, text: str, why: str):
+        super().__init__(text)
+        self.why = why
+
+
 class AttachmentsMixin:
     def prepare_files(self, paths) -> list:
         """Read files and prepare them for a post: a list of ``media.Prepared``, each
@@ -94,6 +104,12 @@ class AttachmentsMixin:
             return c.capability("UNSEENET-BLOB") is not None
         return await self._call(run, self.node_for(group_id))
 
+    def node_files_known(self, group_id: str) -> bool | None:
+        """What ``node_files`` says, from the open connection to the group's node, without
+        asking it anything; None while there is none."""
+        c = self._clients.get(self.node_for(group_id) or "")
+        return None if c is None else c.capability("UNSEENET-BLOB") is not None
+
     async def fetch_blob(self, group_id: str, blob_id: str) -> bytes:
         """The file a post in this group carries, from the group's node: checked against
         its blob ID and size before anything else is done with it (section 9.2), and
@@ -117,13 +133,15 @@ class AttachmentsMixin:
                 raise
         got = await self._call(run, self.node_for(group_id))
         if got == "none":
-            raise SessionError("this node carries no files - another node may")
+            raise FileUnavailable("this node carries no files - another node may", "none")
         if got == "later":
-            raise SessionError("the node is still fetching this file - try again in a moment")
+            raise FileUnavailable("the node is still fetching this file - try again in a moment",
+                                  "later")
         if got is None:
-            raise SessionError("the node does not have this file (any more)")
+            raise FileUnavailable("the node does not have this file (any more)", "gone")
         if bl.blob_id(got) != blob_id or len(got) != att["size"]:
-            raise SessionError("the node sent another file than the post names - not shown")
+            raise FileUnavailable("the node sent another file than the post names - not shown",
+                                  "wrong")
         cache[blob_id] = got
         while sum(len(v) for v in cache.values()) > BLOB_CACHE_OCTETS and len(cache) > 1:
             cache.popitem(last=False)

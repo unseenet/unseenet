@@ -75,6 +75,7 @@ async def test_a_picture_with_its_alt_text_and_size(net):
                    "name": "foto.png", "alt": "En rød firkant", "dim": [40, 30]}
     assert msg.to_dict()["attachments"] == [att]
     assert await reader.node_files(gid) is True
+    assert reader.node_files_known(gid) is True
     assert await reader.fetch_blob(gid, att["blob"]) == sent.octets
     pic = await reader.picture(gid, att["blob"])
     assert (pic.media_type, pic.width, pic.height, pic.frames) == ("image/png", 40, 30, 1)
@@ -106,8 +107,9 @@ async def test_a_node_without_files_says_so(net):
     other = session("other", without)
     other.cache[gid] = me.cache[gid]                 # it read the post elsewhere
     assert await other.node_files(gid) is False
-    with pytest.raises(SessionError, match="carries no files"):
+    with pytest.raises(sess.FileUnavailable, match="carries no files") as no:
         await other.fetch_blob(gid, bl.blob_id(sent.octets))
+    assert no.value.why == "none"
 
 
 async def test_a_wrong_blob_is_refused(net, monkeypatch):
