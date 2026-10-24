@@ -31,6 +31,7 @@ async def test_a_feed_followed_and_its_timeline(tmp_path, monkeypatch):
     key = owner.identity().key_text
     profile = await theirs.profile(key)
     assert profile["feed"] == gid and profile["following"] is False
+    assert profile["theirs"] == {"feed": gid, "site": None}           # to look at (#506)
     done = await theirs.set_following({"person": key})
     assert done["ok"] and done["new"] == [gid]
     assert (await theirs.profile(key))["following"] is True

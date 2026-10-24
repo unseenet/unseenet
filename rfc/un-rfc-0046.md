@@ -648,7 +648,10 @@ Your own feed (UN-RFC 0034 section 5) is started only when you ask:
 
 A profile of someone else (section 4.8) has `feed`, the Group ID of their
 personal feed, which may not exist, and `following`, whether you follow
-them.
+them. Unless you hid it, it also has `theirs`: `{"feed": <Group ID or
+null>, "site": <Group ID or null>}`, their personal feed and site as far
+as they exist, so a front end can offer to look at them - opening a group
+does not follow it (#506).
 
 ## 4.15 Sites and Pages
 

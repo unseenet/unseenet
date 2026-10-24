@@ -84,6 +84,8 @@ async def test_tui_profile_buttons_start_my_feed_and_follow(tmp_path, monkeypatc
     alice.add_node(addr)
     feed = await alice.start_personal_group("feed")
     await alice.post(feed, "Hej", "Fra Alice\n")
+    site = await alice.start_personal_group("site")
+    await alice.put_page(site, "index", "# Alices side\n")
     key = alice.identity().key_text
     await alice.close()
     async with app.run_test(size=(140, 40)) as pilot:
@@ -97,7 +99,14 @@ async def test_tui_profile_buttons_start_my_feed_and_follow(tmp_path, monkeypatc
         assert await wait_for(pilot, lambda: type(app.screen).__name__ == "ConfirmDialog", 100)
         await press(pilot, app, "#cancel")
         assert not app.session.has_personal_group("feed")
-        # someone else's: Follow, then Following, and their feed
+        # someone else's: their site, read without following (#506)
+        app.action_show_profile(key)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
+        assert app.screen.query("#their-feed") and app.screen.query("#their-site")
+        await press(pilot, app, "#their-site")
+        assert await wait_for(pilot, lambda: app.current_group == site, 300)
+        assert site not in app.session.data["subscribed"] and not app.session.is_following(key)
+        # then Follow, then Following, and their feed
         app.action_show_profile(key)
         assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
         assert str(app.screen.query_one("#follow").label) == "Follow"
@@ -134,5 +143,21 @@ async def test_tui_start_my_site_at_the_top_and_on_the_profile(tmp_path, monkeyp
         assert await wait_for(pilot, lambda: gid in _top(app) and START_SITE not in _top(app), 300)
         tree = app.query_one("#groups")
         assert "My site" in str(next(n for n in tree.root.children if n.data == gid).label)
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_no_feed_or_site_buttons_for_someone_without_them(tmp_path, monkeypatch):
+    app, server, addr = await _setup(tmp_path, monkeypatch)
+    bob = Session(Vault.open(tmp_path / "b.vault", "pw", **KDF), status=lambda *_: None)
+    bob.new_identity("bob", "Bob")
+    key = bob.identity().key_text
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.action_show_profile(key)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
+        assert not app.screen.query("#their-feed") and not app.screen.query("#their-site")
+        assert app.screen.query("#follow")
+        await pilot.press("escape")
         await pilot.press("q")
     server.close()
