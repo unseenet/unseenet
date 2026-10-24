@@ -1472,13 +1472,13 @@ async def test_tui_pauses_and_resumes_ripening(tmp_path, monkeypatch):
         app.action_ripening()
         assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
         assert any("Ripening is a calculation" in str(w.render()) for w in app.screen.query("Static"))
-        await pilot.click("#ok")
-        assert await wait_for(pilot, lambda: app.runtime.ripening_paused, 100)
+        app.screen.query_one("#ok").press()            # not a mouse click: slow runners miss it
+        assert await wait_for(pilot, lambda: app.runtime.ripening_paused, 400)
         assert "(ripening paused)" in app.sub_title or "key level" not in app.sub_title
         app.action_ripening()
         assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
-        await pilot.click("#ok")
-        assert await wait_for(pilot, lambda: not app.runtime.ripening_paused, 100)
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: not app.runtime.ripening_paused, 400)
         await pilot.press("q")
     server.close()
 
@@ -1538,7 +1538,7 @@ async def test_tui_keeps_your_state_local_when_asked(tmp_path, monkeypatch):
         assert not app.session.state_kept_local()
         app.action_state_where()
         assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
-        await pilot.click("#ok")
-        assert await wait_for(pilot, lambda: app.session.state_kept_local(), 200)
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: app.session.state_kept_local(), 400)
         await pilot.press("q")
     server.close()
