@@ -232,6 +232,24 @@ while a NIP-22 comment in a group has 7 (`h E K P e k p`); where a relay
 refuses them, the gateway sends replies as chat (`kind:9` with `q`)
 instead.
 
+## 6.1 Several Gateways
+
+A NIP-29 group can be served by several gateways (UN-RFC 0038). For
+Nostr:
+
+- **The other side's consent** (UN-RFC 0038 section 3.2, step 1) is the
+  joining gateway's Nostr key on the group's member list (`kind:39002`)
+  or admin list (`kind:39001`) as the relay publishes them. The gateway
+  that presents the join request to the owner reads those lists and says
+  whether the key is on them. A relay that publishes no lists cannot be
+  checked, and the request says so.
+- **Already there** (UN-RFC 0038 section 5) means an event in the group
+  with the `unseenet` tag (section 5.2) carrying the article's
+  Message-ID. Relays index only one-letter tags, so a gateway reads the
+  group's recent events and compares the tag itself.
+- A gateway takes back (NIP-09) only events it sent itself, never one
+  another gateway sent first.
+
 # 7. Portals
 
 A portal to Nostr (UN-RFC 0023 section 3.5) is a NIP-29 group created
