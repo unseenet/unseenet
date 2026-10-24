@@ -9,6 +9,23 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Reactions** (#510, UN-RFC 0048): one emoji under a post, comment, answer or
+  chat line, one per key, changed with `Supersedes` and taken back with a
+  cancel. The group owner chooses the set in the manifest (`reactions`: a list
+  of up to 12, `[]` for none, or `"any"`); without it, feeds and chats take
+  👍 👎 ❤️ 😂 😮 😢 and discussions none. Nodes refuse reactions outside the
+  set, a second one from the same key, and reactions to reactions; they hold
+  a reaction until its article arrives and drop it when the article goes.
+  Clients keep reactions out of threads, chats, feeds and the timeline and
+  show them as counts only (`Session.reactions_on`, `react`, `react_permission`,
+  `reaction_set`, `who_reacted`), also in closed groups. TUI: ++l++, counts in
+  the list, the chat and the reader, and *Reactions* in the group's settings.
+  Local client API: `reactions` in a group's head, `reactions` and `react` on
+  every row, `POST /api/groups/<id>/react` and `reactions` in the settings
+  (UN-RFC 0046 sections 4.3, 4.5, 4.7). CLI: `unseenet react` and
+  `--reactions` for `group-create` and `group-edit`. Nodes must be updated
+  first. Reactions to private posts come later.
+
 - Tables in Markdown (UN-RFC 0031 section 3.6, amended): GitHub-style tables in
   posts, chat lines, pages, profiles and group rules, with each column's
   alignment; `core.markup` gives a `table` node (`align`, `head`, `rows`, cells
@@ -387,6 +404,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- Editing a feed or a site in the TUI no longer turns it into a discussion:
+  the settings know the `feed` view, and `pages` for a site.
 - Editing a post with files (UN-RFC 0042) dropped them: the new version now
   carries the files of the earlier one unless new ones are given (#496).
 - The TUI's Join (`j`) opens a page address at its page, instead of saying the

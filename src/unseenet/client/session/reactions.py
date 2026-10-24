@@ -11,7 +11,6 @@ Not here: the rules themselves (core/reactions.py), drawing the counts (the clie
 from __future__ import annotations
 
 from . import *  # noqa: F403  - the module's names, as when this was one file
-from .. import session as _s   # names tests patch on the module, read at call time
 from ...core import reactions as rx
 
 
