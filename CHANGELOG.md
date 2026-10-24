@@ -20,8 +20,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   /api/nodes` (with `?info=1` to ask each node), `POST /api/nodes` to add,
   remove or make a node the default - the runtime starts and stops watching
   at once - and `node_label`, `node_names` and `status_idle` in `/api/state`
-  (`idle` on `status` events), so a graphical client can change node and
-  need not repeat the node in its status bar.
+  (`idle` on `status` events, also for a connection to any of your nodes),
+  so a graphical client can change node and need not repeat the node in its
+  status bar.
 - Close a chat (UN-RFC 0044 section 4.2, `closed_chats`, amended): it leaves the
   list of chats on all your devices, the messages stay, and it comes back by
   itself with the next chat line from or to the person (sending opens it

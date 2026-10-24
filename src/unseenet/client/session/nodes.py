@@ -299,7 +299,7 @@ class NodesMixin:
         if wait > 0:                       # it just failed: not again before its time (#297)
             raise ConnectionError(f"{address} could not be reached; trying again in "
                                   f"{wait:.0f} s")
-        status = (lambda *_: None) if quiet else self.say
+        status = (lambda *_, **__: None) if quiet else self.say
         socks = None
         if address.split(":")[0].endswith(".onion"):
             socks = await self._ensure_tor(status)
@@ -318,7 +318,7 @@ class NodesMixin:
         self._backoff.setdefault(address, Backoff()).up()
         self._retry_at.pop(address, None)
         self.emit(ev.NodeState(address, True))
-        status(f"Connected to {self.node_label(address)}")
+        status(f"Connected to {self.node_label(address)}", idle=True)
         return client
 
     async def _ensure_tor(self, status) -> int | Socks:

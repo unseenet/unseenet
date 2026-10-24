@@ -25,8 +25,11 @@ class Event:
 
 @dataclass(frozen=True)
 class Status(Event):
-    """A line for the status bar, as the old ``status`` callback had."""
+    """A line for the status bar, as the old ``status`` callback had. ``idle``: it only
+    says a node is reached ("Connected to ..."), so a front end that shows the
+    node elsewhere may leave it out (#518)."""
     text: str
+    idle: bool = False
     name = "status"
 
 

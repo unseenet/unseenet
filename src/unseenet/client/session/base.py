@@ -106,10 +106,11 @@ class BaseMixin:
             except Exception:  # noqa: BLE001 - a client's bug must not stop the session
                 log.exception("event callback failed for %s", event.name)
 
-    def say(self, text: str) -> None:
-        """A status line: to the old ``status`` callback and as a ``Status`` event."""
+    def say(self, text: str, idle: bool = False) -> None:
+        """A status line: to the old ``status`` callback and as a ``Status`` event
+        (``idle`` when it only says a node is reached)."""
         self.status(text)
-        self.emit(ev.Status(text))
+        self.emit(ev.Status(text, idle))
 
     async def _compute(self, fn):
         """Run ``fn`` (building and stamping an article) in a worker thread,

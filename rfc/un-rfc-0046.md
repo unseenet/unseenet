@@ -146,10 +146,11 @@ nodes know, or null>, "available": <true if this runtime can ripen>,
 identity or the node is still missing.
 
 `status` is a line for people. `status_idle` is true when it only says
-that all is well with the default node ("Connected to ..."): a front end
-that shows the node elsewhere MAY leave such a line out, and show
-`status` again when `status_idle` is false (Tor starting, offline, a
-post being sent).
+that a node was reached ("Connected to ...", the default node or one a
+group is read from): a front end that shows the node elsewhere MAY leave
+such a line out, and show `status` again when `status_idle` is false (Tor
+starting, offline, a post being sent). Whether a node is reached right
+now is the `node-state` event's (section 5), per node.
 
 `POST /api/ripening` `{"paused": true | false}` pauses or resumes ripening
 in the background (UN-RFC 0025 section 7), for example on a warm phone or
