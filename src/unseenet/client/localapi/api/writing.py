@@ -57,7 +57,8 @@ class Writing:
         body = str(data.get("body", "")).strip("\n")
         subject = "" if kind == KIND_CHAT else str(data.get("subject", "")).strip()
         refs = [str(r) for r in data.get("references", []) or []][:MAX_REFERENCES]
-        if not body.strip():
+        files = self._files_to_post(s, gid, data.get("files"))         # section 4.10
+        if not body.strip() and not files:
             raise SessionError("nothing to send")
         if kind not in s.group_kinds(gid):
             raise SessionError("this group takes " + ("posts with a subject only"
@@ -74,9 +75,10 @@ class Writing:
             keys = [k for _, k in s.mentioned(subject, body)][:MAX_MENTION_NOTICES]
 
         async def send() -> str:
-            if kind == KIND_CHAT and not refs:
+            if kind == KIND_CHAT and not refs and not files:
                 return await s.send_chat(gid, body)
-            return await s.post(gid, subject, body, references=refs or None, kind=kind)
+            return await s.post(gid, subject, body, references=refs or None, kind=kind,
+                                files=files or None)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval

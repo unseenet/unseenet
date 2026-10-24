@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Files in the local client API (#442, UN-RFC 0046 section 4.10): posts list
+  their files in `attachments`, a group's head says what files it takes
+  (`files`) and whether its node carries them (`node_files`), `GET
+  /api/groups/<id>/files/<blob>` answers a picture checked, decoded and
+  saved again by the runtime (or with `?save=1` the file itself, to save),
+  and a post can carry up to four files with their alternative text.
 - Files on posts can be read, not only sent (#442, UN-RFC 0027 sections 6.4
   and 9.2): `BLOB` for readers (`Client.blob`), `Session.fetch_blob()`, which
   checks a file against its blob ID and size before anything else, and
