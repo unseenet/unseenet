@@ -121,10 +121,11 @@ from .identity import Identity  # noqa: E402
 from .articles import Articles  # noqa: E402
 from .files import Files  # noqa: E402
 from .pictures import Pictures  # noqa: E402
+from .addresses import Addresses  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures):
+               Files, Pictures, Addresses):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

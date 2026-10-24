@@ -531,6 +531,40 @@ of a post older than the group keeps posts: unpinned, it is gone at
 once, so a front end MUST say so before unpinning it (UN-RFC 0033
 section 7.1).
 
+## 4.13 Addresses
+
+Every identity, group, post and page has one `unseenet:` address (UN-RFC
+0031 section 3.4.1). The runtime writes them and reads them, so every front
+end shares the same addresses and opens every form, the older ones too.
+
+The head of a group (section 4.3) has `address`, the group's, and each of
+its rows has `address`, the post's; a profile (section 4.8) has `address`,
+the identity's. They carry the node this runtime reads the group from as
+an `n=` hint when that node is an onion address. A front end offers them
+to copy.
+
+`GET /api/address?a=<address>` says what an address names:
+
+```
+{"kind": "identity" | "group" | "post" | "page", "address": "<the current form>",
+ "nodes": ["<n= hints>"],
+ "fingerprint": "...", "key": "<key>" or null, "label": "...", "mine": false,
+ "group_id": "...", "followed": true, "available": true,
+ "group": {"id", "label", "title", "type", "view"},
+ "message": {"id", "subject", "kind", "who", "date"} or null,
+ "page": {"path", "title"} or null}
+```
+
+with the fields of its kind: `fingerprint`, `key` (a key this runtime knows
+with that fingerprint, or null) and `mine` for an identity; for the others
+`group_id`, `followed`, `available` (whether your nodes have the group) and
+`group`, with `message` for a post and `page` for a page, null while the
+runtime cannot find it. The runtime fetches the group's manifest, and for a
+post or a page its posts, from your nodes; it never connects to the `n=`
+hints by itself (UN-RFC 0031 section 3.4.1) - a front end asks before
+adding one. An older form, such as `unseenet:join?g=...`, is answered with
+its current form in `address`. Refused with 400 when it is not an address.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,
