@@ -126,3 +126,14 @@ def _icon(key):
     from unseenet.core import crypto
     icon = prof.identicon(crypto.key_from_text(key))
     return {"hue": icon.hue, "cells": [list(r) for r in icon.cells], "colour": icon.hex()}
+
+
+@pytest.mark.parametrize("n", [1, 2, 4, 5])
+def test_a_stored_picture_is_shown_from_its_base64url(n):
+    """A picture object keeps its octets as unpadded base64url (UN-RFC 0022 section 8.1);
+    the page gets them back whole whatever their length."""
+    from unseenet.client.localapi.api.pictures import _shown
+    from unseenet.core.encoding import b64
+    octets = (b"\xfb\xff\xbf" * 2)[:n]                   # needs padding, and "-" "_"
+    shown = _shown({"type": "image/png", "px": 64, "data": b64(octets), "alt": "a"})
+    assert base64.b64decode(shown["data"].split(",", 1)[1]) == octets

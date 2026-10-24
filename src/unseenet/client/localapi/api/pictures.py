@@ -13,6 +13,7 @@ import base64
 import binascii
 
 from . import *  # noqa: F403  - the module's names, as when this was one file
+from ....core.encoding import b64decode
 
 MAX_PICTURE_KEYS = 255                          # keys in one request, as profiles (0041 3.2)
 MAX_PICTURE_UPLOAD = 8 * 1024 * 1024            # the file a picture is made from
@@ -22,7 +23,7 @@ def _shown(pic: dict | None) -> dict | None:
     """A picture for the page: a ``data:`` URL of the runtime's own copy."""
     if not pic:
         return None
-    data = pic.get("octets") or base64.b64decode(pic.get("data", ""))
+    data = pic.get("octets") or b64decode(pic.get("data", ""))  # base64url (0022 8.1)
     return {"type": pic["type"], "px": pic["px"], "alt": pic.get("alt", ""),
             "data": f"data:{pic['type']};base64,{base64.b64encode(data).decode()}"}
 
