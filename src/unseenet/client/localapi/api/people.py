@@ -22,6 +22,19 @@ class People:
         s.emit(ev.GroupsChanged())
         return {"ok": True}
 
+    def close_chat(self, data: dict) -> dict:
+        """``POST /api/chats/close`` (section 4.6): take a chat with a person off the
+        list (``on`` true, the default), or put it back. It is in your state (UN-RFC
+        0044 section 4.2) and opens again by itself with the next chat line."""
+        s = self._ready()
+        key = _key(data.get("key"))
+        if data.get("on", True):
+            s.close_chat(key)
+        else:
+            s.open_chat(key)
+        s.emit(ev.GroupsChanged())
+        return {"ok": True}
+
     def ignored(self) -> dict:
         """``GET /api/ignore`` (section 4.6): the keys you ignore, with their labels."""
         s = self._ready()

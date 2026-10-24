@@ -104,6 +104,7 @@ The plaintext is canonical JSON (UN-RFC 0004):
  "contacts": {"ed25519:...": {"name": "Sonia", "at": "2026-10-18T19:00:00Z"}},
  "ignored": {"ed25519:...": {"label": "", "at": "..."}},
  "hidden": {"ed25519:...": "..."},
+ "closed_chats": {"ed25519:...": {"since": "2026-10-24T21:00:00Z", "at": "..."}},
  "settings": {"signature": "...", "markdown": true, "notices": {"send": true, "take": true},
               "private_min_ripe": 0, "hide_bots": false, "show_blocked": false,
               "clients": {"tui": {"theme": "nord"}, "gui": {"theme": "dark"}},
@@ -120,6 +121,14 @@ The plaintext is canonical JSON (UN-RFC 0004):
 - `starter`: the version of the starter groups this identity has taken,
   so a new client does not follow again a starter group the user left.
 - `hidden`: keys whose profiles the user hides (UN-RFC 0022).
+- `closed_chats`: chats with a person the user closed, so they leave the
+  list of chats on every device (UN-RFC 0028 section 6.2). `since` is when
+  it was closed. A closed chat opens again by itself as soon as there is
+  a chat line from or to that person dated after `since`, so no new
+  message is ever hidden; dates are rounded to 10 minutes (UN-RFC 0009),
+  so a line in the same 10 minutes as the closing may wait for the next.
+  The messages stay; closing only takes the chat off the list. Opening it
+  again on purpose writes it as removed.
 - `settings`: the user's settings that are not about one device - the
   signature, Markdown, mention notices (UN-RFC 0032), the ripening level
   private senders need (UN-RFC 0025 section 3.5), hiding bots, showing
@@ -127,8 +136,8 @@ The plaintext is canonical JSON (UN-RFC 0004):
   name, such as its theme, which mean nothing to another kind.
 
 Every entry carries the time it last changed (`at`), so that two
-clients can merge (section 7). A contact, an ignored key or a hidden
-profile that is removed stays as `{"removed": true, "at": ...}`, so the
+clients can merge (section 7). A contact, an ignored key, a hidden
+profile or a closed chat that is removed stays as `{"removed": true, "at": ...}`, so the
 removal reaches the other clients too; a group or person no longer
 followed moves to `unsubscribed` or `unfollowed`.
 
@@ -231,8 +240,8 @@ its own, so that two clients never undo each other:
 - `subscribed` / `unsubscribed`, `contacts`, `ignored`, `settings`:
   per entry, the newer `at` wins; a group is followed if its newest
   entry is in `subscribed`.
-- `following` / `unfollowed`, `hidden`: per person, the newer `at`
-  wins, as for subscriptions.
+- `following` / `unfollowed`, `hidden`, `closed_chats`: per person, the
+  newer `at` wins, as for subscriptions.
 - `starter`: the higher version.
 - `settings`: the newer `at` wins; two of the same age are joined.
 - `read`: per group, the later `to`; the union of `also`, trimmed.

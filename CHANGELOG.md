@@ -9,6 +9,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Close a chat (UN-RFC 0044 section 4.2, `closed_chats`, amended): it leaves the
+  list of chats on all your devices, the messages stay, and it comes back by
+  itself with the next chat line from or to the person (sending opens it
+  too). `Session.close_chat`/`open_chat`/`chat_closed`; the local client API's
+  `POST /api/chats/close`, and `contacts` in `GET /api/groups` with every
+  contact, also those whose chat is closed (UN-RFC 0046 4.3, 4.6). The TUI has
+  *Close chat* in its commands, and *Add contact* / *Remove contact* on a
+  person's profile.
 - Withdrawing chat lines in the TUI: in a chat, where no line is selected, `D`
   withdraws your last line (as `e` edits it), after asking; the question says
   whether it is a post, a comment or a chat line. The command is *Withdraw

@@ -1192,7 +1192,8 @@ class ProfileDialog(Dialog):
     def __init__(self, key_text: str, label: str, profile, mine: bool = False,
                  hidden: bool = False, shared: str | None = None,
                  feed_started: bool = False, following: bool = False,
-                 site_started: bool = False, theirs: dict | None = None):
+                 site_started: bool = False, theirs: dict | None = None,
+                 contact: str | None = None):
         super().__init__()
         self.key_text, self.label, self.profile = key_text, label, profile
         self.mine, self.hidden = mine, hidden
@@ -1201,6 +1202,7 @@ class ProfileDialog(Dialog):
         self.site_started = site_started
         # someone else's feed and site, when they have them: looked at without following
         self.theirs = theirs or {}
+        self.contact = contact           # the name you gave them, if a contact
         self.shared = shared             # "with you" / "with this group": private (0022, 6)
 
     def compose(self) -> ComposeResult:
@@ -1243,6 +1245,7 @@ class ProfileDialog(Dialog):
                                  id="my-site")
                 else:
                     yield Button("Following" if self.following else "Follow", id="follow")
+                    yield Button("Remove contact" if self.contact else "Add contact", id="contact")
                     if self.theirs.get("feed"):
                         yield Button("Their feed", id="their-feed")
                     if self.theirs.get("site"):
@@ -1268,6 +1271,10 @@ class ProfileDialog(Dialog):
     @on(Button.Pressed, "#their-feed")
     def _their_feed(self) -> None:
         self.dismiss("their-feed")
+
+    @on(Button.Pressed, "#contact")
+    def _contact(self) -> None:
+        self.dismiss("uncontact" if self.contact else "contact")
 
     @on(Button.Pressed, "#their-site")
     def _their_site(self) -> None:
@@ -4558,6 +4565,7 @@ class UnseenetApp(App):
                 theirs = {}
         answer = await self.push_screen_wait(ProfileDialog(
             key, label, p, mine, hidden, shared, theirs=theirs,
+            contact=None if mine else s.contact_name(key),
             feed_started=s.has_personal_group("feed"),
             site_started=s.has_personal_group("site"),
             following=not mine and s.is_following(key)))
@@ -4578,6 +4586,28 @@ class UnseenetApp(App):
                 return
             self.notify(f"Not following {label} any more", timeout=4)
             self.refresh_groups()
+        elif answer == "contact":
+            name = await self.push_screen_wait(InputDialog(
+                "Name this contact", "A name of your own choosing. Only you see it, and nobody "
+                "can pretend to be this contact under it: it is tied to the key.", "e.g. Sonia",
+                value=(p.short if p is not None and getattr(p, "short", "") else "")
+                or label.split("~")[0].lstrip("@")))
+            if name:
+                try:
+                    s.add_contact(key, name)
+                except (SessionError, crypto.CryptoError) as exc:
+                    self.notify(f"Not added: {exc}", severity="error")
+                    return
+                self.notify(f"Added {name}")
+                await self._render_groups()
+        elif answer == "uncontact":
+            name = s.contact_name(key) or label
+            if await self.push_screen_wait(ConfirmDialog(
+                    f"Remove {name}?", "The contact is forgotten. Your messages stay, and the "
+                    "chat stays in Chats while you have one - close it there.", "Remove")):
+                s.remove_contact(key)
+                self.notify(f"{name} is no longer a contact", timeout=4)
+                await self._render_groups()
         elif answer in ("their-feed", "their-site"):
             await self._open_personal_of(key, label, answer.split("-")[1])
 
@@ -4900,6 +4930,9 @@ class UnseenetApp(App):
             ("Rename contact", "Change the name of the selected contact", self.action_rename_contact),
             ("Remove contact", "Forget the selected contact (your messages stay)",
              self.action_remove_contact),
+            ("Close chat", "Take this chat - or one you choose - off the list of chats; it "
+             "comes back when one of you writes. Hide, archive, remove from chats",
+             self.action_close_chat),
             ("Refresh", "Fetch new posts now  [F5]", self.action_refresh),
             ("Private posts", "Open your private posts (chats are under each contact)", self.action_open_inbox),
             ("Mark group as read", "Mark every post in the current group as read",
@@ -5472,6 +5505,32 @@ class UnseenetApp(App):
         self.current_group = self.session.my_inbox
         await self._render_groups()
         self.select_group(self.session.my_inbox)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_close_chat(self) -> None:
+        """Take a chat off the list of chats (UN-RFC 0044 4.2): this one, or one you
+        choose. The messages stay, and it comes back with their next line."""
+        s = self.session
+        key = self._current_contact()
+        if not key:
+            people = [(k, s.contact_name(k) or s.label_of(k)) for k in s.chat_partners()]
+            if not people:
+                self.notify("You have no chats to close", timeout=4)
+                return
+            key = await self.push_screen_wait(KeyListDialog(
+                "Close a chat", "It leaves the list on all your devices. The messages stay, "
+                "and it comes back by itself when they write to you, or when you write.",
+                people, "Close chat"))
+            if not key:
+                return
+        s.close_chat(key)
+        name = s.contact_name(key) or s.label_of(key)
+        self.notify(f"Closed the chat with {name}. It comes back when one of you writes.",
+                    timeout=6)
+        if self.current_group == CONTACT + key:
+            self.current_group = s.my_inbox
+            self.select_group(s.my_inbox)
+        await self._render_groups()
 
     @work(group="dialog", exit_on_error=False)
     async def action_signature(self) -> None:

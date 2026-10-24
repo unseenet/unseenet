@@ -38,7 +38,10 @@ class Groups:
             if g["id"] in on_top:
                 continue                # listed as "My feed"/"My site" at the top instead (#495)
             tops.setdefault(g["hierarchy"], []).append(g)
-        return {"groups": groups, "people": people,
+        # every contact, also those whose chat is closed (they leave "people" then)
+        contacts = [{"id": CONTACT + k, "key": k, "name": name, "closed": s.chat_closed(k)}
+                    for k, name in s.contacts()]
+        return {"groups": groups, "people": people, "contacts": contacts,
                 "hierarchies": [{"name": h, "tree": self._tree(h, gs)}
                                 for h, gs in sorted(tops.items())],
                 "inbox": {"id": s.my_inbox if ready else None,
