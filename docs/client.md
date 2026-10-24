@@ -749,9 +749,9 @@ unseenet --help
 | `timeline [--limit N]` | The entries of every feed you follow, newest first, as written |
 | `address [GROUP_ID [--message ID \| --page PATH]]` | The `unseenet:` address of a group, a post or a page - or, alone, yours |
 | `open ADDRESS [--follow]` | What an `unseenet:` address names |
-| `read GROUP_ID` | Read a group, with each post's Message-ID |
+| `read GROUP_ID` | Read a group, with each post's Message-ID (`--json`: author, date, references, kind, page and files of each) |
 | `withdraw GROUP_ID MESSAGE_ID ... [--yes]` | [Withdraw posts](#withdrawing-a-post): your own, or any in a group you own or moderate |
-| `withdraw GROUP_ID --all [--keep MESSAGE_ID]` | Withdraw every post in a group you own or moderate |
+| `withdraw GROUP_ID --all [--keep MESSAGE_ID] [--keep-author KEY]` | Withdraw every post in a group you own or moderate, but those you keep |
 | `bridges [MODE]` | Show or set [Tor bridges](tor.md) |
 
 Global options go before the command: `--vault FILE` picks the vault and

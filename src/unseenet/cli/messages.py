@@ -34,7 +34,8 @@ async def c_withdraw(app: App, args) -> None:
     try:
         if every:
             done = await s.withdraw_all(args.group, keep=set(getattr(args, "keep", None) or []),
-                                        reason=reason)
+                                        reason=reason,
+                                        keep_authors=getattr(args, "keep_author", None) or [])
         else:
             done = []
             for mid in ids:
@@ -113,62 +114,32 @@ async def c_post(app: App, args) -> None:
 
 
 async def c_read(app: App, args) -> None:
-    """``unseenet read GROUP``: print the group's posts - checked, decrypted for closed
-    groups you are in - with their Message-IDs."""
-    split_group_id(args.group)
-    me = app.identity(args.identity)
-    entry = app.data["groups"].setdefault(args.group, {"type": None, "owner": False, "keys": {}})
-    async with app.connect() as c:
-        try:
-            count, low, high = await c.group(args.group)
-        except NNTPError:
-            sys.exit("Group not carried by this node.")
-        for n in range(low, high + 1):
-            raw = await c.article(str(n))
-            if raw is None:
-                continue
-            raw = _strip_reader_headers(raw)
-            try:
-                art = Article.from_bytes(raw)
-                validate_structure(art, raw_size=len(raw))
-            except ArticleError as err:
-                print(f"[{n}] INVALID: {err}")
-                continue
-            ctl = art.control
-            if ctl and ctl[0] == "manifest":
-                data = json.loads(art.body)
-                entry["type"] = entry["type"] or data["type"]
-                if int(data.get("serial", 0)) >= int((entry.get("manifest") or {}).get("serial", 0)):
-                    entry["manifest"] = data           # the newest: for its portals (c_post)
-                continue
-            if ctl and ctl[0] in ("key-update", "key-grant"):
-                opened = open_envelope(art, me)
-                if opened:
-                    epoch, keys = opened
-                    entry["keys"][str(epoch)] = keys.secret.hex()
-                continue
-            if ctl:
-                continue
-            author = art["Author-Key"]
-            short = crypto.fingerprint(art.author_key)[:4]
-            if "Encrypted" in art:
-                key_hex = entry["keys"].get(str(encryption_epoch(art)))
-                if not key_hex:
-                    print(f"[{n}] (encrypted, you are not a member of this epoch)")
-                    continue
-                inner = decrypt_article(art, crypto.GroupKeys(bytes.fromhex(key_hex)))
-                frm, subj, body = inner["From"], inner["Subject"], inner.body
-            else:
-                frm, subj, body = art["From"], art["Subject"], art.body
-            print(f"\n[{n}] {subj}\n    From: {frm} ({short}) {author[:20]}...\n    Date: {art['Date']}"
-                  f"\n    Message-ID: {art.message_id}\n")
-            print("    " + body.rstrip("\n").replace("\n", "\n    "))
-    from ..core import portals
-    found = portals.portals(entry.get("manifest") or {})
-    if found:
-        print("\nAlso published outside Tor, through portals:\n  "
-              + portals.describe(found).replace("\n", "\n  "))
-    app.vault.save()
+    """``unseenet read GROUP``: the group's posts through ``Session`` - checked, and
+    decrypted for closed groups you are in - in thread order, with their Message-IDs;
+    ``--json`` gives each post's author, date, references, kind, page and blobs, for
+    scripts such as unseenet-demo."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        split_group_id(args.group)
+    except ValueError:
+        sys.exit(f"{args.group!r} is not a group ID")
+    try:
+        await s.fetch_group(args.group)
+    except SessionError as exc:
+        sys.exit(f"Not read: {exc}")
+    rows = []
+    for msg, depth in s.threads(args.group):
+        rows.append({"message_id": msg.message_id, "depth": depth, "author_key": msg.author_key,
+                     "author": s.label_of(msg.author_key), "from": msg.from_name,
+                     "subject": msg.subject, "date": msg.date.isoformat() if msg.date else None,
+                     "references": list(msg.references), "kind": msg.kind,
+                     "page": msg.page, "blobs": list(msg.blobs), "readable": msg.readable,
+                     "body": msg.body})
+    text = "\n".join(f"\n{'  ' * r['depth']}{r['subject'] or r['body'].strip()[:60]}\n"
+                     f"    From: {r['from']} ({r['author']})\n    Date: {r['date']}\n"
+                     f"    Message-ID: {r['message_id']}" for r in rows) or "No posts."
+    emit(args, text, {"group": args.group, "posts": rows})
 
 
 __all__ = ['c_withdraw', 'c_post', 'c_read']

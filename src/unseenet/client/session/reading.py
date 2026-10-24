@@ -357,6 +357,12 @@ class ReadingMixin:
             msg.subject, msg.from_name, msg.body = art.get("Subject", ""), art["From"], art.body
             msg.kind = message_kind(art)                     # UN-RFC 0028
             msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
+            if art.get("Blobs"):                             # files it carries (UN-RFC 0027)
+                from ...core import blobs as bl
+                try:
+                    msg.blobs = tuple(b for b, _ in bl.parse_blobs(art))
+                except ArticleError:
+                    msg.blobs = ()
             if art.get("Page") is not None:                  # a site's page (UN-RFC 0035)
                 msg.page = art["Page"].strip()
                 msg.page_removed = (art.get("Page-Removed") or "").strip().lower() == "yes"

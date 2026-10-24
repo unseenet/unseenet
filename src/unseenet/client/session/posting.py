@@ -93,15 +93,18 @@ class PostingMixin:
         self.save_offline()
         return art.message_id
 
-    async def withdraw_all(self, group_id: str, keep=(), reason: str = "") -> list[str]:
-        """Owner or moderator: withdraw every post in the group but those in ``keep``
-        (for example a demo's weekly reset). Returns the Message-IDs withdrawn."""
+    async def withdraw_all(self, group_id: str, keep=(), reason: str = "",
+                           keep_authors=()) -> list[str]:
+        """Owner or moderator: withdraw every post in the group but those in ``keep``,
+        and those by the keys in ``keep_authors`` (for example a demo's weekly reset,
+        which keeps its own people's posts). Returns the Message-IDs withdrawn."""
         if not self.moderates_or_owns(group_id):
             raise SessionError("only the owner or a moderator can withdraw all posts")
         await self.fetch_group(group_id)
+        authors = set(keep_authors)
         done = []
         for msg in list(self.cache.get(group_id, {}).values()):
-            if msg.message_id in keep:
+            if msg.message_id in keep or msg.author_key in authors:
                 continue
             await self.withdraw(group_id, msg.message_id, reason)
             done.append(msg.message_id)

@@ -83,6 +83,8 @@ def client_main(argv=None) -> None:
     s.add_argument("message_id", nargs="*", help="Message-IDs")
     s.add_argument("--all", action="store_true", help="every post in a group you own or moderate")
     s.add_argument("--keep", action="append", metavar="MSGID", help="with --all: leave this one")
+    s.add_argument("--keep-author", action="append", metavar="KEY",
+                   help="with --all: leave the posts by this key (repeat)")
     s.add_argument("--reason", help="shown to readers (not in closed groups)")
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("invite", help="give a key access to a closed group you own")

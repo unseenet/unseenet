@@ -203,3 +203,27 @@ async def test_files_after_the_owner_allowed_them(tmp_path, monkeypatch, capsys)
     await cli.c_post(me, _args(group=gid, subject="Med billede", attach=[str(_photo(tmp_path))]))
     assert _json(capsys)["files"][0]["type"] == "image/jpeg"
     await done()
+
+
+async def test_read_as_json_and_withdraw_all_but_some_authors(tmp_path, monkeypatch, capsys):
+    """For unseenet-demo (#385): read --json shows each post's author and blobs, and
+    withdraw --all --keep-author leaves the demo's own people's posts."""
+    node, app, done = await _setup(tmp_path, monkeypatch)
+    me, demo_person, visitor = await app("me"), await app("person"), await app("visitor")
+    await cli.c_group_create(me, _args(name="dk.demo", type="open", attachments=1048576,
+                                       types="image/*"))
+    gid = _json(capsys)["group"]
+    await cli.c_post(demo_person, _args(group=gid, subject="Ours", attach=[str(_photo(tmp_path))]))
+    ours = _json(capsys)["message_id"]
+    await cli.c_post(visitor, _args(group=gid, subject="A visitor's"))
+    theirs = _json(capsys)["message_id"]
+    await cli.c_read(me, _args(group=gid))
+    posts = {p["message_id"]: p for p in _json(capsys)["posts"]}
+    assert len(posts[ours]["blobs"]) == 1 and posts[ours]["blobs"][0].startswith("blob1:")
+    assert posts[theirs]["author_key"] == visitor.session.identity().key_text
+    pkey = demo_person.session.identity().key_text
+    await cli.c_withdraw(me, _args(group=gid, message_id=[], all=True, keep=None, reason=None,
+                                   yes=True, keep_author=[pkey]))
+    assert _json(capsys)["withdrawn"] == [theirs]
+    assert node.store.get(ours) and node.store.get(theirs) is None
+    await done()

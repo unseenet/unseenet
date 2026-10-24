@@ -33,6 +33,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- `unseenet read` goes through `Session` too, and `--json` gives each post's
+  author, date, references, kind, page and blob IDs (`Message.blobs`, new);
+  `withdraw --all --keep-author KEY` leaves the posts by some keys
+  (`Session.withdraw_all(keep_authors=)`). For unseenet-demo's weekly run (#385).
 - A personal feed or site can carry pictures: `feed-start --attachments
   MAX_SIZE [--types image/*]`, also for one started without
   (`Session.start_personal_group(attachments=)`). Found by the demo (#385).
