@@ -417,10 +417,13 @@ class ComposeDialog(Dialog):
     BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "send", "Send")]
 
     def __init__(self, group: GroupInfo, subject: str = "", quote: str = "", is_reply: bool = False,
-                 heading: str | None = None, signature: str = "", has_rules: bool = False):
+                 heading: str | None = None, signature: str = "", has_rules: bool = False,
+                 files_allowed: bool = False):
         super().__init__()
         self.group, self.subject, self.quote, self.is_reply = group, subject, quote, is_reply
         self.heading, self.signature, self.has_rules = heading, signature, has_rules
+        self.files_allowed = files_allowed       # the group takes files (UN-RFC 0027)
+        self.files: list[str] = []               # what to send with it, read after dismiss
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog compose"):
@@ -432,6 +435,11 @@ class ComposeDialog(Dialog):
             text = self.quote + (("\n" if self.quote else "\n\n") + SIG_SEPARATOR + self.signature
                                  if self.signature else "")
             yield TextArea(text, id="body", soft_wrap=True)
+            if self.files_allowed:
+                yield Input(placeholder="Files to send with it - paths, comma between: "
+                            "~/garden.jpg, ~/map.pdf", id="files")
+                yield Label("Pictures are cleaned of their metadata - place, camera, time - "
+                            "before they are sent.", classes="hint")
             if self._notices():
                 yield Checkbox("Tell the people you mention (a notice in their inbox)",
                                value=self.app.session.notice_settings()["send"], id="notify")
@@ -492,6 +500,9 @@ class ComposeDialog(Dialog):
         keys: list[str] = []
         if self._notices() and self.query_one("#notify", Checkbox).value:
             keys = [k for _, k in self._mentioned()][:MAX_MENTION_NOTICES]
+        if self.files_allowed:
+            self.files = [p.strip() for p in self.query_one("#files", Input).value.split(",")
+                          if p.strip()]
         self.dismiss((subject, body, keys))
 
 
@@ -1026,6 +1037,11 @@ class EditProfileDialog(Dialog):
             yield Label("Links, one per line: kind value  (kinds: " + ", ".join(prof.LINK_KINDS)
                         + ", or x-something)", classes="hint")
             yield TextArea(links, id="links", soft_wrap=False)
+            yield Input(placeholder="A picture: the path of a file, e.g. ~/me.jpg (empty: as it is)",
+                        id="picture")
+            yield Label("The middle square is kept, at most 128 pixels, without its metadata "
+                        "(UN-RFC 0022). Everyone sees it; a terminal shows your identicon.",
+                        classes="hint")
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Remove profile", variant="error", id="remove")
@@ -1058,6 +1074,7 @@ class EditProfileDialog(Dialog):
         except prof.ProfileError as exc:
             self.app.notify(str(exc), severity="error")
             return
+        self.picture = self.query_one("#picture", Input).value.strip()   # read after dismiss
         self.dismiss(obj)
 
 
@@ -3265,18 +3282,31 @@ class UnseenetApp(App):
     @work(group="post", exit_on_error=False)
     async def compose_post(self, g: GroupInfo, subject: str = "", quote: str = "",
                            references: list[str] | None = None) -> None:
-        result = await self.push_screen_wait(ComposeDialog(
+        data = self.session.manifest_data(g.group_id)
+        dlg = ComposeDialog(
             g, subject, quote, bool(references), signature=self.session.signature(),
-            has_rules=bool(self.session.manifest_data(g.group_id).get("rules"))))
+            has_rules=bool(data.get("rules")),
+            files_allowed=bool(data.get("attachments")) and g.type not in ("closed", "inbox"))
+        result = await self.push_screen_wait(dlg)
         if not result:
             return
         subject, body, notify = result
         if not await self._accept_portals(g.group_id):
             self.notify("Not sent", timeout=4)
             return
+        files = None
+        if dlg.files:                                    # cleaned and checked here (#149)
+            try:
+                files = self.session.prepare_files([Path(p).expanduser() for p in dlg.files])
+            except (SessionError, OSError, ValueError) as exc:
+                self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+                return
+            for f in files:
+                if getattr(f, "note", None):
+                    self.notify(f.note, timeout=6)
         self.set_status("Sending (computing postage) ...")
         try:
-            msgid = await self.session.post(g.group_id, subject, body, references)
+            msgid = await self.session.post(g.group_id, subject, body, references, files=files)
         except (SessionError, OSError, ConnectionError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             return
@@ -3716,7 +3746,8 @@ class UnseenetApp(App):
                 "Before you publish a profile", PROFILE_WARNING, confirm="I understand")):
             return
         current = s.my_profile()
-        answer = await self.push_screen_wait(EditProfileDialog(current))
+        dlg = EditProfileDialog(current)
+        answer = await self.push_screen_wait(dlg)
         if answer is None:
             return
         if answer == "remove":
@@ -3736,10 +3767,14 @@ class UnseenetApp(App):
                 return
         try:
             await s.publish_profile(answer)
-        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            picture = getattr(dlg, "picture", "") if answer else ""
+            if picture:                                       # #155: cleaned by the core
+                await s.publish_picture_file(Path(picture).expanduser(), alt=s.display_name())
+        except (SessionError, OSError, ConnectionError, NNTPError, ValueError) as exc:
             self.notify(f"Not published: {exc}", severity="error")
             return
-        self.notify("Profile published" if answer else "Profile removed")
+        self.notify(("Profile and picture published" if getattr(dlg, "picture", "") else
+                     "Profile published") if answer else "Profile removed")
 
     def action_show_key(self) -> None:
         self.push_screen(InfoDialog("Your key - share it to get private messages or invitations",
