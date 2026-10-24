@@ -177,6 +177,7 @@ a riper key still ripens what it needs.
  "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
  "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
  "timeline": {"id": "timeline:", "feeds": 0},
+ "my_feed": {"id": "feed@<fp>", "started": false, "unread": 0},
  "moderation": 0, "name_requests": 0}
 ```
 
@@ -197,6 +198,9 @@ wherever a group ID does: `contact:<key>` (the chat with one person),
 `for-you:` (replies and mentions from all groups) and `timeline:` (the
 entries of every feed you follow, section 4.14).
 `timeline` is `{"id": "timeline:", "feeds": <how many feeds you follow>}`.
+`my_feed` is your personal feed (UN-RFC 0034 section 5): a front end
+lists it at the top as "My feed" once `started`, and then `hierarchies`
+leaves it out; before, it offers to start it (section 4.14).
 
 `GET /api/groups/<id>`:
 

@@ -23,6 +23,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   your own *Start my feed* / *My feed*, someone else's *Follow* / *Following*
   and *Their feed*. `Session.has_personal_group` and `Session.is_following` for
   every client.
+  The local client API's `GET /api/groups` gives `my_feed` and leaves a
+  started one out of `hierarchies` (UN-RFC 0046 section 4.3), for unseenet-gui.
 - The demo (#385, #388): the project's list of its groups endorses the demo's
   groups `unseenet.demo.*`, owned by the demo key (unseenet-demo); new and
   existing clients start following the demo's site and its shared feed
