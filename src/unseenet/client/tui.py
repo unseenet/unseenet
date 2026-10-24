@@ -15,7 +15,7 @@ import inspect
 import os
 import re
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from textual import on, work
@@ -152,6 +152,7 @@ def node_details(address: str, info: dict | None, known=None, groups: int = 0,
 # Windows console with Consolas - and one cell wide each.
 ICONS = {"threads": "≡", "chat": "»", "data": "¤", "moderated": "√", "channel": "►",
          "closed": "∩", "inbox": "@", "local": "⌂", "unknown": "·"}
+PIN_MARK = "[P]"                 # a pinned post (UN-RFC 0033 section 7.2): no emoji in WGL4
 ICON_LEGEND = ("≡ posts  » chat  ¤ data for programs  √ moderated  ► channel  ∩ closed  "
                "@ inbox  ⌂ local (one node)  · not known yet")
 
@@ -209,6 +210,8 @@ Screen { background: $surface; }
 #article-head { color: $text-muted; }
 #chat { height: 1fr; display: none; }
 #chat-log { height: 1fr; padding: 0 1; }
+#chat-pins { height: auto; padding: 0 1; background: $boost; display: none; }
+#chat-pins.shown { display: block; }
 #chat-input { margin: 0 1; }
 #status { height: 1; background: $boost; color: $text-muted; padding: 0 1; }
 .unread { text-style: bold; }
@@ -683,6 +686,31 @@ class InputDialog(Dialog):
     def _ok(self) -> None:
         value = self.query_one("#value", Input).value.strip()
         self.dismiss(value or None)
+
+
+class PinDialog(Dialog):
+    """Pin a post: an optional note, and what happens to the oldest pin when the
+    group is full (UN-RFC 0033 section 7.1). Dismisses with the note, "" for none."""
+
+    def __init__(self, title: str, hint: str, warning: str = ""):
+        super().__init__()
+        self.title_, self.hint, self.warning = title, hint, warning
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label(self.title_, classes="title", markup=False)
+            yield Label(self.hint, classes="hint", markup=False)
+            if self.warning:
+                yield Static(self.warning, markup=False, classes="hint")
+            yield Input(placeholder="A note shown with it (optional)", id="value", max_length=256)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Pin", variant="primary", id="ok")
+
+    @on(Input.Submitted)
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        self.dismiss(self.query_one("#value", Input).value.strip())
 
 
 class InfoDialog(Dialog):
@@ -1889,6 +1917,7 @@ class UnseenetApp(App):
         self._inbox_ready = False
         self._watching: set[str] = set()
         self.group_query = ""                    # the search in your group list (#13)
+        self.pin_at: dict[str, int] = {}         # the pin a chat's pinned line shows
 
     # --- layout ---
     def compose(self) -> ComposeResult:
@@ -1907,6 +1936,7 @@ class UnseenetApp(App):
                     yield Static("", id="article-head")
                     yield Static("", id="article-body", markup=False)
                 with Vertical(id="chat"):
+                    yield Static("", id="chat-pins", markup=False)
                     yield RichLog(id="chat-log", wrap=True, markup=False, highlight=False)
                     yield Input(placeholder="Write a message - Enter sends, Esc for the shortcuts",
                                 id="chat-input")
@@ -2274,6 +2304,11 @@ class UnseenetApp(App):
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
         self.messages = {}
+        pins = self._pins_here(gid)
+        pinned = {p["id"] for p in pins}
+        by_id = {m.message_id: m for m, _ in rows}
+        if pins and self.view_of(gid) != "chat":
+            self._pinned_section(table, gid, pins, by_id)
         for m, depth in rows:
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
@@ -2289,6 +2324,8 @@ class UnseenetApp(App):
                 subject = f"{ICONS['inbox']} " + subject
             elif m.encrypted and m.readable:
                 subject = f"{ICONS['closed']} " + subject
+            if m.message_id in pinned:
+                subject = f"{PIN_MARK} " + subject           # in its place too (UN-RFC 0033, 7.2)
             why = s.for_me(m, mine, patterns)
             if why:
                 subject = (REPLY_MARK if why == "reply" else MENTION_MARK) + " " + subject
@@ -2307,6 +2344,7 @@ class UnseenetApp(App):
                     screen.show(fresh, keep_place=True)
         mode = self.view_of(gid)
         self._apply_view(mode)
+        self._render_chat_pins(gid if mode == "chat" else None, pins, by_id)
         self._update_chat_input(gid)
         if mode == "chat":
             chron = [m for m, _ in rows] if gid and gid.startswith(CONTACT) \
@@ -2346,6 +2384,7 @@ class UnseenetApp(App):
         log = self.query_one("#chat-log", RichLog)
         log.clear()
         mine = self.session.identity().key_text
+        pinned = {p["id"] for p in self._pins_here(self.current_group)}
         changed = False
         for m in msgs:
             own = m.author_key == mine
@@ -2359,6 +2398,8 @@ class UnseenetApp(App):
                 line.append(" √", style="green")
             if not own and not m.private and self.session.is_bot(m.author_key):
                 line.append(" bot", style="dim")             # UN-RFC 0030 section 6
+            if m.message_id in pinned:
+                line.append(f" {PIN_MARK}", style="bold yellow")   # UN-RFC 0033 section 7.3
             if m.readable and m.kind != KIND_CHAT:      # a post in a chat stands out (UN-RFC 0028)
                 line.append(": ")
                 line.append(f"≡ {m.subject or '(no subject)'}", style="bold underline")
@@ -2603,7 +2644,11 @@ class UnseenetApp(App):
 
     @on(DataTable.RowSelected, "#threads")
     def _open(self, event: DataTable.RowSelected) -> None:
-        """Enter on a message: read it on the whole screen."""
+        """Enter on a message: read it on the whole screen. On the Pinned header: fold
+        the section away, or open it again."""
+        if event.row_key.value == "pins:head":
+            self.action_toggle_pins()
+            return
         msg = self.messages.get(event.row_key.value)
         if msg is not None:
             self.current_message = msg
@@ -3570,6 +3615,14 @@ class UnseenetApp(App):
              self.action_unsubscribe),
             ("Withdraw post", "Take your post (or one in a group you own) back from the network  [D]",
              self.action_withdraw),
+            ("Pin or unpin post", "Owner or moderator: keep the selected post at the top of the "
+             "group, kept by the nodes - or stop (UN-RFC 0033)", self.action_pin),
+            ("Pinned posts", "The posts pinned in this group: choose one to read it",
+             self.action_pinned_posts),
+            ("Next pin", "In a chat: show the next pinned line above it",
+             self.action_next_pin),
+            ("Show or hide the pins", "Fold the Pinned section or a chat's pinned line away, "
+             "per group", self.action_toggle_pins),
             ("Remove group from the network", "Delete a group you own from every node - final",
              self.action_remove_group),
         ]
@@ -4182,6 +4235,207 @@ class UnseenetApp(App):
         self.current_group = None
         self.notify(f"{self.session.group_label(g.group_id)} removed")
         self.refresh_groups()
+
+    # --- pinned posts (UN-RFC 0033 section 7) ---
+    def _pins_here(self, gid: str | None) -> list[dict]:
+        """The pins in force in a real group, as every client works them out."""
+        s = self.session
+        if not gid or gid == FOR_YOU or gid.startswith(CONTACT) or gid == s.my_inbox:
+            return []
+        try:
+            return s.pins(gid)
+        except (SessionError, ValueError, KeyError):
+            return []
+
+    def _pins_hidden(self, gid: str | None) -> bool:
+        return bool(gid) and gid in self.session.data.get("pins_hidden", [])
+
+    @staticmethod
+    def _first_line(m: Message) -> str:
+        if m.kind != KIND_CHAT and m.subject:
+            return m.subject
+        text = split_signature(m.body)[0] if m.readable else ""
+        return next((ln.strip() for ln in text.split("\n") if ln.strip()), "") or "(no text)"
+
+    def _pinned_section(self, table: DataTable, gid: str, pins: list[dict], by_id: dict) -> None:
+        """A Pinned section above the threads, newest pin first (section 7.2): Enter on
+        its head folds it, and a pin opens the post."""
+        hidden = self._pins_hidden(gid)
+        table.add_row(" ", Text(("► " if hidden else "▼ ") + f"Pinned ({len(pins)})", style="bold"),
+                      Text(""), "", key="pins:head")
+        if hidden:
+            return
+        for p in pins:
+            m = by_id.get(p["id"])
+            title = f"{PIN_MARK} " + (self._first_line(m) if m else "(a post not fetched yet)")
+            if p["note"]:
+                title += f"  - {p['note']}"
+            if m is not None:
+                self.messages["pin:" + p["id"]] = m
+            date = p["pinned"].astimezone().strftime("%d %b %H:%M")
+            table.add_row(" ", Text(title), Text(self._who(m) if m else ""), date,
+                          key="pin:" + p["id"])
+
+    def _render_chat_pins(self, gid: str | None, pins: list[dict], by_id: dict) -> None:
+        """The pinned line above a chat: the newest pin first, the next with "Next pin"
+        (section 7.3)."""
+        for w in self.query("#chat-pins"):
+            if not gid or not pins or self._pins_hidden(gid):
+                w.remove_class("shown")
+                continue
+            i = self.pin_at.get(gid, 0) % len(pins)
+            p, m = pins[i], by_id.get(pins[i]["id"])
+            line = Text(f"{PIN_MARK} ", style="bold yellow")
+            if m is not None:
+                line.append(self.session.identity_label(m.author_key, m.from_name) + ": ", style="bold")
+                line.append(self._first_line(m)[:120])
+            else:
+                line.append("a message not fetched yet")
+            if p["note"]:
+                line.append(f"  - {p['note']}", style="dim")
+            if len(pins) > 1:
+                line.append(f"  ({i + 1}/{len(pins)})", style="dim")
+            line.append("   Ctrl+P: Next pin, Pinned posts", style="dim")
+            w.update(line)
+            w.add_class("shown")
+
+    def _beyond_window(self, gid: str, m: Message | None) -> bool:
+        """Older than the group keeps posts: unpinned, the nodes delete it at once."""
+        days = int(self.session.manifest_data(gid).get("retention_days", 0) or 0)
+        return bool(days and m is not None and m.date
+                    and datetime.now(timezone.utc) - m.date > timedelta(days=days))
+
+    def action_toggle_pins(self) -> None:
+        gid, s = self.current_group, self.session
+        if not self._pins_here(gid):
+            self.notify("Nothing is pinned in this group", severity="warning")
+            return
+        hidden = s.data.setdefault("pins_hidden", [])
+        if gid in hidden:
+            hidden.remove(gid)
+        else:
+            hidden.append(gid)
+        self._save_soon()
+        self._render_threads()
+
+    def action_next_pin(self) -> None:
+        gid = self.current_group
+        pins = self._pins_here(gid)
+        if not pins:
+            self.notify("Nothing is pinned in this group", severity="warning")
+            return
+        if self.view_of(gid) != "chat":
+            self.action_pinned_posts()
+            return
+        self.pin_at[gid] = self.pin_at.get(gid, 0) + 1
+        if self._pins_hidden(gid):
+            self.session.data["pins_hidden"].remove(gid)
+            self._save_soon()
+        self._render_threads()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_pinned_posts(self) -> None:
+        """All pins of the group: choose one to read it."""
+        gid, s = self.current_group, self.session
+        pins = self._pins_here(gid)
+        if not pins:
+            self.notify("Nothing is pinned in this group", severity="warning")
+            return
+        by_id = {m.message_id: m for m in s.cache.get(gid, {}).values()}
+        items = []
+        for p in pins:
+            m = by_id.get(p["id"])
+            label = (f"{self._first_line(m)} - {self._who(m)}" if m else "(not fetched yet)") \
+                + f", pinned by {s.label_of(p['by'])}" + (f": {p['note']}" if p["note"] else "")
+            items.append((p["id"], label))
+        chosen = await self.push_screen_wait(KeyListDialog(
+            "Pinned posts", "Newest pin first. Choose one to read it.", items, "Read"))
+        m = by_id.get(chosen) if chosen else None
+        if m is not None:
+            self.current_message = m
+            self.push_screen(ReadScreen(m))
+
+    def action_pin(self) -> None:
+        """Owner or moderator: pin the selected post, or unpin it (section 7.1). The post
+        is the one selected now: a refresh while the dialog opens must not change it."""
+        self._pin(self.current_group, self.current_message)
+
+    @work(group="dialog", exit_on_error=False)
+    async def _pin(self, gid: str | None, selected: Message | None) -> None:
+        from ..core import pins as pn
+        s = self.session
+        if not self._pins_possible(gid):
+            self.notify("Only the owner and moderators of a group pin posts, in groups "
+                        "that take pins.", severity="warning")
+            return
+        if self.view_of(gid) == "chat":            # no selection in a chat: choose a line
+            lines = [m for m in sorted(s.cache.get(gid, {}).values(), key=lambda m: m.number,
+                                       reverse=True) if m.readable][:40]
+            pinned = {p["id"] for p in self._pins_here(gid)}
+            chosen = await self.push_screen_wait(KeyListDialog(
+                "Pin or unpin", "Newest first. [P]: pinned now - choosing it unpins it.",
+                [(m.message_id, (f"{PIN_MARK} " if m.message_id in pinned else "")
+                  + f"{self._who(m)}: {self._first_line(m)[:60]}") for m in lines], "Choose"))
+            m = next((x for x in lines if x.message_id == chosen), None)
+        else:
+            m = selected
+        if m is None or m.group != gid:
+            self.notify("Select a post first", severity="warning")
+            return
+        pins = self._pins_here(gid)
+        now = next((p for p in pins if p["id"] == m.message_id), None)
+        what = self._first_line(m)
+        if now is not None:
+            if not await self.push_screen_wait(ConfirmDialog(
+                    f"Unpin \"{what}\"?",
+                    "It is older than this group keeps posts, so the nodes delete it as soon "
+                    "as it is unpinned." if self._beyond_window(gid, m) else
+                    "It stays where it is, and goes when it is older than this group keeps posts.",
+                    "Unpin", danger=self._beyond_window(gid, m))):
+                return
+            note, unpin = "", True
+        else:
+            try:
+                limit = pn.max_pins(s.manifest_data(gid))
+            except ValueError:
+                limit = pn.MAX_PINS_DEFAULT
+            warning = ""
+            if len(pins) >= limit:                     # the oldest pin stops counting
+                last = next((x for x in s.cache.get(gid, {}).values()
+                             if x.message_id == pins[-1]["id"]), None)
+                warning = (f"This group shows at most {limit} pins, so "
+                           f"\"{self._first_line(last) if last else 'the oldest pin'}\" stops "
+                           "counting. Unpin another one first if you would rather keep it "
+                           "(Ctrl+P: Pinned posts).")
+            note = await self.push_screen_wait(PinDialog(
+                f"Pin \"{what}\"", "Everyone sees it at the top of the group, and the nodes "
+                "keep it until it is unpinned.", warning))
+            if note is None:
+                return
+            unpin = False
+        self.set_status(("Unpinning" if unpin else "Pinning")
+                        + " ... the marker needs its proof of work first")
+        try:
+            await s.pin(gid, m.message_id, note, unpin=unpin)
+        except (SessionError, ValueError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not {'unpinned' if unpin else 'pinned'}: {exc}", severity="error",
+                        timeout=8)
+            return
+        self.set_status("")
+        self.pin_at[gid] = 0                           # the newest pin first again
+        self._render_threads()
+        self.notify("Unpinned" if unpin else "Pinned")
+
+    def _pins_possible(self, gid: str | None) -> bool:
+        from ..core import pins as pn
+        s = self.session
+        if not gid or gid == FOR_YOU or gid.startswith(CONTACT) or gid == s.my_inbox:
+            return False
+        try:
+            return s.moderates_or_owns(gid) and pn.max_pins(s.manifest_data(gid)) > 0
+        except ValueError:
+            return s.moderates_or_owns(gid)
 
     @work(group="dialog", exit_on_error=False)
     async def action_withdraw(self) -> None:

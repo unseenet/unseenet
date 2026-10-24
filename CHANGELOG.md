@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Pinned posts in the terminal client (#442, UN-RFC 0033 section 7): a Pinned
+  section above the threads, newest pin first with its note, folded away with
+  Enter on its head; pinned posts and chat lines marked `[P]`; a pinned line
+  above a chat with "Next pin"; and in the command palette "Pin or unpin
+  post", "Pinned posts" and "Show or hide the pins". Pinning warns when the
+  group is full, and unpinning a post older than the window that it then
+  disappears from the nodes.
 - Pinned posts in the local client API (#442, UN-RFC 0046 section 4.12,
   UN-RFC 0033): a group's head lists the pins in force with each pinned
   post's subject and author, `max_pins` and `may_pin`, every row says
