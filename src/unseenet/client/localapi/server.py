@@ -32,9 +32,10 @@ from typing import Callable
 from aiohttp import WSMsgType, web
 
 from ..session import SessionError
-from .api import NETWORK_ERRORS, LocalAPI, Locked, NotFound
+from .api import NETWORK_ERRORS, LocalAPI, Locked, NotFound, Status
 
 TOKEN_HEADER = "X-Unseenet-Token"
+MAX_REQUEST = 12 * 1024 * 1024     # a post with up to 8 MiB of files, as base64 (section 4.10)
 TOKEN_PROTOCOL = "unseenet-token."
 ANNOUNCE = "UNSEENET-API 1"
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -94,6 +95,8 @@ async def guard(request: web.Request, handler):
         response = _error(str(exc), 409)
     except NotFound as exc:
         response = _error(str(exc), 404)
+    except Status as exc:
+        response = _json({"error": str(exc), **exc.fields}, status=exc.status)
     except SessionError as exc:
         response = _error(str(exc))
     except NETWORK_ERRORS as exc:                    # includes ValueError: a bad key or name
@@ -198,6 +201,13 @@ async def post(request):
 
 async def private(request):
     return _json(_api(request).private(await _body(request)))
+
+
+async def files(request):
+    q = request.query
+    return _json(await _api(request).file(_gid(request), request.match_info["blob"],
+                                          save=q.get("save") in ("1", "true"),
+                                          asked=q.get("asked") in ("1", "true")))
 
 
 async def edit(request):
@@ -348,6 +358,7 @@ ROUTES = [
     ("GET", "/api/known-nodes", known_nodes),
     ("GET", "/api/group-ref", group_ref),
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
+    ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/contacts", contacts),
@@ -378,7 +389,7 @@ def make_app(api: LocalAPI, token: str, *, page: Path | None = None,
     sub-application mounted at ``/x/<name>/`` (UN-RFC 0046 section 6)."""
     if len(token) < 32:
         raise ValueError("the token must be at least 32 characters")
-    app = web.Application(middlewares=[guard], client_max_size=256 * 1024)
+    app = web.Application(middlewares=[guard], client_max_size=MAX_REQUEST)
     app[API_KEY] = api
     app[CONF] = {"port": 0, "token": token}           # port: once bound
     for method, path, handler in ROUTES:

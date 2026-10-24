@@ -216,7 +216,7 @@ or the plain text, and MUST NOT put a post's text into a page as HTML.
 (UN-RFC 0030 section 6): show a mark. `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
-`portal_warning`, `write`, and for its owner or a moderator `roles` (section 4.7):
+`portal_warning`, `write`, `files` and `node_files` (section 4.10), and for its owner or a moderator `roles` (section 4.7):
 `{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
 closed group's owner, `members`; `maintainer` is true when you maintain a
 hierarchy the group is in, so you may block people there (section 4.6).
@@ -259,6 +259,10 @@ the node still has the last word.
 - `POST /api/private`
   `{"key": "ed25519:...", "kind": "post" | "chat", "subject": "...", "body": "...", "reply_to": <Message-ID or null>}`
   answers `{"job": "<job ID>"}`.
+
+A post to a group may carry files: `"files": [{"name": "...", "data":
+"<base64>", "alt": "..."}, ...]`, at most four (section 4.10). With files
+the body may be empty.
 
 Its progress comes as `job` events (section 5). The runtime asks about
 portals (UN-RFC 0023 section 3.5) before it sends: a group with a portal
@@ -377,6 +381,71 @@ For a service (section 3.2), such as a gateway, that builds what it posts:
   new version of a group the key owns (a gatewayed group, a bot's channel),
   for what section 4.7 does not cover. `type`, `owner`, `name` and `local`
   cannot change; the runtime sets `serial`.
+
+## 4.10 Files on Posts
+
+Files are blobs (UN-RFC 0027). A file from the network is hostile input,
+so the runtime does all the work with it and the front end gets only
+what the runtime has checked and, for a picture, saved again.
+
+A Message dict lists the files a post carries in `attachments`:
+`[{"blob": "blob1:...", "type": "image/jpeg", "size": <octets>, "name":
+"...", "alt": "...", "dim": [<width>, <height>] or null}, ...]`, in the
+order to show them. `name` and `alt` are text the author wrote (UN-RFC
+0027 section 4.2): show them as text. A group's head (section 4.3) has
+`files`, what the group takes - `{"max_size": <octets>, "types": [...]}`,
+`types` empty for any type, or null when it takes none (UN-RFC 0027
+section 5.1) - and `node_files`: true when the node the group is read
+from carries files, false when it does not, null when the runtime is not
+connected to it yet. A front end SHOULD say plainly when a group takes
+files but its node carries none, rather than show posts whose pictures
+never come.
+
+`GET /api/groups/<id>/files/<blob-id>` answers a picture a post in that
+group carries, made safe to show:
+
+```
+{"type": "image/jpeg", "width": 64, "height": 48, "frames": 1,
+ "data": "data:image/jpeg;base64,..."}
+```
+
+The runtime fetches the blob from the group's node, checks it against
+its blob ID and the size the post names, determines the type from the
+content (it MUST be the declared one), and decodes and saves it again in
+a separate process with as few rights as the platform allows, refusing
+more than 50 megapixels or 1000 frames (UN-RFC 0027 section 9.2).
+`data` is that new copy, never the octets from the network. Only
+`image/jpeg`, `image/png`, `image/gif` and `image/webp` are shown; SVG
+and PDF are never decoded. A picture by a key you ignore is answered
+`403` unless the request adds `?asked=1` - the person chose to see it.
+
+With `?save=1` it answers the file itself, checked against its blob ID
+but not decoded, to save: `{"name": "...", "type": "...", "size":
+<octets>, "data": "<base64>"}`. A front end MUST NOT open it in another
+program without the person asking each time, and MUST warn first that
+such a program runs outside Unseenet and may go to the internet without
+Tor (UN-RFC 0027 section 9.2).
+
+Errors carry `why` beside `error`:
+
+| Status | `why`       | Meaning                                              |
+|--------|-------------|------------------------------------------------------|
+| 404    | (none)      | No post here that this runtime has read carries it   |
+| 404    | `none`      | The group's node carries no files                    |
+| 404    | `gone`      | The node does not have it (any more)                 |
+| 503    | `later`     | The node is still fetching it from a peer: try again |
+| 502    | `wrong`     | The node sent another file than the post names       |
+| 403    | `ignored`   | By a key you ignore; `?asked=1` to see it anyway     |
+| 415    | `not_shown` | Not a picture this API shows (save it instead)       |
+
+A post with files (section 4.4) sends each file as `{"name", "data",
+"alt"}` with `data` base64. The runtime prepares them as every client of
+this project does: the type from the content, a picture saved again
+without its metadata (GPS position, time, camera, owner), its size in
+pixels in `dim`, and `alt` in the header. It checks them against the
+group before any postage is computed and answers `400` with the reason
+for people when the group takes no files, not of this type or size, or
+more than four or 8 MiB together. A request may be at most 12 MiB.
 
 # 5. Events
 

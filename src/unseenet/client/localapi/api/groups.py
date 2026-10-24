@@ -92,7 +92,9 @@ class Groups:
                "portal_warning": s.portal_warning(gid),
                # may you write here, and if not, why - before you write (#181, #320)
                "write": {"post": _perm(s.write_permission(gid, kind=KIND_POST)),
-                         "chat": _perm(s.write_permission(gid, kind=KIND_CHAT))}}
+                         "chat": _perm(s.write_permission(gid, kind=KIND_CHAT))},
+               # files: what the group takes, and whether its node carries them (#442)
+               "files": self._files_policy(data), "node_files": s.node_files_known(gid)}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
         return out

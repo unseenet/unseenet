@@ -17,6 +17,7 @@ The code follows the sections of UN-RFC 0046, one file each:
     running.py    4.7  groups you run: settings, members, roles, bans, moderation
     identity.py   4.8  profiles, names, the passphrase, settings
     articles.py   4.9  articles and manifests from a program
+    files.py      4.10 files on posts: pictures to show, files to save, files to post
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -68,6 +69,14 @@ class NotFound(Exception):
     """404: no such group or post."""
 
 
+class Status(Exception):
+    """An answer with its own status and fields: ``Status(text, 503, later=True)``."""
+
+    def __init__(self, text: str, status: int, **fields):
+        super().__init__(text)
+        self.status, self.fields = status, fields
+
+
 def _perm(p) -> dict:
     """``Session.write_permission`` for a front end: greyed out, with the reason (#181)."""
     return {"allowed": bool(p.allowed), "reason": p.reason, "code": p.code}
@@ -99,9 +108,11 @@ from .people import People  # noqa: E402
 from .running import Running  # noqa: E402
 from .identity import Identity  # noqa: E402
 from .articles import Articles  # noqa: E402
+from .files import Files  # noqa: E402
 
 
-class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles):
+class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
+               Files):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).
