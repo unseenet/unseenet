@@ -517,6 +517,21 @@ class PeopleMixin:
         hit = self._profile_cache().get(key_text) or {}
         return bool((hit.get("profile") or {}).get("bot") is True)
 
+    def client_setting(self, client: str, key: str, default=None):
+        """A setting of one kind of client - ``client_setting("tui", "theme")`` - kept in
+        the vault and, with your state, in the network (UN-RFC 0044 section 4.2), so it
+        follows you from device to device. Clients choose their own keys."""
+        return self.data.get("clients", {}).get(client, {}).get(key, default)
+
+    def set_client_setting(self, client: str, key: str, value) -> None:
+        """Change one of a client's settings (None removes it), and save."""
+        mine = self.data.setdefault("clients", {}).setdefault(client, {})
+        if value is None:
+            mine.pop(key, None)
+        else:
+            mine[key] = value
+        self.save()
+
     def hide_bots(self) -> bool:
         """True when the user chose to hide posts by bots (UN-RFC 0022 section 4)."""
         return bool(self.data.get("hide_bots"))

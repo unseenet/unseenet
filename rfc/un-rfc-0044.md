@@ -106,6 +106,7 @@ The plaintext is canonical JSON (UN-RFC 0004):
  "hidden": {"ed25519:...": "..."},
  "settings": {"signature": "...", "markdown": true, "notices": {"send": true, "take": true},
               "private_min_ripe": 0, "hide_bots": false, "show_blocked": false,
+              "clients": {"tui": {"theme": "nord"}, "gui": {"theme": "dark"}},
               "at": "..."},
  "read": {"unseenet.test@ph5fc5hop5232qsz": {"to": "2026-10-20T19:00:00Z",
           "also": ["<abc@unseenet>"]}},
@@ -122,7 +123,8 @@ The plaintext is canonical JSON (UN-RFC 0004):
 - `settings`: the user's settings that are not about one device - the
   signature, Markdown, mention notices (UN-RFC 0032), the ripening level
   private senders need (UN-RFC 0025 section 3.5), hiding bots, showing
-  blocked posts.
+  blocked posts - and `clients`, each kind of client's own settings by its
+  name, such as its theme, which mean nothing to another kind.
 
 Every entry carries the time it last changed (`at`), so that two
 clients can merge (section 7). A contact, an ignored key or a hidden

@@ -1444,3 +1444,20 @@ async def test_tui_edit_own_post(tmp_path, monkeypatch):
         assert "(edited" in head
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_keeps_your_theme(tmp_path, monkeypatch):
+    """gui#84: the theme chosen in the TUI is kept with your settings, so it is there
+    the next time - and on every device, with your state (UN-RFC 0044)."""
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    s = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    s.set_client_setting("tui", "theme", "nord")              # chosen on another day
+    await s.close()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert app.theme == "nord"
+        app.theme = "dracula"                                  # chosen in the palette
+        await pilot.pause(0.1)
+        assert app.session.client_setting("tui", "theme") == "dracula"
+        await pilot.press("q")
+    server.close()
