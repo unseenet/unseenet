@@ -101,6 +101,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- Each kind of client has its own settings, kept with your state:
+  `Session.client_setting(client, key)` / `set_client_setting`. The TUI keeps
+  the theme you choose in the command palette there, so it is there next time
+  and on every device (the GUI follows, gui#84).
 - **Your state follows you** (UN-RFC 0044, #257 step 3): the groups and people
   you follow, contacts, ignored keys, hidden profiles, settings and read marks
   are kept, encrypted with a key from your seed, in `state@<fp>` - padded to

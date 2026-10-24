@@ -1960,6 +1960,18 @@ class UnseenetApp(App):
             pass
 
     # --- startup ---
+    def _use_saved_theme(self) -> None:
+        """The theme you chose, kept with your settings - on every device (gui#84)."""
+        theme = self.session.client_setting("tui", "theme") if self.session else None
+        if theme and theme in self.available_themes and theme != self.theme:
+            self.theme = theme
+
+    def watch_theme(self, theme: str) -> None:
+        """Remember a theme chosen in the command palette (ctrl+p)."""
+        s = getattr(self, "session", None)           # Textual may call this before __init__ ends
+        if s is not None and s.client_setting("tui", "theme") != theme:
+            s.set_client_setting("tui", "theme", theme)
+
     @work(exclusive=True, group="startup", exit_on_error=False)
     async def start(self) -> None:
         passphrase = os.environ.get("UNSEENET_PASSPHRASE")
@@ -1991,6 +2003,7 @@ class UnseenetApp(App):
                 s.add_node(result["node"])
                 for backup in result.get("backups", []):    # read from if the first is down
                     s.add_node(backup)
+        self._use_saved_theme()
         self.runtime = ClientRuntime(s)          # startup, refresh and push (#139)
         s.on(self._on_event)
         self._update_subtitle()

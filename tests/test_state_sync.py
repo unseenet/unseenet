@@ -148,3 +148,16 @@ async def test_read_up_to_a_date_never_covers_an_unread_post(network):
     marks = a._read_marks()[gid]
     assert marks["to"] < "2026-10-24T10:00:00Z" and marks["also"] == ["<mine@x>"]
     assert not a.is_read(a.cache[gid]["<reply@x>"])
+
+
+async def test_a_clients_own_settings_follow_you_too(network):
+    """The TUI's theme (and the GUI's) is kept per client, and goes with your state."""
+    _, device = network
+    a = device("stick")
+    a.set_client_setting("tui", "theme", "nord")
+    a.set_client_setting("gui", "theme", "dark")
+    assert await a.sync_state() == "written"
+    b = device("phone")
+    await b.sync_state()
+    assert b.client_setting("tui", "theme") == "nord" and b.client_setting("gui", "theme") == "dark"
+    assert b.client_setting("tui", "font", "normal") == "normal"

@@ -24,7 +24,8 @@ from . import *  # noqa: F403  - the shared names: SessionError, NNTPError, ...
 from ...core import state as st
 
 WRITE_EVERY = 3600.0              # section 7.1: at most once an hour
-SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "mention_notices")
+SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "mention_notices",
+            "clients")                # each client's own: the TUI's theme, the GUI's (UN-RFC 0044, 4.2)
 
 
 def _now() -> str:
