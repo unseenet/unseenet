@@ -64,7 +64,33 @@ content_type="text/plain; charset=utf-8")`:
 - `kind="chat"` posts a chat line (no subject) instead of a post
   (UN-RFC 0028);
 - `references` makes it a reply - in a channel open for comments, a
-  comment (UN-RFC 0030).
+  comment (UN-RFC 0030);
+- `content_type=MARKDOWN_TYPE` (from `unseenet.core.markup`) says the
+  body is Markdown (UN-RFC 0031): headings, lists, links and emphasis are
+  shown formatted. Without it, clients show the text as it is.
+
+### Pictures and other files
+
+`p.post(..., files=[...])` puts files on the post (UN-RFC 0027). Each is a
+path, `(name, octets)` or `(name, octets, alt)` - give pictures their
+alternative text:
+
+```python
+async with Poster(load_key(), from_name="Picture bot") as p:
+    result = await p.post(GROUP, "Image of the day", "The Moon rising.\n",
+                          content_type=MARKDOWN_TYPE,
+                          files=[("moon.jpg", jpeg_octets, "The Moon over the sea")])
+```
+
+The files are prepared as in the clients - the type from the content, a
+picture cleaned of its metadata - and checked against the group's
+manifest before any postage is computed: the group must take files
+(`attachments`), of that type and size. If it does not, `post` raises
+`PosterError` and nothing is sent. Files above 64 KiB together cost a
+little more postage (UN-RFC 0027 section 4.5).
+
+A node that carries no files refuses the post (`refused`); the project's
+own nodes carry them.
 
 The result says which nodes took it (`accepted`), which refused it and
 why (`refused`), and which could not be reached (`unreachable`).
@@ -79,7 +105,10 @@ To avoid posting the same thing twice after a restart,
   (`Session.publish_profile` with `make_profile(..., bot=True)`,
   UN-RFC 0022), and name a person to contact.
 - Post only what you may: credit the source and link to it, as its
-  licence asks.
+  licence asks. That goes for pictures above all: post one only when its
+  licence allows it (public domain, CC0, CC BY and the like), credit it,
+  and link to anything else. A post cannot be taken back from the
+  network.
 - Post rarely. A channel that floods is a channel people unsubscribe
   from.
 
