@@ -60,7 +60,7 @@ class Manifests:
         if m.type == "state" and current is not None:            # UN-RFC 0044 section 7.1
             old = self.store.get(current.message_id)
             if old is not None and (parse_date(art["Date"]) - parse_date(Article.from_bytes(old)["Date"])
-                                    < timedelta(hours=1)):
+                                    < self.STATE_EVERY):
                 raise ArticleError("rate", "too soon: a state at most once an hour (UN-RFC 0044 7.1)")
         if m.view == "pages" and self.config.sites != "accept":     # UN-RFC 0035 section 6.2
             raise ArticleError("group", "this node carries no sites")
