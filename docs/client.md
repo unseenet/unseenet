@@ -348,6 +348,32 @@ Only you know: the list is kept in your vault and never sent anywhere,
 and the person is not told. **People you ignore** in the command palette
 shows the list, and shows someone again.
 
+## Pinned posts
+
+The owner and moderators of a group can pin posts at the top of it, for
+example a welcome post or the rules ([UN-RFC 0033](spec/un-rfc-0033.md)).
+Nodes keep a pinned post beyond the group's window until it is unpinned.
+
+In the threads view, the pins are in a **Pinned** section above the
+threads, newest pin first, with their notes. A pinned post is also marked
+`[P]` in its place. Press ++enter++ on the section's head to fold it away
+or open it again; the client remembers this per group. In the chat view, a
+line above the chat shows the newest pin, and **Next pin** in the command
+palette shows the next. Pinned lines are marked `[P]` in the chat.
+**Pinned posts** lists them all, and choosing one opens it.
+
+To pin, select a post and choose **Pin or unpin post** in the command
+palette (++ctrl+p++). In a chat, you choose the line from a list. You can
+add a note that is shown with the pin. A group shows at most its
+`max_pins` pins (5 unless its owner set another number): when it is full,
+the client tells you which pin stops counting. Choosing the command on a
+pinned post unpins it. A post older than the group keeps posts disappears
+from the nodes as soon as it is unpinned, and the client says so first.
+Pinning is not on a key, on purpose: it is rare.
+
+Only pins by the owner and moderators of the group's current manifest
+count, and your client checks this itself, as it does for withdrawals.
+
 ## Withdrawing a post
 
 Select a post and choose **Withdraw post** in the command palette
