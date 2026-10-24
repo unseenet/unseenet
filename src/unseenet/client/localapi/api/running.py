@@ -36,12 +36,21 @@ class Running:
         if kinds not in KINDS:
             raise SessionError("kinds is both, post or chat")
         view = data.get("view")
+        if view not in (None, "threads", "chat", "feed", "pages"):
+            raise SessionError("view is threads, chat, feed or pages")
+        if view == "pages" and gtype != "channel":      # UN-RFC 0035 section 3
+            raise SessionError("a site is a channel: you and the people you choose write its pages")
+        comments = data.get("comments")
+        if comments not in (None, "open", "none"):
+            raise SessionError("comments is open or none")
+        if comments is None and view == "feed" and gtype == "channel":
+            comments = "open"                           # a feed: anyone comments (UN-RFC 0034 3.2)
         att = _file_choice(data.get("files", "none"))
         gid = await s.create_group(
             name, gtype, title=str(data.get("title", "")).strip(),
             description=str(data.get("description", "")).strip(),
-            view=view if view in ("threads", "chat") else None,
-            low_latency=bool(data.get("fast")), kinds=KINDS[kinds],
+            view=view, comments=comments if gtype == "channel" else None,
+            low_latency=bool(data.get("fast")) and view == "chat", kinds=KINDS[kinds],
             extra={"attachments": att} if att else None)
         await self._fetch(gid)
         s.emit(ev.GroupsChanged())

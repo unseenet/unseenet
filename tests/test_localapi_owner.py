@@ -116,3 +116,22 @@ async def test_a_group_created_and_edited_with_a_files_choice(tmp_path, monkeypa
     await owner.close()
     await other.close()
     server.close()
+
+
+async def test_create_a_feed_and_a_site(tmp_path, monkeypatch):
+    """A group created as a feed or a site (UN-RFC 0034 3.2, 0035 3; UN-RFC 0046 4.7)."""
+    server, owner, other, api = await _setup(tmp_path, monkeypatch, sites="accept")
+    feed = (await api.create_group({"name": "dk.nyheder", "type": "channel", "view": "feed"}))["id"]
+    data = owner.manifest_data(feed)
+    assert data["view"] == "feed" and data["comments"] == "open"     # a feed takes comments
+    shared = (await api.create_group({"name": "dk.faelles", "type": "open", "view": "feed"}))["id"]
+    assert owner.manifest_data(shared)["view"] == "feed"
+    site = (await api.create_group({"name": "dk.side", "type": "channel", "view": "pages"}))["id"]
+    assert owner.manifest_data(site)["view"] == "pages"
+    with pytest.raises(SessionError, match="a site is a channel"):
+        await api.create_group({"name": "dk.forkert", "type": "open", "view": "pages"})
+    with pytest.raises(SessionError, match="view is"):
+        await api.create_group({"name": "dk.forkert", "type": "open", "view": "slides"})
+    await owner.close()
+    await other.close()
+    server.close()
