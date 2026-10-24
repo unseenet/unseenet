@@ -9,6 +9,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **My site** as **My feed** (#495): the TUI lists it at the top of the group
+  list, or a dimmed *Start my site*, and your own profile has *Start my site* /
+  *My site*; `GET /api/groups` gives `my_site` too (UN-RFC 0046 section 4.3).
 - `files` (`none`, `pictures`, `pictures+pdf`) when creating a group and in its
   settings in the local client API (#496, UN-RFC 0046 section 4.7), for
   unseenet-gui's *Files* choice.

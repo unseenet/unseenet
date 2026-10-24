@@ -31,12 +31,12 @@ class Groups:
                    "name": s.contact_name(k) or s.label_of(k),
                    "unread": s.unread_from(k, KIND_CHAT)} for k in s.chat_partners()]
         c = s.for_you_counts()
-        my_feed = s.personal_group("feed")
-        started = s.has_personal_group("feed")
+        mine = {k: (s.personal_group(k), s.has_personal_group(k)) for k in ("feed", "site")}
+        on_top = {gid for gid, started in mine.values() if started}
         tops: dict[str, list[dict]] = {}
         for g in sorted(groups, key=lambda g: g["label"]):
-            if started and g["id"] == my_feed:
-                continue                     # listed as "My feed" at the top instead (#495)
+            if g["id"] in on_top:
+                continue                # listed as "My feed"/"My site" at the top instead (#495)
             tops.setdefault(g["hierarchy"], []).append(g)
         return {"groups": groups, "people": people,
                 "hierarchies": [{"name": h, "tree": self._tree(h, gs)}
@@ -47,8 +47,9 @@ class Groups:
                 # the timeline, when you follow a feed (UN-RFC 0034 section 7)
                 "timeline": {"id": TIMELINE, "feeds": len(s.feeds_followed())},
                 # your own feed, or the way to start it, at the top (#495)
-                "my_feed": {"id": my_feed, "started": started,
-                            "unread": s.unread_count(my_feed) if started else 0},
+                **{f"my_{k}": {"id": gid, "started": started,
+                               "unread": s.unread_count(gid) if started else 0}
+                   for k, (gid, started) in mine.items()},
                 "moderation": len(s.submissions()), "name_requests": self._name_requests(s)}
 
     @staticmethod

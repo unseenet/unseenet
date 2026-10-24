@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("textual")
 
 from unseenet.client.session import Session  # noqa: E402
-from unseenet.client.tui import START_FEED, ProfileDialog, UnseenetApp  # noqa: E402
+from unseenet.client.tui import START_FEED, START_SITE, ProfileDialog, UnseenetApp  # noqa: E402
 from unseenet.core.store import Store  # noqa: E402
 from unseenet.core.vault import Vault  # noqa: E402
 from unseenet.node.server import Node, NodeConfig  # noqa: E402
@@ -19,7 +19,7 @@ KDF = {"ops": 1, "mem": 8192 * 1024}
 async def _setup(tmp_path, monkeypatch):
     import unseenet.client.session as sess
     monkeypatch.setattr(sess, "DEFAULT_POW", 10)
-    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0), sites="accept"))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
     s = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
@@ -113,5 +113,26 @@ async def test_tui_profile_buttons_start_my_feed_and_follow(tmp_path, monkeypatc
         assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
         await press(pilot, app, "#follow")                  # Following: stop
         assert await wait_for(pilot, lambda: not app.session.is_following(key), 200)
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_start_my_site_at_the_top_and_on_the_profile(tmp_path, monkeypatch):
+    """My site works as My feed does: at the top, and a button on your own profile."""
+    app, server, _ = await _setup(tmp_path, monkeypatch)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert await wait_for(pilot, lambda: START_SITE in _top(app), 200)
+        app.action_show_profile(app.session.identity().key_text)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
+        assert str(app.screen.query_one("#my-site").label) == "Start my site"
+        await press(pilot, app, "#my-site")
+        assert await wait_for(pilot, lambda: type(app.screen).__name__ == "ConfirmDialog", 100)
+        await press(pilot, app, "#ok")
+        gid = app.session.personal_group("site")
+        assert await wait_for(pilot, lambda: app.session.has_personal_group("site"), 400)
+        assert await wait_for(pilot, lambda: gid in _top(app) and START_SITE not in _top(app), 300)
+        tree = app.query_one("#groups")
+        assert "My site" in str(next(n for n in tree.root.children if n.data == gid).label)
         await pilot.press("q")
     server.close()

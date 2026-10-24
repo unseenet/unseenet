@@ -14,9 +14,9 @@ from unseenet.node.server import Node, NodeConfig
 KDF = {"ops": 1, "mem": 8192 * 1024}
 
 
-async def _setup(tmp_path, monkeypatch):
+async def _setup(tmp_path, monkeypatch, **node_config):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0), **node_config))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
 
