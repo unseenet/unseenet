@@ -183,6 +183,22 @@ that inject spam or abuse lose their peers.
 - The pseudonymous record of UN-RFC 0023 section 6.2 is what the gateway
   can offer where a Usenet server would keep a log of who posted what.
 
+## 6.1 Several Gateways
+
+A Usenet group can be served by several gateways (UN-RFC 0038).
+
+- **Usenet has no consent of its own** to give (UN-RFC 0038 section 3.2,
+  step 1): anyone can read a newsgroup, and a server's peers are not the
+  group. Admission rests on the group owner's approval alone, and the
+  gateway that presents the join request MUST say so.
+- **Duplicates need nothing more:** one Usenet article has the same
+  `Message-ID`, and so the same origin pair (UN-RFC 0023 section 4.2),
+  whichever gateway reads it and from whichever server, so the import
+  turns of UN-RFC 0038 section 4 catch it.
+- **Already there**, for export (UN-RFC 0038 section 5), is a `STAT
+  <message-id>` that succeeds on the gateway's own news server, which
+  holds what its peers sent it.
+
 # 7. Timing Signals
 
 Usenet has no presence, typing or read signals. The only timing
