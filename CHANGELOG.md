@@ -67,6 +67,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- A personal feed or site is named after its owner - "Andreas~42e5's feed",
+  not "feed" - and a followed person keeps the name seen in their posts
+  across commands and restarts, not "?~42e5" (#423).
 - CI: the tests run on main and on pull requests - no longer a second time for
   every pushed branch - and not for changes to the docs or RFCs only (#392).
   The portables, the bootable image, Docker and the docs already built only

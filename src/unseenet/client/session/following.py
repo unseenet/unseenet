@@ -163,10 +163,17 @@ class FollowingMixin:
     def following(self) -> list[dict]:
         """The people you follow: ``{"fingerprint", "key", "name", "label", "feeds"}``,
         ``feeds`` those followed because of them."""
-        return [{"fingerprint": fp, "key": p.get("key"), "name": p.get("name"),
-                 "label": self.label_of(p["key"]) if p.get("key") else (p.get("name") or fp),
-                 "feeds": list(p.get("feeds", []))}
-                for fp, p in sorted(self._following().items())]
+        out = [{"fingerprint": fp, "key": p.get("key"), "name": p.get("name"),
+                "label": self.label_of(p["key"]) if p.get("key") else (p.get("name") or fp),
+                "feeds": list(p.get("feeds", []))}
+               for fp, p in sorted(self._following().items())]
+        self._save_learnt_labels()
+        return out
+
+    def _save_learnt_labels(self) -> None:
+        if getattr(self, "_labels_learnt", False):
+            self._labels_learnt = False
+            self.save()
 
     def follow_feed(self, group_id: str, on: bool = True) -> None:
         """Follow a feed on its own (or stop, ``on=False``): subscribing, kept when a
@@ -216,4 +223,7 @@ class FollowingMixin:
                     rows.append(msg)
         epoch = datetime.min.replace(tzinfo=timezone.utc)
         rows.sort(key=lambda m: (m.date or epoch, m.message_id), reverse=True)
+        for m in rows:
+            self.seen_name(m.author_key)              # remember the names of those followed
+        self._save_learnt_labels()
         return rows[:limit]
