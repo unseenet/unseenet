@@ -154,6 +154,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (⌂), each with its path; choosing one shows it, Markdown and all; `v`
   switches a site between pages and threads. Writing pages stays with the
   command line (`unseenet page-put`) for now.
+- Root list: `torproject` and `tor` are reserved for the Tor Project (#335), so
+  nobody - the project included - can look as if it speaks for it; theirs to
+  claim when they want it.
 - Nodes tell the operator when the contact inbox has new messages (#135): it
   counts them without reading them - in `unseenet-monitor` (c: seen), as a
   warning in `unseenet-node status`, and through an optional `[operator]

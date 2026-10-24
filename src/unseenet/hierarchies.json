@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "updated": "2026-10-17",
+  "updated": "2026-10-24",
   "hierarchies": [
     {
       "name": "unseenet",
@@ -19,6 +19,8 @@
     {"name": "xmpp", "policy": "reserved", "title": "XMPP, through gateways", "description": "Held for a possible gateway to XMPP group chats (MUC) (UN-RFC 0023)."},
     {"name": "fedi", "policy": "reserved", "title": "The fediverse, through gateways", "description": "Held for a possible gateway to fediverse communities and groups (ActivityPub: Lemmy, Mastodon and others) (UN-RFC 0023)."},
     {"name": "nostr", "policy": "reserved", "title": "Nostr, through gateways", "description": "Held for a possible gateway to Nostr channels and groups (UN-RFC 0023)."},
+    {"name": "torproject", "policy": "reserved", "title": "Held for the Tor Project", "description": "Kept for the Tor Project, so that nobody - the Unseenet project included - can look as if it speaks for it. Theirs to claim when they want it (UN-RFC 0018 section 7)."},
+    {"name": "tor", "policy": "reserved", "title": "Held for the Tor Project", "description": "Kept for the Tor Project, as torproject is. Groups about Tor live under alt.tor."},
     {"name": "bsky", "policy": "reserved", "title": "Bluesky, through gateways", "description": "Held for a possible gateway to feeds and groups on Bluesky and the AT Protocol (UN-RFC 0023)."},
     {"name": "discord", "policy": "reserved", "title": "Discord, through gateways", "description": "Held for a possible gateway to Discord channels (UN-RFC 0023)."},
     {"name": "telegram", "policy": "reserved", "title": "Telegram, through gateways", "description": "Held for a possible gateway to Telegram groups and channels (UN-RFC 0023)."},
