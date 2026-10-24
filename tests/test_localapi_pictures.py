@@ -14,6 +14,7 @@ import unseenet.client.session as sess                      # noqa: E402
 from unseenet.client.localapi import LocalAPI               # noqa: E402
 from unseenet.client.session import Session                 # noqa: E402
 from unseenet.core import profiles as prof                  # noqa: E402
+from unseenet.core import crypto                          # noqa: E402
 from unseenet.core.store import Store                       # noqa: E402
 from unseenet.core.vault import Vault                       # noqa: E402
 from unseenet.node.server import Node, NodeConfig           # noqa: E402
@@ -137,3 +138,14 @@ def test_a_stored_picture_is_shown_from_its_base64url(n):
     octets = (b"\xfb\xff\xbf" * 2)[:n]                   # needs padding, and "-" "_"
     shown = _shown({"type": "image/png", "px": 64, "data": b64(octets), "alt": "a"})
     assert base64.b64decode(shown["data"].split(",", 1)[1]) == octets
+
+
+async def test_identicons_when_the_node_is_away(tmp_path):
+    """No node to ask: every key still gets its identicon, and no picture is
+    remembered for it, so it is asked for again later."""
+    s = Session(Vault.open(tmp_path / "v.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    s.data["nodes"] = ["127.0.0.1:1"]
+    other = crypto.Identity.generate().key_text
+    assert await s.pictures([other]) == {other: None}
+    assert other not in s.__dict__.get("_picture_cache", {})

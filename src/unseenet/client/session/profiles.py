@@ -204,7 +204,10 @@ class ProfilesMixin:
             except crypto.CryptoError:
                 out[key] = None
         if todo:
-            found = await self.fetch_manifests(list(todo))
+            try:
+                found = await self.fetch_manifests(list(todo))
+            except OSError:                     # node away: identicons now, ask again later
+                return {**out, **dict.fromkeys(todo.values())}
             for gid, key in todo.items():
                 m = found.get(gid)
                 obj = prof.picture_from_manifest(m) if m is not None else None
