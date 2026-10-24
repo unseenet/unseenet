@@ -48,6 +48,7 @@ class NodesMixin:
         if len(nodes) == 1:
             raise SessionError("you need at least one node")
         nodes.remove(address)
+        (self.data.get("node_names") or {}).pop(address, None)
         moved = [gid for gid, e in self.data["groups"].items() if e.get("node") == address]
         for gid in moved:
             self.data["groups"][gid]["node"] = nodes[0]
@@ -87,6 +88,89 @@ class NodesMixin:
                 self._forget_numbers(group_id)
             entry["node"] = address
             self.save()
+
+    # --- names of nodes (#518) -------------------------------------------------
+    # The signed known-node list (UN-RFC 0010) is trusted; a node's own name (UN-RFC
+    # 0011) is not - anyone can call a node "unseenet-node1" - so it is marked as the
+    # node's own claim. Without either, the start of the onion address.
+    def _known_node(self, address: str):
+        host = address.strip().split(":")[0].lower()
+        for n in self.known_nodes():
+            if n.address.strip().split(":")[0].lower() == host:
+                return n
+        return None
+
+    def node_name(self, address: str) -> tuple[str | None, str]:
+        """``(name, source)`` of a node: source ``known`` (the signed node list),
+        ``self`` (the node's own name, not checked) or ``none``."""
+        known = self._known_node(address)
+        if known is not None and known.name:
+            return known.name, "known"
+        own = (self.data.get("node_names") or {}).get(address)
+        if own:
+            return own, "self"
+        return None, "none"
+
+    def node_label(self, address: str | None) -> str:
+        """How a node is shown in one line: its listed name; its own name marked
+        ``(unlisted)``; else the start of its onion address."""
+        if not address:
+            return ""
+        name, source = self.node_name(address)
+        if source == "known":
+            return name
+        if source == "self":
+            return f"{name} (unlisted)"
+        return short_node(address)
+
+    def node_entry(self, address: str) -> dict:
+        """One node for a front end: name, where it is from, label, the full address."""
+        name, source = self.node_name(address)
+        known = self._known_node(address)
+        return {"address": address, "name": name, "source": source,
+                "label": self.node_label(address),
+                "description": known.description if known is not None else "",
+                "operator": known.operator if known is not None else "",
+                "default": address == self.node}
+
+    def node_entries(self) -> list[dict]:
+        """Your nodes, the default first, each with how many followed groups it serves."""
+        out = []
+        for address in self.nodes:
+            e = self.node_entry(address)
+            e["groups"] = sum(1 for g in self.data["subscribed"] if self.node_for(g) == address)
+            out.append(e)
+        return out
+
+    def _keep_node_name(self, address: str, info: dict) -> None:
+        """Keep a node's own name from its node information, cleaned, in the vault."""
+        name = clean_node_name(info.get("name") if isinstance(info, dict) else None)
+        names = self.data.setdefault("node_names", {})
+        if name and names.get(address) != name:
+            names[address] = name
+            self.save()
+
+    async def _learn_node_name(self, client: Client, address: str) -> None:
+        """While connecting: a node not on the known list tells its name, once a run.
+
+        A full node's 400 and a broken connection go to ``_connect`` as any other
+        failure; an answer that is not a name is only no name."""
+        tried = self.__dict__.setdefault("_names_asked", set())
+        if (address in tried or self._known_node(address) is not None
+                or address in (self.data.get("node_names") or {})
+                or client.capability("UNSEENET-NODEINFO") is None):
+            return
+        tried.add(address)
+        try:
+            lines = await client.multiline("LIST UNSEENET.NODEINFO", 215)
+        except NNTPError as exc:
+            if exc.code == 400:             # full: refused like any other command
+                raise
+            return
+        try:
+            self._keep_node_name(address, json.loads(lines[0]) if lines else {})
+        except ValueError:
+            pass
 
     # --- the known nodes (UN-RFC 0010) ---
     def known_nodes(self) -> list:
@@ -219,10 +303,11 @@ class NodesMixin:
         socks = None
         if address.split(":")[0].endswith(".onion"):
             socks = await self._ensure_tor(status)
-        status(f"Connecting to {address} ...")
+        status(f"Connecting to {self.node_label(address)} ...")
         try:
             client = await Client.connect(address, socks)
             await client.fetch_capabilities()
+            await self._learn_node_name(client, address)
         except (OSError, ConnectionError, NNTPError, asyncio.TimeoutError) as exc:
             wait = self._failed(address)
             self.emit(ev.NodeState(address, False, str(exc) or type(exc).__name__))
@@ -233,7 +318,7 @@ class NodesMixin:
         self._backoff.setdefault(address, Backoff()).up()
         self._retry_at.pop(address, None)
         self.emit(ev.NodeState(address, True))
-        status(f"Connected to {address}")
+        status(f"Connected to {self.node_label(address)}")
         return client
 
     async def _ensure_tor(self, status) -> int | Socks:
@@ -426,5 +511,7 @@ class NodesMixin:
             if c.capability("UNSEENET-NODEINFO") is None:
                 return {}
             lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
-            return json.loads(lines[0]) if lines else {}
+            info = json.loads(lines[0]) if lines else {}
+            self._keep_node_name(node or self.node, info)     # its own name, newest (#518)
+            return info
         return await self._call(run, node)

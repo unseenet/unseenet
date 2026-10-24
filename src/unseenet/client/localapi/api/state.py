@@ -19,8 +19,9 @@ class State:
         s = self.session
         out = {"api": API_VERSION, "version": __version__, "service": self.service,
                "unlocked": s is not None, "setup": self.needs_setup(),
-               "connected": self.connected, "status": self.status, "identity": None,
-               "node": None, "nodes": [],
+               "connected": self.connected, "status": self.status,
+               "status_idle": self.status_idle, "identity": None,
+               "node": None, "node_label": None, "nodes": [], "node_names": {},
                "inbox_ready": bool(self.runtime and self.runtime.inbox_ready),
                "ripening": None}
         if self.vault_path is not None:
@@ -30,6 +31,9 @@ class State:
             out["identity"] = {"key": ident.key_text, "display": s.display_name(),
                                "label": s.identity_label(ident.key_text, s.display_name())}
             out["node"], out["nodes"] = s.node, list(s.nodes)
+            out["node_label"] = s.node_label(s.node) or None               # #518
+            out["node_names"] = {a: {k: e[k] for k in ("name", "source", "label")}
+                                 for a, e in ((a, s.node_entry(a)) for a in s.nodes)}
             t = s.ripening().t
             out["ripening"] = {"level": rp.level(t), "t": t, "next_at": rp.next_threshold(t),
                                "published": s.published_level(), "available": rp.available(),

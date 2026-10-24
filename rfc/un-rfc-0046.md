@@ -137,11 +137,19 @@ check `v` and refuse a version it does not know rather than draw wrong.
 ```
 
 Unlocked: `identity` is `{"key": "ed25519:...", "display": "..."}`,
-`node` the default node, and `ripening` `{"level": <0-4 or null>, "t":
+`node` the default node, `node_label` how it is shown (section 4.17),
+`nodes` your node addresses and `node_names` each one's `{"name",
+"source", "label"}`, and `ripening` `{"level": <0-4 or null>, "t":
 <iterations>, "next_at": <iterations or null>, "published": <the level
 nodes know, or null>, "available": <true if this runtime can ripen>,
 "paused": <true while paused>}` (UN-RFC 0025). `setup` is true while the
 identity or the node is still missing.
+
+`status` is a line for people. `status_idle` is true when it only says
+that all is well with the default node ("Connected to ..."): a front end
+that shows the node elsewhere MAY leave such a line out, and show
+`status` again when `status_idle` is false (Tor starting, offline, a
+post being sent).
 
 `POST /api/ripening` `{"paused": true | false}` pauses or resumes ripening
 in the background (UN-RFC 0025 section 7), for example on a warm phone or
@@ -742,6 +750,44 @@ someone who wants no public profile, or another one for friends.
   front end shows it in that context only, saying it was shared with you or
   with the group.
 
+## 4.17 Your Nodes
+
+A person has one or more nodes; each group is read from one of them, and
+new groups and the inbox go to the default node, the first (UN-RFC 0001).
+A front end shows a node by name, in this order:
+
+1. the name on the signed known-node list (UN-RFC 0010), `source`
+   `known`;
+2. otherwise the node's own `name` from its node information (UN-RFC
+   0011), `source` `self`. Anyone can give a node any name, also one on
+   the known-node list, so a front end MUST show it as the node's own
+   claim (the runtime's `label` adds "(unlisted)");
+3. otherwise the start of its onion address, `source` `none`.
+
+The runtime asks a node not on the list for its name once, while
+connecting, and keeps it in the vault, cleaned: one line, no control or
+format characters, at most 64 characters. The full address is always
+given beside the name, for a tooltip or to copy.
+
+- `GET /api/nodes`: `{"nodes": [{"address", "name", "source", "label",
+  "description", "operator", "default", "groups"}], "known": [...]}` -
+  your nodes, the default first, with how many groups you follow are read
+  from each, and in `known` the listed nodes you do not use yet, in the
+  same form. `description` and `operator` are the known-node list's (or
+  empty). With `?info=1` each node is also asked for its node information:
+  `reachable` (true or false) and `info` (its answer, `{}` if it offers
+  none, null if unreachable). That waits for the slowest node, at most a
+  minute: a front end shows the list first and asks with `info=1` after.
+- `POST /api/nodes` `{"action": "add" | "remove" | "default", "address":
+  "..."}` adds a node, stops using one, or makes one the default (adding
+  it if needed), and answers `GET /api/nodes` without `info`. A new node's
+  groups are read at once, and new posts on it pushed. `remove` also
+  answers `moved`, the followed groups now read from the default node;
+  nothing is deleted on the node itself, and the last node cannot be
+  removed (400). An address is an onion address (56 characters and
+  `.onion`, with an optional `:port`) or `host:port`; anything else is
+  400.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,
@@ -757,6 +803,8 @@ section 3). Each message is one JSON object with its name in `event`:
   and `reached`, `error` with `failed`;
 - `ripening-paused`: `{"event": "ripening-paused", "paused": true | false}`
   after `POST /api/ripening`, so every window follows.
+- `status` carries `idle` (section 4.1) when the runtime says it, so a
+  front end can follow without asking the state again.
 
 A front end that connects late asks `GET /api/state` and the groups
 again; events are not replayed.

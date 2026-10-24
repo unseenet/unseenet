@@ -191,6 +191,12 @@ async def known_nodes(request):
     return _json(_api(request).known_nodes())
 
 
+async def nodes(request):
+    if request.method == "POST":
+        return _json(await _api(request).change_nodes(await _body(request)))
+    return _json(await _api(request).nodes(info=request.query.get("info") in ("1", "true")))
+
+
 async def group_ref(request):
     return _json(await _api(request).group_ref(request.query.get("ref", "")))
 
@@ -420,6 +426,7 @@ ROUTES = [
     ("POST", "/api/subscribe", subscribe), ("GET", "/api/browse", browse),
     ("POST", "/api/refresh", refresh), ("POST", "/api/ripening", ripening),
     ("GET", "/api/known-nodes", known_nodes),
+    ("GET", "/api/nodes", nodes), ("POST", "/api/nodes", nodes),
     ("GET", "/api/group-ref", group_ref), ("GET", "/api/address", address),
     ("GET", "/api/following", following), ("POST", "/api/following", following),
     ("GET", "/api/feed", feed), ("POST", "/api/feed", feed),
