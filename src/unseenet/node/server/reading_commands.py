@@ -159,7 +159,7 @@ class ReadingCommands:
             subject = "(group settings)"
         elif ctl:
             subject = f"(control: {ctl[0]})"
-        elif encrypted.strip() == INBOX_SCHEME or art.group.startswith("inbox@"):
+        elif encrypted.strip() in INBOX_SCHEMES or art.group.startswith("inbox@"):
             subject = "(private message)"
         elif encrypted:
             subject = "(encrypted)"

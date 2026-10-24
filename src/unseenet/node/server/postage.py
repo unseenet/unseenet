@@ -43,7 +43,7 @@ class Postage:
 
     @staticmethod
     def _sealed_inbox(art: Article) -> bool:
-        return (art.get("Encrypted", "").strip() == INBOX_SCHEME
+        return (art.get("Encrypted", "").strip() in INBOX_SCHEMES      # either form (UN-RFC 0009)
                 and art.group.split("@", 1)[0] == "inbox")
 
     def _ripening_level(self, art: Article, source: str | None, from_peer: bool,

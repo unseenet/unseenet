@@ -42,7 +42,7 @@ from ...core import crypto, profiles, reconcile
 from ...core.groups import split_group_id
 from ...core.article import MAX_SIZE, Article, ArticleError, parse_date, validate_structure
 from ...core.groups import message_kind, parse_supersedes
-from ...core.groups import (INBOX_SCHEME, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
+from ...core.groups import (INBOX_SCHEME, INBOX_SCHEMES, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
                            is_key_bound, make_group_id, parse_key_update, split_group_id)
 from ...core import blobs as bl
 from ...core import pages as pg

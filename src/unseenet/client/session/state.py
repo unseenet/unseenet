@@ -76,6 +76,7 @@ class StateMixin:
             "starter": 1 if starter is True else int(starter or 0),
             "settings": settings,
             "read": self._read_marks(),
+            "sent": [dict(e) for e in d.get("sent_copies", [])],
         }
 
     def _read_marks(self) -> dict:
@@ -141,6 +142,7 @@ class StateMixin:
         s["starter"] = snap["starter"]
         s["settings"] = {**snap["settings"], "at": stamp("settings", snap["settings"])}
         s["read"] = snap["read"]
+        s["sent"] = snap["sent"]
         s["updated"] = now
         return s
 
@@ -179,6 +181,10 @@ class StateMixin:
                 read_to[gid] = r["to"]
             marks = d["read"].setdefault(gid, [])
             marks.extend(m for m in r.get("also", []) if m not in marks)
+        copies = {e["msgid"]: e for e in d.get("sent_copies", [])}
+        for e in s.get("sent", []):
+            copies.setdefault(e["msgid"], {k: e[k] for k in ("msgid", "inbox", "at") if k in e})
+        d["sent_copies"] = sorted(copies.values(), key=lambda e: e.get("at", ""))[-MAX_SENT_COPIES:]
         self._remember(s)
 
     def _remember(self, s: dict) -> None:

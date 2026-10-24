@@ -18,6 +18,9 @@ _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+_-]*(\.[a-z0-9][a-z0-9+_-]*)*$")
 _FP_RE = re.compile(r"^[a-z2-7]{16}$")
 ENC_SCHEME = "xchacha20poly1305"
 INBOX_SCHEME = "sealedbox"
+INBOX_SCHEME2 = "sealedbox2"      # two envelopes: the sender can read it too (UN-RFC 0009 2.3)
+INBOX_SCHEMES = (INBOX_SCHEME, INBOX_SCHEME2)
+ENVELOPE = 80                     # a sealed box of a 32-octet key
 INBOX_NAME = "inbox"            # personal inbox: inbox@<fp> (UN-RFC 0009, 2.2)
 
 
@@ -591,11 +594,15 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
                   sender: crypto.Identity | None = None, reply_inbox: str | None = None,
                   references: list[str] | None = None, content_type: str | None = None,
                   kind: str = KIND_POST, pow_bits: int = 18,
-                  extra: list[tuple[str, str]] | None = None) -> Article:
+                  extra: list[tuple[str, str]] | None = None,
+                  two_envelopes: bool = False, copy_to: bytes | None = None) -> Article:
     """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
 
     ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box, as do
-    ``extra`` inner headers (e.g. a mention notice's, UN-RFC 0032).
+    ``extra`` inner headers (e.g. a mention notice's, UN-RFC 0032). With
+    ``two_envelopes`` it is ``sealedbox2``: the second envelope opens it for
+    ``copy_to`` (the sender's own key), or for nobody when that is None - so nobody can
+    tell whether the sender kept a copy (UN-RFC 0044 section 6.1).
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
@@ -614,10 +621,21 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     if sender is not None:
         msg = _sender_message(group_id, one_time.key_text, inner.canonical())
         inner.set("Sender-Signature", sender.sign_text(crypto.PURPOSE_INBOX_SENDER, msg))
-    box = crypto.seal_to(owner_pk, inner.to_bytes())
-    outer_body = "\n".join(textwrap.wrap(b64(box), 76)) + "\n"
-    art = new_article(group_id, None, outer_body, references=references,
-                      extra=[("Encrypted", INBOX_SCHEME)])
+    if two_envelopes:
+        import os as _os
+        import nacl.bindings as nb
+        key, nonce = _os.urandom(32), _os.urandom(24)
+        ct = nb.crypto_aead_xchacha20poly1305_ietf_encrypt(inner.to_bytes(), group_id.encode(),
+                                                            nonce, key)
+        second = (crypto.seal_to(copy_to, key) if copy_to is not None else
+                  crypto.seal_to(crypto.Identity.generate().public_key, _os.urandom(32)))
+        box, scheme = crypto.seal_to(owner_pk, key) + second + nonce + ct, INBOX_SCHEME2
+    else:
+        box, scheme = crypto.seal_to(owner_pk, inner.to_bytes()), INBOX_SCHEME
+    text = b64(box)                     # fixed lines: textwrap breaks at the "-" of base64url,
+    outer_body = "\n".join(text[i:i + 76] for i in range(0, len(text), 76)) + "\n"   # and the
+    art = new_article(group_id, None, outer_body, references=references,           # size would vary
+                      extra=[("Encrypted", scheme)])
     return art.finalize(one_time, pow_bits)
 
 
@@ -626,11 +644,27 @@ def open_inbox_article(art: Article, owner: crypto.Identity) -> tuple[Article, b
 
     Raises ArticleError if it cannot be opened or a claimed sender does not verify.
     """
-    if art.get("Encrypted", "").strip() != INBOX_SCHEME:
+    scheme = art.get("Encrypted", "").strip()
+    if scheme not in INBOX_SCHEMES:
         raise ArticleError("syntax", "not an inbox article")
     try:
-        blob = crypto.open_sealed_with(owner, b64decode("".join(art.body.split())))
-    except (crypto.CryptoError, ValueError) as exc:
+        raw = b64decode("".join(art.body.split()))
+        if scheme == INBOX_SCHEME:
+            blob = crypto.open_sealed_with(owner, raw)
+        else:                           # either envelope: the owner's, or the sender's copy
+            import nacl.bindings as nb
+            key = None
+            for env in (raw[:ENVELOPE], raw[ENVELOPE:2 * ENVELOPE]):
+                try:
+                    key = crypto.open_sealed_with(owner, env)
+                    break
+                except crypto.CryptoError:
+                    continue
+            if key is None or len(key) != 32:
+                raise crypto.CryptoError("no envelope for this key")
+            nonce, ct = raw[2 * ENVELOPE:2 * ENVELOPE + 24], raw[2 * ENVELOPE + 24:]
+            blob = nb.crypto_aead_xchacha20poly1305_ietf_decrypt(ct, art.group.encode(), nonce, key)
+    except Exception as exc:  # noqa: BLE001 - CryptoError, a bad layout, a failed tag
         raise ArticleError("signature", "cannot decrypt inbox article") from exc
     inner = Article.from_bytes(blob)
     if "Sender-Key" not in inner:
@@ -679,7 +713,7 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         raise ArticleError("permission", "banned from this group")
     if manifest.type == "inbox":
         # Anyone may write; nodes can only check the form (UN-RFC 0009, 2.4).
-        if art.get("Encrypted", "").strip() != INBOX_SCHEME:
+        if art.get("Encrypted", "").strip() not in INBOX_SCHEMES:
             raise ArticleError("permission", "inbox articles must be sealed to the owner")
         return
     if manifest.type == "closed":

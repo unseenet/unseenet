@@ -304,7 +304,7 @@ class PeopleMixin:
                     validate_structure(notice, raw_size=len(raw))
                 except (ValueError, ArticleError):
                     continue
-                if (notice.get("Encrypted", "").strip() == INBOX_SCHEME
+                if (notice.get("Encrypted", "").strip() in INBOX_SCHEMES
                         and split_group_id(notice.group)[0] == INBOX_NAME):
                     out.append(notice)
             return out[:MAX_MENTION_NOTICES]

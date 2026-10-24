@@ -56,6 +56,10 @@ class PrivateMixin:
             await self.renew_key_bound()
         except (SessionError, OSError, ConnectionError, NNTPError) as exc:
             log.warning("could not renew key-bound groups: %s", exc)
+        try:
+            await self.offer_sealedbox2()                       # UN-RFC 0009 section 2.2
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            log.info("inbox not offering sealedbox2 now: %s", exc)
         return gid
 
     def _ident_entry(self, name: str | None = None) -> dict:
@@ -229,15 +233,22 @@ class PrivateMixin:
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
         inner = extra if anonymous else self._with_inner_ripening(extra)
+        two = await self.takes_sealedbox2(group_id)        # both ends can (UN-RFC 0009, 2.3)
+        copy_to = self.identity().public_key if (two and remember) else None
         art = await self._post_with_postage(group_id, lambda bits: inbox_article(
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
             references=references, content_type=content_type, kind=kind, pow_bits=bits,
-            extra=inner))
+            extra=inner, two_envelopes=two, copy_to=copy_to))
         msgid = art.message_id
         if not remember:
             return msgid
+        if copy_to is not None:               # readable again from any device (UN-RFC 0044, 6.2)
+            copies = self.data.setdefault("sent_copies", [])
+            copies.append({"msgid": msgid, "inbox": group_id,
+                           "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+            del copies[:-MAX_SENT_COPIES]
         # The message is sealed to the recipient, so keep our own copy (encrypted, local only).
         self._remember_sent({"to": crypto.key_to_text(owner_key), "group": group_id, "msgid": msgid,
                              # where it falls among received messages: dates are rounded to
@@ -364,6 +375,72 @@ class PrivateMixin:
         others = sorted((k for k in last if k not in contacts and k != me),
                         key=lambda k: last[k], reverse=True)
         return contacts + others
+
+    async def node_has(self, capability: str, node: str | None = None) -> bool:
+        """Whether a node lists a capability (UN-RFC 0005); False when unreachable."""
+        async def has(c: Client) -> bool:
+            return c.capability(capability) is not None or capability in c.capabilities
+        try:
+            return bool(await self._call(has, node or self.node))
+        except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError):
+            return False
+
+    async def takes_sealedbox2(self, inbox: str) -> bool:
+        """Whether a private post to this inbox may be ``sealedbox2``: its owner says so
+        in its manifest, and our node takes the form (UN-RFC 0009 section 2.3)."""
+        return (self.manifest_data(inbox).get("sealedbox2") is True
+                and await self.node_has("UNSEENET-SEALEDBOX2", self.node_for(inbox)))
+
+    async def offer_sealedbox2(self) -> bool:
+        """Say in our inbox's manifest that we take ``sealedbox2`` - once every node of
+        ours does (UN-RFC 0009 section 2.2). True if the manifest was changed."""
+        gid = self.my_inbox
+        data = self.manifest_data(gid)
+        if not data or data.get("sealedbox2") is True or not self.nodes:
+            return False
+        for node in self.nodes:
+            if not await self.node_has("UNSEENET-SEALEDBOX2", node):
+                return False                   # not yet: senders would lose their posts
+        ident = self.identity()
+        fields = {k: v for k, v in data.items() if k not in ("serial", "expires")}
+        await self._publish_key_bound(gid, lambda serial, bits: manifest_article(
+            ident, gid, {**fields, "serial": serial, "sealedbox2": True}, bits))
+        self.group_entry(gid)["type"] = "inbox"
+        return True
+
+    async def fetch_sent_copies(self) -> int:
+        """Your private posts sent from another device, read from the recipients' inboxes
+        through their second envelope (UN-RFC 0044 section 6.2), into your sent list.
+        Returns how many were added; those that cannot be had now are tried again later."""
+        have = {e.get("msgid") for e in self.sent}
+        ident, added = self.identity(), 0
+        for c in list(self.data.get("sent_copies", [])):
+            if c["msgid"] in have:
+                continue
+            async def get(cl: Client, mid=c["msgid"]):
+                return await cl.article(mid)
+            try:
+                raw = await self._call(get, self.node_for(c["inbox"]))
+            except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError):
+                continue
+            if raw is None:
+                continue
+            try:
+                art = Article.from_bytes(raw)
+                inner, _ = open_inbox_article(art, ident)
+            except ArticleError:
+                continue
+            fp = split_group_id(c["inbox"])[1]
+            owner = self.manifest_data(c["inbox"]).get("owner") or ""
+            self.sent.append({"to": owner or fp, "group": c["inbox"], "msgid": c["msgid"],
+                              "after": 0, "subject": inner.get("Subject", ""),
+                              "body": art_body_text(inner.body), "kind": message_kind(inner),
+                              "references": (art.get("References") or "").split(),
+                              "date": parse_date(art["Date"]).isoformat(), "from_network": True})
+            added += 1
+        if added:
+            self.save()
+        return added
 
     def _load_sent(self) -> list[dict]:
         """Copies of private posts you sent (they are sealed to others, so only these

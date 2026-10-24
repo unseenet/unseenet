@@ -101,6 +101,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
+  step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
+  recipient, one for you - so any device of yours reads it again from the
+  recipient's inbox (the sent list goes with your state). Nobody can tell
+  whether you kept a copy: both forms are the same size. Used only where both
+  ends can - the recipient's inbox says `sealedbox2` (clients set it once all
+  their nodes take it) and your node lists `UNSEENET-SEALEDBOX2`; otherwise
+  the old form, with the copy in your vault as before. Nodes take both forms.
+  Inbox bodies are wrapped in fixed 76-character lines (textwrap broke at the
+  `-` of base64url, so the size varied).
 - Each kind of client has its own settings, kept with your state:
   `Session.client_setting(client, key)` / `set_client_setting`. The TUI keeps
   the theme you choose in the command palette there, so it is there next time
