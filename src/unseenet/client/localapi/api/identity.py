@@ -8,6 +8,8 @@ Part of ``LocalAPI`` (see __init__.py)."""
 
 from __future__ import annotations
 
+import re
+
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import api as _a   # LocalAPI itself, joined after the parts
 
@@ -232,7 +234,48 @@ class Identity:
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
                 "private_min_ripe": s.private_min_ripe(),
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
-                "pictures": s.show_pictures()}
+                "pictures": s.show_pictures(), "state_local": s.state_kept_local()}
+
+    async def change_settings(self, data: dict) -> dict:
+        """``POST /api/settings``: as ``set_settings``, and ``state_local`` - keep your
+        state on this device only, or in the network again (UN-RFC 0044 section 7.4)."""
+        data = dict(data)
+        local = data.pop("state_local", None)
+        if local is not None and not isinstance(local, bool):
+            raise SessionError("state_local is true or false")
+        out = self.set_settings(data)              # checks the rest before anything changes
+        s = self._ready()
+        if local is not None and local != s.state_kept_local():
+            await s.set_state_kept_local(local)
+            out = self.settings()
+        return out
+
+    # a client's own settings (UN-RFC 0044 section 4.2): small values under short keys
+    _CLIENT = re.compile(r"[a-z][a-z0-9-]{0,31}")
+
+    def client_settings(self, client: str) -> dict:
+        """``GET /api/settings/clients/<client>`` (section 4.8): the settings one kind of
+        client keeps with your state, so they follow you from device to device."""
+        s = self._ready()
+        if not self._CLIENT.fullmatch(client or ""):
+            raise SessionError("a client is named in lowercase letters, digits and -")
+        return {"client": client, "settings": dict(s.data.get("clients", {}).get(client, {}))}
+
+    def set_client_settings(self, client: str, data: dict) -> dict:
+        """``POST /api/settings/clients/<client>`` ``{"key": value, ...}``: change them;
+        null removes one. Values are strings, numbers, true or false."""
+        s = self._ready()
+        self.client_settings(client)
+        for key, value in data.items():
+            if not self._CLIENT.fullmatch(key):
+                raise SessionError(f"a setting is named in lowercase letters, digits and -: {key!r}")
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise SessionError(f"{key} is a string, a number, true, false or null")
+            if isinstance(value, str) and len(value) > 256:
+                raise SessionError(f"{key} is at most 256 characters")
+        for key, value in data.items():
+            s.set_client_setting(client, key, value)
+        return self.client_settings(client)
 
     def set_settings(self, data: dict) -> dict:
         """``POST /api/settings`` (section 4.8): change your settings - signature,

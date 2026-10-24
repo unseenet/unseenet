@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- A client's own settings in the local client API (unseenet-gui#84, UN-RFC
+  0046 section 4.8): `GET/POST /api/settings/clients/<client>`, kept with your
+  state so a front end's theme follows you; and `state_local` in
+  `/api/settings`, to keep your state on this device only (UN-RFC 0044 7.4).
 - Private profiles in the local client API (#442, UN-RFC 0046 section 4.16,
   UN-RFC 0022 section 6): `POST /api/profile/share` shares a profile with one
   person or a closed group, or takes it back; `GET /api/profile` with
