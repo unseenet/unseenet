@@ -9,6 +9,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- `files` (`none`, `pictures`, `pictures+pdf`) when creating a group and in its
+  settings in the local client API (#496, UN-RFC 0046 section 4.7), for
+  unseenet-gui's *Files* choice.
 - **"Add my entrance"** (unseenet-entrance#3, UN-RFC 0043 8.1), as for nodes:
   an issue form; a check that reaches the entrance over HTTPS and its onion,
   compares every file of the web client it serves with the signed version

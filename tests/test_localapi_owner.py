@@ -98,3 +98,21 @@ async def test_ignore_names_and_members(tmp_path, monkeypatch):
     await owner.close()
     await other.close()
     server.close()
+
+
+async def test_a_group_created_and_edited_with_a_files_choice(tmp_path, monkeypatch):
+    """#496: ``files`` when creating a group and in its settings (UN-RFC 0046 4.7)."""
+    from unseenet.core import blobs as bl
+    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    gid = (await api.create_group({"name": "dk.foto", "type": "open", "files": "pictures"}))["id"]
+    assert owner.manifest_data(gid)["attachments"] == bl.PICTURES
+    assert api.group(gid)["group"]["files"]
+    await api.group_settings(gid, {"files": "pictures+pdf"})
+    assert owner.manifest_data(gid)["attachments"] == bl.PICTURES_AND_PDF
+    await api.group_settings(gid, {"files": "none"})
+    assert "attachments" not in owner.manifest_data(gid)
+    with pytest.raises(SessionError, match="files is none"):
+        await api.create_group({"name": "dk.x", "type": "open", "files": "everything"})
+    await owner.close()
+    await other.close()
+    server.close()
