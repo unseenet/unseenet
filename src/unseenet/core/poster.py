@@ -5,6 +5,9 @@
     async with Poster(load_key(), from_name="Daily news") as p:
         result = await p.post("alt.news@<fingerprint>", "Today", "Something happened.\\n")
         print(result.message_id, result.accepted)
+        # a picture too, where the group takes files (UN-RFC 0027):
+        await p.post("alt.space@<fingerprint>", "Image of the day", "The Moon\\n",
+                     files=[("moon.jpg", jpeg_octets, "The Moon over the sea")])
 
 A :class:`Poster` never prompts. It takes a key (see :func:`load_key`), the
 nodes to post to (the built-in list of known nodes by default, UN-RFC 0010),
@@ -204,28 +207,87 @@ class Poster:
         await self._session.adopt_published_ripening()
         return self._session.ripening().level
 
-    async def post(self, group: str, subject: str, body: str, **kw) -> PostResult:
-        """Post a message to every node; see :meth:`build` for the arguments."""
-        return await self.post_article(self.build(group, subject, body, **kw))
+    async def post(self, group: str, subject: str, body: str, *, files=None,
+                   **kw) -> PostResult:
+        """Post a message to every node; see :meth:`build` for the arguments.
 
-    async def post_article(self, art: Article, bits: int = 0) -> PostResult:
+        ``files`` (UN-RFC 0027): pictures and other files on the post, each a path,
+        ``(name, octets)``, ``(name, octets, alt)`` or a prepared ``media.Prepared``.
+        They are prepared as in the clients (the type from the content, a picture
+        cleaned of its metadata) and checked against the group's manifest before any
+        postage is computed; PosterError if the group may not carry them. A node
+        that carries no files refuses the post (``PostResult.refused``)."""
+        if not files:
+            return await self.post_article(self.build(group, subject, body, **kw))
+        prepared = await self.prepare_files(group, files)
+        from .blobs import attachment_headers, blob_id, extra_bits_for
+        extra = list(kw.pop("extra", None) or [])
+        extra += attachment_headers([(f.name, f.media_type, f.octets, f.alt, f.dim)
+                                     for f in prepared])
+        art = self.build(group, subject, body, extra=extra, **kw)
+        return await self.post_article(
+            art, blobs=[(blob_id(f.octets), f.octets) for f in prepared],
+            extra_bits=extra_bits_for(sum(len(f.octets) for f in prepared)))
+
+    async def prepare_files(self, group: str, files) -> list:
+        """The files for a post to ``group``, prepared and checked as a client does
+        (``Session.prepare_files`` / ``check_files``), with the group's current
+        manifest fetched first. Raises PosterError with the reason."""
+        from ..client import media
+        from ..client.session import SessionError
+        if self._session is None:
+            raise PosterError("use the Poster in 'async with' (or call start() first)")
+        prepared = []
+        try:
+            for f in files:
+                if isinstance(f, media.Prepared):
+                    prepared.append(f)
+                    continue
+                if isinstance(f, (str, os.PathLike)):
+                    prepared.extend(self._session.prepare_files([f]))
+                    continue
+                name, octets, *rest = f
+                p = media.prepare(name, bytes(octets))
+                alt = rest[0] if rest else ""
+                prepared.append(media.Prepared(p.name, p.media_type, p.octets, p.note, alt, p.dim))
+            m = await self._session.fetch_manifest(group)
+            if m is not None:                     # the rules for files: the current manifest
+                self._session.group_entry(group)["manifest"] = dict(m.raw)
+            self._session.check_files(group, prepared)
+        except SessionError as exc:
+            raise PosterError(str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise PosterError(f"a file must be a path, (name, octets) or (name, octets, alt): "
+                              f"{exc}") from exc
+        for f in prepared:
+            if f.note:
+                self.log(f"{f.name}: {f.note}")
+        return prepared
+
+    async def post_article(self, art: Article, bits: int = 0, *, blobs=(),
+                           extra_bits: int = 0) -> PostResult:
         """Sign ``art`` and post it to every node, through ``Session.post_article``.
         Signing is deterministic, so adding postage for a node that asks for more
-        keeps the Message-ID. ``bits`` is ignored: each node's need is asked."""
+        keeps the Message-ID. ``bits`` is ignored: each node's need is asked.
+        ``blobs`` and ``extra_bits``: the article's files and the postage they add
+        (see :meth:`post`), sent with it to every node."""
         if self._session is None:
             raise PosterError("use the Poster in 'async with' (or call start() first)")
         art.finalize(self.key, 0)                # the Message-ID, before any node
         result = PostResult(art.message_id)
+        blobs = list(blobs)
         for address in self.nodes:
-            await self._post_to(address, art, result)
+            await self._post_to(address, art, result, blobs, extra_bits)
         return result
 
-    async def _post_to(self, address: str, art: Article, result: PostResult) -> None:
+    async def _post_to(self, address: str, art: Article, result: PostResult,
+                       blobs=(), extra_bits: int = 0) -> None:
         from ..client.session import SessionError
         for attempt in range(1, self.later_attempts + 1):
             try:
                 await asyncio.wait_for(
-                    self._session.post_article(art, node=address, sign_with=self.key),
+                    self._session.post_article(art, node=address, sign_with=self.key,
+                                               blobs=blobs, extra_bits=extra_bits),
                     self.connect_timeout + 600)   # ripening to level 0 takes minutes
             except SessionError as exc:
                 text = str(exc).removeprefix("rejected by node: ")

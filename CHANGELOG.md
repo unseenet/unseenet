@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Files on posts from bots and gateways (#474, UN-RFC 0027): `Poster.post(...,
+  files=[...])` takes paths, `(name, octets)` or `(name, octets, alt)`, prepares
+  them as the clients do (type from the content, pictures cleaned of metadata),
+  checks them against the group's manifest before any postage is computed, and
+  sends them as blobs with the post through `Session`. `Session.post_article`
+  takes `blobs` and `extra_bits` for this. Documented in `docs/bots.md`.
 - Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
   0034): a group can be shown as a feed, with `comment` on each row (may you
   answer it with a chat line); the timeline as the pseudo-group `timeline:`,
