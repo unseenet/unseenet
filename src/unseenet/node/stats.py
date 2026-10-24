@@ -295,7 +295,9 @@ async def contact_watch(node, data_dir: Path | None, every: float = 60.0) -> Non
             env = {**os.environ, "UNSEENET_CONTACT_MESSAGES": str(st["messages"]),
                    "UNSEENET_CONTACT_NEW": str(st["new"]), "UNSEENET_NODE": node.config.name}
             try:
-                proc = await asyncio.create_subprocess_exec(*shlex.split(cmd), env=env)
+                # posix=False on Windows: there a backslash is part of the path, not an escape
+                args = shlex.split(cmd, posix=os.name != "nt")
+                proc = await asyncio.create_subprocess_exec(*args, env=env)
                 await asyncio.wait_for(proc.wait(), timeout=30)
             except (OSError, ValueError, asyncio.TimeoutError) as exc:
                 logging.getLogger("unseenet.node").warning("notify command failed: %s", exc)
