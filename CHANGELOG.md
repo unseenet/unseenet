@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Feeds in the terminal client (#442, UN-RFC 0034): a group shown as a feed
+  lists its entries newest first, every note its own, with the number of
+  comments, and the reading pane shows the entry with its comments under it;
+  r writes a comment (a chat line) and Reply with a post answers with a
+  post; v switches between feed, threads and chat. A Timeline under For you
+  brings every followed feed together. Follow someone, People you follow and
+  Start my feed (after the warning) are in the command palette.
 - Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
   0034): a group can be shown as a feed, with `comment` on each row (may you
   answer it with a chat line); the timeline as the pseudo-group `timeline:`,

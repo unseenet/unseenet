@@ -102,7 +102,7 @@ else is in the command palette, ++ctrl+p++:
 | ++g++ | Browse the groups on the node; ++space++, ++enter++ or a click on `[ ]` subscribes or unsubscribes. A click elsewhere on the line, like the cursor, shows what the group is below the list |
 | ++enter++ | Read the selected post on the whole screen (or click it a second time; ++f++ does the same) |
 | ++n++ | New post in the current group |
-| ++r++ | Reply to the selected post |
+| ++r++ | Reply to the selected post (in a feed: comment on it) |
 | ++ctrl+s++ | Send (in the compose window) |
 | ++m++ | Write a private post: type a contact's name or paste a key (pre-filled with the selected post's author); to chat instead: ++ctrl+p++, *Chat with someone* |
 | ++c++ | Your contacts: chat, write a private post, rename or remove |
@@ -115,7 +115,7 @@ else is in the command palette, ++ctrl+p++:
 | ++s++ | Edit your signature |
 | ++a++ | Add the selected post's author as a contact |
 | ++shift+d++ | Withdraw the selected post (yours, or in a group you own or moderate) |
-| ++v++ | Switch between chat and threads for the current group |
+| ++v++ | Switch between chat and threads for the current group (and feed, for a feed) |
 | ++question-mark++ | About this group: its rules, type, owner and node |
 | `#` | Go to a group the selected post names, such as `#dk.snak` |
 | ++f1++ | About Unseenet, with links to the source and these pages |
@@ -665,6 +665,32 @@ accepts, how long it keeps posts, the minimum postage and what it logs.
 If the operator has set up a contact inbox, **Write to operator** sends
 them a private message. Use it to report abuse, ask for a group to be
 carried, or just say thanks.
+
+## Feeds
+
+A group can be shown as a **feed** ([UN-RFC 0034](spec/un-rfc-0034.md)):
+entries newest first - a short note, or a post with its subject as the
+headline - and under each its comments, oldest first, in the reading pane.
+The list says how many comments an entry has. In a feed, ++r++ writes a
+comment: one line, no subject, no quote. To answer with a post instead,
+use **Reply with a post** in the command palette (++ctrl+p++). ++v++
+switches a feed to threads and chat and back.
+
+To **follow** someone, choose **Follow someone** in the command palette and
+give their key, their name (such as `andreas@lorensen`) or their
+`unseenet:` address; the author of the selected post is filled in. That
+follows their personal feed and the feeds their profile lists, now and as
+they start new ones. Nobody is told, and the list of whom you follow stays
+in your vault. **People you follow** shows them and stops following one.
+
+**Timeline**, under For you in the group list, is every feed you follow in
+one: the newest entries first, each with the feed it is from, in the order
+they were written and nothing else. A comment you write there goes to the
+entry's own feed.
+
+**Start my feed** in the command palette starts your own personal feed,
+`feed@<your fingerprint>`, after telling you that it is public and tied to
+your identity, and asks whether readers may comment.
 
 ## Addresses
 
