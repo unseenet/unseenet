@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Withdrawing chat lines in the TUI: in a chat, where no line is selected, `D`
+  withdraws your last line (as `e` edits it), after asking; the question says
+  whether it is a post, a comment or a chat line. The command is *Withdraw
+  (delete) post*, so the palette finds it by *delete* too.
 - Create a group as a feed or a site (UN-RFC 0034 3.2, UN-RFC 0035 3): the TUI's
   Create group offers *Site* besides *Feed* (choosing it makes the group a
   channel, as a site must be, and says who writes it), and Edit group offers

@@ -2200,8 +2200,8 @@ class UnseenetApp(App):
         if action == "invite":
             g = self.groups.get(gid)
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
-        if action == "withdraw":
-            return bool(m and group and s.may_cancel(m))
+        if action == "withdraw":                  # the selected post, or your last chat line
+            return bool(group and self._withdrawable(gid) is not None)
         if action == "edit":                      # your own post, or your last chat line
             return bool(group and self._editable(gid) is not None)
         if action == "add_contact":
@@ -4108,6 +4108,19 @@ class UnseenetApp(App):
         m = self.current_message
         return m if m is not None and m.group == gid and s.may_edit(m) else None
 
+    def _withdrawable(self, gid: str) -> Message | None:
+        """What D withdraws: the selected post or comment if you may; in a chat, where
+        no line is selected, your last line - as e edits it."""
+        s = self.session
+        if self.view_of(gid) == "chat":
+            me = s.identity().key_text
+            mine = [m for m in s.visible(sorted(s.cache.get(gid, {}).values(),
+                                                key=lambda m: m.number))
+                    if m.author_key == me and s.may_cancel(m)]
+            return mine[-1] if mine else None
+        m = self.current_message
+        return m if m is not None and s.may_cancel(m) else None
+
     @work(group="dialog", exit_on_error=False)
     async def action_edit(self) -> None:
         """Edit your own post or chat line (UN-RFC 0042): a new version in its place."""
@@ -4893,7 +4906,8 @@ class UnseenetApp(App):
              self.action_mark_all_read),
             ("Unsubscribe from group", "Stop following the current group and forget it locally",
              self.action_unsubscribe),
-            ("Withdraw post", "Take your post (or one in a group you own) back from the network  [D]",
+            ("Withdraw (delete) post", "Remove, delete, slet, fjern: take your post, comment or "
+             "chat line (or any post in a group you own) back from the network  [D]",
              self.action_withdraw),
             ("Pin or unpin post", "Owner or moderator: keep the selected post at the top of the "
              "group, kept by the nodes - or stop (UN-RFC 0033)", self.action_pin),
@@ -5778,16 +5792,22 @@ class UnseenetApp(App):
 
     @work(group="dialog", exit_on_error=False)
     async def action_withdraw(self) -> None:
-        """Withdraw the selected post (UN-RFC 0004, section 7)."""
-        m, s = self.current_message, self.session
-        if m is None or not s.may_cancel(m):
-            self.notify("You can withdraw your own posts, and any post in a group you own "
-                        "or moderate.", severity="warning")
+        """Withdraw (delete) the selected post or comment, or in a chat your last line
+        (UN-RFC 0004, section 7)."""
+        s = self.session
+        m = self._withdrawable(self.current_group or "")
+        if m is None:
+            self.notify("You can withdraw your own posts, comments and chat lines, and any "
+                        "post in a group you own or moderate.", severity="warning")
             return
         mine = m.author_key == s.identity().key_text
+        what = ("chat line" if self.view_of(m.group) == "chat" else "comment") \
+            if m.kind == KIND_CHAT else "post"
+        shown = m.subject or split_signature(m.body)[0].strip().replace("\n", " ")[:60] \
+            or "(no subject)"
         if not await self.push_screen_wait(ConfirmDialog(
-                f"Withdraw \"{m.subject or '(no subject)'}\"?",
-                ("Your post" if mine else "This post") + " is taken back from every node "
+                f"Withdraw your {what} \"{shown}\"?" if mine else f"Withdraw this {what} \"{shown}\"?",
+                ("Your " + what if mine else "This " + what) + " is taken back from every node "
                 "that follows the protocol, and other clients stop showing it.\n\n"
                 "It is withdrawn, not deleted: people who have read it may have kept a "
                 "copy, and nodes or programs that ignore withdrawals can keep it.",
