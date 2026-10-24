@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Addresses in the local client API (#442, UN-RFC 0046 section 4.13, UN-RFC
+  0031 section 3.4.1): a group's head, each of its posts and every profile
+  carry their `unseenet:` address, and `GET /api/address` says what any
+  address names - an identity, a group, a post or a page, the older
+  `unseenet:join?g=` form too - and whether your nodes have it.
 - `unseenet:` addresses in the terminal client and the command line (#357,
   UN-RFC 0031 section 3.4.1): invitations are written as
   `unseenet:<group-id>?n=<onion>`; Join (j) takes every form - a group ID, a

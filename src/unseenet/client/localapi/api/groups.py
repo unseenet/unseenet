@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import api as _a   # LocalAPI itself, joined after the parts
+from . import addresses as _addr
 
 
 class Groups:
@@ -99,7 +100,9 @@ class Groups:
                "files": self._files_policy(data), "node_files": s.node_files_known(gid),
                # pinned posts, newest pin first, and whether you may pin (UN-RFC 0033, #442)
                "pins": self._pins(s, gid), "max_pins": self._max_pins(data),
-               "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0}
+               "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0,
+               # its unseenet: address, to copy (UN-RFC 0031 section 3.4.1, #442)
+               "address": _addr.group_address(s, gid)}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
         return out
@@ -177,6 +180,7 @@ class Groups:
             pinned = {p["id"] for p in head["pins"]}
             for row, (m, _) in zip(out, rows):
                 row["pinned"] = m.message_id in pinned
+                row["address"] = _addr.post_address(s, gid, m.message_id)
         return {"group": head, "rows": out}
 
     @staticmethod

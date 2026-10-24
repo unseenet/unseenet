@@ -21,7 +21,9 @@ class Identity:
         s = self._ready()
         me = s.identity().key_text
         key = (key or "").strip() or me
-        base = {"label": s.label_of(key), "link_kinds": list(prof.LINK_KINDS)}
+        from .addresses import identity_address
+        base = {"label": s.label_of(key), "link_kinds": list(prof.LINK_KINDS),
+                "address": identity_address(_key(key))}       # to share (section 4.13)
         if key == me:
             from .pictures import _shown
             return {**self._profile(me, s.my_profile()), **base, "mine": True, "hidden": False,
