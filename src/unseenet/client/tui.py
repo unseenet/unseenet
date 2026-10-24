@@ -2355,8 +2355,16 @@ class UnseenetApp(App):
         gid = self.current_group
         s = self.session
         mine, patterns = s.my_message_ids(), s._mention_patterns()
-        feed = bool(gid) and self.view_of(gid) == "feed"
-        rows = (s.feed_rows(gid) if feed else s.threads(gid)) if gid else []   # every client (#139)
+        shown = self.view_of(gid) if gid else "threads"
+        feed = shown == "feed"
+        page_of: dict[str, str] = {}
+        if shown == "pages":                     # a site: one row a page, home first (0035, 5.2)
+            site = s.site(gid)
+            rows = [(p["current"], 0) for p in site["pages"] if p["current"] is not None]
+            page_of = {p["current"].message_id: p["path"] for p in site["pages"] if p["current"]}
+            home = site["home"]
+        else:                                    # the same rows in every client (#139)
+            rows = (s.feed_rows(gid) if feed else s.threads(gid)) if gid else []
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
@@ -2379,6 +2387,9 @@ class UnseenetApp(App):
                 subject = "  " * depth + "↳ " + title
             else:
                 subject = ("  " * (depth - 1) + "└ " if depth else "") + title
+            if m.message_id in page_of:                 # a page: its title and its path
+                path = page_of[m.message_id]
+                subject = ("⌂ " if path == home else "  ") + (m.subject or path) + f"   /{path}"
             if m.edited:
                 subject += "  (edited)"
             notice = s.is_notice(m)                      # UN-RFC 0032: names you elsewhere
@@ -2573,8 +2584,10 @@ class UnseenetApp(App):
             self.notify("For you and the timeline are always shown as they are", severity="warning")
             return
         order = ["threads", "feed", "chat"]                 # UN-RFC 0008 and 0034: chat goes back to threads
+        if self.session.manifest_data(gid).get("view") == "pages":
+            order = ["pages", "threads"]                    # a site (UN-RFC 0035)
         now = self.view_of(gid)
-        new = order[(order.index(now) + 1) % 3] if now in order else "threads"
+        new = order[(order.index(now) + 1) % len(order)] if now in order else order[0]
         self.session.set_view(gid, new)
         self.set_status(f"Shown as {new}  (v for the next)")
         self._render_threads()
