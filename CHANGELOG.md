@@ -67,6 +67,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- CI: the tests run on main and on pull requests - no longer a second time for
+  every pushed branch - and not for changes to the docs or RFCs only (#392).
+  The portables, the bootable image, Docker and the docs already built only
+  when their own inputs changed.
 - Starter groups come in versions (#388): a vault takes each version's
   groups once, so groups added later reach those who started earlier - and a
   group they left is never added again. Version 2 adds `unseenet.chat`; the
