@@ -34,6 +34,13 @@ class PersonalMixin:
             raise SessionError("a personal group is a feed or a site")
         return make_group_id(kind, self.identity(name).public_key)
 
+    def has_personal_group(self, kind: str) -> bool:
+        """Whether this identity has started its personal feed or site in this vault:
+        followed and owned here - what clients show as "My feed" or "My site"."""
+        gid = self.personal_group(kind)
+        return (gid in self.data["subscribed"]
+                and bool(self.data["groups"].get(gid, {}).get("owner")))
+
     def personal_group_warning(self, kind: str) -> str:
         """What the user must be told before a personal feed or site is started."""
         return PERSONAL_GROUP_WARNING.format(what=kind)

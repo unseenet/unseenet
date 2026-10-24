@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Your own feed where people look for it (#495): the TUI lists **My feed** at
+  the top of the group list, under For you and Timeline (and not again further
+  down), or a dimmed **Start my feed** until you have one. Profiles get buttons:
+  your own *Start my feed* / *My feed*, someone else's *Follow* / *Following*
+  and *Their feed*. `Session.has_personal_group` and `Session.is_following` for
+  every client.
 - The demo (#385, #388): the project's list of its groups endorses the demo's
   groups `unseenet.demo.*`, owned by the demo key (unseenet-demo); new and
   existing clients start following the demo's site and its shared feed
