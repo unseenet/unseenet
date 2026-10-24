@@ -20,7 +20,13 @@ class LabelsMixin:
         return await naming.refresh(self)
 
     def group_label(self, group_id: str, also_known: set[str] = frozenset()) -> str:
-        """The name to show for a group: without the fingerprint where UN-RFC 0018 allows."""
+        """The name to show for a group: without the fingerprint where UN-RFC 0018 allows.
+        A personal feed or site is named after its owner - "Andreas~42e5's feed" (#423)."""
+        name = group_id.split("@", 1)[0]
+        if name in ("feed", "site"):
+            owner = self.manifest_data(group_id).get("owner")
+            if owner:
+                return f"{self.label_of(owner)}'s {name}"
         return naming.group_label(self, group_id, also_known)
 
     def identity_label(self, key_text: str, from_name: str = "") -> str:
@@ -35,6 +41,17 @@ class LabelsMixin:
             for m in msgs.values():
                 if m.author_key == key_text and m.from_name and (at is None or (m.date and m.date > at)):
                     best, at = m.from_name, m.date
+        if key_text:                               # someone followed: remembered across runs
+            try:
+                fp = crypto.fingerprint(crypto.key_from_text(key_text))
+            except crypto.CryptoError:
+                return best
+            person = self.data.get("following", {}).get("people", {}).get(fp)
+            if person is not None:
+                if best and person.get("display") != best:
+                    person["display"] = best
+                    self._labels_learnt = True      # saved by following() and timeline()
+                return best or person.get("display", "")
         return best
 
     def label_of(self, key_text: str) -> str:
