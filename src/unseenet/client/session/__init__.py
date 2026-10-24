@@ -202,6 +202,7 @@ class Message:
     sender_ripening: str | None = None    # a private post: the sender's Key-Ripening (0025, 3.5)
     page: str | None = None               # a page article of a site: its path (UN-RFC 0035)
     page_removed: bool = False            # ... a removal of that path
+    blobs: tuple = ()                     # the blob IDs it carries (UN-RFC 0027, Blobs)
 
     @property
     def author_fp(self) -> str:
