@@ -362,7 +362,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   rules_type: str | None = None, lifetime: timedelta | None = None,
                   extra: dict | None = None) -> Article:
     """``extra``: further manifest fields - ``attachments`` (UN-RFC 0027), ``max_pins``
-    (0033), ``max_pages`` and ``home`` (0035) - checked as nodes check them."""
+    (0033), ``max_pages``, ``home`` and ``index`` (0035) - checked as nodes check them."""
     if gtype not in GROUP_TYPES:
         raise ValueError(gtype)
     group_id = make_group_id(name, owner.public_key)
@@ -406,11 +406,11 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 
 
 # manifest fields of the 0.5.0 documents, set through ``extra`` and Session.update_group
-EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home")
+EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index")
 
 
 def check_extra_fields(data: dict) -> None:
-    """ValueError if ``attachments``, ``max_pins``, ``max_pages`` or ``home`` are not
+    """ValueError if ``attachments``, ``max_pins``, ``max_pages``, ``home`` or ``index`` are not
     as UN-RFC 0027 section 5.1, 0033 section 4.1 and 0035 section 3 say."""
     from .blobs import check_attachments_field
     from .pages import check_manifest_fields
@@ -419,8 +419,8 @@ def check_extra_fields(data: dict) -> None:
     max_pins(data)
     if data.get("view") == "pages":
         check_manifest_fields(data)
-    elif "max_pages" in data or "home" in data:
-        raise ValueError("max_pages and home are for sites (view pages)")
+    elif "max_pages" in data or "home" in data or "index" in data:
+        raise ValueError("max_pages, home and index are for sites (view pages)")
 
 
 MAX_RULES = 8192

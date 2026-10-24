@@ -9,6 +9,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Addresses on the web (#454, UN-RFC 0031 section 3.4.1): every client reads
+  `web+unseenet:` and the web form `https://<any host>/a/<...>` as the
+  `unseenet:` address it stands for, and opens it in the network over Tor -
+  the host is only a hint. `core.addresses.web_address` writes the web form on
+  a listed web entrance, without `n=` hints. The TUI shows both forms when you
+  copy an address and opens the web form with `j`; the local client API gives
+  `web` in `/api/address` (UN-RFC 0046 section 4.13).
+- A site's `index` field (UN-RFC 0035 section 3): `yes` or `no` (the default),
+  whether search engines may index it when an entrance shows it on the web;
+  `unseenet group-create`/`group-edit --index`.
+
 - A client's own settings in the local client API (unseenet-gui#84, UN-RFC
   0046 section 4.8): `GET/POST /api/settings/clients/<client>`, kept with your
   state so a front end's theme follows you; and `state_local` in
@@ -309,6 +320,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- The TUI's Join (`j`) opens a page address at its page, instead of saying the
+  client does not show pages (they are shown since #473).
 - Stopping and starting ripening quickly could let the old run remove the
   new run's file, so the new segment stopped at once (#337).
 

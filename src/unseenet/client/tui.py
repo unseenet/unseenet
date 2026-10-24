@@ -729,14 +729,20 @@ class PinDialog(Dialog):
 
 
 class InfoDialog(Dialog):
-    def __init__(self, title: str, text: str):
+    """A value to select and copy; ``web``, when given, is a second one under its own
+    label - an address's web form (UN-RFC 0031 section 3.4.1)."""
+    def __init__(self, title: str, text: str, web: str | None = None):
         super().__init__()
-        self.title_, self.text = title, text
+        self.title_, self.text, self.web = title, text, web
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Label(self.title_, classes="title")
             yield Input(value=self.text, id="value")   # an Input so it can be selected and copied
+            if self.web:
+                yield Label("On the web - opens in the network for anyone with a client, "
+                            "on any entrance:", markup=False)
+                yield Input(value=self.web, id="web")
             with Horizontal(classes="buttons"):
                 yield Button("Close", variant="primary", id="cancel")
 
@@ -3186,7 +3192,12 @@ class UnseenetApp(App):
             self.copy_to_clipboard(a)              # OSC 52: many terminals take it
         except Exception:  # noqa: BLE001 - a terminal without it: the dialog is enough
             pass
-        await self.push_screen_wait(InfoDialog("Address - select it to copy", a))
+        from ..core import addresses as addr
+        try:
+            web = addr.web_address(a)
+        except addr.AddressError:
+            web = None                               # no listed entrance: the one form only
+        await self.push_screen_wait(InfoDialog("Address - select it to copy", a, web))
 
     @work(group="dialog", exit_on_error=False)
     async def action_open_address(self) -> None:
@@ -3194,7 +3205,8 @@ class UnseenetApp(App):
         from ..core import addresses as addr
         s = self.session
         text = await self.push_screen_wait(InputDialog(
-            "Open an address", "An unseenet: address - of a group, a post, a page or a person.",
+            "Open an address", "An unseenet: address - of a group, a post, a page or a person - "
+            "or its web form, https://<entrance>/a/..., which opens here over Tor.",
             "unseenet:..."))
         if not text:
             return
@@ -3570,7 +3582,11 @@ class UnseenetApp(App):
 
     def _show_address(self, title: str, text: str) -> None:
         self.copy_to_clipboard(text)          # where the terminal lets it (OSC 52)
-        self.push_screen(InfoDialog(title, text))
+        try:
+            web = addr.web_address(text)      # the same address on the web (UN-RFC 0031 3.4.1)
+        except addr.AddressError:
+            web = None
+        self.push_screen(InfoDialog(title, text, web))
 
     def _key_for_fingerprint(self, fp: str) -> str | None:
         """A key this client has met with that fingerprint: yours, a contact's, or an
@@ -3592,14 +3608,16 @@ class UnseenetApp(App):
         """Join a group or open what an unseenet: address names - a group, a post or a
         person; the older forms too (UN-RFC 0031 section 3.4.1)."""
         value = await self.push_screen_wait(InputDialog(
-            "Join a group or open an address", "Paste a group ID or an unseenet: address.",
+            "Join a group or open an address", "Paste a group ID or an unseenet: address - its web form "
+            "(https://<entrance>/a/...) opens here too, over Tor.",
             "dk.snak@... or unseenet:..."))
         if not value:
             return
         value = value.strip()
+        looks = (value.lower().startswith((addr.SCHEME, addr.WEB_SCHEME))
+                 or addr.is_web_form(value))      # web+unseenet: and https://<host>/a/... too
         try:
-            a = addr.parse(value if value.lower().startswith(addr.SCHEME)
-                           else addr.SCHEME + value)
+            a = addr.parse(value if looks else addr.SCHEME + value)
         except addr.AddressError as exc:
             self.notify(f"That is not an address: {exc}", severity="error")
             return
@@ -3611,9 +3629,9 @@ class UnseenetApp(App):
                 self.notify(f"Someone this client has not met yet: fingerprint {a.fingerprint}",
                             timeout=8)
             return
-        if a.kind == "page":
-            self.notify("That is a page; this client does not show pages yet", severity="warning")
         gid, node = a.group_id, (a.nodes[0] if a.nodes else None)
+        if a.kind == "page":
+            self._open_at = ("page", a.path)        # a site opens at that page (#473)
         if gid in self.groups:
             self.current_group = gid
             self.select_group(gid)
@@ -3640,6 +3658,8 @@ class UnseenetApp(App):
         if a.kind == "post":
             self.select_group(gid)
             await self._select_post(a.message_id)
+        elif a.kind == "page":
+            self.select_group(gid)
 
     async def _select_post(self, msgid: str) -> None:
         """Select a post of the open group once it is read, or say it is not there."""

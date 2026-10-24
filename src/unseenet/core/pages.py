@@ -16,6 +16,8 @@ from .groups import parse_supersedes
 
 MAX_PAGES_DEFAULT, MAX_PAGES_MAX = 32, 100      # section 3
 HOME_DEFAULT = "index"
+INDEX_DEFAULT = "no"          # may search engines index the site (section 9.3): no by default
+INDEX_VALUES = ("yes", "no")
 MAX_BODY = 65536                                # octets (section 4.2)
 MAX_TITLE = 128
 _SEGMENT = re.compile(r"^[a-z0-9_.-]{1,64}$")
@@ -52,13 +54,15 @@ def resolve_link(current: str, href: str) -> str | None:
 
 
 def check_manifest_fields(data: dict) -> None:
-    """``max_pages`` and ``home`` (section 3); ValueError if invalid."""
+    """``max_pages``, ``home`` and ``index`` (section 3); ValueError if invalid."""
     n = data.get("max_pages", MAX_PAGES_DEFAULT)
     if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= MAX_PAGES_MAX:
         raise ValueError(f"max_pages must be an integer from 1 to {MAX_PAGES_MAX}")
     home = data.get("home", HOME_DEFAULT)
     if not isinstance(home, str) or not valid_path(home):
         raise ValueError("home must be a page path")
+    if data.get("index", INDEX_DEFAULT) not in INDEX_VALUES:
+        raise ValueError("index must be yes or no")
 
 
 @dataclass(frozen=True)

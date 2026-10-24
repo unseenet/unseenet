@@ -566,7 +566,7 @@ to copy.
 
 ```
 {"kind": "identity" | "group" | "post" | "page", "address": "<the current form>",
- "nodes": ["<n= hints>"],
+ "web": "https://<entrance>/a/..." or null, "nodes": ["<n= hints>"],
  "fingerprint": "...", "key": "<key>" or null, "label": "...", "mine": false,
  "group_id": "...", "followed": true, "available": true,
  "group": {"id", "label", "title", "type", "view"},
@@ -581,8 +581,11 @@ with that fingerprint, or null) and `mine` for an identity; for the others
 runtime cannot find it. The runtime fetches the group's manifest, and for a
 post or a page its posts, from your nodes; it never connects to the `n=`
 hints by itself (UN-RFC 0031 section 3.4.1) - a front end asks before
-adding one. An older form, such as `unseenet:join?g=...`, is answered with
-its current form in `address`. Refused with 400 when it is not an address.
+adding one. An older form, such as `unseenet:join?g=...`, `web+unseenet:` or the
+web form `https://<host>/a/...` on any host, is answered with its current
+form in `address`; `web` is the web form on the first listed web entrance
+(UN-RFC 0043 section 8.1), without `n=` hints, or null when none is
+listed. A front end offers both to copy. Refused with 400 when it is not an address.
 
 ## 4.14 Feeds
 
