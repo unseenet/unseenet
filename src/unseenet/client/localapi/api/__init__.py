@@ -49,11 +49,10 @@ from ... import naming
 from ...grouptree import group_tree
 from ...runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime
 from ...session import MAX_MENTION_NOTICES, GroupInfo, Message, Session, SessionError
-from ...threads import CONTACT, FOR_YOU
+from ...threads import CONTACT, FOR_YOU, TIMELINE
 
 API_VERSION = 1
 MAX_READ = 500                  # ids per read request
-TIMELINE = "timeline:"         # the pseudo-group of the timeline (section 4.14)
 MAX_REFERENCES = 50
 GROUP_TYPES = ("open", "moderated", "channel", "closed")
 KINDS = {"both": None, "post": [KIND_POST], "chat": [KIND_CHAT]}

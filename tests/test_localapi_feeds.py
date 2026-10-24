@@ -24,6 +24,7 @@ async def test_a_feed_followed_and_its_timeline(tmp_path, monkeypatch):
     assert started["id"] == mine["id"] and api.my_feed()["started"] is True
     gid = started["id"]
     entry = await owner.post(gid, "", "Første note\n", kind="chat")
+    note = await owner.post(gid, "", "Anden note lige efter\n", kind="chat")
     older = await owner.post(gid, "En overskrift", "Et indlæg\n")
 
     theirs = LocalAPI(session=other)
@@ -46,7 +47,7 @@ async def test_a_feed_followed_and_its_timeline(tmp_path, monkeypatch):
     t = theirs.group(TIMELINE)
     assert t["group"]["view"] == "feed" and t["group"]["label"] == "Timeline"
     ids = [(r["message"]["id"], r["depth"]) for r in t["rows"]]
-    assert ids[0][1] == 0 and {i for i, d in ids if d == 0} == {entry, older}
+    assert ids[0][1] == 0 and {i for i, d in ids if d == 0} == {entry, note, older}
     assert ids[ids.index((entry, 0)) + 1] == (comment, 1)       # the comment under its entry
     row = t["rows"][0]
     assert row["comment"]["allowed"] and row["group_label"] and row["address"].startswith("unseenet:")

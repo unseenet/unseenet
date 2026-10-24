@@ -2,7 +2,7 @@
 import pytest
 
 from unseenet.client.session import Message, Session, SessionError
-from unseenet.client.threads import CONTACT, FOR_YOU, threaded
+from unseenet.client.threads import CONTACT, FOR_YOU, feed_threaded, threaded
 from unseenet.core.groups import KIND_CHAT
 from unseenet.core.vault import Vault
 
@@ -33,6 +33,26 @@ def test_consecutive_chat_lines_stay_together_and_depth_is_capped():
     assert ids(rows) == [(4, 0), (3, 0), (1, 0), (2, 0)]
     deep = threaded([m(1), m(2, [1, 1, 1, 1, 1, 1, 1])])
     assert deep[1][1] == 4
+
+
+def dated(n, minute, refs=(), kind="post"):
+    from datetime import datetime, timezone
+    x = m(n, refs, kind)
+    x.date = datetime(2026, 1, 1, 12, minute, tzinfo=timezone.utc)
+    return x
+
+
+def test_a_feed_has_every_note_as_an_entry_newest_first():
+    # notes 1 and 2 in a row are two entries; 3 answers 1, 4 answers 3; 5 is a post
+    rows = feed_threaded([dated(1, 0, kind=KIND_CHAT), dated(2, 1, kind=KIND_CHAT),
+                          dated(3, 5, [1], KIND_CHAT), dated(4, 6, [1, 3], KIND_CHAT),
+                          dated(5, 2), dated(6, 7, [99])])
+    assert ids(rows) == [(6, 0), (5, 0), (2, 0), (1, 0), (3, 1), (4, 2)]
+
+
+def test_a_comment_answering_only_a_comment_still_goes_under_its_entry():
+    rows = feed_threaded([dated(1, 0), dated(2, 1, [1]), dated(3, 2, [2])])
+    assert ids(rows) == [(1, 0), (2, 1), (3, 1)]
 
 
 @pytest.fixture

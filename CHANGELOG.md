@@ -15,7 +15,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   every followed feed's entries newest first with their comments under them;
   `GET/POST /api/following` to follow and stop following people and feeds;
   `GET/POST /api/feed` to start your own feed after the warning; and a
-  profile says whose feed it is and whether you follow them.
+  profile says whose feed it is and whether you follow them. A group shown
+  as a feed is laid out by `Session.feed()` in every client: each note its
+  own entry, entries newest first by date, comments under them.
 - Addresses in the local client API (#442, UN-RFC 0046 section 4.13, UN-RFC
   0031 section 3.4.1): a group's head, each of its posts and every profile
   carry their `unseenet:` address, and `GET /api/address` says what any
