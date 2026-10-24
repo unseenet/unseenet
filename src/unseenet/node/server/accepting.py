@@ -78,6 +78,7 @@ class Accepting:
     # --- key-bound groups whose manifest has not arrived (UN-RFC 0040 section 6) ---
     KB_WAIT_SECONDS = 6 * 3600.0
     GROUP_WAIT_SECONDS = 15 * 60.0   # an ordinary group's manifest, sent first, comes soon (#384)
+    STATE_EVERY = timedelta(hours=1)  # a state@ manifest at most this often (UN-RFC 0044, 7.1)
 
     KB_WAIT_MAX = 10000
 

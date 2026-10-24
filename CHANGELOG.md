@@ -82,6 +82,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- **Your state follows you** (UN-RFC 0044, #257 step 3): the groups and people
+  you follow, contacts, ignored keys, hidden profiles, settings and read marks
+  are kept, encrypted with a key from your seed, in `state@<fp>` - padded to
+  4, 8 or 16 KiB - and merged with what the network has whenever a client
+  starts and refreshes; written at most once an hour, and not for read marks
+  alone. A new stick or phone with the same key looks like the old one after
+  one fetch; its own defaults never overwrite what was set elsewhere. Per
+  identity it can be kept local (`Session.set_state_kept_local`), which
+  removes the group. `core/state.py`, `client/session/state.py`,
+  `ClientRuntime.sync_state`.
 - Nodes carry `state@<fp>`, an identity's encrypted state (UN-RFC 0044, #257
   step 2): a key-bound group of the new type `state` that has only its
   owner's manifest - at most 24 KiB, at most once an hour (`441 too soon`),

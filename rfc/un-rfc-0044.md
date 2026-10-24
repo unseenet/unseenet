@@ -125,7 +125,10 @@ The plaintext is canonical JSON (UN-RFC 0004):
   blocked posts.
 
 Every entry carries the time it last changed (`at`), so that two
-clients can merge (section 7).
+clients can merge (section 7). A contact, an ignored key or a hidden
+profile that is removed stays as `{"removed": true, "at": ...}`, so the
+removal reaches the other clients too; a group or person no longer
+followed moves to `unsubscribed` or `unfollowed`.
 
 ## 4.3 Read Marks, Coarsely
 
@@ -222,6 +225,7 @@ its own, so that two clients never undo each other:
 - `following` / `unfollowed`, `hidden`: per person, the newer `at`
   wins, as for subscriptions.
 - `starter`: the higher version.
+- `settings`: the newer `at` wins; two of the same age are joined.
 - `read`: per group, the later `to`; the union of `also`, trimmed.
 - `sent`: the union, by Message-ID.
 
@@ -230,7 +234,13 @@ The merged state gets `serial` one higher than the highest seen.
 ## 7.3 Starting
 
 When a client starts with an identity, it fetches `state@`, merges it
-into its local copy, and only then shows groups. A vault opened
+into its local copy, and only then shows groups. A vault that has never
+synced its state gives what it holds the earliest time, not the current
+one: it has changed nothing yet, so the network's state wins where they
+differ - a new device's defaults never overwrite what was set elsewhere.
+
+A vault with several identities keeps its state with its default
+identity; the others keep theirs in the vault only. A vault opened
 somewhere new therefore looks the same as everywhere else after one
 fetch. Without a network it shows the local copy.
 

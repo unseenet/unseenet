@@ -98,12 +98,29 @@ class ClientRuntime:
             except NETWORK_ERRORS as exc:
                 return self._emit_refreshed(error=str(exc) or type(exc).__name__)
             self.available = available
+            await self.sync_state()        # your state first, then your groups (UN-RFC 0044, 7.3)
             inbox = None if self.inbox_ready else asyncio.ensure_future(self._set_up_inbox())
             fetched = await self._fetch(s.data["subscribed"])
             if inbox is not None and (listed := await inbox) is not None:
                 self.available = available = listed
                 await self._fetch(g for g in s.data["subscribed"] if g not in fetched)  # the inbox
             return self._emit_refreshed(available=len(available))
+
+    async def sync_state(self, write: bool = True) -> str | None:
+        """Your state in the network (UN-RFC 0044): fetched and merged into the vault,
+        and written when it says more - at most once an hour (``Session.sync_state``).
+        Sends ``GroupsChanged`` when it changed the groups you follow. None when the
+        network could not be reached."""
+        s = self.session
+        before = list(s.data["subscribed"])
+        try:
+            result = await s.sync_state(write=write)
+        except (SessionError, *NETWORK_ERRORS) as exc:
+            log.info("state not synced now (%s)", exc)
+            return None
+        if s.data["subscribed"] != before:
+            s.emit(ev.GroupsChanged())
+        return result
 
     async def _fetch(self, group_ids) -> set[str]:
         done = set()
@@ -331,6 +348,10 @@ class ClientRuntime:
 
     async def stop(self) -> None:
         self.stop_ripening()                           # before cancelling: frees its thread
+        try:                                           # your state, on closing (UN-RFC 0044, 7.1)
+            await asyncio.wait_for(self.sync_state(), timeout=15)
+        except asyncio.TimeoutError:
+            pass
         tasks = list(self._tasks)
         for task in tasks:
             task.cancel()

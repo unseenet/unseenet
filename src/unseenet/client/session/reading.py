@@ -407,7 +407,11 @@ class ReadingMixin:
         marks = self.data["read"].get(msg.group, [])
         # an edit of a post you read stays read (UN-RFC 0042): seeing it changed is
         # what "(edited)" is for, not a new post
-        return msg.message_id in marks or any(v in marks for v in msg.versions)
+        if msg.message_id in marks or any(v in marks for v in msg.versions):
+            return True
+        to = self.data.get("read_to", {}).get(msg.group)    # read up to a date, on any device
+        return bool(to and msg.date and                     # (UN-RFC 0044 section 4.3)
+                    msg.date.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") <= to)
 
     def mark_read(self, msg: Message, save: bool = True) -> None:
         """Mark a post read. Each group keeps the newest marks only (``MAX_READ_MARKS``);
