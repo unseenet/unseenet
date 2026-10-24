@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 # Pseudo group IDs a client can show next to real groups.
 CONTACT = "contact:"     # + a key: the chat with one person (UN-RFC 0028, 6.2)
 FOR_YOU = "for-you:"     # replies to you and posts naming you, from all groups (#109)
+TIMELINE = "timeline:"   # the feeds you follow, newest first (UN-RFC 0034 section 7)
+FEED_DEPTH = 2           # a feed shows comments two levels deep (UN-RFC 0034 section 4)
 
 MAX_DEPTH = 4            # deeper replies are drawn at this depth
 

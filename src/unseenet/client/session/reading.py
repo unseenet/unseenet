@@ -135,6 +135,8 @@ class ReadingMixin:
         """
         if group_id == FOR_YOU:
             return [(m, 0) for m in self.for_you(unread_only=False)[:200]]
+        if group_id == TIMELINE:                  # UN-RFC 0034 section 7
+            return [(m, 0) for m in self.timeline(200)]
         if group_id.startswith(CONTACT):          # as everywhere: ignores, filters (0025, 3.5)
             return [(m, 0) for m in self.visible(self.conversation(group_id[len(CONTACT):],
                                                                    KIND_CHAT))]
@@ -143,10 +145,19 @@ class ReadingMixin:
         msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
         return threaded(self.visible(msgs))        # replies to ignored people stay
 
+    def feed_rows(self, group_id: str) -> list[tuple["Message", int]]:
+        """A group as a feed (UN-RFC 0034 section 4): its entries newest first, each
+        followed by its comments in order, at most two levels deep - the same rows
+        in every client. The timeline is entries only."""
+        return [(m, min(d, FEED_DEPTH)) for m, d in self.threads(group_id)]
+
     def view_of(self, group_id: str | None) -> str:
-        """``"threads"``, ``"chat"`` or ``"data"``: your own choice for the group,
-        else its owner's (UN-RFC 0008 section 3.1), else threads. Private posts
-        and "For you" are always threads, a contact's chat always starts as chat."""
+        """``"threads"``, ``"chat"``, ``"feed"`` or ``"data"``: your own choice for the
+        group, else its owner's (UN-RFC 0008 section 3.1), else threads. Private posts
+        and "For you" are always threads, the timeline a feed, a contact's chat always
+        starts as chat."""
+        if group_id == TIMELINE:
+            return "feed"
         if not group_id or group_id == self.my_inbox or group_id == FOR_YOU:
             return "threads"
         views = self.data.get("views", {})
