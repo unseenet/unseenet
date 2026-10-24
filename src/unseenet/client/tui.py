@@ -756,7 +756,9 @@ class CreateGroupDialog(Dialog):
             yield Select([("Replicated to other nodes", "everywhere"),
                           ("Only on this node (local)", "local")],
                          value="everywhere", allow_blank=False, id="where")
-            yield Select(DELIVERY_CHOICES, value="threads", allow_blank=False, id="view")
+            yield Select(DELIVERY_CHOICES + [SITE_CHOICE], value="threads", allow_blank=False,
+                         id="view")
+            yield Label("", id="view-help", classes="hint", markup=False)
             yield Select(KINDS_CHOICES, value="both", allow_blank=False, id="kinds")
             yield Select(COMMENTS_CHOICES, value="none", allow_blank=False, id="comments")
             yield Select(FILES_CHOICES, value="none", allow_blank=False, id="files")
@@ -778,6 +780,25 @@ class CreateGroupDialog(Dialog):
         self.query_one("#comments", Select).display = event.value == "channel"
         # files only where they are not encrypted, for now (#497)
         self.query_one("#files", Select).display = event.value in FILES_GROUP_TYPES
+        if event.value != "channel" and self.query_one("#view", Select).value == "pages":
+            self.query_one("#view", Select).value = "threads"   # a site is a channel
+
+    @on(Select.Changed, "#view")
+    def _view_changed(self, event: Select.Changed) -> None:
+        """A site is a channel (UN-RFC 0035 section 3); a feed's channel takes comments."""
+        help_label = self.query_one("#view-help", Label)
+        kind = self.query_one("#type", Select)
+        if event.value == "pages":
+            kind.value = "channel"
+            help_label.update("A site is a channel: you, and the posters you add, write its "
+                              "pages. n writes the first page; index is the home page.")
+        elif event.value == "feed":
+            if kind.value == "channel":
+                self.query_one("#comments", Select).value = "open"
+            help_label.update("A feed: entries newest first, comments under each. As a "
+                              "channel only you post and anyone comments; open: anyone posts.")
+        else:
+            help_label.update("")
 
     @on(Input.Changed, "#name")
     def _check_name(self, event: Input.Changed) -> None:
@@ -1404,8 +1425,9 @@ class EditGroupDialog(Dialog):
             yield Input(value=d.get("title", ""), placeholder="Title", id="title")
             yield Input(value=d.get("description", ""), placeholder="Description (one paragraph)",
                         id="description")
-            yield Select(DELIVERY_CHOICES + ([SITE_CHOICE] if current == "pages" else []),
-                         value=current, allow_blank=False, id="view")
+            yield Select(DELIVERY_CHOICES + ([SITE_CHOICE] if current == "pages"
+                                             or d.get("type") == "channel" else []),
+                         value=current, allow_blank=False, id="view")   # a site: channels only
             if d.get("type") == "channel":
                 yield Select(COMMENTS_CHOICES, value=d.get("comments", "none"), allow_blank=False,
                              id="comments")

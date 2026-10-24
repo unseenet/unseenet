@@ -349,11 +349,15 @@ not (you do not own or moderate the group).
 
 - `POST /api/groups` `{"name": "...", "type": "open" | "moderated" |
   "channel" | "closed", "title": "...", "description": "...", "view":
-  "threads" | "chat", "kinds": "both" | "post" | "chat", "fast": false,
-  "files": "none" | "pictures" | "pictures+pdf"}` creates a group you own;
+  "threads" | "chat" | "feed" | "pages", "kinds": "both" | "post" | "chat",
+  "fast": false, "comments": "open" | "none", "files": "none" | "pictures" |
+  "pictures+pdf"}` creates a group you own;
   answers `{"id": "<group ID>"}`. `files` is what files it takes (UN-RFC
   0027 section 5.1): none (the default), pictures, or pictures and PDFs,
-  up to 4 MiB each.
+  up to 4 MiB each. `pages` makes a site and needs `"type": "channel"`
+  (UN-RFC 0035 section 3); `comments` is for channels (UN-RFC 0030), and a
+  channel shown as `feed` takes comments unless it says `none`; `fast` is
+  for chat groups only.
 - `POST /api/groups/<id>/settings` with the manifest fields to change
   (`title`, `description`, `rules`, `rules_type`, `view`, `kinds` as for
   creating, `min_pow`, `low_latency`, `retention_days`, `comments`,

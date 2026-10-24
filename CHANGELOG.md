@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Create a group as a feed or a site (UN-RFC 0034 3.2, UN-RFC 0035 3): the TUI's
+  Create group offers *Site* besides *Feed* (choosing it makes the group a
+  channel, as a site must be, and says who writes it), and Edit group offers
+  *Site* for any channel. The local client API's `POST /api/groups` takes
+  `view` `feed` and `pages` and `comments`; a channel shown as a feed takes
+  comments unless it says `none` (UN-RFC 0046 section 4.7).
 - **Reactions** (#510, UN-RFC 0048): one emoji under a post, comment, answer or
   chat line, one per key, changed with `Supersedes` and taken back with a
   cancel. The group owner chooses the set in the manifest (`reactions`: a list
