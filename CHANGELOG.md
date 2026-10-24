@@ -67,6 +67,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- Starter groups come in versions (#388): a vault takes each version's
+  groups once, so groups added later reach those who started earlier - and a
+  group they left is never added again. Version 2 adds `unseenet.chat`; the
+  demo's groups follow when the demo moves to `unseenet.demo`.
 - A new group's posts no longer wait an hour at a peer that has not got its
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up

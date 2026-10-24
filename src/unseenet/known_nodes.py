@@ -49,8 +49,15 @@ DATA_GROUPS = frozenset({
 
 # The project's groups a new client starts with, so there is something to read.
 HELP_GROUP = "unseenet.help@ph5fc5hop5232qsz"
-STARTER_GROUPS = ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP, HELP_GROUP,
-                  "unseenet.test@ph5fc5hop5232qsz")
+# The groups a new client follows, in versions: a vault takes each version's groups
+# once, so groups added later reach those who started earlier too - and a group they
+# left is never added again (#388). Add a version; never change an earlier one.
+STARTER_GROUP_VERSIONS = (
+    ("unseenet@ph5fc5hop5232qsz", ANNOUNCE_GROUP, HELP_GROUP,          # 1
+     "unseenet.test@ph5fc5hop5232qsz"),
+    ("unseenet.chat@ph5fc5hop5232qsz",),                                # 2 (#388)
+)
+STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version)
 
 _ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
 MAX_NODES = 200

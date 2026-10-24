@@ -281,7 +281,7 @@ async def _app_with_groups(tmp_path, monkeypatch, names):
     s = Session(Vault.open(vault_path, "pw", **KDF), status=lambda *_: None)
     s.new_identity("me", "Me")
     s.add_node(f"127.0.0.1:{server.sockets[0].getsockname()[1]}")
-    s.data["starter_groups"] = True    # the project's groups are not on this test node
+    s.data["starter_groups"] = 99      # the project's groups are not on this test node
     await s.ensure_inbox()
     for n in names:
         await s.create_group(n, "open", min_pow=10)

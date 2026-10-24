@@ -1029,3 +1029,24 @@ async def test_mention_notices_go_with_approval(tmp_path, monkeypatch):
     for p in (owner, sonia):
         await p.close()
     server.close()
+
+
+def test_starter_groups_added_later_reach_earlier_vaults(tmp_path, monkeypatch):
+    """#388: a vault that took the first list gets the groups added since - and never
+    again one it left."""
+    from unseenet import known_nodes
+    s = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("andreas", "Andreas")
+    s.add_node("127.0.0.1:1119")
+    first = known_nodes.STARTER_GROUP_VERSIONS[0]
+    s.data["subscribed"] = [g for g in first if g != first[-1]]   # left the last one
+    s.data["starter_groups"] = True                              # took version 1 before #388
+    assert s.subscribe_starter_groups()
+    assert "unseenet.chat@ph5fc5hop5232qsz" in s.data["subscribed"]
+    assert first[-1] not in s.data["subscribed"]                 # left: stays away
+    assert s.data["starter_groups"] == len(known_nodes.STARTER_GROUP_VERSIONS)
+    assert not s.subscribe_starter_groups()                      # nothing new
+    monkeypatch.setattr(known_nodes, "STARTER_GROUP_VERSIONS",
+                        known_nodes.STARTER_GROUP_VERSIONS + (("unseenet.demo@aaaaaaaaaaaaaaaa",),))
+    assert s.subscribe_starter_groups()                          # a third version, one day
+    assert "unseenet.demo@aaaaaaaaaaaaaaaa" in s.data["subscribed"]
