@@ -360,8 +360,15 @@ async def names(request):
 
 async def settings(request):
     if request.method == "POST":
-        return _json(_api(request).set_settings(await _body(request)))
+        return _json(await _api(request).change_settings(await _body(request)))
     return _json(_api(request).settings())
+
+
+async def client_settings(request):
+    client = request.match_info["client"]
+    if request.method == "POST":
+        return _json(_api(request).set_client_settings(client, await _body(request)))
+    return _json(_api(request).client_settings(client))
 
 
 async def articles(request):
@@ -431,6 +438,8 @@ ROUTES = [
     ("GET", "/api/pictures", pictures), ("POST", "/api/profile/picture", profile_picture),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),
+    ("GET", "/api/settings/clients/{client}", client_settings),
+    ("POST", "/api/settings/clients/{client}", client_settings),
     ("POST", "/api/articles", articles), ("POST", "/api/groups/{gid}/manifest", manifest),
     ("GET", "/api/events", events),
 ]

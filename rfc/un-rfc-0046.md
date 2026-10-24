@@ -372,8 +372,20 @@ not (you do not own or moderate the group).
   `show_blocked` (true or false: show posts a hierarchy blocked,
   UN-RFC 0018), `hide_bots` (true or false: leave out posts by keys whose
   profile says `bot`, UN-RFC 0030 section 6), `pictures` (true or false:
-  false shows identicons only, section 4.11). Both answer all settings, with `signature_preview` (the
-  template filled in). An unknown setting is `400`.
+  false shows identicons only, section 4.11), `state_local` (true or false:
+  keep your state on this device only, or in the network, UN-RFC 0044
+  section 7.4; turning it on removes what is in the network). Both answer
+  all settings, with `signature_preview` (the template filled in). An
+  unknown setting is `400`, and then nothing is changed.
+- `GET /api/settings/clients/<client>` answers `{"client", "settings": {...}}`:
+  the settings one kind of client keeps for itself (`gui`, `tui`, ...),
+  kept with your state so they follow you from device to device (UN-RFC
+  0044 section 4.2) - a theme, a font size. `POST` it `{"<key>": value, ...}`
+  to change them, `null` removing one; it answers as `GET`. Client names
+  and keys are lowercase letters, digits and `-` (at most 32); values are
+  strings (at most 256 characters), numbers, true or false. A front end
+  MAY keep a copy in the browser for its first paint, but these are what
+  count.
 
 ## 4.9 Articles from a Program
 
