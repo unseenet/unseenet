@@ -73,6 +73,7 @@ class StateMixin:
             "contacts": {k: {"name": v.get("name", "")} for k, v in d["contacts"].items()},
             "ignored": {k: {"label": v.get("label", "")} for k, v in d["ignored"].items()},
             "hidden": {k: True for k in d.get("hidden_profiles", [])},
+            "closed_chats": {k: {"since": v} for k, v in d.get("closed_chats", {}).items()},
             "starter": 1 if starter is True else int(starter or 0),
             "settings": settings,
             "read": self._read_marks(),
@@ -129,7 +130,7 @@ class StateMixin:
                 k = key.split(":", 1)[1]
                 if k not in snap[section]:
                     s[off][k] = seen[key][1]
-        for section in ("contacts", "ignored", "hidden"):
+        for section in ("contacts", "ignored", "hidden", "closed_chats"):
             for k, v in snap[section].items():
                 at = stamp(f"{section}:{k}", v)
                 s[section][k] = {**(v if isinstance(v, dict) else {}), "at": at}
@@ -167,6 +168,12 @@ class StateMixin:
         for k, v in s["hidden"].items():
             (hidden.discard if v.get("removed") else hidden.add)(k)
         d["hidden_profiles"] = sorted(hidden)
+        closed = d.setdefault("closed_chats", {})
+        for k, v in s.get("closed_chats", {}).items():
+            if v.get("removed"):
+                closed.pop(k, None)
+            elif v.get("since"):
+                closed[k] = v["since"]
         if s["starter"] > (1 if d.get("starter_groups") is True else int(d.get("starter_groups") or 0)):
             d["starter_groups"] = s["starter"]
         settings = {k: v for k, v in s["settings"].items() if k != "at"}
@@ -202,8 +209,9 @@ class StateMixin:
                                       p.get("at", "")]
         for k, at in s["unfollowed"].items():
             seen[f"unfollowed:{k}"] = [v("gone"), at]
-        for section, field in (("contacts", "name"), ("ignored", "label"), ("hidden", None)):
-            for k, e in s[section].items():
+        for section, field in (("contacts", "name"), ("ignored", "label"), ("hidden", None),
+                               ("closed_chats", "since")):
+            for k, e in s.get(section, {}).items():
                 value = "removed" if e.get("removed") else ({field: e.get(field, "")} if field else True)
                 seen[f"{section}:{k}"] = [v(value), e.get("at", "")]
         settings = {k: x for k, x in s["settings"].items() if k != "at"}

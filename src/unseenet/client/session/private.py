@@ -370,6 +370,7 @@ class PrivateMixin:
         section 6.1, #496). Returns the Message-ID. Portals and mention notices
         are the client's to ask about first, as for ``post()``."""
         if group_id.startswith(CONTACT):
+            self.open_chat(group_id[len(CONTACT):])       # writing to them opens it again
             owner = crypto.key_from_text(group_id[len(CONTACT):])
             return await self.send_private(personal_inbox_id(owner), "", text,
                                            owner_key=owner, kind=KIND_CHAT, files=files)
@@ -400,7 +401,7 @@ class PrivateMixin:
         me = self.identity().key_text
         others = sorted((k for k in last if k not in contacts and k != me),
                         key=lambda k: last[k], reverse=True)
-        return contacts + others
+        return [k for k in contacts + others if not self.chat_closed(k)]   # closed (0044, 4.2)
 
     async def node_has(self, capability: str, node: str | None = None) -> bool:
         """Whether a node lists a capability (UN-RFC 0005); False when unreachable."""

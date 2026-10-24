@@ -173,6 +173,7 @@ a riper key still ripens what it needs.
 {"groups": [<GroupInfo dict>, ...],
  "people": [{"id": "contact:<key>", "key": "...", "name": "...", "contact": true,
              "unread": 0}, ...],
+ "contacts": [{"id": "contact:<key>", "key": "...", "name": "...", "closed": false}, ...],
  "inbox": {"id": "inbox@<fp>", "unread": 0},
  "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
  "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
@@ -184,7 +185,9 @@ a riper key still ripens what it needs.
 
 `groups` are the groups the identity follows, in its order
 (`Session.subscribed_groups()`), with their counts. `people` are its chats
-(UN-RFC 0028 section 6.2); `inbox.id` is null until the inbox is set up,
+(UN-RFC 0028 section 6.2), without the ones you closed (section 4.6);
+`contacts` are all your contacts, with whether their chat is closed;
+`inbox.id` is null until the inbox is set up,
 `moderation` counts the posts waiting for you to approve (section 4.7) and
 `name_requests` the people asking for a name under yours (section 4.8).
 Every group here and elsewhere also has `shown`: its name as people should
@@ -330,6 +333,11 @@ first), then those containing it, then by a word of the name.
 
 - `POST /api/contacts` `{"key": "...", "name": "..."}` adds or renames a
   contact, `{"key": "...", "remove": true}` removes one.
+- `POST /api/chats/close` `{"key": "...", "on": true}` takes a chat with a
+  person off `people` in `GET /api/groups` (`"on": false` puts it back).
+  It is kept in the state (UN-RFC 0044 section 4.2, `closed_chats`), and
+  the chat comes back by itself with the next chat line from or to them;
+  sending one opens it too.
 - `GET /api/ignore` lists the keys you ignore (`{"ignored": [{"key",
   "label"}, ...]}`); `POST /api/ignore`
   `{"key": "...", "label": "...", "on": true}` ignores one or stops.

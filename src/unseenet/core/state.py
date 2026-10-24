@@ -1,7 +1,7 @@
 """An identity's state in the network (UN-RFC 0044): what it is, sealed and merged.
 
 The state - groups followed, people followed, contacts, ignored keys, hidden
-profiles, settings, read marks - lives encrypted in the manifest of the
+profiles, closed chats, settings, read marks - lives encrypted in the manifest of the
 identity's key-bound group ``state@<fp>``. This module is the protocol only:
 the key (section 4.1), sealing to a fixed size (section 5) and opening, and
 merging two states so that two clients never undo each other (section 7.2).
@@ -21,7 +21,8 @@ from .encoding import DS, H
 VERSION = 1
 SIZES = (4 * 1024, 8 * 1024, 16 * 1024)     # section 5: padded to the smallest that holds it
 MAX_ALSO = 64                               # section 4.3: read marks after "to", per group
-MAPS = ("subscribed", "unsubscribed", "following", "unfollowed", "contacts", "ignored", "hidden")
+MAPS = ("subscribed", "unsubscribed", "following", "unfollowed", "contacts", "ignored", "hidden",
+        "closed_chats")
 
 
 class StateError(ValueError):
@@ -115,7 +116,7 @@ def merge(a: dict, b: dict) -> dict:
                        default=(None, off), key=lambda e: _at(e[0]))
             winner = best if best[0] is not None and (gone[0] is None or _at(best[0]) >= _at(gone[0])) else gone
             out[winner[1]][k] = winner[0]
-    for name in ("contacts", "ignored", "hidden"):
+    for name in ("contacts", "ignored", "hidden", "closed_chats"):
         for k in set(a[name]) | set(b[name]):
             out[name][k] = max((s[name][k] for s in (a, b) if k in s[name]), key=_at)
     out["starter"] = max(int(a.get("starter") or 0), int(b.get("starter") or 0))

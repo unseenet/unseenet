@@ -34,6 +34,42 @@ class PeopleMixin:
         self.data["contacts"].pop(key_text, None)
         self.save()
 
+    # --- closing a chat (UN-RFC 0044 section 4.2, closed_chats) ---
+    def close_chat(self, key_text: str) -> None:
+        """Take a chat with a person off the list of chats, on every device (it is in
+        your state). The messages stay; it opens again by itself with the next chat
+        line from or to them, so no new message is ever hidden (UN-RFC 0028, 6.2)."""
+        crypto.key_from_text(key_text)
+        self.data.setdefault("closed_chats", {})[key_text] = \
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.save()
+
+    def open_chat(self, key_text: str) -> None:
+        """Put a closed chat back on the list."""
+        if self.data.setdefault("closed_chats", {}).pop(key_text, None) is not None:
+            self.save()
+
+    def chat_closed(self, key_text: str) -> bool:
+        """Whether a chat is closed: closed, and no chat line from or to them since."""
+        since = self.data.get("closed_chats", {}).get(key_text)
+        if not since:
+            return False
+        try:
+            when = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        for m in self.cache.get(self.my_inbox, {}).values():
+            if m.kind == KIND_CHAT and m.sender_key == key_text and m.date and m.date > when:
+                return False
+        for e in self.sent:
+            if e.get("kind") == KIND_CHAT and e.get("to") == key_text and e.get("date"):
+                try:
+                    if datetime.fromisoformat(e["date"]) > when:
+                        return False
+                except ValueError:
+                    continue
+        return True
+
     def contact_name(self, key_text: str | None) -> str | None:
         """The name the user gave this key in their contacts, or None."""
         entry = self.data["contacts"].get(key_text or "")

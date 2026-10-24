@@ -269,6 +269,10 @@ async def contacts(request):
     return _json(_api(request).contact(await _body(request)))
 
 
+async def close_chat(request):
+    return _json(_api(request).close_chat(await _body(request)))
+
+
 async def ignore(request):
     if request.method == "POST":
         return _json(_api(request).ignore(await _body(request)))
@@ -427,7 +431,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
     ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/react", react),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
-    ("POST", "/api/contacts", contacts),
+    ("POST", "/api/contacts", contacts), ("POST", "/api/chats/close", close_chat),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),
     ("GET", "/api/groups/{gid}/report", report), ("POST", "/api/groups/{gid}/report", report),
     ("POST", "/api/groups/{gid}/block", block),
