@@ -420,6 +420,13 @@ group the post names, and ++escape++ goes back to the list.
 
 ![A post on the whole screen](img/client-read.svg)
 
+A post with files lists them under its text: the name, what kind of file
+it is, its size and the description the author wrote. The terminal does
+not draw the pictures; ++f++ saves the files in your Downloads folder (or
+your home folder). They are checked against what the post names first,
+and they are not opened: a program outside Unseenet may go to the
+internet without Tor.
+
 Writing a post or a reply (++n++, ++r++) opens the compose window, with your
 signature below the `-- ` line. ++ctrl+s++ sends.
 

@@ -203,6 +203,7 @@ class Message:
     page: str | None = None               # a page article of a site: its path (UN-RFC 0035)
     page_removed: bool = False            # ... a removal of that path
     blobs: tuple = ()                     # the blob IDs it carries (UN-RFC 0027, Blobs)
+    attachments: tuple = ()               # ... as shown: blob, type, size, name, alt, dim (4.2)
 
     @property
     def author_fp(self) -> str:
@@ -236,6 +237,7 @@ class Message:
             "mention_group": self.mention_group, "mention_of": self.mention_of,
             "supersedes": list(self.supersedes), "edited": _iso(self.edited),
             "versions": list(self.versions),
+            "attachments": [dict(a) for a in self.attachments],
         }
 
 

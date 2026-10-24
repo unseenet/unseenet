@@ -29,6 +29,8 @@ class Prepared:
     media_type: str
     octets: bytes
     note: str = ""
+    alt: str = ""                       # alternative text the author gives (UN-RFC 0027, 4.2)
+    dim: tuple[int, int] | None = None  # a picture's width and height
 
 
 def sniff(octets: bytes) -> str:
@@ -132,13 +134,22 @@ def prepare(name: str, octets: bytes) -> Prepared:
     name = name.replace("\\", "/").rsplit("/", 1)[-1] or "file"
     media_type = sniff(octets)
     if media_type in IMAGE_TYPES:
-        return Prepared(name, media_type, strip_image(octets, media_type))
+        clean = strip_image(octets, media_type)
+        return Prepared(name, media_type, clean, dim=_size(clean))
     if media_type == "application/pdf":
         return Prepared(name, media_type, octets,
                         "PDF files are sent as they are: their own metadata (author, "
                         "software, dates) is not removed.")
     return Prepared(name, media_type, octets,
                     f"{name} is sent as it is: only pictures are cleaned of metadata.")
+
+
+def _size(octets: bytes) -> tuple[int, int] | None:
+    from PIL import Image
+    try:
+        return Image.open(io.BytesIO(octets)).size
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def avatar(octets: bytes, *, max_octets: int = 8192, sizes=(128, 96, 64, 48, 32)) -> tuple[bytes, str, int]:

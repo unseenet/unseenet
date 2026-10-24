@@ -163,20 +163,55 @@ def check_article(art: Article, manifest_data: dict | None) -> list[tuple[str, i
 
 def attachment_headers(files) -> list[tuple[str, str]]:
     """The ``Blobs`` and ``Attachment-<n>`` headers (sections 4.1-4.3) for a plain
-    article's files, given as ``(name, media type, octets)``; the name is sent as
-    base64 of its first 128 octets."""
-    files = list(files)
+    article's files, given as ``(name, media type, octets)``, optionally followed by
+    the alternative text and the picture's ``(width, height)``; the name is sent as
+    base64 of its first 128 octets, the text as base64 of its first 512."""
+    files = [tuple(f) + (None,) * (5 - len(f)) for f in files]
     if not files:
         return []
     if len(files) > MAX_PER_ARTICLE:
         raise ValueError(f"at most {MAX_PER_ARTICLE} files on a post")
-    if sum(len(d) for _, _, d in files) > MAX_TOTAL:
+    if sum(len(f[2]) for f in files) > MAX_TOTAL:
         raise ValueError(f"at most {MAX_TOTAL // (1024 * 1024)} MiB of files on a post")
-    headers = [("Blobs", " ".join(f"{blob_id(d)}={len(d)}" for _, _, d in files))]
-    for i, (name, media_type, data) in enumerate(files, 1):
-        headers.append((f"Attachment-{i}", f"{blob_id(data)}; type={media_type}; size={len(data)}; "
-                                           f"name={b64(name.encode()[:128])}"))
+    headers = [("Blobs", " ".join(f"{blob_id(f[2])}={len(f[2])}" for f in files))]
+    for i, (name, media_type, data, alt, dim) in enumerate(files, 1):
+        value = (f"{blob_id(data)}; type={media_type}; size={len(data)}; "
+                 f"name={b64(name.encode()[:MAX_NAME])}")
+        if alt and alt.strip():
+            value += f"; alt={b64(_cut(alt.strip(), MAX_ALT))}"
+        if dim:
+            value += f"; dim={int(dim[0])}x{int(dim[1])}"
+        headers.append((f"Attachment-{i}", value))
     return headers
+
+
+def _cut(text: str, limit: int) -> bytes:
+    """``text`` as UTF-8 of at most ``limit`` octets, not cut inside a character."""
+    return text.encode()[:limit].decode("utf-8", "ignore").encode()
+
+
+def shown_attachments(headers) -> list[dict]:
+    """The ``Attachment-<n>`` headers as a client shows them: ``blob``, ``type``,
+    ``size``, and ``name`` and ``alt`` as text (empty when not given), ``dim`` as
+    ``[width, height]`` or None. [] when there are none or they are not valid."""
+    try:
+        found = parse_attachments(headers)
+    except ArticleError:
+        return []
+    out = []
+    for a in found:
+        def text(field):
+            try:
+                return b64decode(a[field]).decode("utf-8", "replace") if a.get(field) else ""
+            except ValueError:
+                return ""
+        dim = None
+        w, x, h = (a.get("dim") or "").partition("x")
+        if x and w.isdigit() and h.isdigit():
+            dim = [int(w), int(h)]
+        out.append({"blob": a["blob"], "type": a["type"].lower(), "size": a["size"],
+                    "name": text("name"), "alt": text("alt"), "dim": dim})
+    return out
 
 
 def extra_bits_for(total: int) -> int:
