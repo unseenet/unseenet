@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import random
 import inspect
 import os
@@ -504,6 +505,96 @@ class ComposeDialog(Dialog):
             self.files = [p.strip() for p in self.query_one("#files", Input).value.split(",")
                           if p.strip()]
         self.dismiss((subject, body, keys))
+
+
+class PageDialog(Dialog):
+    """Write a page of a site (UN-RFC 0035 section 9.2): its path (a new page), title and
+    Markdown, pictures as on posts, and a preview as readers will see it. Dismissed with
+    ``(path, title, text)``; ``files`` is read after."""
+    BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("ctrl+s", "send", "Publish"),
+                Binding("ctrl+o", "preview", "Preview")]
+
+    def __init__(self, heading: str, gid: str, path: str = "", title: str = "", text: str = "",
+                 files_allowed: bool = False):
+        super().__init__()
+        self.heading, self.gid, self.path, self.title_, self.text = heading, gid, path, title, text
+        self.new = not path                      # a new page chooses its path
+        self.files_allowed = files_allowed
+        self.files: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog compose"):
+            yield Label(self.heading, classes="title", markup=False)
+            yield Input(value=self.path, placeholder="Path - e.g. index, about or projects/ovos",
+                        id="path", disabled=not self.new)
+            yield Input(value=self.title_, placeholder="Title (the path if left empty)", id="title")
+            yield TextArea(self.text, id="body", soft_wrap=True)
+            if self.files_allowed:
+                yield Input(placeholder="Pictures for it - paths, comma between: ~/garden.jpg",
+                            id="files")
+            yield Label("Markdown. A link without a scheme is a page of this site: [About](about). "
+                        "Ctrl+O previews, Ctrl+S publishes - with a small proof-of-work.",
+                        classes="hint")
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Preview", id="preview")
+                yield Button("Publish", variant="primary", id="ok")
+
+    def on_mount(self) -> None:
+        self.query_one("#path" if self.new else "#body").focus()
+
+    def _path(self) -> str:
+        return self.query_one("#path", Input).value.strip().strip("/")
+
+    @on(Button.Pressed, "#preview")
+    def action_preview(self) -> None:
+        from ..core import pages as pg
+        path = self._path() or "index"
+
+        def resolve(href: str) -> str | None:
+            target = pg.resolve_link(path, href) if pg.valid_path(path) else None
+            return addr.page_address(self.gid, target) if target else None
+        text = self.query_one("#body", TextArea).text[:pg.MAX_BODY]
+        title = self.query_one("#title", Input).value.strip() or path
+        self.app.push_screen(PreviewDialog(
+            f"Preview - {title}   /{path}",
+            richtext.blocks(markup.page_body(text, "text/markdown", resolve))))
+
+    @on(Button.Pressed, "#ok")
+    def action_send(self) -> None:
+        from ..core import pages as pg
+        path, text = self._path(), self.query_one("#body", TextArea).text
+        if not pg.valid_path(path):
+            self.app.notify("A path is 1-8 parts of a-z 0-9 - _ . separated by /",
+                            severity="error")
+            return
+        if not text.strip():
+            self.app.notify("A page needs some text", severity="error")
+            return
+        if len(text.encode()) > pg.MAX_BODY:
+            self.app.notify(f"A page is at most {pg.MAX_BODY // 1024} KiB", severity="error")
+            return
+        if self.files_allowed:
+            self.files = [p.strip() for p in self.query_one("#files", Input).value.split(",")
+                          if p.strip()]
+        self.dismiss((path, self.query_one("#title", Input).value.strip()[:pg.MAX_TITLE], text))
+
+
+class PreviewDialog(Dialog):
+    """A page as readers will see it (UN-RFC 0035 section 9.2)."""
+    BINDINGS = [Binding("escape", "cancel", "Back")]
+
+    def __init__(self, title: str, rendered: Text):
+        super().__init__()
+        self.title_, self.rendered = title, rendered
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog compose"):
+            yield Label(self.title_, classes="title", markup=False)
+            with VerticalScroll(id="preview-view"):
+                yield Static(self.rendered, id="preview-text")
+            with Horizontal(classes="buttons"):
+                yield Button("Back", variant="primary", id="cancel")
 
 
 class SignatureDialog(Dialog):
@@ -1886,8 +1977,10 @@ class UnseenetApp(App):
         shown = self.view_of(gid) if group else "threads"
         if action in ("next_unread", "read"):     # the keys of a list (#490)
             return bool(gid) and not chat and not typing and (action == "next_unread" or m is not None)
-        if action in ("new_post", "reply") and shown == "pages":
-            return False                          # this client reads sites; it does not write them
+        if action == "reply" and shown == "pages":
+            return False                          # a page is not answered (UN-RFC 0035)
+        if action == "new_post" and shown == "pages":
+            return self._writes_pages(gid)        # n writes a page, for the site's writers (#212)
         if action == "new_post":
             return contact or (group and s.write_permission(gid, kind=KIND_POST).allowed)
         if action == "reply":                     # #181: hidden when it would be refused
@@ -2868,6 +2961,12 @@ class UnseenetApp(App):
         g = self._need_group()
         if not g:
             return
+        if self._is_site(g.group_id):              # a site: n writes a new page (0035, 9.2)
+            if not self._writes_pages(g.group_id):
+                self.notify("Only the site's writers write its pages", severity="warning")
+                return
+            self.compose_page(g)
+            return
         p = self.session.write_permission(g.group_id, kind=KIND_POST)
         if not p:
             self.notify(p.reason, severity="warning")
@@ -3120,6 +3219,30 @@ class UnseenetApp(App):
             return
         self.set_status("")
         self.notify("Your feed is started: n writes in it, and anyone can comment", timeout=8)
+        self.refresh_groups()
+        self.select_group(gid)
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_start_site(self) -> None:
+        """Start your own site (UN-RFC 0035 section 7), after saying it is public - or go to it."""
+        s = self.session
+        gid = s.personal_group("site")
+        if gid in s.data["subscribed"] and s.data["groups"].get(gid, {}).get("owner"):
+            self.select_group(gid)
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Start my site", s.personal_group_warning("site"), "Start my site")):
+            return
+        self.set_status("Starting your site ...")
+        try:
+            gid = await s.start_personal_group("site")
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not started: {exc}", severity="error", timeout=8)
+            self.set_status("")
+            return
+        self.set_status("")
+        self.notify("Your site is started: n writes its first page - index is the home page",
+                    timeout=8)
         self.refresh_groups()
         self.select_group(gid)
 
@@ -3456,6 +3579,137 @@ class UnseenetApp(App):
             self._send_notices(g.group_id, msgid, subject, KIND_POST, notify)
         self.select_group(g.group_id)
 
+    # --- writing pages of a site (UN-RFC 0035 section 9.2, #212) ---
+    def _is_site(self, gid: str) -> bool:
+        """A site shown as its pages (v shows it as threads, where n writes posts)."""
+        return bool(gid) and gid in self.groups and self.view_of(gid) == "pages" \
+            and self.session.manifest_data(gid).get("view") == "pages"
+
+    def _writes_pages(self, gid: str) -> bool:
+        data, me = self.session.manifest_data(gid), self.session.identity().key_text
+        return me in (data.get("owner"), *data.get("moderators", []), *data.get("posters", []))
+
+    def _page_now(self, gid: str, path: str) -> dict | None:
+        return next((p for p in self.session.site(gid)["pages"] if p["path"] == path), None)
+
+    @work(group="post", exit_on_error=False)
+    async def compose_page(self, g: GroupInfo, m: Message | None = None) -> None:
+        """A new page (``m`` None) or a new version of page ``m``; the site is read first,
+        so the new version names the current one."""
+        from ..core import pages as pg
+        s, gid = self.session, g.group_id
+        data = s.manifest_data(gid)
+        label = s.group_label(gid)
+        dlg = PageDialog(
+            f"Edit /{m.page} in {label} - readers see the new version" if m else
+            f"New page in {label}", gid, path=m.page if m else "",
+            title=m.subject if m else "", text=m.body if m and m.readable else "",
+            files_allowed=bool(data.get("attachments")))
+        result = await self.push_screen_wait(dlg)
+        if not result:
+            return
+        path, title, text = result
+        with contextlib.suppress(SessionError, OSError, ConnectionError, NNTPError):
+            await s.fetch_group(gid)                 # the site as it is now (section 9.2)
+        site = s.site(gid)
+        paths = [p["path"] for p in site["pages"]]
+        most = data.get("max_pages", pg.MAX_PAGES_DEFAULT)
+        if m is None and path in paths:
+            if not await self.push_screen_wait(ConfirmDialog(
+                    "The page is there", f"/{path} is a page of this site already. Write a new "
+                    "version of it?", "Write over it")):
+                return
+        elif path not in paths and len(paths) >= most:
+            if not await self.push_screen_wait(ConfirmDialog(
+                    "The site is full", f"The site keeps at most {most} pages; a new one pushes "
+                    "the last out (UN-RFC 0035 section 9.2). Write it anyway?", "Write it")):
+                return
+        files = None
+        if dlg.files:
+            try:
+                files = s.prepare_files([Path(p).expanduser() for p in dlg.files])
+            except (SessionError, OSError, ValueError) as exc:
+                self.notify(f"Not published: {exc}", severity="error", timeout=8)
+                return
+        self.set_status("Publishing the page (computing postage) ...")
+        try:
+            msgid = await s.put_page(gid, path, text, title, files=files)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not published: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify(f"Published /{path}", timeout=4)
+        self._open_at = msgid
+        with contextlib.suppress(SessionError, OSError, ConnectionError, NNTPError):
+            await s.fetch_group(gid)
+        self.select_group(gid)
+
+    def _selected_page(self) -> tuple[str, Message] | None:
+        gid, m = self.current_group or "", self.current_message
+        if not self._is_site(gid) or m is None or not m.page:
+            self.notify("Select a page of a site first", severity="warning")
+            return None
+        if not self._writes_pages(gid):
+            self.notify("Only the site's writers write its pages", severity="warning")
+            return None
+        return gid, m
+
+    @work(group="post", exit_on_error=False)
+    async def action_page_previous(self) -> None:
+        """Publish the selected page's previous version again (UN-RFC 0035 section 10.4)."""
+        sel = self._selected_page()
+        if sel is None:
+            return
+        gid, m = sel
+        s = self.session
+        p = self._page_now(gid, m.page)
+        prev = p and p["previous"]
+        if not prev or not prev.readable:
+            self.notify("This page has no earlier version to go back to", severity="warning")
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Previous version", f"Publish the earlier version of /{m.page} again "
+                f"(\"{prev.subject}\")? It becomes the page in force.", "Go back")):
+            return
+        self.set_status("Publishing the earlier version (computing postage) ...")
+        try:
+            await s.put_page(gid, m.page, prev.body, prev.subject, content_type=prev.content_type)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify(f"/{m.page} is back at its earlier version", timeout=4)
+        with contextlib.suppress(SessionError, OSError, ConnectionError, NNTPError):
+            await s.fetch_group(gid)
+        self.select_group(gid)
+
+    @work(group="post", exit_on_error=False)
+    async def action_page_remove(self) -> None:
+        """Remove the selected page from its site (``Page-Removed``, UN-RFC 0035)."""
+        sel = self._selected_page()
+        if sel is None:
+            return
+        gid, m = sel
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Remove the page", f"Remove /{m.page} from the site? Readers no longer see it; "
+                "people may have kept copies.", "Remove", danger=True)):
+            return
+        self.set_status("Removing the page (computing postage) ...")
+        try:
+            await self.session.remove_page(gid, m.page)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not removed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        self.notify(f"/{m.page} removed", timeout=4)
+        self.current_message = None
+        with contextlib.suppress(SessionError, OSError, ConnectionError, NNTPError):
+            await self.session.fetch_group(gid)
+        self.select_group(gid)
+
     def _editable(self, gid: str) -> Message | None:
         """What e edits: the selected post if it is yours; in a chat, your last line."""
         s = self.session
@@ -3470,6 +3724,13 @@ class UnseenetApp(App):
     async def action_edit(self) -> None:
         """Edit your own post or chat line (UN-RFC 0042): a new version in its place."""
         gid = self.current_group or ""
+        cur = self.current_message
+        if self._is_site(gid) and cur is not None and cur.page and gid in self.groups:
+            if not self._writes_pages(gid):      # any writer edits a page (0035, 9.2)
+                self.notify("Only the site's writers write its pages", severity="warning")
+                return
+            self.compose_page(self.groups[gid], cur)
+            return
         m = self._editable(gid)
         g = self.groups.get(gid)
         if m is None or g is None:
@@ -4075,6 +4336,12 @@ class UnseenetApp(App):
             ("Following", "The people you follow - stop following one", self.action_following),
             ("Start my feed", "Your own feed, public, where anyone can comment - or open it",
              self.action_start_feed),
+            ("Start my site", "Your own site of pages, public - or open it; n writes a page",
+             self.action_start_site),
+            ("Previous version of this page", "Publish the selected page's earlier version "
+             "again (a site you write in)", self.action_page_previous),
+            ("Remove this page", "Remove the selected page from the site you write in",
+             self.action_page_remove),
             ("Share my profile", "With one person or this closed group only - not public",
              self.action_share_profile),
             ("Take back my shared profile", "From a person or this closed group",

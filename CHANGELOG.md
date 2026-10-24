@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- The TUI writes pages (#212, UN-RFC 0035 section 9.2), as unseenet-gui does: in a
+  site, `n` writes a new page and `e` a new version of the selected one, with
+  its path, title, Markdown and pictures, and a preview (Ctrl+O) as readers
+  will see it; it warns before writing over a path or past `max_pages`. The
+  commands add Start my site, Previous version of this page and Remove this
+  page. Only the site's writers get them.
 - Addresses on the web (#454, UN-RFC 0031 section 3.4.1): every client reads
   `web+unseenet:` and the web form `https://<any host>/a/<...>` as the
   `unseenet:` address it stands for, and opens it in the network over Tor -
@@ -19,7 +25,6 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - A site's `index` field (UN-RFC 0035 section 3): `yes` or `no` (the default),
   whether search engines may index it when an entrance shows it on the web;
   `unseenet group-create`/`group-edit --index`.
-
 - A client's own settings in the local client API (unseenet-gui#84, UN-RFC
   0046 section 4.8): `GET/POST /api/settings/clients/<client>`, kept with your
   state so a front end's theme follows you; and `state_local` in
