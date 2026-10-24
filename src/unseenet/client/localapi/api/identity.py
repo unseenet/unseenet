@@ -14,10 +14,12 @@ from .. import api as _a   # LocalAPI itself, joined after the parts
 
 class Identity:
     # --- who you are (section 4.8) ---------------------------------------------
-    async def profile(self, key: str | None = None) -> dict:
+    async def profile(self, key: str | None = None, context: str | None = None) -> dict:
         """A profile with what a front end shows around it (#320): its label, whether
         you hid it, and for yours whether one is published and the warning before
-        the first (UN-RFC 0022 sections 9.1, 9.2)."""
+        the first (UN-RFC 0022 sections 9.1, 9.2). With ``context`` - where it is
+        opened: a closed group's ID, or ``me`` (your private posts or a chat with
+        them) - a profile they shared there only (section 6, UN-RFC 0046 4.16)."""
         s = self._ready()
         me = s.identity().key_text
         key = (key or "").strip() or me
@@ -35,6 +37,12 @@ class Identity:
         fp = crypto.fingerprint(crypto.key_from_text(key))
         # their personal feed, and whether you follow them (UN-RFC 0034, section 4.14)
         base.update(feed=f"feed@{fp}", following=fp in s.data.get("following", {}).get("people", {}))
+        # a profile they shared with you or this closed group, shown only there (0022, 6)
+        ctx = self._context(s, context)
+        shared = s.private_profile(key, ctx) if ctx else None
+        base["shared"] = None if shared is None else {
+            **self._profile(key, shared), "context": ctx,
+            "context_label": "you" if ctx == "me" else s.group_label(ctx)}
         if s.profile_hidden(key):                         # hidden: not even asked for
             return {**self._profile(key, None), **base, "mine": False, "hidden": True}
         # all the authors you have, read together, so a node cannot tell whose you open
@@ -46,6 +54,42 @@ class Identity:
         p = await s.profile_of(key)
         return {**self._profile(key, None if p is None else (p.raw or {"about": p.about})),
                 **base, "mine": False, "hidden": False}
+
+    @staticmethod
+    def _context(s: Session, context: str | None) -> str | None:
+        """Where a profile is opened, as the core keeps shared ones: ``me`` for your private
+        posts and chats, or a closed group's ID."""
+        context = (context or "").strip()
+        if not context:
+            return None
+        if context == "me" or context == s.my_inbox or context.startswith(CONTACT):
+            return "me"
+        return context if s.group_entry(context).get("type") == "closed" else None
+
+    async def share_profile(self, data: dict) -> dict:
+        """``POST /api/profile/share`` (section 4.16, UN-RFC 0022 section 6): share a
+        profile with one person (``"to"``: their key) or a closed group (its ID), where
+        only they can read it - your public profile, or ``"profile"`` (an object, or
+        ``{"edit": fields}`` as for ``POST /api/profile``) made for them; with
+        ``"withdraw": true`` take back the one you shared there. Nothing is published."""
+        s = self._ready()
+        to = str(data.get("to", "")).strip()
+        if to.startswith(CONTACT):
+            to = to[len(CONTACT):]
+        if to.startswith("ed25519:"):
+            to = personal_inbox_id(crypto.key_from_text(_key(to)))
+        elif not to:
+            raise SessionError("share with whom? a key or a closed group")
+        if data.get("withdraw"):
+            mid = await s.withdraw_shared_profile(to)
+        else:
+            profile = data.get("profile")
+            if isinstance(profile, dict) and isinstance(profile.get("edit"), dict):
+                profile = self._from_fields(s, profile["edit"])
+            if profile is not None and not isinstance(profile, dict):
+                raise SessionError("a profile is an object or null")
+            mid = await s.share_profile(to, profile)
+        return {"ok": True, "id": mid}
 
     def hide_profile(self, key: str, hidden: bool = True) -> dict:
         """Hide or show someone's profile, for you alone (UN-RFC 0022 section 9.2)."""

@@ -322,7 +322,7 @@ async def profile(request):
         except (ValueError, UnicodeDecodeError):
             raise web.HTTPBadRequest(text="expected JSON")
         return _json(await _api(request).publish_profile(data))
-    return _json(await _api(request).profile(request.query.get("key")))
+    return _json(await _api(request).profile(request.query.get("key"), request.query.get("context")))
 
 
 async def pictures(request):
@@ -332,6 +332,10 @@ async def pictures(request):
 
 async def profile_picture(request):
     return _json(await _api(request).publish_picture(await _body(request)))
+
+
+async def profile_share(request):
+    return _json(await _api(request).share_profile(await _body(request)))
 
 
 async def profile_hide(request):
@@ -423,7 +427,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/role", role), ("POST", "/api/groups/{gid}/ban", ban),
     ("GET", "/api/moderation", moderation), ("POST", "/api/moderation", moderation),
     ("GET", "/api/profile", profile), ("POST", "/api/profile", profile),
-    ("POST", "/api/profile/hide", profile_hide), ("POST", "/api/passphrase", passphrase),
+    ("POST", "/api/profile/hide", profile_hide), ("POST", "/api/profile/share", profile_share), ("POST", "/api/passphrase", passphrase),
     ("GET", "/api/pictures", pictures), ("POST", "/api/profile/picture", profile_picture),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),
