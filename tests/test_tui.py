@@ -1755,3 +1755,42 @@ async def test_tui_copies_and_opens_addresses(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.current_address() == link, 200)   # and back
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_footer_keys_of_the_view_and_next_unread(tmp_path, monkeypatch):
+    """#490: the footer shows the keys that work in the view you are in - Space next
+    unread and f Read in a list, v View everywhere - and Space goes to the next unread."""
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr_ = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr_)
+    gid = await other.create_group("dk.taster", "open", min_pow=10)
+    ids = [await other.post(gid, f"Indlæg {i}", f"{i}\n") for i in range(3)]
+    await other.close()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.session.subscribe(gid)
+        await app.session.fetch_group(gid)
+        app.refresh_groups()
+        app.select_group(gid)
+        assert await wait_for(pilot, lambda: len(app.messages) == 3, 300)
+        app.session.mark_read(app.messages[ids[1]])
+        app.query_one("#threads").focus()
+        await pilot.pause(0.2)
+        shown = {b.binding.description for b in app.active_bindings.values()
+                 if b.binding.show and b.enabled}
+        assert {"Next unread", "View"} <= shown and "Chat/threads" not in shown
+        table = app.query_one("#threads")
+        start = table.cursor_row
+        unread = {k for k in ids if not app.session.is_read(app.messages[k])}
+        await pilot.press("space")
+        await pilot.pause(0.2)
+        assert table.cursor_row != start
+        assert app.current_message.message_id in unread              # an unread one (read now)
+        app.session.set_view(gid, "chat")
+        app._render_threads()
+        app._apply_view("chat")
+        app.query_one("#chat-input").focus()
+        await pilot.pause(0.2)
+        assert not app.check_action("next_unread", ())              # typing: the letters are text
+    server.close()

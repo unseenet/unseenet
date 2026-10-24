@@ -1854,8 +1854,9 @@ class UnseenetApp(App):
         Binding("e", "edit", "Edit", show=False),
         Binding("question_mark", "group_info", "About group"),
         Binding("number_sign", "group_ref", "Go to #group", show=False),
-        Binding("v", "toggle_view", "Chat/threads"),
-        Binding("f", "read", "Full screen", show=False),
+        Binding("space", "next_unread", "Next unread"),
+        Binding("f", "read", "Read"),
+        Binding("v", "toggle_view", "View"),          # threads, feed, chat; or pages (#490)
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
         Binding("f1", "about", "About", show=False),
@@ -1882,6 +1883,11 @@ class UnseenetApp(App):
                 or getattr(self.focused, "id", None) == "groups-filter"
         if action == "write":
             return chat and not typing
+        shown = self.view_of(gid) if group else "threads"
+        if action in ("next_unread", "read"):     # the keys of a list (#490)
+            return bool(gid) and not chat and not typing and (action == "next_unread" or m is not None)
+        if action in ("new_post", "reply") and shown == "pages":
+            return False                          # this client reads sites; it does not write them
         if action == "new_post":
             return contact or (group and s.write_permission(gid, kind=KIND_POST).allowed)
         if action == "reply":                     # #181: hidden when it would be refused
@@ -2781,6 +2787,20 @@ class UnseenetApp(App):
         if msg is not None:
             self.current_message = msg
             self.push_screen(ReadScreen(msg))
+
+    def action_next_unread(self) -> None:
+        """Space: the next unread post, entry or comment in the list (#490), as in the
+        reader and in the graphical client."""
+        table = self.query_one("#threads", DataTable)
+        keys = [k.value for k in table.rows]
+        at = table.cursor_row
+        order = keys[at + 1:] + keys[:max(0, at)]
+        for key in order:
+            m = self.messages.get(key)
+            if m is not None and not self.session.is_read(m):
+                table.move_cursor(row=table.get_row_index(key))
+                return
+        self.notify("Nothing unread here", timeout=3)
 
     def action_read(self) -> None:
         if self.current_message is None:

@@ -327,6 +327,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- The TUI's footer shows the keys of the view you are in (#490), the same as the
+  graphical client: Space goes to the next unread post or entry, f reads, v is
+  "View" (threads, feed, chat; or pages), and on a site New post and Reply are
+  hidden.
 - A paused key ripening stays paused over a restart until you resume it (#337):
   kept with the key in the vault, on that device only. The TUI says so, and the
   local client API (UN-RFC 0046 section 4.1) keeps it the same way.
