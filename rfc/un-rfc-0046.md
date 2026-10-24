@@ -244,6 +244,18 @@ posters and members, and channel comments (UN-RFC 0030). A front end
 SHOULD make what is not allowed unavailable up front and show `reason`;
 the node still has the last word.
 
+**Reactions** (UN-RFC 0048). A group's head has `reactions`:
+`{"offered": ["👍", ...], "any": false, "setting": "default"}`, the emoji
+the group takes in the order to offer them (with `any`, the default set
+first and any other emoji besides; `offered` is empty when the group takes
+none) and the owner's choice as section 4.7 takes it. In a real
+group and in the timeline, each row has `reactions`, `[{"emoji": "👍",
+"count": 3, "mine": true}, ...]` in the order they were first given, one
+per key, `react`, a permission whose further codes are `"private"`,
+`"target"` and `"no_reactions"`, and `react_offered`, the set of the row's
+own group as in the head (the timeline mixes groups). Reactions are never
+rows themselves.
+
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" |
   "pages" | null}`: null goes back to the owner's choice (UN-RFC 0008
@@ -305,6 +317,11 @@ first), then those containing it, then by a word of the name.
   `{"job": "<id>"}`.
 - `POST /api/groups/<id>/withdraw` `{"id": "<Message-ID>"}`: your own
   post, or one in a group you own or moderate (UN-RFC 0004 section 7).
+- `POST /api/groups/<id>/react` `{"id": "<Message-ID>", "emoji": "👍"}`:
+  react to a post, comment or chat line (UN-RFC 0048), as a job (`{"job":
+  "<id>"}`); the emoji you already gave takes it back, another one changes
+  it. With `"who": true` it answers `{"who": ["<label>", ...]}`, who gave
+  that emoji, instead.
 - `POST /api/groups/<id>/mentioned` `{"subject": "...", "body": "..."}`:
   who a post would tell (UN-RFC 0032), before it is sent:
   `{"may": true, "names": [...], "max": 10}`.
@@ -340,8 +357,9 @@ not (you do not own or moderate the group).
 - `POST /api/groups/<id>/settings` with the manifest fields to change
   (`title`, `description`, `rules`, `rules_type`, `view`, `kinds` as for
   creating, `min_pow`, `low_latency`, `retention_days`, `comments`,
-  `comment_days`, `files` as for creating): a new manifest (UN-RFC 0004, 0014, 0030). Any other field
-  is `400`.
+  `comment_days`, `files` as for creating, `reactions`: `"default"`,
+  `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4):
+  a new manifest (UN-RFC 0004, 0014, 0030). Any other field is `400`.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
 - `POST /api/groups/<id>/invite` `{"key": "..."}` and

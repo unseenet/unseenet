@@ -146,7 +146,7 @@ class PostingMixin:
         by_id = {m.message_id: n for n, m in cache.items()}
         keep_days = int(manifest.get("retention_days", 90))
         now = datetime.now(timezone.utc)
-        changed = False
+        changed = self._cancel_reactions(group_id, cancels, privileged)   # UN-RFC 0048, 5
         for target, c in list(cancels.items()):
             n = by_id.get(target)
             if n is None:

@@ -47,6 +47,7 @@ from ...core.groups import (INBOX_SCHEME, INBOX_SCHEMES, KEY_BOUND_MANIFEST_MAX,
 from ...core import blobs as bl
 from ...core import pages as pg
 from ...core import pins as pn
+from ...core import reactions as rx
 from ...core import ripening as rp
 from ...core.store import Store
 from ...nntp import (MANIFESTS_ANSWER_BYTES, MANIFESTS_MAX, MAX_LINE, RECONCILE_MAX_BYTES,

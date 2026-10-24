@@ -32,6 +32,7 @@ class Articles:
             refs = []
         self.db.executemany("INSERT OR IGNORE INTO blob_refs VALUES (?, ?, ?, ?)",
                             [(art.message_id, b, group, n) for b, n in refs])
+        self._index_reaction(art)                          # UN-RFC 0048
         self.remember(art.message_id)
         self.db.commit()
         return number
@@ -104,6 +105,7 @@ class Articles:
                 "DELETE FROM markers WHERE group_id=? AND (message_id NOT IN "
                 "(SELECT message_id FROM articles) OR date < ?) AND message_id NOT IN "
                 "(SELECT message_id FROM keep_now)", (group_id, now - days * 86400))
+        deleted += self.drop_orphan_reactions()            # UN-RFC 0048 section 6.2
         self.kb_sweep(now)
         self.remove_expired_key_bound(now)
         self.db.execute("DELETE FROM history WHERE seen < ?", (now - (default_days + 2) * 86400,))

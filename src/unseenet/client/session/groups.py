@@ -430,6 +430,12 @@ class GroupsMixin:
         for key, value in changes.items():
             if key not in allowed:
                 raise SessionError(f"{key} cannot be changed")
+            if key == "reactions":                # [] is none, None the default (0048, 4)
+                if value is None:
+                    data.pop(key, None)
+                else:
+                    data[key] = value
+                continue
             if value in (None, "", False, []) and key in ("title", "description", "rules",
                                                          "rules_type",
                                                          "low_latency", "banned", "moderators",

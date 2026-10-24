@@ -163,6 +163,8 @@ class ReadingCommands:
             subject = "(private message)"
         elif encrypted:
             subject = "(encrypted)"
+        elif rx.is_reaction(art):                       # UN-RFC 0048: a newsreader's line
+            subject = f"(reaction {art.get('Reaction', '').strip()})"
         else:
             subject = art.get("Subject") or "(no subject)"
         head, _, body = raw.partition(b"\r\n\r\n")

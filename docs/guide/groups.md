@@ -121,6 +121,27 @@ random delay that otherwise hides where a post entered the network.
 That is what makes chat feel like chat, and it is a real trade-off: the
 client shows when a group has made it.
 
+### Reactions
+
+Under any post, comment or chat line, a reader can leave a **reaction**:
+one emoji, such as 👍, instead of writing "+1". A reaction is a tiny
+signed message of its own, so it costs a little postage and travels like
+everything else, but clients never show it as a comment - only as a
+count under what it answers. Each key has at most one reaction on a
+post; choosing another emoji changes it, choosing the same one takes it
+back.
+
+The owner decides which emoji a group takes, or none, or any. Feeds and
+chats take 👍 👎 ❤️ 😂 😮 😢 unless the owner says otherwise; discussion
+groups take none unless the owner turns them on. Nodes refuse reactions
+the group does not take.
+
+Two things are worth knowing. Reactions are **public**: anyone can see
+which key reacted to what, as with a comment. And they are **only
+counted, never used**: no client sorts or hides posts by how many
+reactions they have, so a bought pile of likes buys nothing but a
+number. *(From 0.5.0.)*
+
 ## Closed groups
 
 A closed group is encrypted end to end. Its members share a secret key,
@@ -217,4 +238,5 @@ whole picture.
 [0030](../spec/un-rfc-0030.md) (comments in channels),
 [0033](../spec/un-rfc-0033.md) (pins),
 [0034](../spec/un-rfc-0034.md) (feeds),
-[0035](../spec/un-rfc-0035.md) (pages and sites).
+[0035](../spec/un-rfc-0035.md) (pages and sites),
+[0048](../spec/un-rfc-0048.md) (reactions).

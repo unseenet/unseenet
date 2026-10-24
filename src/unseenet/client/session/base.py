@@ -35,6 +35,7 @@ class BaseMixin:
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
         self.cache: dict[str, dict[int, Message]] = {}
+        self.reaction_msgs: dict[str, dict[int, Message]] = {}   # beside cache (UN-RFC 0048)
         self._acting_as: str | None = None   # act_as(): an identity for this run only
         self.ripening_limit: int | None = None   # the level this machine can ripen to (#440)
         self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores

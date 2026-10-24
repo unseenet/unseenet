@@ -113,6 +113,9 @@ class Groups:
                # pinned posts, newest pin first, and whether you may pin (UN-RFC 0033, #442)
                "pins": self._pins(s, gid), "max_pins": self._max_pins(data),
                "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0,
+               # the reactions the group takes, in the order to offer them (UN-RFC 0048)
+               "reactions": {**self._reaction_policy(s, gid),
+                             "setting": self._reaction_setting(data)},
                # its unseenet: address, to copy (UN-RFC 0031 section 3.4.1, #442)
                "address": _addr.group_address(s, gid)}
         if out["owner"] or s.moderates(gid):
@@ -200,10 +203,42 @@ class Groups:
             for row, (m, _) in zip(out, rows):
                 row["pinned"] = m.message_id in pinned
                 row["address"] = _addr.post_address(s, gid, m.message_id)
+            self._add_reactions(s, out, rows)   # under every row (UN-RFC 0048 section 7.2)
             if head["view"] == "feed":          # a comment is a chat line (UN-RFC 0034, 4.2)
                 for row, (m, _) in zip(out, rows):
                     row["comment"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_CHAT))
         return {"group": head, "rows": out}
+
+    @staticmethod
+    def _reaction_setting(data: dict):
+        """The owner's choice as the settings take it: "default", "none", "any" or a list."""
+        r = data.get("reactions")
+        return "default" if r is None else "none" if r == [] else r
+
+    @staticmethod
+    def _reaction_policy(s: Session, gid: str) -> dict:
+        r = s.reaction_set(gid)
+        return {"offered": list(r.offered), "any": r.any}
+
+    @staticmethod
+    def _add_reactions(s: Session, out: list[dict], rows) -> None:
+        """Each row's ``reactions`` - [{emoji, count, mine}] in the order first given -,
+        ``react``, whether you may react to it, and ``react_offered``, its own group's
+        set - rows of the timeline come from many groups (UN-RFC 0048 sections 7.2, 7.3)."""
+        me = s.identity().key_text
+        counts: dict[str, dict] = {}
+        policy: dict[str, dict] = {}
+        for row, (m, _) in zip(out, rows):
+            if m.group not in counts:
+                counts[m.group] = s.all_reactions(m.group)
+                r = s.reaction_set(m.group)
+                policy[m.group] = {"offered": list(r.offered), "any": r.any}
+            c = counts[m.group].get(m.message_id)
+            mine = c.of(me) if c else None
+            row["reactions"] = [{"emoji": e, "count": len(keys), "mine": e == mine}
+                                for e, keys in (c.by_emoji.items() if c else ())]
+            row["react"] = _perm(s.react_permission(m.group, m))
+            row["react_offered"] = policy[m.group]
 
     @staticmethod
     def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:

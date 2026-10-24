@@ -92,6 +92,10 @@ def _group_fields(args) -> tuple[dict, dict]:
     for opt in ("max_pins", "max_pages", "home", "index"):
         if getattr(args, opt, None) is not None:
             extra[opt] = getattr(args, opt)
+    r = getattr(args, "reactions", None)                     # UN-RFC 0048 section 4
+    if r is not None:
+        extra["reactions"] = {"default": None, "none": [], "any": "any"}.get(
+            r, [e.strip() for e in r.split(",") if e.strip()])
     return fields, extra
 
 
@@ -182,7 +186,7 @@ async def c_invite(app: App, args) -> None:
 
 
 def _group_options(s, *, create: bool) -> None:
-    """The settings group-create and group-edit share (UN-RFC 0004, 0008, 0027-0035)."""
+    """The settings group-create and group-edit share (UN-RFC 0004, 0008, 0027-0035, 0048)."""
     s.add_argument("--title")
     s.add_argument("--description")
     s.add_argument("--min-pow", type=int, help="postage in bits (create: default 20)")
@@ -199,6 +203,9 @@ def _group_options(s, *, create: bool) -> None:
                    help="allow files up to this many octets (UN-RFC 0027); 0 to stop")
     s.add_argument("--types", help="with --attachments: allowed media types, e.g. image/*,application/pdf")
     s.add_argument("--max-pins", type=int, help="pins in force, 0-25 (UN-RFC 0033)")
+    s.add_argument("--reactions", metavar="SET",
+                   help="reactions the group takes (UN-RFC 0048): default (feeds and chat "
+                        "👍 👎 ❤️ 😂 😮 😢, discussions none), none, any, or emoji like 🎉,❤️")
     s.add_argument("--max-pages", type=int, help="sites: pages in force, 1-100 (UN-RFC 0035)")
     s.add_argument("--home", help="sites: the path of the home page")
     s.add_argument("--index", choices=("yes", "no"),

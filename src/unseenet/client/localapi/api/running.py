@@ -58,6 +58,14 @@ class Running:
         changes = dict(data)
         if "files" in changes:                  # what files it takes (#496, UN-RFC 0027 5.1)
             changes["attachments"] = _file_choice(changes.pop("files"))
+        if "reactions" in changes:              # UN-RFC 0048 section 4.1
+            r = changes["reactions"]
+            if r in ("default", None):
+                changes["reactions"] = None     # the view's default, left out
+            elif r == "none":
+                changes["reactions"] = []
+            elif r != "any" and not (isinstance(r, list) and all(isinstance(e, str) for e in r)):
+                raise SessionError('reactions is "default", "none", "any" or a list of emoji')
         if "kinds" in changes:
             if changes["kinds"] not in KINDS:
                 raise SessionError("kinds is both, post or chat")

@@ -46,6 +46,7 @@ from . import richtext
 from . import groupfilter
 from .grouptree import fingerprint_suffix, group_tree
 from ..core import markup
+from ..core import reactions as rx
 from ..core import about
 from ..core import profiles as prof
 from ..core.blobs import FILE_CHOICES, file_choice
@@ -685,14 +686,31 @@ class BridgesDialog(Dialog):
 DELIVERY_CHOICES = [("Discussion - shown as threads", "threads"),
                     ("Chat - shown as a conversation", "chat"),
                     ("Chat, fast delivery - gives up some anonymity", "fastchat"),
+                    ("Feed - posts with comments underneath (UN-RFC 0034)", "feed"),
                     ("Data for programs - hidden when people browse", "data")]
 DELIVERY = {"threads": ("threads", False), "chat": ("chat", False), "fastchat": ("chat", True),
-            "data": ("data", False)}
+            "feed": ("feed", False), "data": ("data", False), "pages": ("pages", False)}
+SITE_CHOICE = ("Site - pages (UN-RFC 0035)", "pages")   # offered for a site only
 # what a group takes (UN-RFC 0028, 4.1); "both" is the manifest's default
 KINDS_CHOICES = [("Takes posts and chat lines", "both"),
                  ("Takes posts with a subject only (a discussion group)", "post"),
                  ("Takes chat lines only (a chat group)", "chat")]
 KINDS = {"both": None, "post": ["post"], "chat": ["chat"]}
+
+REACTIONS_CHOICES = [("Reactions: as the view has them (feeds, chat: " + " ".join(rx.DEFAULT_SET)
+                      + "; discussion: none)", "default"),
+                     ("No reactions", "none"), ("Any emoji as a reaction", "any"),
+                     ("Your own set of reactions (below)", "custom")]   # UN-RFC 0048 section 4
+
+
+def reactions_choice(value) -> str:
+    """The REACTIONS_CHOICES entry for a manifest's ``reactions``."""
+    if value is None:
+        return "default"
+    if value == "any":
+        return "any"
+    return "none" if value == [] else "custom"
+
 
 COMMENTS_CHOICES = [("Only you and your posters write", "none"),
                     ("Readers may comment on posts", "open")]
@@ -701,6 +719,14 @@ FILES_CHOICES = [("No files", "none"),
                  ("Pictures, up to 4 MiB each", "pictures"),
                  ("Pictures and PDFs, up to 4 MiB each", "pictures+pdf")]
 FILES_GROUP_TYPES = ("open", "moderated", "channel", "closed")   # closed: encrypted (#497)
+
+
+def reactions_label(d: dict) -> str:
+    """What a group takes as reactions (UN-RFC 0048 section 4), for the group's info."""
+    r = rx.reaction_set(d)
+    if r.any:
+        return "any emoji"
+    return " ".join(r.emoji) if r else "none"
 
 
 def comments_label(d: dict) -> str:
@@ -832,6 +858,66 @@ class PinDialog(Dialog):
     @on(Button.Pressed, "#ok")
     def _ok(self) -> None:
         self.dismiss(self.query_one("#value", Input).value.strip())
+
+
+class ReactDialog(Dialog):
+    """React to a post, comment or chat line (UN-RFC 0048 section 7.3): the group's
+    set as a short numbered list - a number key chooses -, and where the group takes
+    any emoji, a field for another. Your own reaction is marked; choosing it again
+    takes it back. Dismisses with the emoji, or None."""
+
+    def __init__(self, what: str, offered: tuple, mine: str | None, any_: bool,
+                 first_time: bool = False):
+        super().__init__()
+        self.what, self.offered, self.mine, self.any_ = what, offered, mine, any_
+        self.first_time = first_time
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Label("React to " + self.what, classes="title", markup=False)
+            lines = []
+            for i, e in enumerate(self.offered[:9], 1):
+                own = rx.same_emoji(e, self.mine or "")
+                lines.append(f"  {i}  {e}" + ("   (yours - again takes it back)" if own else ""))
+            yield Static("\n".join(lines) or "  (none)", markup=False)
+            if self.any_:
+                yield Input(placeholder="Or another emoji (or :shortcode:)", id="value")
+            hint = "A number chooses. Esc closes."
+            if self.first_time:
+                hint += ("\nReactions are public and signed: anybody can see which key "
+                         "reacted to what.")
+            yield Label(hint, classes="hint", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel")
+
+    def on_key(self, event) -> None:
+        if event.character and event.character.isdigit() and event.character != "0":
+            i = int(event.character)
+            if i <= len(self.offered):
+                event.stop()
+                self.dismiss(self.offered[i - 1])
+
+    @on(Input.Submitted)
+    def _typed(self) -> None:
+        value = self.query_one("#value", Input).value.strip()
+        if value.isdigit() and 0 < int(value) <= len(self.offered):   # a number in the field
+            self.dismiss(self.offered[int(value) - 1])
+            return
+        if value.startswith(":") and value.endswith(":"):        # UN-RFC 0031 section 5.2
+            value = markup.emoji(value.strip(":")) or value
+        if not rx.is_emoji(value):
+            self.app.notify("One emoji, please", severity="warning")
+            return
+        self.dismiss(value)
+
+
+def reactions_text(counts, mine: str | None) -> str:
+    """The reactions under a post as a terminal shows them (UN-RFC 0048 section 7.2):
+    each emoji and its count, your own in brackets - "👍 3  [❤️ 1]"."""
+    if counts is None or not counts.by_emoji:
+        return ""
+    return "  ".join((f"[{e} {len(k)}]" if rx.same_emoji(e, mine or "") else f"{e} {len(k)}")
+                     for e, k in counts.by_emoji.items())
 
 
 class InfoDialog(Dialog):
@@ -1253,6 +1339,7 @@ class GroupInfoDialog(Dialog):
                                   ("chat",): "chat lines only (a chat group)"}.get(
                      tuple(d.get("kinds") or ()), "posts and chat lines"),
                  *([f"Comments:  {comments_label(d)}"] if d.get("type") == "channel" else []),
+                 *([f"Reactions: {reactions_label(d)}"] if d.get("type") != "inbox" else []),
                  f"Postage:   {d.get('min_pow', 0)} bits     Kept for: {d.get('retention_days', 90)} days"
                  + ("     Local to one node" if d.get("local") else ""),
                  f"Version:   {d.get('serial', 1)}"]
@@ -1317,12 +1404,19 @@ class EditGroupDialog(Dialog):
             yield Input(value=d.get("title", ""), placeholder="Title", id="title")
             yield Input(value=d.get("description", ""), placeholder="Description (one paragraph)",
                         id="description")
-            yield Select(DELIVERY_CHOICES, value=current, allow_blank=False, id="view")
+            yield Select(DELIVERY_CHOICES + ([SITE_CHOICE] if current == "pages" else []),
+                         value=current, allow_blank=False, id="view")
             if d.get("type") == "channel":
                 yield Select(COMMENTS_CHOICES, value=d.get("comments", "none"), allow_blank=False,
                              id="comments")
                 yield Input(value=str(d.get("comment_days") or ""), id="comment_days",
                             placeholder="Days a thread takes comments (empty: always)")
+            if d.get("type") != "inbox":                 # UN-RFC 0048 section 4.1
+                r = d.get("reactions")
+                yield Select(REACTIONS_CHOICES, value=reactions_choice(r), allow_blank=False,
+                             id="reactions")
+                yield Input(value=" ".join(r) if isinstance(r, list) else "", id="reaction_set",
+                            placeholder="Your own set: up to 12 emoji, e.g. 🎉 ❤️ 👏")
             if d.get("type") in FILES_GROUP_TYPES:      # #496
                 choice = file_choice(d.get("attachments"))
                 choices = FILES_CHOICES + ([("Files as they are now (limits set elsewhere)",
@@ -1366,6 +1460,17 @@ class EditGroupDialog(Dialog):
             choice = self.query_one("#files", Select).value
             if choice != "custom":                       # custom limits are kept as they are
                 changes["attachments"] = FILE_CHOICES[choice]
+        if self.query("#reactions"):                     # UN-RFC 0048 section 4.1
+            choice = self.query_one("#reactions", Select).value
+            if choice == "custom":
+                own = self.query_one("#reaction_set", Input).value.replace(",", " ").split()
+                if not own or len(own) > rx.MAX_SET or not all(rx.is_emoji(e) for e in own):
+                    self.app.notify(f"Your own set: 1 to {rx.MAX_SET} emoji, with spaces "
+                                    "between", severity="error")
+                    return
+                changes["reactions"] = list(dict.fromkeys(own))
+            else:
+                changes["reactions"] = {"default": None, "none": [], "any": "any"}[choice]
         self.dismiss(changes)
 
 
@@ -1414,6 +1519,7 @@ class ReadScreen(Screen):
         Binding("number_sign", "group_ref", "#group", show=False),
         Binding("f", "save_files", "Save files", show=False),
         Binding("u", "profile", "Profile", show=False),   # the author's: feed, site, follow
+        Binding("l", "react", "React"),                   # UN-RFC 0048
     ]
     CSS = """
     ReadScreen #read-head { padding: 0 1; background: $boost; color: $text; }
@@ -1473,6 +1579,9 @@ class ReadScreen(Screen):
 
     def action_reply(self) -> None:
         self.app.action_reply()
+
+    def action_react(self) -> None:
+        self.app.action_react(self.msg)
 
     def action_message(self) -> None:
         self.app.action_message()
@@ -2001,6 +2110,7 @@ class UnseenetApp(App):
         Binding("ctrl+f", "attach_to_chat", "Attach"),   # files on the next chat line (#496)
         Binding("n", "new_post", "New post"),
         Binding("r", "reply", "Reply"),
+        Binding("l", "react", "React"),               # a like, or another emoji (UN-RFC 0048)
         Binding("g", "browse", "Groups"),
         Binding("slash", "search_groups", "Search groups", show=False),
         Binding("j", "join", "Join", show=False),
@@ -2029,7 +2139,7 @@ class UnseenetApp(App):
         """Show only the shortcuts that do something where you are (False hides one)."""
         s = self.session
         if isinstance(self.screen, ReadScreen):
-            return action in ("about", "refresh")    # it has its own r, m, n, p
+            return action in ("about", "refresh")    # it has its own r, m, n, p, l
         if s is None or not s.has_identity():
             return True
         gid = self.current_group or ""
@@ -2059,6 +2169,12 @@ class UnseenetApp(App):
         if action == "reply":                     # #181: hidden when it would be refused
             return contact or (m is not None and m.readable and (
                 m.private or s.write_permission(gid, reply_to=m, kind=KIND_POST).allowed))
+        if action == "react":                     # hidden where reacting is impossible (0048)
+            if contact or not group or shown == "pages":
+                return False
+            if chat:
+                return bool(s.reaction_set(gid))
+            return m is not None and s.react_permission(gid, m).allowed
         if action == "invite":
             g = self.groups.get(gid)
             return bool(g and g.type == "closed" and s.group_entry(gid).get("owner"))
@@ -2618,6 +2734,7 @@ class UnseenetApp(App):
         by_id = {m.message_id: m for m, _ in rows}
         if pins and self.view_of(gid) != "chat":
             self._pinned_section(table, gid, pins, by_id)
+        counted: dict = {}                              # reactions, once per group (0048)
         for m, depth in rows:
             self.messages[m.message_id] = m
             flag = "●" if not s.is_read(m) else " "
@@ -2652,7 +2769,11 @@ class UnseenetApp(App):
             elif gid == TIMELINE:
                 subject += f"  ({s.group_label(m.group)})"
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
-            table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
+            line = Text(subject)
+            liked = self._reactions_line(m, counted)
+            if liked:
+                line.append("   " + liked, style="dim")
+            table.add_row(flag, line, Text(self._who(m)), date, key=m.message_id)
         self._render_title()
         # the rows are fresh objects; an open read screen follows them, so it
         # shows an edited post and steps n/p from the right place (#137)
@@ -2713,6 +2834,7 @@ class UnseenetApp(App):
         mine = self.session.identity().key_text
         pinned = {p["id"] for p in self._pins_here(self.current_group)}
         changed = False
+        counted: dict = {}
         for m in msgs:
             own = m.author_key == mine
             who = "You" if own else (self.session.identity_label(m.author_key, m.from_name)
@@ -2738,6 +2860,9 @@ class UnseenetApp(App):
                 line.append(self._indented(m, text, len(when) + len(who) + 3, first=False))
             if m.edited:
                 line.append(f"  (edited {edited_when(m)})", style="dim")
+            liked = self._reactions_line(m, counted)     # UN-RFC 0048 section 7.2
+            if liked:
+                line.append(f"\n{' ' * (len(when) + 1)}{liked}", style="dim")
             if m.readable and m.attachments:             # files on a chat line (#496)
                 names = ", ".join(a.get("name") or ("picture" if a["type"].startswith("image/")
                                                     else a["type"]) for a in m.attachments)
@@ -2971,6 +3096,20 @@ class UnseenetApp(App):
         if self.current_group == gid:
             self._render_threads()
 
+    def _reactions_line(self, m: Message, cache: dict | None = None) -> str:
+        """The reactions under ``m`` as text (UN-RFC 0048 section 7.2), "" for none.
+        ``cache``: {group: all its counts}, so a list counts each group once."""
+        s = self.session
+        if m.private or not m.readable:
+            return ""
+        if cache is None:
+            counts = s.reactions_on(m)
+        else:
+            if m.group not in cache:
+                cache[m.group] = s.all_reactions(m.group)
+            counts = cache[m.group].get(m.message_id)
+        return reactions_text(counts, counts.of(s.identity().key_text) if counts else None)
+
     def _who(self, m: Message) -> str:
         if m.to_key and self.current_group == self.session.my_inbox:
             return f"You → {self._key_label(m.to_key)}"
@@ -3066,6 +3205,14 @@ class UnseenetApp(App):
             if msg.attachments:                              # UN-RFC 0027 section 9.2
                 body.append("\n\n")
                 body.append(attachments_text(msg.attachments))
+            liked = self._reactions_line(msg)                # UN-RFC 0048 section 7.2
+            if liked or (not msg.private and self.session.react_permission(msg.group, msg)):
+                body.append("\n\n")
+                if liked:
+                    body.append(liked)
+                    body.append("   ")
+                if not msg.private and self.session.react_permission(msg.group, msg):
+                    body.append("l reacts", style="dim italic")
         else:
             body = Text("\n" + (msg.error or msg.subject))
         return head, body
@@ -5537,6 +5684,65 @@ class UnseenetApp(App):
         self.pin_at[gid] = 0                           # the newest pin first again
         self._render_threads()
         self.notify("Unpinned" if unpin else "Pinned")
+
+    def action_react(self, msg: Message | None = None) -> None:
+        """l: react to the selected post, comment or chat line with one of the group's
+        emoji (UN-RFC 0048 section 7.3); in a chat, choose the line first. The emoji you
+        gave already takes it back, another one changes it. The post is the one selected
+        now: a refresh while the dialog opens must not change it."""
+        m = msg or self.current_message
+        gid = m.group if msg is not None and m is not None else (self.current_group or "")
+        if gid in ACROSS and m is not None:
+            gid = m.group
+        self._react(gid, m, chat=msg is None and self.view_of(gid) == "chat")
+
+    @work(group="dialog", exit_on_error=False)
+    async def _react(self, gid: str, m: Message | None, chat: bool) -> None:
+        s = self.session
+        if chat:                                       # no selection in a chat
+            lines = [x for x in sorted(s.cache.get(gid, {}).values(), key=lambda x: x.number,
+                                       reverse=True) if x.readable][:40]
+            chosen = await self.push_screen_wait(KeyListDialog(
+                "React to", "Newest first.",
+                [(x.message_id, f"{self._who(x)}: {self._first_line(x)[:60]}") for x in lines],
+                "Choose"))
+            m = next((x for x in lines if x.message_id == chosen), None)
+        if m is None:
+            self.notify("Select a post first", severity="warning")
+            return
+        allowed = s.react_permission(m.group, m)
+        if not allowed:
+            self.notify(allowed.reason, severity="warning")
+            return
+        rs = s.reaction_set(m.group)
+        mine = s.reactions_on(m).of(s.identity().key_text)
+        first = not s.client_setting("tui", "reacted", False)
+        emoji = await self.push_screen_wait(ReactDialog(
+            f"\"{self._first_line(m)[:50]}\"", rs.offered, mine, rs.any, first_time=first))
+        if not emoji:
+            return
+        if first:
+            s.set_client_setting("tui", "reacted", True)
+        self._send_reaction(m, emoji, taking_back=rx.same_emoji(emoji, mine or ""))
+
+    @work(group="react", exit_on_error=False)
+    async def _send_reaction(self, m: Message, emoji: str, taking_back: bool) -> None:
+        """Post the reaction in the background (its postage takes a moment) and show
+        the counts again when it is out (UN-RFC 0048 section 7.3)."""
+        self.set_status(("Taking back " if taking_back else "Reacting ") + emoji
+                        + " ... the reaction needs its proof of work first")
+        try:
+            await self.session.react(m, emoji)
+        except (SessionError, ValueError, OSError, ConnectionError) as exc:
+            self.set_status("")
+            self.notify(f"Not sent: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("")
+        if m.group == self.current_group or self.current_group in ACROSS:
+            self._render_threads()
+        for screen in self.screen_stack:
+            if isinstance(screen, ReadScreen) and screen.msg.message_id == m.message_id:
+                screen.show(screen.msg, keep_place=True)
 
     def _pins_possible(self, gid: str | None) -> bool:
         from ..core import pins as pn

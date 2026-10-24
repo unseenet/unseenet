@@ -129,8 +129,11 @@ async def c_read(app: App, args) -> None:
     except SessionError as exc:
         sys.exit(f"Not read: {exc}")
     rows = []
+    reactions = s.all_reactions(args.group)                 # UN-RFC 0048
     for msg, depth in s.threads(args.group):
-        rows.append({"message_id": msg.message_id, "depth": depth, "author_key": msg.author_key,
+        c = reactions.get(msg.message_id)
+        rows.append({"reactions": {e: len(k) for e, k in c.by_emoji.items()} if c else {},
+                     "message_id": msg.message_id, "depth": depth, "author_key": msg.author_key,
                      "author": s.label_of(msg.author_key), "from": msg.from_name,
                      "subject": msg.subject, "date": msg.date.isoformat() if msg.date else None,
                      "references": list(msg.references), "kind": msg.kind,
@@ -138,8 +141,39 @@ async def c_read(app: App, args) -> None:
                      "body": msg.body})
     text = "\n".join(f"\n{'  ' * r['depth']}{r['subject'] or r['body'].strip()[:60]}\n"
                      f"    From: {r['from']} ({r['author']})\n    Date: {r['date']}\n"
-                     f"    Message-ID: {r['message_id']}" for r in rows) or "No posts."
+                     f"    Message-ID: {r['message_id']}"
+                     + ("\n    " + "  ".join(f"{e} {n}" for e, n in r["reactions"].items())
+                        if r["reactions"] else "") for r in rows) or "No posts."
     emit(args, text, {"group": args.group, "posts": rows})
 
 
-__all__ = ['c_withdraw', 'c_post', 'c_read']
+async def c_react(app: App, args) -> None:
+    """``unseenet react GROUP MSGID EMOJI``: react to a post, comment or chat line
+    (UN-RFC 0048). The emoji you already gave takes it back, another changes it;
+    ``--who`` lists who gave the emoji instead."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        split_group_id(args.group)
+    except ValueError:
+        sys.exit(f"{args.group!r} is not a group ID")
+    try:
+        await s.fetch_group(args.group)
+        msg = s.find_message(args.group, args.message_id)
+        if msg is None:
+            sys.exit(f"{args.message_id} is not in {args.group}")
+        if getattr(args, "who", False):
+            who = s.who_reacted(msg, args.emoji)
+            emit(args, "\n".join(who) or "Nobody.", {"who": who})
+            return
+        mid = await s.react(msg, args.emoji)
+    except SessionError as exc:
+        sys.exit(f"Not done: {exc}")
+    if mid is None:
+        emit(args, f"Took back {args.emoji} on {args.message_id}", {"taken_back": True})
+    else:
+        emit(args, f"Reacted {args.emoji} to {args.message_id} ({mid})",
+             {"message_id": mid, "taken_back": False})
+
+
+__all__ = ['c_withdraw', 'c_post', 'c_read', 'c_react']

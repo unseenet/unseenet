@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0048                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0002, 0028, 0030, 0031, 0034
+Updates: 0002, 0028, 0030, 0031, 0034, 0046
 
                        Unseenet: Reactions
 ```
@@ -257,10 +257,13 @@ contacts. It MUST make clear what it counts.
 
 # 8. Closed Groups and Inboxes
 
-In closed groups `Message-Kind`, `Reaction`, `Subject`, `References` and
-the body are in the encrypted inner article (UN-RFC 0004 section 6);
-`Reaction` MUST NOT appear in the outer article. Nodes cannot tell a
-reaction from any other article there, and cannot count or enforce.
+In closed groups `Message-Kind`, `Reaction`, `Subject` and the body are
+in the encrypted inner article (UN-RFC 0004 section 6); `Reaction` MUST
+NOT appear in the outer article. `References` stays in the outer
+article, as for every article of a closed group, so nodes see what a
+reaction answers as they see what a reply answers, but not that it is a
+reaction. Nodes cannot tell a reaction from any other article there, and
+cannot count or enforce.
 
 Clients of members enforce the reaction set: a reaction whose emoji is
 not in it, or which breaks section 3 or 5, is not counted. A client MUST
@@ -349,6 +352,9 @@ counted once.
 - **UN-RFC 0031** section 5.3: reactions are this document.
 - **UN-RFC 0034** section 8: "in a later document, reactions" is this
   document; section 4.4: clients MUST NOT pick comments by reactions.
+- **UN-RFC 0046** sections 4.3, 4.5 and 4.7: the local client API gives
+  each group's reaction set, each row's reactions and whether you may
+  react, reacting as a job, and `reactions` in a group's settings.
 - **UN-RFC 0000** section 6: 0048 is added to the index.
 
 # 13. Open Issues

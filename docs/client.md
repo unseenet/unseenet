@@ -103,6 +103,7 @@ else is in the command palette, ++ctrl+p++:
 | ++enter++ | Read the selected post on the whole screen (or click it a second time; ++f++ does the same) |
 | ++n++ | New post in the current group |
 | ++r++ | Reply to the selected post |
+| ++l++ | React to the selected post, comment or chat line: a number chooses one of the group's emoji; the same again takes it back. Not shown where the group takes no reactions |
 | ++ctrl+s++ | Send (in the compose window) |
 | ++m++ | Write a private post: type a contact's name or paste a key (pre-filled with the selected post's author); to chat instead: ++ctrl+p++, *Chat with someone* |
 | ++c++ | Your contacts: chat, write a private post, rename or remove |

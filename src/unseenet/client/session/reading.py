@@ -245,9 +245,12 @@ class ReadingMixin:
             if msg is None:
                 changed = True     # control article updated group state
                 continue
+            raws[n] = raw
+            if self._take_reaction(group_id, n, msg):          # UN-RFC 0048: not a post
+                cache.pop(n, None)
+                continue
             new += n not in cache
             cache[n] = msg
-            raws[n] = raw
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
         if entry.get("cancels") and self._apply_cancels(group_id):
@@ -296,7 +299,9 @@ class ReadingMixin:
                 n, raw = int(n_text), base64.b64decode(b64raw)
                 msg = self._parse(n, raw, gid, entry, me)
                 if msg is not None:
-                    cache[n], raws[n] = msg, raw
+                    raws[n] = raw
+                    if not self._take_reaction(gid, n, msg):   # UN-RFC 0048
+                        cache[n] = msg
                     loaded += 1
             if entry.get("cancels"):
                 self._apply_cancels(gid)
@@ -383,6 +388,7 @@ class ReadingMixin:
         else:
             msg.subject, msg.from_name, msg.body = art.get("Subject", ""), art["From"], art.body
             msg.kind = message_kind(art)                     # UN-RFC 0028
+            msg.reaction = (art.get("Reaction") or "").strip()   # UN-RFC 0048
             msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
             if art.get("Blobs"):                             # files it carries (UN-RFC 0027)
                 from ...core import blobs as bl
@@ -408,6 +414,7 @@ class ReadingMixin:
         msg.readable = True
         msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
         msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
+        msg.reaction = (inner.get("Reaction") or "").strip()     # UN-RFC 0048 section 8
         msg.content_type = inner.get("Content-Type", "")
         self._encrypted_files(msg, art, inner, msg.group)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with the group (0022, 6)
@@ -428,9 +435,12 @@ class ReadingMixin:
 
     def _redecrypt(self, group_id: str) -> None:
         entry = self.group_entry(group_id)
-        for msg in self.cache.get(group_id, {}).values():
+        cache = self.cache.get(group_id, {})
+        for n, msg in list(cache.items()):
             if msg.encrypted and not msg.readable and msg.raw:
                 self._decrypt_into(msg, Article.from_bytes(msg.raw), entry)
+                if self._take_reaction(group_id, n, msg):      # it was a reaction (0048, 8)
+                    del cache[n]
 
     # ------------------------------------------------------------------
     # read marks
