@@ -32,6 +32,9 @@ class Identity:
                     # to tell before the first (section 4.11)
                     "picture": _shown(s.my_picture()), "picture_warning": prof.PICTURE_WARNING}
         key = _key(key)
+        fp = crypto.fingerprint(crypto.key_from_text(key))
+        # their personal feed, and whether you follow them (UN-RFC 0034, section 4.14)
+        base.update(feed=f"feed@{fp}", following=fp in s.data.get("following", {}).get("people", {}))
         if s.profile_hidden(key):                         # hidden: not even asked for
             return {**self._profile(key, None), **base, "mine": False, "hidden": True}
         # all the authors you have, read together, so a node cannot tell whose you open

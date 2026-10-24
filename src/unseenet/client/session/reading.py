@@ -130,8 +130,9 @@ class ReadingMixin:
         """A group's posts as every client shows them: ``(message, depth)`` rows.
 
         Threads newest first for a post view; oldest first, flat, for a chat
-        view and a contact's chat; newest first, flat, for "For you". People
-        you ignore are left out and an edited post shows its newest version.
+        view and a contact's chat; newest first, flat, for "For you"; entries
+        newest first with their comments for a feed (``feed_rows``). People you
+        ignore are left out and an edited post shows its newest version.
         """
         if group_id == FOR_YOU:
             return [(m, 0) for m in self.for_you(unread_only=False)[:200]]
@@ -142,14 +143,20 @@ class ReadingMixin:
                                                                    KIND_CHAT))]
         if group_id == self.my_inbox:
             return threaded(self.visible(self.private_posts()))   # what you sent, too
+        if self.view_of(group_id) == "feed":
+            return self.feed_rows(group_id)
         msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
         return threaded(self.visible(msgs))        # replies to ignored people stay
 
     def feed_rows(self, group_id: str) -> list[tuple["Message", int]]:
-        """A group as a feed (UN-RFC 0034 section 4): its entries newest first, each
-        followed by its comments in order, at most two levels deep - the same rows
-        in every client. The timeline is entries only."""
-        return [(m, min(d, FEED_DEPTH)) for m, d in self.threads(group_id)]
+        """A group as a feed (UN-RFC 0034 section 4), whatever view you chose for it:
+        every post or note that answers nothing is an entry, newest first by ``Date``,
+        each followed by its comments in order, at most two levels deep - the same
+        rows in every client. The timeline is entries only."""
+        if group_id == TIMELINE:
+            return self.threads(TIMELINE)
+        msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
+        return [(m, min(d, FEED_DEPTH)) for m, d in feed_threaded(self.visible(msgs))]
 
     def view_of(self, group_id: str | None) -> str:
         """``"threads"``, ``"chat"``, ``"feed"`` or ``"data"``: your own choice for the

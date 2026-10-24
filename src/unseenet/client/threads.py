@@ -51,3 +51,35 @@ def threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
             depth = 0 if m.message_id == root else min(len(m.references), MAX_DEPTH)
             out.append((m, depth))
     return out
+
+
+def feed_threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
+    """A group shown as a feed (UN-RFC 0034 section 4): every post or chat line that
+    answers nothing here is an entry - consecutive chat lines too, each a note of its
+    own - entries newest first by ``Date``, each followed by its comments in the
+    order they came. ``(message, depth)``, depth 0 for an entry and the comment's
+    depth under it (at most ``MAX_DEPTH``); a front end shows two levels."""
+    from datetime import datetime, timezone
+    pos = {m.message_id: i for i, m in enumerate(msgs)}
+    by_id = {m.message_id: m for m in msgs}
+    entries: dict[str, list[Message]] = {}
+    for m in msgs:
+        root = next((r for r in m.references if r in by_id), None)
+        if root is not None:                    # under the entry its first reference is in
+            while True:
+                up = next((r for r in by_id[root].references if r in by_id), None)
+                if up is None:
+                    break
+                root = up
+        entries.setdefault(root or m.message_id, [])
+        if root is not None:
+            entries[root].append(m)
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    out = []
+    for root in sorted(entries, key=lambda r: (by_id[r].date or epoch, pos[r]), reverse=True):
+        out.append((by_id[root], 0))
+        for m in entries[root]:
+            refs = m.references
+            depth = len(refs) - refs.index(root) if root in refs else 1
+            out.append((m, max(1, min(depth, MAX_DEPTH))))
+    return out

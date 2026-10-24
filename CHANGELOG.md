@@ -15,6 +15,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   checks them against the group's manifest before any postage is computed, and
   sends them as blobs with the post through `Session`. `Session.post_article`
   takes `blobs` and `extra_bits` for this. Documented in `docs/bots.md`.
+- Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
+  0034): a group can be shown as a feed, with `comment` on each row (may you
+  answer it with a chat line); the timeline as the pseudo-group `timeline:`,
+  every followed feed's entries newest first with their comments under them;
+  `GET/POST /api/following` to follow and stop following people and feeds;
+  `GET/POST /api/feed` to start your own feed after the warning; and a
+  profile says whose feed it is and whether you follow them. A group shown
+  as a feed is laid out by `Session.feed_rows()` in every client: each note its
+  own entry, entries newest first by date, comments under them.
 - Addresses in the local client API (#442, UN-RFC 0046 section 4.13, UN-RFC
   0031 section 3.4.1): a group's head, each of its posts and every profile
   carry their `unseenet:` address, and `GET /api/address` says what any
@@ -120,6 +129,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   feed** (after saying it is public). The rows come from the core
   (`Session.feed_rows`, the pseudo group `TIMELINE`), so the GUI can show the
   same.
+- TUI: files and pictures (#149, #155). Where a group takes files, the compose
+  dialog has a Files field (paths, comma between); pictures are cleaned of
+  their metadata before they are sent. Edit profile takes a picture file,
+  published as your profile picture - the middle square, at most 128 px, no
+  metadata. Reading and saving files (f) was there already.
+- TUI: a site is shown as its pages (#212) - one row a page, the home page first
+  (⌂), each with its path; choosing one shows it, Markdown and all; `v`
+  switches a site between pages and threads. Writing pages stays with the
+  command line (`unseenet page-put`) for now.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the
