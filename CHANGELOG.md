@@ -286,6 +286,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- The project's bot channels are feeds by default and take pictures (#475):
+  `tools/project/create_groups.py` sets `view: feed` for the six of them and
+  `attachments` (`image/*`, 512 KiB) for all but The Conversation.
 - `Session` is split into files by area (`client/session/`: base, ripening,
   nodes, labels, groups, private, profiles, people, reading, posting), each
   with a docstring saying what belongs there, joined into
