@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Pinned posts in the local client API (#442, UN-RFC 0046 section 4.12,
+  UN-RFC 0033): a group's head lists the pins in force with each pinned
+  post's subject and author, `max_pins` and `may_pin`, every row says
+  whether it is `pinned`, and `POST /api/groups/{id}/pin` pins or unpins a
+  post with an optional note. A pin of a post beyond the group's window is
+  marked `beyond_window`, for a front end to warn before unpinning it.
 - Pictures of people in the local client API (#442, UN-RFC 0046 section
   4.11): every post's row has its author's identicon, `GET /api/pictures`
   answers the pictures and identicons of many keys - read together with
