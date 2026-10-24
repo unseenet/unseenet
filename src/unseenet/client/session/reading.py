@@ -153,6 +153,8 @@ class ReadingMixin:
         every post or note that answers nothing is an entry, newest first by ``Date``,
         each followed by its comments in order, at most two levels deep - the same
         rows in every client. The timeline is entries only."""
+        if group_id == TIMELINE:
+            return self.threads(TIMELINE)
         msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
         return [(m, min(d, FEED_DEPTH)) for m, d in feed_threaded(self.visible(msgs))]
 
