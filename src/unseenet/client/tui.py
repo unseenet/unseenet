@@ -54,7 +54,9 @@ from .session import (MAX_SIG_LINES, SIG_SEPARATOR, GroupInfo, Message, Session,
 
 REFRESH_SECONDS = 60           # a fallback; new posts normally arrive by push (UN-RFC 0008)
 REPO_URL, DOCS_URL = about.REPO_URL, about.DOCS_URL
-from .threads import CONTACT, FOR_YOU   # the session's pseudo groups (#139)
+from .threads import CONTACT, FOR_YOU, TIMELINE   # the session's pseudo groups (#139)
+ACROSS = (FOR_YOU, TIMELINE)             # views across groups: act in the post's own group
+FEED_MARK = "≡"                          # the timeline in the group list (UN-RFC 0034)
 from .runtime import ClientRuntime
 from . import events as ev
 REPLY_MARK, MENTION_MARK = "◄", "♦"   # in the basic character set (Windows console)
@@ -1842,7 +1844,7 @@ class UnseenetApp(App):
             return True
         gid = self.current_group or ""
         m = self.current_message
-        if gid == FOR_YOU and m is not None:
+        if gid in ACROSS and m is not None:
             gid = m.group                         # act as in the post's own group
         contact = gid.startswith(CONTACT)
         group = gid in self.groups
@@ -1893,7 +1895,7 @@ class UnseenetApp(App):
         chat line would be refused - not after you typed one (#181)."""
         box = self.query_one("#chat-input", Input)
         p = (self.session.write_permission(gid, kind=KIND_CHAT)
-             if gid and not gid.startswith(CONTACT) and gid != FOR_YOU else None)
+             if gid and not gid.startswith(CONTACT) and gid not in ACROSS else None)
         if p is not None and not p:
             box.disabled, box.placeholder = True, p.reason
         else:
@@ -2097,7 +2099,7 @@ class UnseenetApp(App):
         if news:
             self.notify(news, timeout=8)
         self._for_you_seen = now
-        if self.current_group in groups or self._current_contact() or self.current_group == FOR_YOU:
+        if self.current_group in groups or self._current_contact() or self.current_group in ACROSS:
             self._render_threads()
         elif groups:
             self.select_group(next(iter(groups)))
@@ -2196,6 +2198,8 @@ class UnseenetApp(App):
             text.stylize("bold")
         if not searching:
             nodes[FOR_YOU] = tree.root.add_leaf(text, data=FOR_YOU)
+            if self.session.feeds_followed():            # UN-RFC 0034 section 7
+                nodes[TIMELINE] = tree.root.add_leaf(Text(f"{FEED_MARK} Timeline"), data=TIMELINE)
         self._for_you_seen = getattr(self, "_for_you_seen", None) or for_you
         # one chat per person: your contacts, and anyone else you have chatted with
         # (UN-RFC 0028, 6.2); posts are in Private posts
@@ -2287,6 +2291,18 @@ class UnseenetApp(App):
             self._render_threads()
             self.query_one("#threads").focus()
             return
+        if gid == TIMELINE:
+            self._render_threads()                          # what is saved, at once
+            self.query_one("#threads").focus()
+            try:
+                await self.session.refresh_following()      # people's feeds, as they are now
+                for feed in self.session.feeds_followed():
+                    await self.session.fetch_group(feed)
+            except (SessionError, OSError, ConnectionError) as exc:
+                self.set_status(f"Offline ({exc}) - showing saved posts")
+            if self.current_group == TIMELINE:
+                self._render_threads()
+            return
         if gid.startswith(CONTACT):
             try:
                 await self.session.fetch_group(self.session.my_inbox)
@@ -2322,7 +2338,8 @@ class UnseenetApp(App):
         gid = self.current_group
         s = self.session
         mine, patterns = s.my_message_ids(), s._mention_patterns()
-        rows = s.threads(gid) if gid else []     # the same rows in every client (#139)
+        feed = bool(gid) and self.view_of(gid) == "feed"
+        rows = (s.feed_rows(gid) if feed else s.threads(gid)) if gid else []   # every client (#139)
         table = self.query_one("#threads", DataTable)
         keep = self.current_message.message_id if self.current_message else None
         table.clear()
@@ -2339,7 +2356,12 @@ class UnseenetApp(App):
             if m.kind == KIND_CHAT and m.readable:     # a chat line among posts: its first line
                 first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
                 title = "» " + first[:60] + ("…" if len(first) > 60 else "")
-            subject = ("  " * (depth - 1) + "└ " if depth else "") + title
+            if feed and depth:                          # a comment: who and what, under its entry
+                first = (m.body.strip().split("\n", 1)[0] if m.readable else "") or "…"
+                title = first[:70] + ("…" if len(first) > 70 else "")
+                subject = "  " * depth + "↳ " + title
+            else:
+                subject = ("  " * (depth - 1) + "└ " if depth else "") + title
             if m.edited:
                 subject += "  (edited)"
             notice = s.is_notice(m)                      # UN-RFC 0032: names you elsewhere
@@ -2355,6 +2377,8 @@ class UnseenetApp(App):
             if gid == FOR_YOU:
                 subject += (f"  ({s.group_label(m.mention_group)}, not followed)" if notice
                             else f"  ({s.group_label(m.group)})")
+            elif gid == TIMELINE:
+                subject += f"  ({s.group_label(m.group)})"
             date = m.date.astimezone().strftime("%d %b %H:%M") if m.date else ""
             table.add_row(flag, Text(subject), Text(self._who(m)), date, key=m.message_id)
         self._render_title()
@@ -2528,8 +2552,14 @@ class UnseenetApp(App):
             self.notify("Private posts are always shown as a list; open a contact to chat",
                         severity="warning")
             return
-        new = "threads" if self.view_of(gid) == "chat" else "chat"
+        if gid in ACROSS:
+            self.notify("For you and the timeline are always shown as they are", severity="warning")
+            return
+        order = ["threads", "feed", "chat"]                 # UN-RFC 0008 and 0034: chat goes back to threads
+        now = self.view_of(gid)
+        new = order[(order.index(now) + 1) % 3] if now in order else "threads"
         self.session.set_view(gid, new)
+        self.set_status(f"Shown as {new}  (v for the next)")
         self._render_threads()
         self._focus_view(gid)
 
@@ -2615,6 +2645,12 @@ class UnseenetApp(App):
             self.query_one("#threads-title", Static).update(
                 f"{REPLY_MARK} For you  ·  {REPLY_MARK} {c.replies} unread replies to your posts, "
                 f"{MENTION_MARK} {c.mentions} unread posts that name you  ·  from all your groups")
+            return
+        if gid == TIMELINE:
+            n = len(self.session.feeds_followed())
+            self.query_one("#threads-title", Static).update(
+                f"{FEED_MARK} Timeline  ·  {n} feed{'s' if n != 1 else ''} you follow, newest first, "
+                "nothing reordered  ·  r comments in the post's own feed")
             return
         if gid.startswith(CONTACT):
             key = gid[len(CONTACT):]
@@ -2737,7 +2773,7 @@ class UnseenetApp(App):
 
     # --- actions ---
     def _need_group(self) -> GroupInfo | None:
-        if self.current_group == FOR_YOU and self.current_message \
+        if self.current_group in ACROSS and self.current_message \
                 and self.current_message.group in self.groups:
             return self.groups[self.current_message.group]
         if not self.current_group or self.current_group not in self.groups:
@@ -2944,6 +2980,80 @@ class UnseenetApp(App):
         self._watching.clear()
         self.refresh_groups()
         self._start_watches()
+
+    # --- feeds and following (UN-RFC 0034) ---
+    @work(group="dialog", exit_on_error=False)
+    async def action_follow(self) -> None:
+        """Follow a person: their feeds come into your timeline. Nobody is told."""
+        s = self.session
+        m = self.current_message
+        mine = s.identity().key_text
+        default = m.author_key if m and m.author_key and m.author_key != mine and not m.private else ""
+        target = await self.push_screen_wait(InputDialog(
+            "Follow", "A key, a fingerprint, an unseenet: address or a name such as "
+            "andreas@lorensen. Their feeds come into your Timeline; nobody is told, and "
+            "nobody can see whom you follow.", "ed25519:... or a name", default))
+        if not target:
+            return
+        self.set_status("Following ...")
+        try:
+            got = await s.follow_person(target)
+            for feed in got.get("feeds", []):
+                await s.fetch_group(feed)
+        except (SessionError, OSError, ConnectionError, ValueError) as exc:
+            self.notify(f"Not followed: {exc}", severity="error", timeout=8)
+            self.set_status("")
+            return
+        who = s.label_of(got["key"]) if got.get("key") else target
+        feeds = got.get("feeds", [])
+        self.notify(f"Following {who}" + ("" if feeds else " - no feed yet; it comes in when they "
+                                           "start one"), timeout=6)
+        self.set_status("")
+        self.refresh_groups()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_following(self) -> None:
+        """The people you follow; stop following one."""
+        s = self.session
+        people = [(p.get("key") or p["fingerprint"], p["label"]) for p in s.following()]
+        if not people:
+            self.notify("You follow nobody yet - Follow in Ctrl+P, on a post's author", timeout=6)
+            return
+        target = await self.push_screen_wait(KeyListDialog(
+            "Following", "Their feeds are in your Timeline. Only you know whom you follow.",
+            people, "Stop following"))
+        if not target:
+            return
+        try:
+            await s.unfollow_person(target)
+        except (SessionError, ValueError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify("Not following any more", timeout=4)
+        self.refresh_groups()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_start_feed(self) -> None:
+        """Start your own feed (UN-RFC 0034 section 5), after saying it is public."""
+        s = self.session
+        gid = s.personal_group("feed")
+        if gid in s.data["subscribed"] and s.data["groups"].get(gid, {}).get("owner"):
+            self.select_group(gid)
+            return
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Start my feed", s.personal_group_warning("feed"), "Start my feed")):
+            return
+        self.set_status("Starting your feed ...")
+        try:
+            gid = await s.start_personal_group("feed")
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not started: {exc}", severity="error", timeout=8)
+            self.set_status("")
+            return
+        self.set_status("")
+        self.notify("Your feed is started: n writes in it, and anyone can comment", timeout=8)
+        self.refresh_groups()
+        self.select_group(gid)
 
     @work(group="dialog", exit_on_error=False)
     async def action_state_where(self) -> None:
@@ -3320,7 +3430,7 @@ class UnseenetApp(App):
 
     def action_group_address(self) -> None:
         gid = self.current_group
-        if not gid or gid not in self.groups or gid == FOR_YOU or gid.startswith(CONTACT):
+        if not gid or gid not in self.groups or gid in ACROSS or gid.startswith(CONTACT):
             self.notify("Select a group first", severity="warning")
             return
         self._show_address("The group's address - others open it with j", self._group_address(gid))
@@ -3716,6 +3826,11 @@ class UnseenetApp(App):
               if self.runtime is not None and self.runtime.ripening_paused else
               "Pause ripening your key (on battery, a warm laptop), and what ripening is"),
              self.action_ripening),
+            ("Follow", "Follow a person - the selected post's author, or anyone by key or name; "
+             "their feeds come into your Timeline", self.action_follow),
+            ("Following", "The people you follow - stop following one", self.action_following),
+            ("Start my feed", "Your own feed, public, where anyone can comment - or open it",
+             self.action_start_feed),
             ("Private posts from new keys",
              ("Hidden: only contacts and keys ripened an hour or more reach you - show all"
               if self.session.private_min_ripe() is not None else
@@ -4444,7 +4559,7 @@ class UnseenetApp(App):
     def _pins_here(self, gid: str | None) -> list[dict]:
         """The pins in force in a real group, as every client works them out."""
         s = self.session
-        if not gid or gid == FOR_YOU or gid.startswith(CONTACT) or gid == s.my_inbox:
+        if not gid or gid in ACROSS or gid.startswith(CONTACT) or gid == s.my_inbox:
             return []
         try:
             return s.pins(gid)
@@ -4634,7 +4749,7 @@ class UnseenetApp(App):
     def _pins_possible(self, gid: str | None) -> bool:
         from ..core import pins as pn
         s = self.session
-        if not gid or gid == FOR_YOU or gid.startswith(CONTACT) or gid == s.my_inbox:
+        if not gid or gid in ACROSS or gid.startswith(CONTACT) or gid == s.my_inbox:
             return False
         try:
             return s.moderates_or_owns(gid) and pn.max_pins(s.manifest_data(gid)) > 0

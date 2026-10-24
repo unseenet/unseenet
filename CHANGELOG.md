@@ -106,6 +106,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   ripe as the machine allows (#358, #440). Your own chat line shows at once,
   dimmed, "sending ...", then the real one - or red, "not sent" (#325).
   "Your state" keeps it in the network or on this device only (UN-RFC 0044).
+- TUI: feeds (#207). A **Timeline** under "For you" - the entries of the feeds
+  you follow, newest first, nothing reordered; a group shown as a **feed** -
+  entries newest first, comments under each, two levels, marked ↳; `v` goes
+  threads → feed → chat. In the palette: **Follow** (the selected post's
+  author, or anyone by key or name), **Following** (and stop), **Start my
+  feed** (after saying it is public). The rows come from the core
+  (`Session.feed_rows`, the pseudo group `TIMELINE`), so the GUI can show the
+  same.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the

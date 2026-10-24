@@ -1540,5 +1540,36 @@ async def test_tui_keeps_your_state_local_when_asked(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
         app.screen.query_one("#ok").press()
         assert await wait_for(pilot, lambda: app.session.state_kept_local(), 400)
+async def test_tui_follows_a_person_and_shows_the_timeline_and_a_feed(tmp_path, monkeypatch):
+    """#207 in the TUI: Follow (by key), a Timeline in the group list with the person's
+    entries, and their feed as a feed - comments under the entry, marked ↳."""
+    from unseenet.client.tui import TIMELINE
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    alice = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    alice.new_identity("alice", "Alice"); alice.add_node(addr)
+    feed = await alice.start_personal_group("feed")
+    entry = await alice.post(feed, "Første indlæg", "Hej fra mit feed\n")
+    await alice.post(feed, "", "En kommentar\n", references=[entry], kind="chat")
+    await alice.publish_profile({"v": 1, "about": "Hej", "feeds": [feed]})
+    key = alice.identity().key_text
+    await alice.close()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.action_follow()
+        assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "InputDialog", 100)
+        app.screen.query_one("#value").value = key
+        await pilot.click("#ok")
+        assert await wait_for(pilot, lambda: TIMELINE in [n.data for n in app.query_one("#groups").root.children], 400)
+        app.select_group(TIMELINE)
+        assert await wait_for(pilot, lambda: [m.subject for m in app.messages.values()] == ["Første indlæg"], 400)
+        assert "Timeline" in str(app.query_one("#threads-title").render())
+        app.session.subscribe(feed)
+        app.session.set_view(feed, "feed")
+        app.select_group(feed)
+        assert await wait_for(pilot, lambda: len(app.messages) == 2, 400)
+        table = app.query_one("#threads")
+        rows = [str(table.get_row_at(i)[1]) for i in range(table.row_count)]
+        assert rows[0].endswith("Første indlæg") and "↳ En kommentar" in rows[1]
         await pilot.press("q")
     server.close()
