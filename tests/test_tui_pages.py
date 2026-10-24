@@ -51,6 +51,8 @@ async def test_tui_writes_pages(tmp_path, monkeypatch):
         app.select_group(gid)
         assert await wait_for(pilot, lambda: len(app.messages) == 1, 400), stack(app)
 
+        assert app.check_action("new_post", ()) is True        # n is shown for a writer
+        assert app.check_action("reply", ()) is False           # a page is not answered
         app.action_new_post()                                   # n in a site: a new page
         assert await wait_for(pilot, lambda: isinstance(app.screen, PageDialog)), stack(app)
         assert await wait_for(pilot, lambda: laid_out(app, "#body"))
@@ -129,6 +131,7 @@ async def test_tui_readers_do_not_write_pages(tmp_path, monkeypatch):
         assert await app_ready(pilot, app), stack(app)
         app.select_group(gid)
         assert await wait_for(pilot, lambda: len(app.messages) == 1, 400), stack(app)
+        assert not app.check_action("new_post", ())           # n hidden for a reader
         app.action_new_post()
         app.current_message = next(iter(app.messages.values()))
         app.action_edit()

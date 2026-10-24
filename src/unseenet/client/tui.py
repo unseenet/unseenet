@@ -1977,8 +1977,10 @@ class UnseenetApp(App):
         shown = self.view_of(gid) if group else "threads"
         if action in ("next_unread", "read"):     # the keys of a list (#490)
             return bool(gid) and not chat and not typing and (action == "next_unread" or m is not None)
-        if action in ("new_post", "reply") and shown == "pages":
-            return False                          # this client reads sites; it does not write them
+        if action == "reply" and shown == "pages":
+            return False                          # a page is not answered (UN-RFC 0035)
+        if action == "new_post" and shown == "pages":
+            return self._writes_pages(gid)        # n writes a page, for the site's writers (#212)
         if action == "new_post":
             return contact or (group and s.write_permission(gid, kind=KIND_POST).allowed)
         if action == "reply":                     # #181: hidden when it would be refused
