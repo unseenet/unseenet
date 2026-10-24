@@ -2430,6 +2430,14 @@ class UnseenetApp(App):
                 else sorted((m for m, _ in rows), key=lambda m: m.number)
             self._render_chat(chron)
             return
+        target = getattr(self, "_open_at", None)          # an address that was opened (#357)
+        if target is not None and gid:
+            if isinstance(target, tuple):                # a page, by its path
+                keep = next((k for k, m in self.messages.items() if m.page == target[1]), keep)
+            elif target in self.messages:
+                keep = target
+            if keep in self.messages:
+                self._open_at = None
         if keep in self.messages:
             table.move_cursor(row=table.get_row_index(keep))
         elif gid and gid.startswith(CONTACT) and rows:
@@ -3148,6 +3156,83 @@ class UnseenetApp(App):
             await rt.pause_ripening()
             self.set_status("Ripening paused until you resume it or start again.")
         self._update_subtitle()
+
+    # --- addresses (UN-RFC 0031 section 3.4.1, #357) ---
+    def current_address(self) -> str | None:
+        """The unseenet: address of what you are on: the post or page, else the group,
+        else - in a chat with someone - the person."""
+        from ..core import addresses as addr
+        s, gid, m = self.session, self.current_group or "", self.current_message
+        if gid.startswith(CONTACT):
+            return addr.identity_address(crypto.fingerprint(crypto.key_from_text(gid[len(CONTACT):])))
+        if m is not None and not m.private and m.group and not m.group.startswith(CONTACT):
+            if m.page is not None:
+                return addr.page_address(m.group, m.page)
+            return addr.post_address(m.group, m.message_id)
+        if gid and gid not in ACROSS and gid != s.my_inbox:
+            return addr.group_address(gid)
+        return None
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_copy_address(self) -> None:
+        """Show the address of what you are on, to copy - and put it on the clipboard
+        where the terminal lets us."""
+        a = self.current_address()
+        if a is None:
+            self.notify("Choose a group, a post or a chat first", severity="warning")
+            return
+        try:
+            self.copy_to_clipboard(a)              # OSC 52: many terminals take it
+        except Exception:  # noqa: BLE001 - a terminal without it: the dialog is enough
+            pass
+        await self.push_screen_wait(InfoDialog("Address - select it to copy", a))
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_open_address(self) -> None:
+        """Open an unseenet: address - a group, a post, a page or a person."""
+        from ..core import addresses as addr
+        s = self.session
+        text = await self.push_screen_wait(InputDialog(
+            "Open an address", "An unseenet: address - of a group, a post, a page or a person.",
+            "unseenet:..."))
+        if not text:
+            return
+        try:
+            a = addr.parse(text)
+        except addr.AddressError as exc:
+            self.notify(f"Not an address: {exc}", severity="error", timeout=6)
+            return
+        if a.kind == "identity":
+            if await self.push_screen_wait(ConfirmDialog(
+                    "A person", f"An identity: {a.fingerprint}. Follow them? Their feeds come "
+                    "into your Timeline; nobody is told.", "Follow")):
+                try:
+                    await s.follow_person(a.fingerprint)
+                except (SessionError, OSError, ConnectionError, ValueError) as exc:
+                    self.notify(f"Not followed: {exc}", severity="error", timeout=8)
+                    return
+                self.notify("Following", timeout=4)
+                self.refresh_groups()
+            return
+        try:
+            m = await s.fetch_manifest(a.group_id)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Could not look: {exc}", severity="error", timeout=8)
+            return
+        if m is None:
+            self.notify(f"{a.group_id} is not on your nodes", severity="warning", timeout=8)
+            return
+        if a.group_id not in s.data["subscribed"]:
+            title = m.raw.get("title") or m.name
+            if not await self.push_screen_wait(ConfirmDialog(
+                    "Follow this group?", f"{s.group_label(a.group_id)} - {title}. Follow it to "
+                    "read it here?", "Follow")):
+                return
+            s.subscribe(a.group_id)
+            self.refresh_groups()
+        self._open_at = a.message_id if a.kind == "post" else (("page", a.path) if a.kind == "page"
+                                                             else None)
+        self.select_group(a.group_id)
 
     @work(group="dialog", exit_on_error=False)
     async def action_tor(self) -> None:
@@ -3953,6 +4038,10 @@ class UnseenetApp(App):
              self.action_share_profile),
             ("Take back my shared profile", "From a person or this closed group",
              self.action_unshare_profile),
+            ("Copy address", "The unseenet: address of this post, page, group or person - to "
+             "give to others", self.action_copy_address),
+            ("Open address", "Go to an unseenet: address - a group, a post, a page or a person",
+             self.action_open_address),
             ("Private posts from new keys",
              ("Hidden: only contacts and keys ripened an hour or more reach you - show all"
               if self.session.private_min_ripe() is not None else

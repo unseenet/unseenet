@@ -156,6 +156,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   it back. `Session.share_profile`, `withdraw_shared_profile`,
   `private_profile(key, context)`; in the TUI, "Share my profile" and "Take
   back my shared profile" in the palette.
+- TUI: "Copy address" gives the `unseenet:` address of the post, page, group or
+  person you are on (and puts it on the clipboard where the terminal lets it);
+  "Open address" goes to one - a group (following it if you say so), a post or a
+  page with the cursor on it, or a person to follow (#357).
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the

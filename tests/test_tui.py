@@ -1724,3 +1724,33 @@ async def test_tui_shows_a_profile_shared_with_you(tmp_path, monkeypatch):
         await pilot.press("escape")
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_copies_and_opens_addresses(tmp_path, monkeypatch):
+    """#357 in the TUI: the address of what you are on, and opening one - a post in a
+    group you do not follow yet: asked first, then the cursor on the post."""
+    from unseenet.client.tui import ConfirmDialog, InputDialog
+    from unseenet.core import addresses as addr
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr_ = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    other = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    other.new_identity("o", "Other"); other.add_node(addr_)
+    gid = await other.create_group("dk.adresse", "open", min_pow=10)
+    await other.post(gid, "Første", "a\n")
+    mid = await other.post(gid, "Den her", "b\n")
+    await other.close()
+    link = addr.post_address(gid, mid)
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.action_open_address()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, InputDialog), 100)
+        app.screen.query_one("#value").value = link
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ConfirmDialog), 200)
+        app.screen.query_one("#ok").press()                    # follow the group
+        assert await wait_for(pilot, lambda: app.current_group == gid and len(app.messages) == 2, 400)
+        table = app.query_one("#threads")
+        assert await wait_for(pilot, lambda: table.cursor_row == table.get_row_index(mid), 200)
+        assert app.current_address() == link                    # and back again
+        await pilot.press("q")
+    server.close()
