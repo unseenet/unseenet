@@ -52,6 +52,10 @@ Because the Group ID is derived from the key, anyone who knows a
 person's key knows where to write to them. A client MAY create a
 personal inbox automatically when an identity is created.
 
+An inbox's manifest MAY carry `"sealedbox2": true`: its owner's client
+reads inbox articles of that form, and the owner's nodes take them
+(section 2.3).
+
 ## 2.3 Inbox Articles
 
 An ordinary article in an inbox group MUST:
@@ -63,6 +67,29 @@ An ordinary article in an inbox group MUST:
 - have as body the b64 encoding (lines of at most 76 characters) of a
   sealed box (UN-RFC 0003 section 4.1) to the owner's key, containing
   the **inner article**.
+
+Or, so that the sender can read its own sent posts from another device
+(UN-RFC 0044 section 6), it has `Encrypted: sealedbox2` and as body the
+b64 encoding of
+
+```
+envelope-1 || envelope-2 || nonce || ciphertext
+```
+
+where `ciphertext` is the inner article encrypted with
+XChaCha20-Poly1305 under a random 32-octet `content_key` (24-octet
+`nonce`, associated data the Group ID), `envelope-1` is a sealed box of
+`content_key` to the owner's key, and `envelope-2` a sealed box of
+`content_key` to the sender's own key - or of 32 random octets to a
+random key, when the sender keeps no copy. Each envelope is 80 octets,
+so nobody can tell whether the sender kept a copy.
+
+A client sends `sealedbox2` only when the inbox's manifest has
+`"sealedbox2": true` and its own node lists `UNSEENET-SEALEDBOX2` in
+`CAPABILITIES`; otherwise `sealedbox`. An owner's client sets
+`"sealedbox2": true` in its inbox's manifest only when it reads that
+form and its own nodes list the capability. A client MUST read both
+forms. A later version retires `sealedbox`.
 
 The inner article is in article syntax and carries:
 
@@ -95,8 +122,10 @@ were verified.
 
 Nodes cannot check who may write to an inbox, because everybody may. A
 node MUST reject an ordinary article in an inbox group unless it meets
-section 2.3 as far as a node can see: `Encrypted: sealedbox`, no outer
-`From`/`Subject`, and a valid outer signature and postage.
+section 2.3 as far as a node can see: `Encrypted: sealedbox` or
+`sealedbox2`, no outer `From`/`Subject`, and a valid outer signature and
+postage. A node that accepts `sealedbox2` lists `UNSEENET-SEALEDBOX2` in
+its `CAPABILITIES` (UN-RFC 0005).
 
 Owners of inboxes that receive spam SHOULD raise `min_pow` in the
 manifest. Nodes MAY apply a higher minimum postage to inbox groups than

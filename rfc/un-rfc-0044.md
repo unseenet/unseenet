@@ -184,7 +184,14 @@ envelope-1 || envelope-2 || ciphertext
 Both envelopes have the same length. Every inbox article has exactly
 two, so nobody can tell from an article whether its sender kept a copy,
 or whether it has a sender at all; sealed boxes say nothing about whom
-they are for. The header `Encrypted: sealedbox2` marks the new form.
+they are for. The header `Encrypted: sealedbox2` marks the new form;
+UN-RFC 0009 section 2.3 gives its exact layout.
+
+Older nodes take only `sealedbox`, and older clients read only that, so
+the new form is used only where both ends can (UN-RFC 0009 section 2.3):
+the recipient's inbox manifest says `"sealedbox2": true`, and the
+sender's node lists `UNSEENET-SEALEDBOX2`. Otherwise the sender writes
+`sealedbox`, as before, and keeps its copy in the vault only.
 
 ## 6.2 Finding Them Again
 
