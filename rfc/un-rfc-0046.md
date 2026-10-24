@@ -574,7 +574,7 @@ its current form in `address`. Refused with 400 when it is not an address.
 A group whose `view` is `feed` (UN-RFC 0034) is read like any group
 (section 4.3): its rows are its entries, every post or chat line that
 answers nothing in the group, newest first by `Date`, each at depth 0 and
-followed by its comments (`Session.feed()`), and a front end shows them as
+followed by its comments, two levels at most (`Session.feed_rows()`), and a front end shows them as
 UN-RFC 0034 section 4 says. In a group shown as a feed each row also has `comment`, a
 permission (section 4.3) to answer it with a chat line, which is how a
 comment is written (UN-RFC 0034 section 4.2): `POST /api/groups/<id>/post`

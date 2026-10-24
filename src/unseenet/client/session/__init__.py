@@ -64,7 +64,7 @@ from ...core.vault import Vault
 from ...nntp import Client, NNTPError
 from ... import names
 from .. import naming
-from ..threads import CONTACT, FOR_YOU, feed_threaded, threaded
+from ..threads import CONTACT, FEED_DEPTH, FOR_YOU, TIMELINE, feed_threaded, threaded
 from .. import events as ev
 from ...core import pow as postage
 from ...core import ripening as rp

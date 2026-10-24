@@ -16,7 +16,7 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `GET/POST /api/following` to follow and stop following people and feeds;
   `GET/POST /api/feed` to start your own feed after the warning; and a
   profile says whose feed it is and whether you follow them. A group shown
-  as a feed is laid out by `Session.feed()` in every client: each note its
+  as a feed is laid out by `Session.feed_rows()` in every client: each note its
   own entry, entries newest first by date, comments under them.
 - Addresses in the local client API (#442, UN-RFC 0046 section 4.13, UN-RFC
   0031 section 3.4.1): a group's head, each of its posts and every profile
@@ -110,6 +110,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- TUI: "Key ripening" in the palette pauses and resumes ripening, and says
+  what it is; the subtitle shows "(ripening paused)", or that the key is as
+  ripe as the machine allows (#358, #440). Your own chat line shows at once,
+  dimmed, "sending ...", then the real one - or red, "not sent" (#325).
+  "Your state" keeps it in the network or on this device only (UN-RFC 0044).
+- TUI: feeds (#207). A **Timeline** under "For you" - the entries of the feeds
+  you follow, newest first, nothing reordered; a group shown as a **feed** -
+  entries newest first, comments under each, two levels, marked ↳; `v` goes
+  threads → feed → chat. In the palette: **Follow** (the selected post's
+  author, or anyone by key or name), **Following** (and stop), **Start my
+  feed** (after saying it is public). The rows come from the core
+  (`Session.feed_rows`, the pseudo group `TIMELINE`), so the GUI can show the
+  same.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the

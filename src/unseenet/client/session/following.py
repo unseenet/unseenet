@@ -218,7 +218,7 @@ class FollowingMixin:
         Nothing reorders it, and nothing from a feed you do not follow is in it."""
         rows = []
         for gid in self.feeds_followed():
-            for msg, depth in self.feed(gid):
+            for msg, depth in self.feed_rows(gid):
                 if depth == 0 and not msg.private and msg.page is None and msg.readable:
                     rows.append(msg)
         epoch = datetime.min.replace(tzinfo=timezone.utc)

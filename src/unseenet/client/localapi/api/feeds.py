@@ -31,7 +31,7 @@ class Feeds:
         under: dict[str, list] = {}
         for gid in {m.group for m in entries}:
             current = None
-            for m, depth in s.feed(gid):
+            for m, depth in s.feed_rows(gid):
                 if depth == 0:
                     current = under.setdefault(m.message_id, [])
                 elif current is not None:
