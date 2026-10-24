@@ -218,6 +218,18 @@ async def address(request):
     return _json(await _api(request).address(request.query.get("a", "")))
 
 
+async def following(request):
+    if request.method == "GET":
+        return _json(_api(request).following())
+    return _json(await _api(request).set_following(await _body(request)))
+
+
+async def feed(request):
+    if request.method == "GET":
+        return _json(_api(request).my_feed())
+    return _json(await _api(request).start_feed(await _body(request)))
+
+
 async def pin(request):
     return _json(await _api(request).pin(_gid(request), await _body(request)))
 
@@ -374,6 +386,8 @@ ROUTES = [
     ("POST", "/api/refresh", refresh), ("POST", "/api/ripening", ripening),
     ("GET", "/api/known-nodes", known_nodes),
     ("GET", "/api/group-ref", group_ref), ("GET", "/api/address", address),
+    ("GET", "/api/following", following), ("POST", "/api/following", following),
+    ("GET", "/api/feed", feed), ("POST", "/api/feed", feed),
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),

@@ -174,6 +174,7 @@ ripens what it needs.
  "inbox": {"id": "inbox@<fp>", "unread": 0},
  "hierarchies": [{"name": "dk", "tree": <folder>}, ...],
  "for_you": {"id": "for-you:", "replies": 0, "mentions": 0},
+ "timeline": {"id": "timeline:", "feeds": 0},
  "moderation": 0, "name_requests": 0}
 ```
 
@@ -189,9 +190,11 @@ see it, without the fingerprint only where the hierarchy lists the name
 folder is `{"label", "path", "own", "groups": [<group ID>, ...],
 "children": [<folder>, ...]}`, names under `alt.` without it and a shared
 part of names as a folder.
-Besides real group IDs, two pseudo IDs work
-wherever a group ID does: `contact:<key>` (the chat with one person) and
-`for-you:` (replies and mentions from all groups).
+Besides real group IDs, three pseudo IDs work
+wherever a group ID does: `contact:<key>` (the chat with one person),
+`for-you:` (replies and mentions from all groups) and `timeline:` (the
+entries of every feed you follow, section 4.14).
+`timeline` is `{"id": "timeline:", "feeds": <how many feeds you follow>}`.
 
 `GET /api/groups/<id>`:
 
@@ -234,8 +237,9 @@ SHOULD make what is not allowed unavailable up front and show `reason`;
 the node still has the last word.
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
-- `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | null}`:
-  null goes back to the owner's choice (UN-RFC 0008 section 3.1).
+- `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" | null}`:
+  null goes back to the owner's choice (UN-RFC 0008 section 3.1, UN-RFC
+  0034 section 3.1).
 - `POST /api/subscribe` `{"id": "<group ID>", "on": true}`.
 - `GET /api/browse?pattern=<wildmat>`: `{"groups": [<GroupInfo dict>, ...]}`,
   what the node lists.
@@ -564,6 +568,56 @@ post or a page its posts, from your nodes; it never connects to the `n=`
 hints by itself (UN-RFC 0031 section 3.4.1) - a front end asks before
 adding one. An older form, such as `unseenet:join?g=...`, is answered with
 its current form in `address`. Refused with 400 when it is not an address.
+
+## 4.14 Feeds
+
+A group whose `view` is `feed` (UN-RFC 0034) is read like any group
+(section 4.3): its rows are the threads, an entry at depth 0 with its
+comments under it, and a front end shows them as UN-RFC 0034 section 4
+says. In a group shown as a feed each row also has `comment`, a
+permission (section 4.3) to answer it with a chat line, which is how a
+comment is written (UN-RFC 0034 section 4.2): `POST /api/groups/<id>/post`
+with `"kind": "chat"` and the entry, or the comment answered, last in
+`references`.
+
+`GET /api/groups/timeline:` is the timeline (UN-RFC 0034 section 7): the
+entries of every feed you follow, newest first by `Date` and in no other
+order, each followed by its comments as its feed has them. Each row has
+`group_label`, the feed it is from, `address`, `reply` and `comment` for
+that feed; writing from the timeline writes to the entry's own feed. The
+head has `feeds`, how many feeds you follow. The runtime asks for the
+manifests of followed groups it does not know yet, so that a feed is
+known to be one; what changes comes as `groups_changed`.
+
+Following never sends anything to anyone (UN-RFC 0034 section 6):
+
+- `GET /api/following`: `{"people": [{"fingerprint", "key", "name",
+  "label", "feeds": [<feed>, ...]}, ...], "feeds": [<feed>, ...]}`, the
+  people you follow with the feeds followed because of them, and every
+  feed you follow. A feed is `{"id", "label", "title", "type",
+  "personal"}`, `personal` for a personal group (UN-RFC 0029 section 2.1).
+- `POST /api/following` `{"person": "<key, name, fingerprint or
+  unseenet: address>", "on": true}` follows a person - their personal
+  groups and the feeds their profile lists (UN-RFC 0034 section 6.1) - and
+  answers `{"ok": true, "fingerprint", "key", "name", "feeds", "new"}`;
+  with `"on": false` it stops, answering `{"ok": true, "unsubscribed":
+  [...]}`, the feeds followed only because of them. `{"feed": "<group
+  ID>", "on": true}` follows a feed on its own, or stops. `{"refresh":
+  true}` reads the profiles of those you follow again and answers `{"ok":
+  true, "new": [...]}`, the feeds followed since. Refused with 400 when a
+  person cannot be found.
+
+Your own feed (UN-RFC 0034 section 5) is started only when you ask:
+
+- `GET /api/feed`: `{"id": "feed@<fp>", "started": false, "followed":
+  false, "warning": "..."}`, with the warning a front end MUST show before
+  it is started (UN-RFC 0029 section 2.1).
+- `POST /api/feed` `{"comments": "open" | "none", "title": "..."}` starts
+  it (or follows it again) and answers `{"ok": true, "id": "feed@<fp>"}`.
+
+A profile of someone else (section 4.8) has `feed`, the Group ID of their
+personal feed, which may not exist, and `following`, whether you follow
+them.
 
 # 5. Events
 

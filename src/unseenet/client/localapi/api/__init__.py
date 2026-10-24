@@ -53,6 +53,7 @@ from ...threads import CONTACT, FOR_YOU
 
 API_VERSION = 1
 MAX_READ = 500                  # ids per read request
+TIMELINE = "timeline:"         # the pseudo-group of the timeline (section 4.14)
 MAX_REFERENCES = 50
 GROUP_TYPES = ("open", "moderated", "channel", "closed")
 KINDS = {"both": None, "post": [KIND_POST], "chat": [KIND_CHAT]}
@@ -122,10 +123,11 @@ from .articles import Articles  # noqa: E402
 from .files import Files  # noqa: E402
 from .pictures import Pictures  # noqa: E402
 from .addresses import Addresses  # noqa: E402
+from .feeds import Feeds  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses):
+               Files, Pictures, Addresses, Feeds):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).
