@@ -1,0 +1,68 @@
+name: entrance-health
+# Every day, reach each listed web entrance (src/unseenet/entrances.json) over
+# HTTPS and its onion, compare the web client it serves with the signed version,
+# and tunnel to a node. Changed files: off the list at once; failing for 3 days:
+# a note to its operator; after 10 days off the list, and the new list is posted
+# to unseenet.entrances. See tools/entrance_health.py and tools/entrance_check.py.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: entrances-json                 # shares the lane with entrance requests
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor && (sudo systemctl stop tor || true)
+      - run: python tools/entrance_health.py --actions actions.json
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then echo "no changes"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/unseenet/entrances.json tools/entrance-health.json
+          git commit -m "Web entrances: daily health check"
+          git pull --rebase -q origin main
+          git push origin HEAD:main
+      - name: Post the new list to unseenet.entrances
+        if: hashFiles('actions.json') != ''
+        env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
+        run: |
+          if python -c "import json,sys; sys.exit(0 if json.load(open('actions.json'))['announce'] else 1)"; then
+            python tools/announce.py entrances
+          fi
+      - name: Tell the operators
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'EOF'
+          import json, subprocess, tempfile
+          actions = json.load(open("actions.json"))
+          for c in actions["comments"]:
+              with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+                  f.write(c["body"])
+              subprocess.run(["gh", "issue", "comment", str(c["issue"]), "--body-file", f.name], check=False)
+          for i in actions["issues"]:
+              with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+                  f.write(i["body"])
+              subprocess.run(["gh", "issue", "create", "--title", i["title"], "--body-file", f.name],
+                             check=False)
+          EOF

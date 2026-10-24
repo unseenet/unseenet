@@ -28,7 +28,9 @@ In `/etc/unseenet-entrance.env`, then `sudo systemctl restart unseenet-entrance`
 | `ENTRANCE_OPERATOR`, `ENTRANCE_CONTACT` | Who runs it, shown in `/.well-known/unseenet-entrance` |
 | `ENTRANCE_AUTO_UPDATE=off` | Stop the web client from updating itself |
 | `ENTRANCE_NODES=any` | Tunnel to any onion node, not only the known ones |
-| `ENTRANCE_MAX_PER_VISITOR` | Open tunnels per visitor (6) |
+| `ENTRANCE_MAX_SESSIONS_PER_VISITOR` | Web-client sessions per visitor address (16); each session has one Tor circuit per node. Through the entrance's onion every visitor comes from Tor, so there each session counts as a visitor |
+| `ENTRANCE_MAX_PER_VISITOR` | Open tunnels per visitor (64), so one session cannot open hundreds |
+| `ENTRANCE_CLAIM` | While asking to be listed: the challenge the request posts ([Being listed](listed.md)); remove it afterwards |
 | `ENTRANCE_MAX_TOTAL` | Open tunnels in all. `auto` (the default) allows what the available memory and the open-file limit carry, about 120 KB and two open files per tunnel, and prints the number at start; a number overrides it |
 | `ENTRANCE_TRUST_FORWARDED=1` | A reverse proxy on this machine sits in front: count limits per visitor, not per proxy |
 | `ENTRANCE_HOME` | A name that sends visitors on to the entrance's own address |

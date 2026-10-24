@@ -1,0 +1,114 @@
+name: entrance-request
+# "Add my entrance" issues (.github/ISSUE_TEMPLATE/add-entrance.yml), as node-request.yml:
+#   opened / edited / a new comment
+#       -> check the form, reach the entrance over HTTPS and its onion, compare the
+#          web client it serves with the signed version, tunnel to a node, and look
+#          for the challenge posted here in ENTRANCE_CLAIM; comment the result
+#   label "accepted" (maintainers only: labels need triage rights)
+#       -> check again, add it to src/unseenet/entrances.json, post the new list
+#          to unseenet.entrances, comment and close
+# Issue text and comments are untrusted: tools/entrance_request.py reads them from
+# files, they are never put into a shell command.
+on:
+  issues:
+    types: [opened, edited, labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # a new edit or comment replaces a running check; labels get their own lane,
+  # so the "labeled" event that comes with "opened" does not cancel the check
+  group: entrance-request-${{ github.event.issue.number }}-${{ github.event.action == 'labeled' && github.event.label.name || 'check' }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: >
+      contains(github.event.issue.labels.*.name, 'entrance-request') &&
+      github.event.issue.state == 'open' &&
+      (github.event.action == 'opened' || github.event.action == 'edited' ||
+       (github.event_name == 'issue_comment' && github.event.comment.user.type != 'Bot'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor && (sudo systemctl stop tor || true)
+      - name: Fetch the comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?per_page=100" > comments.json
+      - continue-on-error: true
+        run: >
+          python tools/entrance_request.py check --event "$GITHUB_EVENT_PATH"
+          --comments comments.json --report report.md
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$NUMBER" --body-file report.md
+
+  add:
+    if: >
+      github.event_name == 'issues' && github.event.action == 'labeled' &&
+      github.event.label.name == 'accepted' &&
+      contains(github.event.issue.labels.*.name, 'entrance-request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: entrances-json             # one change to the list at a time
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install .
+      - run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq && sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor && (sudo systemctl stop tor || true)
+      - name: Fetch the comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?per_page=100" > comments.json
+      - id: add
+        continue-on-error: true
+        run: >
+          python tools/entrance_request.py add --event "$GITHUB_EVENT_PATH"
+          --comments comments.json --report report.md
+      - name: Commit the new list
+        if: steps.add.outcome == 'success'
+        env:
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/unseenet/entrances.json tools/entrance-health.json
+          git commit -m "Web entrances: add the entrance from #$NUMBER"
+          git pull --rebase -q origin main
+          git push origin HEAD:main
+      - name: Post the new list to unseenet.entrances
+        if: steps.add.outcome == 'success'
+        env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
+        run: python tools/announce.py entrances
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          OUTCOME: ${{ steps.add.outcome }}
+        run: |
+          gh issue comment "$NUMBER" --body-file report.md
+          if [ "$OUTCOME" = "success" ]; then
+            gh issue close "$NUMBER" --reason completed
+          else
+            gh issue edit "$NUMBER" --remove-label accepted
+          fi
