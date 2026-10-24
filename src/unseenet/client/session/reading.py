@@ -409,8 +409,22 @@ class ReadingMixin:
         msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
         msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
         msg.content_type = inner.get("Content-Type", "")
+        self._encrypted_files(msg, art, inner, msg.group)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with the group (0022, 6)
             self._keep_private_profile(msg, msg.group)
+
+    def _encrypted_files(self, msg: Message, art: Article, inner: Article, group_id: str) -> None:
+        """The files of an encrypted article, from its inner headers, checked against its
+        outer ``Blobs`` and the group's types (UN-RFC 0027 sections 4.4, 5.2)."""
+        if not art.get("Blobs"):
+            return
+        from ...core import blobs as bl
+        att = self.manifest_data(group_id).get("attachments")
+        shown, keys = bl.inner_attachments(art, inner.headers,
+                                           att.get("types") if isinstance(att, dict) else None)
+        msg.blobs = tuple(keys)
+        msg.attachments = tuple(shown)
+        msg.file_keys = keys
 
     def _redecrypt(self, group_id: str) -> None:
         entry = self.group_entry(group_id)

@@ -60,8 +60,9 @@ class AttachmentsMixin:
         """Raise ``SessionError`` with a sentence for the user unless these prepared
         files may go on a post here: the group takes files (its manifest's
         ``attachments``, UN-RFC 0027 section 5.1), of these types and sizes, at most
-        four and 8 MiB together, and not yet in closed groups, inboxes or moderated
-        groups - their files are encrypted, which comes later."""
+        four and 8 MiB together. In closed groups and inboxes they are encrypted, 40
+        octets larger (section 3.3). A submission to a moderated group sends them to
+        the moderators encrypted (section 5.3)."""
         from ...core import blobs as bl
         files = list(files)
         if not files:
@@ -69,21 +70,25 @@ class AttachmentsMixin:
         entry = self.group_entry(group_id)
         data = self.manifest_data(group_id)
         gtype = data.get("type") or entry.get("type")
-        if gtype in ("closed", "inbox") or group_id == self.my_inbox:
-            raise SessionError("files in closed groups and private posts are not possible yet")
-        if gtype == "moderated" and not self.moderates(group_id):
-            raise SessionError("files in moderated groups are not possible yet")
+        if group_id == self.my_inbox:
+            raise SessionError("files cannot go to your own inbox")
+        if gtype == "closed" and not entry.get("keys"):
+            raise SessionError("you are not a member of this closed group")
         att = data.get("attachments")
         if not isinstance(att, dict):
-            raise SessionError("this group takes no files - its owner can allow them")
+            raise SessionError("they take no files in private posts" if gtype == "inbox" else
+                               "this group takes no files - its owner can allow them")
+        limit = att["max_size"]
+        if gtype in ("closed", "inbox"):
+            limit = min(limit, bl.MAX_BLOB - bl.ENC_OVERHEAD)   # the blob is the file + 40
         if len(files) > bl.MAX_PER_ARTICLE:
             raise SessionError(f"at most {bl.MAX_PER_ARTICLE} files on a post")
         if sum(len(f.octets) for f in files) > bl.MAX_TOTAL:
             raise SessionError(f"at most {bl.MAX_TOTAL // (1024 * 1024)} MiB of files on a post")
         for f in files:
-            if len(f.octets) > att["max_size"]:
+            if len(f.octets) > limit:
                 raise SessionError(f"{f.name} is {len(f.octets) // 1024} KiB; this group takes "
-                                   f"files up to {att['max_size'] // 1024} KiB")
+                                   f"files up to {limit // 1024} KiB")
             if not bl.type_allowed(f.media_type, att.get("types")):
                 raise SessionError(f"{f.name} is {f.media_type}, which this group does not take")
 
@@ -113,10 +118,12 @@ class AttachmentsMixin:
     async def fetch_blob(self, group_id: str, blob_id: str) -> bytes:
         """The file a post in this group carries, from the group's node: checked against
         its blob ID and size before anything else is done with it (section 9.2), and
-        kept in memory for a while. Files in encrypted groups are not possible yet.
+        kept in memory for a while. In closed groups and inboxes the blob is decrypted
+        with the file's key from the post (UN-RFC 0027 section 3.3) and checked again.
         ``SessionError`` with a sentence for the user when it cannot be had."""
         from ...core import blobs as bl
-        att, _ = self.attachment(group_id, blob_id)
+        att, msg = self.attachment(group_id, blob_id)
+        key = msg.file_keys.get(blob_id)
         cache = self.__dict__.setdefault("_blob_cache", OrderedDict())
         if blob_id in cache:
             cache.move_to_end(blob_id)
@@ -139,9 +146,18 @@ class AttachmentsMixin:
                                   "later")
         if got is None:
             raise FileUnavailable("the node does not have this file (any more)", "gone")
-        if bl.blob_id(got) != blob_id or len(got) != att["size"]:
+        expected = att["size"] + (bl.ENC_OVERHEAD if key else 0)
+        if bl.blob_id(got) != blob_id or len(got) != expected:
             raise FileUnavailable("the node sent another file than the post names - not shown",
                                   "wrong")
+        if key:
+            try:
+                got = bl.decrypt_file(key, got)
+            except ValueError:
+                got = b""
+            if len(got) != att["size"]:
+                raise FileUnavailable("the file does not open with the key its post gives - "
+                                      "not shown", "wrong")
         cache[blob_id] = got
         while sum(len(v) for v in cache.values()) > BLOB_CACHE_OCTETS and len(cache) > 1:
             cache.popitem(last=False)

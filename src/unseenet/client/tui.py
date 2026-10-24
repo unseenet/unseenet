@@ -698,7 +698,7 @@ COMMENTS_CHOICES = [("Only you and your posters write", "none"),
 FILES_CHOICES = [("No files", "none"),
                  ("Pictures, up to 4 MiB each", "pictures"),
                  ("Pictures and PDFs, up to 4 MiB each", "pictures+pdf")]
-FILES_GROUP_TYPES = ("open", "channel")   # encrypted files (closed, inbox, moderated): #497
+FILES_GROUP_TYPES = ("open", "moderated", "channel", "closed")   # closed: encrypted (#497)
 
 
 def comments_label(d: dict) -> str:
@@ -2018,7 +2018,7 @@ class UnseenetApp(App):
         if action == "write":
             return chat and not typing
         if action == "attach_to_chat":
-            return chat and group and self._chat_takes_files(gid)
+            return chat and (group or contact) and self._chat_takes_files(gid)
         shown = self.view_of(gid) if group else "threads"
         if action in ("next_unread", "read"):     # the keys of a list (#490)
             return bool(gid) and not chat and not typing and (action == "next_unread" or m is not None)
@@ -2474,6 +2474,20 @@ class UnseenetApp(App):
             self._offer_pictures(event.node.data)
 
     @work(group="dialog", exit_on_error=False)
+    async def action_toggle_inbox_files(self) -> None:
+        """Pictures in private posts and chats to you, on or off (#497)."""
+        s = self.session
+        on = not s.inbox_files()
+        try:
+            await s.set_inbox_files(on)
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.notify("People can send you pictures in private posts and chats - encrypted, "
+                    "only you see them" if on else
+                    "Private posts and chats to you take no pictures now", timeout=6)
+
+    @work(group="dialog", exit_on_error=False)
     async def _offer_pictures(self, gid: str) -> None:
         """Your feed or site made before they took pictures by default: offer it, once (#496)."""
         s = self.session
@@ -2812,10 +2826,30 @@ class UnseenetApp(App):
         self._show_chat_files(self.current_group)
         self.send_chat(self.current_group, text, files)
 
+    async def _inbox_takes_files(self, inbox: str) -> bool:
+        """Whether someone's inbox takes files (#497), from its manifest - read once."""
+        s = self.session
+        if not s.manifest_data(inbox):
+            try:
+                m = await s.fetch_manifest(inbox)
+            except (SessionError, OSError, ConnectionError, NNTPError):
+                m = None
+            if m is not None:
+                s.group_entry(inbox)["manifest"] = dict(m.raw)
+        return isinstance(s.manifest_data(inbox).get("attachments"), dict)
+
     def _chat_takes_files(self, gid: str) -> bool:
-        """Whether a chat line here may carry files (UN-RFC 0028 section 6.1, #496)."""
-        if not gid or gid.startswith(CONTACT) or gid in ACROSS:
-            return False                        # private chats: encrypted files, #497
+        """Whether a chat line here may carry files (UN-RFC 0028 section 6.1, #496/#497):
+        a group's manifest says so; a person's inbox unless its manifest says no."""
+        if gid.startswith(CONTACT):
+            try:
+                data = self.session.manifest_data(personal_inbox_id(
+                    crypto.key_from_text(gid[len(CONTACT):])))
+            except crypto.CryptoError:
+                return False
+            return not data or isinstance(data.get("attachments"), dict)
+        if not gid or gid in ACROSS:
+            return False
         data = self.session.manifest_data(gid)
         g = self.groups.get(gid)
         gtype = data.get("type") or (g.type if g else None)
@@ -2833,6 +2867,10 @@ class UnseenetApp(App):
     async def action_attach_to_chat(self) -> None:
         """Files to send with the next chat line in this group (#496)."""
         gid = self.current_group or ""
+        if gid.startswith(CONTACT) and not await self._inbox_takes_files(personal_inbox_id(
+                crypto.key_from_text(gid[len(CONTACT):]))):
+            self.notify("They take no files in private chats", severity="warning")
+            return
         if not self._chat_takes_files(gid):
             self.notify("This group takes no files - its owner can allow them",
                         severity="warning")
@@ -2859,7 +2897,9 @@ class UnseenetApp(App):
             self._render_threads()
         try:
             if gid.startswith(CONTACT):
-                await self.session.send_chat(gid, text)
+                prepared = (self.session.prepare_files([Path(p).expanduser() for p in files])
+                            if files else None)       # encrypted with the line (#497)
+                await self.session.send_chat(gid, text, files=prepared)
             else:
                 if not await self._accept_portals(gid):
                     self.query_one("#chat-input", Input).value = text
@@ -3160,16 +3200,19 @@ class UnseenetApp(App):
                               owner_key: bytes | None = None,
                               references: list[str] | None = None) -> None:
         g = GroupInfo(target, type="inbox")
-        result = await self.push_screen_wait(ComposeDialog(
+        dlg = ComposeDialog(
             g, subject, quote, bool(references), heading=heading + "  @ only they can read it",
-            signature=self.session.signature()))
+            signature=self.session.signature(), files_allowed=await self._inbox_takes_files(target))
+        result = await self.push_screen_wait(dlg)
         if not result:
             return
         subject, body, _ = result
         self.set_status("Sending (computing postage) ...")
         try:
+            files = (self.session.prepare_files([Path(p).expanduser() for p in dlg.files])
+                     if dlg.files else None)          # encrypted with the post (#497)
             await self.session.send_private(target, subject, body, owner_key=owner_key,
-                                            references=references)
+                                            references=references, files=files)
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             return
@@ -3685,7 +3728,8 @@ class UnseenetApp(App):
         dlg = ComposeDialog(
             g, subject, quote, bool(references), signature=self.session.signature(),
             has_rules=bool(data.get("rules")),
-            files_allowed=bool(data.get("attachments")) and g.type not in ("closed", "inbox"))
+            files_allowed=bool(data.get("attachments")) and g.type != "inbox"
+            and (g.type != "closed" or bool(self.session.group_entry(g.group_id).get("keys"))))
         result = await self.push_screen_wait(dlg)
         if not result:
             return
@@ -4514,6 +4558,10 @@ class UnseenetApp(App):
             ("Following", "The people you follow - stop following one", self.action_following),
             ("Start my feed", "Your own feed, public, where anyone can comment - or open it",
              self.action_start_feed),
+            (("Pictures in private posts: on" if self.session and self.session.inbox_files()
+              else "Pictures in private posts: off"),
+             "Whether people can send you pictures in private posts and chats - encrypted, "
+             "only you can see them", self.action_toggle_inbox_files),
             ("Start my site", "Your own site of pages, public - or open it; n writes a page",
              self.action_start_site),
             ("Previous version of this page", "Publish the selected page's earlier version "

@@ -141,7 +141,11 @@ async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):
         await pilot.click("#info")                    # details of the selected node
         assert await wait_for(pilot, lambda: isinstance(app.screen, NodeInfoDialog))
         await pilot.click("#ok")                      # "Write to operator"
-        await pilot.pause(0.4)
+        from unseenet.client.tui import ComposeDialog
+        # the dialog comes from a worker that may first read the inbox's manifest (#497)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ComposeDialog)
+                              and laid_out(app, "#subject"), 300), stack(app)
+        app.screen.query_one("#subject").focus()
         await pilot.press(*"Hej")
         await pilot.click("#body")
         await pilot.press(*"Tak for noden")

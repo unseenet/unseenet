@@ -268,9 +268,12 @@ the node still has the last word.
   `{"key": "ed25519:...", "kind": "post" | "chat", "subject": "...", "body": "...", "reply_to": <Message-ID or null>}`
   answers `{"job": "<job ID>"}`.
 
-A post to a group may carry files: `"files": [{"name": "...", "data":
-"<base64>", "alt": "..."}, ...]`, at most four (section 4.10). With files
-the body may be empty.
+A post to a group, a chat line, and a private post or chat may carry
+files: `"files": [{"name": "...", "data": "<base64>", "alt": "..."},
+...]`, at most four (section 4.10). With files the body may be empty. In
+closed groups and private posts the runtime encrypts them (UN-RFC 0027
+section 3.3); to an inbox that takes no files the job fails, saying so.
+An edit (section 4.5) keeps the files of the earlier version.
 
 Its progress comes as `job` events (section 5). The runtime asks about
 portals (UN-RFC 0023 section 3.5) before it sends: a group with a portal

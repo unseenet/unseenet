@@ -58,11 +58,12 @@ class Files:
                 "frames": pic.frames, "data": f"data:{pic.media_type};base64,{data}"}
 
     @staticmethod
-    def _files_to_post(s: Session, gid: str, files) -> list:
+    def _files_to_post(s: Session, gid: str, files, check: bool = True) -> list:
         """The files of ``POST .../post`` (``[{"name", "data", "alt"}]``, ``data`` base64)
         prepared as every client prepares them - the type from the content, pictures
         saved again without metadata - and checked against the group before anything
-        is computed. ``SessionError`` with a sentence for people otherwise."""
+        is computed (``check=False``: when sending, as for someone's inbox, whose
+        manifest is read then). ``SessionError`` with a sentence for people otherwise."""
         from ... import media
         if not files:
             return []
@@ -85,5 +86,6 @@ class Files:
                 raise SessionError(f"{name}: {exc}") from exc
             out.append(media.Prepared(p.name, p.media_type, p.octets, p.note,
                                       str(f.get("alt") or "").strip(), p.dim))
-        s.check_files(gid, out)
+        if check:
+            s.check_files(gid, out)
         return out

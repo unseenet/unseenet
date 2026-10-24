@@ -6,7 +6,7 @@ import io
 
 import pytest
 
-from unseenet.client.session import Session, SessionError
+from unseenet.client.session import Session
 from unseenet.core import blobs as bl
 from unseenet.core.article import Article
 from unseenet.core.blobs import BlobStore
@@ -101,9 +101,6 @@ async def test_chat_lines_carry_files_and_edits_keep_them(tmp_path, monkeypatch)
         await s.fetch_group(gid)
         newer = await s.edit(s.find_message(gid, new), "Haven", "Uden billede\n", files=[])
         assert newer not in [a.message_id for a in _with_blobs(node)]
-        with pytest.raises(SessionError, match="private chats"):
-            other = _session(tmp_path, addr, "other")
-            await s.send_chat("contact:" + other.identity().key_text, "Hej", files=files)
     finally:
         await s.close()
         server.close()

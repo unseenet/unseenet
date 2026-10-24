@@ -42,8 +42,12 @@ class PrivateMixin:
             if not await self._call(exists, self.node_for(gid)):
                 # a serial above any we used before: the inbox may have expired (UN-RFC 0029, 8)
                 serial = int(self.manifest_data(gid).get("serial", 0)) + 1
+                from ...core import blobs as bl
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
                                     min_pow=_s.DEFAULT_POW, serial=serial,
+                                    # pictures in private posts and chats (#497)
+                                    extra=({"attachments": bl.PICTURES}
+                                           if self.data.get("inbox_files", True) else None),
                                     pow_bits=await self.required_pow(gid),
                                     lifetime=self.key_bound_lifetime())
                 await self._post_article(art)
@@ -60,6 +64,10 @@ class PrivateMixin:
             await self.offer_sealedbox2()                       # UN-RFC 0009 section 2.2
         except (SessionError, OSError, ConnectionError, NNTPError) as exc:
             log.info("inbox not offering sealedbox2 now: %s", exc)
+        try:
+            await self.offer_inbox_files()                      # #497
+        except (SessionError, OSError, ConnectionError, NNTPError) as exc:
+            log.info("inbox not offering files now: %s", exc)
         return gid
 
     def _ident_entry(self, name: str | None = None) -> dict:
@@ -212,11 +220,13 @@ class PrivateMixin:
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
                            kind: str = KIND_POST, remember: bool = True,
-                           extra: list[tuple[str, str]] | None = None) -> str:
+                           extra: list[tuple[str, str]] | None = None, files=None) -> str:
         """Send a message to an inbox. Only its owner can read it.
 
         ``kind`` is ``"post"`` (a subject, read on its own, answered with a quote)
         or ``"chat"`` (a line in a running conversation, no subject) - UN-RFC 0028.
+        ``files`` are prepared files, sent as encrypted blobs whose keys travel
+        inside the sealed box (UN-RFC 0027 sections 3.3, 4.3), if the inbox takes them.
         """
         if kind == KIND_CHAT:
             subject = ""
@@ -233,14 +243,28 @@ class PrivateMixin:
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
         inner = extra if anonymous else self._with_inner_ripening(extra)
+        outer, blobs, file_bits = [], [], 0
+        files = list(files or [])
+        if files:
+            from ...core import blobs as bl
+            if not isinstance(self.manifest_data(group_id).get("attachments"), dict):
+                m = await self.fetch_manifest(group_id)     # it may take files by now
+                if m is not None:
+                    self.group_entry(group_id)["manifest"] = dict(m.raw)
+            self.check_files(group_id, files)
+            outer, inner_files, blobs = bl.encrypted_attachment_headers(
+                [(f.name, f.media_type, f.octets, f.alt, f.dim) for f in files])
+            inner = list(inner or []) + inner_files
+            file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
         two = await self.takes_sealedbox2(group_id)        # both ends can (UN-RFC 0009, 2.3)
         copy_to = self.identity().public_key if (two and remember) else None
         art = await self._post_with_postage(group_id, lambda bits: inbox_article(
             group_id, owner_key, from_name="" if anonymous else self.display_name(),
             subject=subject, body=body, sender=sender,
             reply_inbox=None if anonymous else self.my_inbox,
-            references=references, content_type=content_type, kind=kind, pow_bits=bits,
-            extra=inner, two_envelopes=two, copy_to=copy_to))
+            references=references, content_type=content_type, kind=kind,
+            pow_bits=bits + file_bits, extra=inner, two_envelopes=two, copy_to=copy_to,
+            outer_extra=outer), blobs=blobs)
         msgid = art.message_id
         if not remember:
             return msgid
@@ -255,6 +279,7 @@ class PrivateMixin:
                              # 10 minutes for privacy, so they cannot order a conversation
                              "after": self._high.get(self.my_inbox, 0),
                              "subject": subject, "body": art_body_text(body), "kind": kind,
+                             "files": [f.name for f in files],
                              "references": references or [],
                              "date": datetime.now(timezone.utc).isoformat()})
         self.data["read"].setdefault(self.my_inbox, []).append(msgid)
@@ -345,11 +370,9 @@ class PrivateMixin:
         section 6.1, #496). Returns the Message-ID. Portals and mention notices
         are the client's to ask about first, as for ``post()``."""
         if group_id.startswith(CONTACT):
-            if files:
-                raise SessionError("files in private chats are not possible yet")
             owner = crypto.key_from_text(group_id[len(CONTACT):])
             return await self.send_private(personal_inbox_id(owner), "", text,
-                                           owner_key=owner, kind=KIND_CHAT)
+                                           owner_key=owner, kind=KIND_CHAT, files=files)
         return await self.post(group_id, "", text, kind=KIND_CHAT, files=files)
 
     def private_posts(self) -> list["Message"]:
@@ -408,6 +431,40 @@ class PrivateMixin:
         fields = {k: v for k, v in data.items() if k not in ("serial", "expires")}
         await self._publish_key_bound(gid, lambda serial, bits: manifest_article(
             ident, gid, {**fields, "serial": serial, "sealedbox2": True}, bits))
+        self.group_entry(gid)["type"] = "inbox"
+        return True
+
+    def inbox_files(self) -> bool:
+        """Whether your inbox takes pictures in private posts and chats (#497); on
+        unless turned off with ``set_inbox_files``."""
+        return bool(self.data.get("inbox_files", True))
+
+    async def set_inbox_files(self, on: bool) -> None:
+        """Let your inbox take pictures, or not; the manifest is changed right away."""
+        self.data["inbox_files"] = bool(on)
+        self.save()
+        await self.offer_inbox_files()
+
+    async def offer_inbox_files(self) -> bool:
+        """Make our inbox's manifest say what ``inbox_files`` says: pictures, up to 4
+        MiB each, encrypted (UN-RFC 0027 sections 3.3, 5.1), or none. True if the
+        manifest was changed. The blobs are only carried by nodes that carry encrypted
+        blobs, which senders are told when theirs does not."""
+        from ...core import blobs as bl
+        gid = self.my_inbox
+        data = self.manifest_data(gid)
+        if not data or not self.nodes:
+            return False
+        want = bl.PICTURES if self.inbox_files() else None
+        if data.get("attachments") == want:
+            return False
+        ident = self.identity()
+        fields = {k: v for k, v in data.items()
+                  if k not in ("serial", "expires", "attachments")}
+        if want is not None:
+            fields["attachments"] = want
+        await self._publish_key_bound(gid, lambda serial, bits: manifest_article(
+            ident, gid, {**fields, "serial": serial}, bits))
         self.group_entry(gid)["type"] = "inbox"
         return True
 
@@ -485,6 +542,7 @@ class PrivateMixin:
         msg.content_type = inner.get("Content-Type", "")
         msg.kind = message_kind(inner)
         msg.reply_inbox = inner.get("Reply-Inbox")
+        self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
             msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
             msg.mention_of = (inner.get("Mention-Of") or "").strip() or None

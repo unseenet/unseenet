@@ -95,12 +95,14 @@ class Writing:
             raise SessionError("that is your own key")
         kind = _kind(data)
         body = str(data.get("body", "")).strip("\n")
-        if not body.strip():
-            raise SessionError("nothing to send")
         subject = "" if kind == KIND_CHAT else str(data.get("subject", "")).strip()
         if kind == KIND_POST and not subject:
             raise SessionError("a post needs a subject")
         owner = crypto.key_from_text(key)
+        # encrypted with it (UN-RFC 0027 3.3, #497); checked against their inbox when sent
+        files = self._files_to_post(s, personal_inbox_id(owner), data.get("files"), check=False)
+        if not body.strip() and not files:
+            raise SessionError("nothing to send")
         inbox, refs = personal_inbox_id(owner), []
         reply_to = data.get("reply_to")
         if reply_to:
@@ -112,9 +114,9 @@ class Writing:
 
         async def send() -> str:
             if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner):
-                return await s.send_chat(CONTACT + key, body)
+                return await s.send_chat(CONTACT + key, body, files=files or None)
             return await s.send_private(inbox, subject, body, owner_key=owner,
-                                        references=refs or None, kind=kind)
+                                        references=refs or None, kind=kind, files=files or None)
 
         async def after(msgid: str) -> None:
             s.emit(ev.GroupUpdated(group))
