@@ -33,6 +33,8 @@ PLAIN_TYPE = "text/plain; charset=utf-8"
 LINK_SCHEMES = ("http", "https", "unseenet", "news")
 MAX_HEADING = 3
 MAX_LIST_DEPTH = 4
+MAX_TABLE_COLUMNS = 16                 # a table wider than this keeps its first 16 (section 3.6)
+MAX_TABLE_ROWS = 500
 MAX_TEXT = 256 * 1024                 # a crafted message must not hang a client (section 7)
 _SHORTCODE = re.compile(r":([a-z0-9_+\-]+):")
 _BLOB = re.compile(r"^(blob1:[a-z2-7]{52})$")    # a blob ID of UN-RFC 0027 section 3.1
@@ -100,7 +102,7 @@ def find_emoji(query: str, limit: int = 8) -> list[str]:
 
 @lru_cache(maxsize=2)
 def _parser(chat: bool) -> MarkdownIt:
-    md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable("strikethrough")
+    md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["strikethrough", "table"])
     md.disable("html_block").disable("html_inline")
     if chat:                          # chat stays chat (section 3.3)
         md.disable(["heading", "lheading", "list", "blockquote", "hr"])
@@ -186,7 +188,7 @@ def image_blobs(nodes) -> list[str]:
             if n["blob"] not in out:
                 out.append(n["blob"])
         else:
-            for key in ("c", "items"):
+            for key in ("c", "items", "head", "rows"):
                 if isinstance(n.get(key), list):
                     out += [b for b in image_blobs(n[key]) if b not in out]
     return out
@@ -203,7 +205,7 @@ def _without_images(nodes, keep=frozenset()):
             out.append({"t": "text", "v": f"[image: {n.get('alt') or 'no description'}]"})
         else:
             n = dict(n)
-            for key in ("c", "items"):
+            for key in ("c", "items", "head", "rows"):
                 if isinstance(n.get(key), list):
                     n[key] = _without_images(n[key], keep)
             out.append(n)
@@ -255,12 +257,51 @@ def _blocks(tokens, i: int, end: int, depth: int) -> tuple[list[dict], int]:
                 out.append({"t": "ol" if t == "ordered_list_open" else "ul", "start": start,
                             "items": items})
             i = close + 1
+        elif t == "table_open":              # GFM tables (section 3.6)
+            close = _close(tokens, i)
+            out.append(_table(tokens, i + 1, close))
+            i = close + 1
         elif t == "inline":                  # a tight list item's text
             out.append({"t": "p", "c": _inline(tok.children or [])})
             i += 1
         else:
             i += 1
     return out, i
+
+
+def _table(tokens, i: int, end: int) -> dict:
+    """``{"t": "table", "align": [...], "head": [cell, ...], "rows": [[cell, ...], ...]}``,
+    a cell being inline nodes and ``align`` ``left``, ``center``, ``right`` or None per
+    column (section 3.6); at most MAX_TABLE_COLUMNS columns and MAX_TABLE_ROWS rows."""
+    head: list = []
+    rows: list = []
+    align: list = []
+    row: list | None = None
+    in_head = False
+    while i < end:
+        tok = tokens[i]
+        if tok.type == "thead_open":
+            in_head = True
+        elif tok.type == "tbody_open":
+            in_head = False
+        elif tok.type == "tr_open":
+            row = []
+        elif tok.type == "tr_close" and row is not None:
+            cells = row[:MAX_TABLE_COLUMNS]
+            if in_head:
+                head = cells
+            elif len(rows) < MAX_TABLE_ROWS:
+                rows.append(cells)
+            row = None
+        elif tok.type in ("th_open", "td_open") and row is not None:
+            if in_head:
+                style = tok.attrGet("style") or ""
+                m = re.search(r"text-align:\s*(left|center|right)", str(style))
+                align.append(m.group(1) if m else None)
+            inline = tokens[i + 1] if i + 1 < end and tokens[i + 1].type == "inline" else None
+            row.append(_inline(inline.children or []) if inline is not None else [])
+        i += 1
+    return {"t": "table", "align": align[:MAX_TABLE_COLUMNS], "head": head, "rows": rows}
 
 
 def _close(tokens, i: int) -> int:

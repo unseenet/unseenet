@@ -16,6 +16,7 @@ from ..core.groups import GROUP_REF_RE
 
 QUOTE = "│ "
 WIDE = 60
+CELL = 52                                 # the widest a table column is drawn (UN-RFC 0031 3.6)
 
 
 def _glyphs() -> bool:
@@ -99,6 +100,65 @@ def blocks(tree: list[dict], prefix: str = "", tight: bool = False) -> Text:
                     out.append(prefix)
                     out.append(mark if j == 0 else " " * len(mark), style="bold" if j == 0 else None)
                     out.append(line)
+        elif t == "table":
+            out.append(table(b, prefix))
+    return out
+
+
+def table(b: dict, prefix: str = "") -> Text:
+    """A table (UN-RFC 0031 section 3.6) drawn with lines: the header bold, each column
+    as wide as its widest cell up to CELL, longer cells cut with an ellipsis, and the
+    columns aligned as the delimiter row says. Box lines, or ASCII on the Linux console."""
+    rows = [b.get("head") or []] + list(b.get("rows") or [])
+    ncol = max((len(r) for r in rows), default=0)
+    if not ncol:
+        return Text()
+    cells = [[_one_line(inline(r[c])) if c < len(r) else Text() for c in range(ncol)]
+             for r in rows]
+    width = [min(CELL, max(1, max(c.cell_len for c in col))) for col in zip(*cells)]
+    align = list(b.get("align") or []) + [None] * ncol
+    box = ("┌┬┐├┼┤└┴┘─│" if _glyphs() else "+++++++++-|")
+
+    def rule(left: str, mid: str, right: str) -> Text:
+        return Text(prefix + left + mid.join(box[9] * (w + 2) for w in width) + right, style="dim")
+
+    def line(row: list[Text], bold: bool) -> Text:
+        out = Text(prefix)
+        out.append(box[10], style="dim")
+        for c, w, a in zip(row, width, align):
+            cell = c.copy()
+            cell.truncate(w, overflow="ellipsis")
+            cell.align(a or "left", w)
+            if bold:
+                cell.stylize("bold")
+            out.append(" ")
+            out.append(cell)
+            out.append(" ")
+            out.append(box[10], style="dim")
+        return out
+
+    out = rule(box[0], box[1], box[2])
+    out.append("\n")
+    out.append(line(cells[0], bool(b.get("head"))))
+    if b.get("head") and len(cells) > 1:
+        out.append("\n")
+        out.append(rule(box[3], box[4], box[5]))
+    for row in cells[1:]:
+        out.append("\n")
+        out.append(line(row, False))
+    out.append("\n")
+    out.append(rule(box[6], box[7], box[8]))
+    return out
+
+
+def _one_line(text: Text) -> Text:
+    """A cell on one line: its line breaks as spaces."""
+    parts = text.split("\n")
+    out = Text()
+    for i, part in enumerate(parts):
+        if i:
+            out.append(" ")
+        out.append(part)
     return out
 
 

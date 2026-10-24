@@ -57,8 +57,9 @@ outside the subset is shown as the text it is.
 ## 3.1 Never
 
 - **No raw HTML**, inline or as blocks. It is shown as text.
-- **No tables, footnotes, task lists or other extensions**, except
-  strikethrough (`~~text~~`) and emoji shortcodes (section 5).
+- **No footnotes, task lists or other extensions**, except
+  strikethrough (`~~text~~`), tables (section 3.6) and emoji shortcodes
+  (section 5).
 - **No remote content of any kind.** A client MUST NOT fetch anything
   to display a message: no images, fonts, previews or link metadata.
 
@@ -69,12 +70,13 @@ Posts (UN-RFC 0028) may use: paragraphs and line breaks, headings
 emphasis, strikethrough, inline code, code blocks (fenced or indented,
 with an optional language that clients MAY use for highlighting),
 block quotes, ordered and unordered lists (nested at most 4 deep),
-thematic breaks, links and images (sections 3.4 and 3.5), and emoji.
+thematic breaks, links and images (sections 3.4 and 3.5), tables
+(section 3.6), and emoji.
 
 ## 3.3 Chat Lines
 
 Chat lines may use: emphasis, strong emphasis, strikethrough, inline
-code, code blocks, links, images and emoji. Headings, lists, block
+code, code blocks, links, images, tables (section 3.6) and emoji. Headings, lists, block
 quotes and thematic breaks are shown as the text they are, so that chat
 stays chat.
 
@@ -211,6 +213,28 @@ The same alt text is shown where the blob cannot be had: the node does
 not carry files in the group, it has expired, or the client is a
 terminal that cannot show pictures (it MAY offer to open the file).
 
+## 3.6 Tables
+
+Tables are those of GitHub Flavored Markdown 0.29: a header row, a
+delimiter row under it, and the rows after, cells separated by `|`:
+
+```
+| Group     | What            | Address        |
+|:----------|:---------------:|---------------:|
+| Discuss   | threads         | `unseenet:...` |
+```
+
+- A table needs its delimiter row, so an ordinary line with a `|` in it
+  is never one. That is also why tables are allowed in chat lines.
+- Cells hold inline content only (section 3.2's inline parts, with
+  links and images); the delimiter row's colons give each column's
+  alignment, left, centre or right.
+- A client MUST show at least the first 16 columns and 500 rows, and
+  MAY leave out what is beyond. A table wider than the space it has
+  SHOULD scroll sideways or be cut, never break the layout around it.
+- A client that does not show tables shows the text as it is, which is
+  meant to be readable as it stands.
+
 # 4. Quotes and Replies
 
 A reply quotes with `> ` at the start of each line, as before. In
@@ -258,6 +282,8 @@ separate matters and need documents of their own.
 - UN-RFC 0022 section 4.1 and UN-RFC 0014 section 2.1 let a profile's
   `about` and a group's `rules` be Markdown with the post subset of
   section 3.2, without images.
+- Profiles' `about`, groups' `rules` and pages (UN-RFC 0035) may hold
+  tables as posts do (section 3.6).
 - UN-RFC 0004 section 6.4 (invitations), UN-RFC 0022 section 7 (link
   proofs) and UN-RFC 0035 section 8 (links to pages) use the addresses
   of section 3.4.1; their older forms are read as section 3.4.1 says.
