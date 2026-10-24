@@ -4355,11 +4355,15 @@ class UnseenetApp(App):
             self.current_message = m
             self.push_screen(ReadScreen(m))
 
+    def action_pin(self) -> None:
+        """Owner or moderator: pin the selected post, or unpin it (section 7.1). The post
+        is the one selected now: a refresh while the dialog opens must not change it."""
+        self._pin(self.current_group, self.current_message)
+
     @work(group="dialog", exit_on_error=False)
-    async def action_pin(self) -> None:
-        """Owner or moderator: pin the selected post, or unpin it (section 7.1)."""
+    async def _pin(self, gid: str | None, selected: Message | None) -> None:
         from ..core import pins as pn
-        gid, s = self.current_group, self.session
+        s = self.session
         if not self._pins_possible(gid):
             self.notify("Only the owner and moderators of a group pin posts, in groups "
                         "that take pins.", severity="warning")
@@ -4374,7 +4378,7 @@ class UnseenetApp(App):
                   + f"{self._who(m)}: {self._first_line(m)[:60]}") for m in lines], "Choose"))
             m = next((x for x in lines if x.message_id == chosen), None)
         else:
-            m = self.current_message
+            m = selected
         if m is None or m.group != gid:
             self.notify("Select a post first", severity="warning")
             return
