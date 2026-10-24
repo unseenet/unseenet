@@ -210,7 +210,8 @@ class PostingMixin:
             return await self._send_article(art, node, blobs)
 
     async def post_article(self, art: Article, node: str | None = None,
-                           sign_with: crypto.Identity | None = None) -> str:
+                           sign_with: crypto.Identity | None = None, *,
+                           blobs=(), extra_bits: int = 0) -> str:
         """Post an article built elsewhere (a gateway's imports, a registrar's
         answers, a bot's posts), as everything else is posted: ripening first where
         the node asks for it, Key-Ripening set, our chain sent to a node that lacks
@@ -218,20 +219,26 @@ class PostingMixin:
 
         With ``sign_with``, the article is signed here with the postage this node
         and group need for that key's level (UN-RFC 0025 section 5), and once more
-        if the node asks for more. Without it, it must be signed already."""
+        if the node asks for more. Without it, it must be signed already.
+
+        ``blobs`` are ``(blob ID, octets)`` for the files the article's ``Blobs`` and
+        ``Attachment-<n>`` headers name; they are sent first on the same connection
+        (``BLOBPOST``, UN-RFC 0027 section 6). ``extra_bits`` is the postage the
+        files add (section 4.5, ``core.blobs.extra_bits_for``), paid on top."""
+        blobs = list(blobs)
         if sign_with is None:
-            return await self._post_article(art, node)
+            return await self._post_article(art, node, blobs)
         target = node or self.node_for(art.group)
         name = self._identity_named_by(sign_with.public_key)
         if name is not None and await self.node_wants_ripening(target):
             await self.ensure_ripe(name, target)   # the level decides the postage
-        bits = await self.postage_for(art, target)
+        bits = await self.postage_for(art, target) + extra_bits
         for attempt in (1, 2):
             if (not art.get("Signature") or art.proven_pow() < bits
                     or art.author_key != sign_with.public_key):
                 await self._compute(lambda: art.finalize(sign_with, bits))
             try:
-                return await self._post_article(art, node)
+                return await self._post_article(art, node, blobs)
             except SessionError as exc:
                 need = _needed_bits(str(exc))
                 if attempt == 2 or need <= bits:

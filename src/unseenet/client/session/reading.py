@@ -409,6 +409,8 @@ class ReadingMixin:
         msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
         msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
         msg.content_type = inner.get("Content-Type", "")
+        if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with the group (0022, 6)
+            self._keep_private_profile(msg, msg.group)
 
     def _redecrypt(self, group_id: str) -> None:
         entry = self.group_entry(group_id)

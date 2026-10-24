@@ -16,6 +16,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `GET/POST /api/site` for your personal site; `pages` as a view of a site.
   `core.pages.resolve_link` and `core.markup.page_body` give every client the
   same links within a site. A job that the core refuses now ends as failed.
+- Files on posts from bots and gateways (#474, UN-RFC 0027): `Poster.post(...,
+  files=[...])` takes paths, `(name, octets)` or `(name, octets, alt)`, prepares
+  them as the clients do (type from the content, pictures cleaned of metadata),
+  checks them against the group's manifest before any postage is computed, and
+  sends them as blobs with the post through `Session`. `Session.post_article`
+  takes `blobs` and `extra_bits` for this. Documented in `docs/bots.md`.
 - Feeds in the local client API (#442, UN-RFC 0046 section 4.14, UN-RFC
   0034): a group can be shown as a feed, with `comment` on each row (may you
   answer it with a chat line); the timeline as the pseudo-group `timeline:`,
@@ -135,10 +141,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   their metadata before they are sent. Edit profile takes a picture file,
   published as your profile picture - the middle square, at most 128 px, no
   metadata. Reading and saving files (f) was there already.
+- Registered names (`@lorensen`) are renewed by themselves in their last 30
+  days, as key-bound groups and names given under yours already were (#424):
+  a `renew` claim in the background, once per name per run and not while one
+  is on its way - so nobody loses a name, and every name under it, by
+  forgetting. Domain names need nothing.
 - TUI: a site is shown as its pages (#212) - one row a page, the home page first
   (⌂), each with its path; choosing one shows it, Markdown and all; `v`
   switches a site between pages and threads. Writing pages stays with the
   command line (`unseenet page-put`) for now.
+- **Private profiles** (UN-RFC 0022 section 6, #182): share a profile with one
+  person or a closed group only - for those who want no public profile, or
+  another one for friends. It is read only by them, shown only there, marked
+  "shared with you" or "with this group", never elsewhere; an empty one takes
+  it back. `Session.share_profile`, `withdraw_shared_profile`,
+  `private_profile(key, context)`; in the TUI, "Share my profile" and "Take
+  back my shared profile" in the palette.
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the
@@ -275,6 +293,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- The project's bot channels are feeds by default and take pictures (#475):
+  `tools/project/create_groups.py` sets `view: feed` for the six of them and
+  `attachments` (`image/*`, 512 KiB) for all but The Conversation.
 - `Session` is split into files by area (`client/session/`: base, ripening,
   nodes, labels, groups, private, profiles, people, reading, posting), each
   with a docstring saying what belongs there, joined into

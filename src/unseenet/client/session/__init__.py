@@ -190,6 +190,7 @@ class Message:
     error: str | None = None
     raw: bytes = field(default=b"", repr=False)
     private: bool = False                 # an inbox message (UN-RFC 0009)
+    private_profile: bool = False         # a profile shared with you or the group (0022, 6)
     sender_key: str | None = None         # verified sender of a private message
     reply_inbox: str | None = None
     to_key: str | None = None             # a private message you sent: its recipient

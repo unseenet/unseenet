@@ -495,3 +495,5 @@ class PrivateMixin:
             msg.sender_ripening = (inner.get("Key-Ripening") or "").strip() or None
             msg.from_name = inner.get("From", "")
             naming.note_certificate(self, msg.sender_key, inner.get(names.HEADER))
+            if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with you (0022, 6)
+                self._keep_private_profile(msg, "me")

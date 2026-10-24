@@ -127,8 +127,10 @@ In the client you press `@`, type the name you want and claim it.
   claim is sent sealed to the registrar's inbox, with a little extra
   postage so that grabbing hundreds of names costs something. The
   registrar answers in your private messages, usually within an hour,
-  with the certificate. It lasts a year; you renew it under `@`, and
-  for 30 days after it runs out nobody but you can take it. A key can hold at most three registered names, and a few names - such as
+  with the certificate. It lasts a year; your client renews it by itself
+  in the last month while it runs (or you do, under `@`), and for 30 days
+  after it runs out nobody but you can take it. A key can hold at most
+  three registered names, and a few names - such as
   `admin`, `help` and `unseenet` - are kept for the project so nobody can
   pose as it.
 - **A domain name** such as `lorensen.dk` proves that the domain is

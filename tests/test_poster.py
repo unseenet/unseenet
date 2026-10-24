@@ -102,3 +102,86 @@ def test_build_rules():
     assert chat.get("Subject") == "" and chat.get("Message-Kind") == "chat"
     with pytest.raises(ValueError):
         p.build(gid, "x", "y", kind="letter")
+
+
+# --- files on posts (#474, UN-RFC 0027) -------------------------------------------
+
+def _png(w=40, h=30) -> bytes:
+    import io
+
+    from PIL import Image
+    out = io.BytesIO()
+    Image.new("RGB", (w, h), (200, 30, 30)).save(out, "PNG")
+    return out.getvalue()
+
+
+def _channel_with_files(owner, bot, attachments):
+    """A channel the bot posts in; ``attachments`` as in its manifest (None: no files)."""
+    from unseenet.core.groups import Manifest, canonical_json
+    m = make_manifest(owner, "space", "channel", posters=[bot.key_text], pow_bits=BITS)
+    if attachments is None:
+        return m
+    data = Manifest.from_article(m).raw | {"attachments": attachments}
+    art = new_article(m.group, None, canonical_json(data),
+                      extra=[("Control", "manifest"), ("Content-Type", "application/json")])
+    return art.finalize(owner, BITS)
+
+
+async def _node_with_blobs(**blobs):
+    node = Node(Store(), NodeConfig(min_pow=BITS, forward_delay=(0, 0), blobs=blobs or None))
+    server = await node.serve("127.0.0.1", 0)
+    return node, server, f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+
+async def test_a_picture_goes_with_the_post_and_reads_back(tmp_path):
+    from unseenet.client.session import Session
+    from unseenet.core import blobs as bl
+    owner, bot = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = _channel_with_files(owner, bot, {"max_size": 1048576, "types": ["image/*"]})
+    node, server, addr = await _node_with_blobs(max_size=1048576)
+    node.accept(manifest.to_bytes())
+    octets = _png()
+    async with Poster(bot, [addr], from_name="NASA bot", tor="none",
+                      state=tmp_path / "bot.json") as p:
+        result = await p.post(manifest.group, "Image of the day", "The Moon",
+                              files=[("moon.png", octets, "The Moon over the sea")])
+    assert result.ok and result.accepted == [addr], result
+    reader = Session(Vault.open(tmp_path / "r.vault", "pw", ops=1, mem=8192 * 1024),
+                     status=lambda *_: None)
+    reader.new_identity("r", "R")
+    reader.add_node(addr)
+    reader.subscribe(manifest.group)
+    try:
+        [msg] = reader.visible(await reader.fetch_group(manifest.group))
+        [att] = msg.attachments
+        assert att["name"] == "moon.png" and att["type"] == "image/png"
+        assert att["alt"] == "The Moon over the sea" and att["dim"] == [40, 30]
+        sent = await reader.fetch_blob(manifest.group, att["blob"])
+        assert att["blob"] == bl.blob_id(sent) and sent.startswith(b"\x89PNG")
+    finally:
+        await reader.close()
+        server.close()
+
+
+async def test_files_are_checked_before_any_postage(tmp_path):
+    owner, bot = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = _channel_with_files(owner, bot, None)          # the group takes no files
+    node, server, addr = await _node_with_blobs(max_size=1048576)
+    node.accept(manifest.to_bytes())
+    async with Poster(bot, [addr], tor="none", state=tmp_path / "bot.json") as p:
+        with pytest.raises(PosterError, match="takes no files"):
+            await p.post(manifest.group, "Picture", "x", files=[("a.png", _png())])
+        with pytest.raises(PosterError, match="a file must be"):
+            await p.post(manifest.group, "Picture", "x", files=[42])
+    server.close()
+
+
+async def test_a_node_without_files_refuses_the_post(tmp_path):
+    owner, bot = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = _channel_with_files(owner, bot, {"max_size": 1048576})
+    node, server, addr = await _node_with_blobs()              # blobs off on this node
+    node.accept(manifest.to_bytes())
+    async with Poster(bot, [addr], tor="none", state=tmp_path / "bot.json") as p:
+        result = await p.post(manifest.group, "Picture", "x", files=[("a.png", _png())])
+    assert not result.ok and "carries no files" in result.refused[addr]
+    server.close()

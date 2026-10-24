@@ -1694,3 +1694,30 @@ async def test_tui_shows_a_site_as_its_pages(tmp_path, monkeypatch):
         assert "Om os" in rows[1] and rows[1].endswith("/about")
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_shows_a_profile_shared_with_you(tmp_path, monkeypatch):
+    """#182 in the TUI: a profile shared with you shows in your private posts, marked."""
+    from unseenet.client.tui import ProfileDialog
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    alice = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    alice.new_identity("alice", "Alice"); alice.add_node(addr)
+    await alice.ensure_inbox()
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    inbox = me.my_inbox
+    await me.close()
+    await alice.share_profile(inbox, {"v": 1, "about": "Kun til dig"})
+    key = alice.identity().key_text
+    await alice.close()
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.select_group(inbox)
+        assert await wait_for(pilot, lambda: app.session.private_profile(key, "me") is not None, 400)
+        app.action_show_profile(key)
+        assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
+        texts = [str(w.render()) for w in app.screen.query("Static")]
+        assert any("Shared with you" in t for t in texts) and any("Kun til dig" in t for t in texts)
+        await pilot.press("escape")
+        await pilot.press("q")
+    server.close()

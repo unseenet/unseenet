@@ -72,12 +72,17 @@ project's list.
 | `unseenet.canary` | channel | the GitHub poster: daily connection checks ([UN-RFC 0021](../spec/un-rfc-0021.md)) |
 | `unseenet.names` | channel | the registrar's replicas ([UN-RFC 0019](../spec/un-rfc-0019.md)) |
 | `unseenet.admin` | open | anyone: hierarchy requests and name disputes |
-| `alt.news.wikipedia` | channel, comments open (14 days) | the news bot: one post per story in Wikipedia's *In the news*; anyone comments |
-| `alt.history.onthisday` | channel, comments open (7 days) | the on-this-day bot: the day's anniversaries; anyone comments |
-| `alt.news.globalvoices` | channel, comments open (14 days) | the Global Voices bot: whole stories (CC BY 3.0); anyone comments |
-| `alt.news.theconversation` | channel, comments open (14 days) | The Conversation bot: opening paragraphs and a link (CC BY-ND 4.0), at most 8 a day |
-| `alt.privacy.eff` | channel, comments open (14 days) | the EFF bot: Deeplinks posts (CC BY 4.0) |
-| `alt.space.nasa` | channel, comments open (7 days) | the NASA bot: Image of the Day |
+| `alt.news.wikipedia` | channel, feed, comments open (14 days), pictures | the news bot: one post per story in Wikipedia's *In the news*; anyone comments |
+| `alt.history.onthisday` | channel, feed, comments open (7 days), pictures | the on-this-day bot: the day's anniversaries; anyone comments |
+| `alt.news.globalvoices` | channel, feed, comments open (14 days), pictures | the Global Voices bot: whole stories (CC BY 3.0); anyone comments |
+| `alt.news.theconversation` | channel, feed, comments open (14 days) | The Conversation bot: opening paragraphs and a link (CC BY-ND 4.0), at most 8 a day |
+| `alt.privacy.eff` | channel, feed, comments open (14 days), pictures | the EFF bot: Deeplinks posts (CC BY 4.0) |
+| `alt.space.nasa` | channel, feed, comments open (7 days), pictures | the NASA bot: Image of the Day |
+
+The bot channels are shown as feeds by default (UN-RFC 0034; readers can switch to
+threads). Those marked *pictures* take pictures up to 512 KiB each (`image/*`,
+UN-RFC 0027): a node keeps at most 8 MiB of files per group, so a bot keeps its
+pictures small. The Conversation's are agency pictures, so its channel takes none.
 
 All have the fingerprint `ph5fc5hop5232qsz`, for example
 `unseenet.announce@ph5fc5hop5232qsz`. The node list and the root list are

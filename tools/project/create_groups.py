@@ -163,27 +163,27 @@ GROUPS = (
      "Gateways to other networks announce themselves here (UN-RFC 0038).", GATEWAYS, None, 18),
     ("unseenet.admin", "open", "threads", "Hierarchy requests and name disputes",
      "Requests for hierarchies, decisions, and complaints about names.", ADMIN, None, 22),
-    ("alt.news.wikipedia", "channel", "threads", "News from Wikipedia's In the news",
+    ("alt.news.wikipedia", "channel", "feed", "News from Wikipedia's In the news",
      "One post per story in Wikipedia's \"In the news\", by a bot. Comment on any story.",
      BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
      "ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza", 20),
-    ("alt.history.onthisday", "channel", "threads", "On this day in history",
+    ("alt.history.onthisday", "channel", "feed", "On this day in history",
      "Each day's anniversaries from Wikipedia's \"On this day\", by a bot.",
      BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
      "ed25519:ame5agdrby6zyjqusfnpyicxg4nygfai3lqwewz2ctkkjuid3hxa", 20),
-    ("alt.news.globalvoices", "channel", "threads", "Global Voices: citizen media from around the world",
+    ("alt.news.globalvoices", "channel", "feed", "Global Voices: citizen media from around the world",
      "Whole stories from Global Voices, by a bot. Comment on any story.",
      BOT_RULES.format(source="Global Voices (CC BY 3.0)"),
      "ed25519:ojyu2pv2v3aye2tw4xbel3ha5loujwxqjao5wnoe55dw7zc4fw7q", 20),
-    ("alt.news.theconversation", "channel", "threads", "The Conversation: news analysis by researchers",
+    ("alt.news.theconversation", "channel", "feed", "The Conversation: news analysis by researchers",
      "The opening of articles from The Conversation, with a link to the rest, by a bot.",
      BOT_RULES.format(source="The Conversation (CC BY-ND 4.0)"),
      "ed25519:7ky3decxcamoqttl2fqysiie24ptdxt4mld5yrxdb2ftbheukydq", 20),
-    ("alt.privacy.eff", "channel", "threads", "EFF Deeplinks: digital rights, privacy, free speech",
+    ("alt.privacy.eff", "channel", "feed", "EFF Deeplinks: digital rights, privacy, free speech",
      "Posts from the Electronic Frontier Foundation's Deeplinks blog, by a bot.",
      BOT_RULES.format(source="EFF Deeplinks (CC BY 4.0)"),
      "ed25519:uangztkgxp6ql2nxj6fy34d2bjspykt5taxfi7i4urrcm2o4kvca", 20),
-    ("alt.space.nasa", "channel", "threads", "NASA Image of the Day",
+    ("alt.space.nasa", "channel", "feed", "NASA Image of the Day",
      "NASA's Image of the Day: the caption and a link to the picture, by a bot.",
      BOT_RULES.format(source="NASA (not copyrighted)"),
      "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq", 20),
@@ -198,6 +198,16 @@ COMMENTS = {
     "alt.privacy.eff": ("open", 14),
     "alt.space.nasa": ("open", 7),
 }
+
+
+# Files the bot channels take (UN-RFC 0027 section 5.1): pictures, kept small - a node
+# keeps at most 8 MiB of files per group (UN-RFC 0017 2.2), so a picture a day must be
+# a few hundred KiB for its channel to keep them for weeks. The Conversation's are
+# agency pictures the bot does not post (unseenet-bots#7), so it takes none.
+BOT_PICTURES = {"max_size": 512 * 1024, "types": ["image/*"]}
+ATTACHMENTS = {name: BOT_PICTURES for name in (
+    "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
+    "alt.privacy.eff", "alt.space.nasa")}
 
 
 # Portals (UN-RFC 0023 section 3.5): name -> the group's counterparts on other networks,
@@ -215,7 +225,8 @@ KINDS = {"unseenet.chat": ["chat"]}
 
 # What this list decides for groups that already exist, and each field's default.
 SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
-            "comments": "none", "comment_days": None, "portals": [], "kinds": None}
+            "comments": "none", "comment_days": None, "portals": [], "kinds": None,
+            "attachments": None}
 
 
 def _short(value) -> str:
@@ -234,7 +245,7 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
     for k, default in (("comments", "none"), ("comment_days", None), ("portals", []),
-                       ("kinds", None)):
+                       ("kinds", None), ("attachments", None)):
         if data.get(k, default) == default:
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
@@ -263,7 +274,8 @@ async def main() -> None:
             comments, comment_days = COMMENTS.get(name, ("none", None))
             wanted = {"view": view, "title": title, "description": desc, "rules": rules,
                       "min_pow": min_pow, "comments": comments, "comment_days": comment_days,
-                      "portals": PORTALS.get(name, []), "kinds": KINDS.get(name)}
+                      "portals": PORTALS.get(name, []), "kinds": KINDS.get(name),
+                      "attachments": ATTACHMENTS.get(name)}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -282,7 +294,8 @@ async def main() -> None:
                             posters=posters, min_pow=min_pow, retention_days=90,
                             view=None if view == "threads" else view,
                             comments=comments, comment_days=comment_days,
-                            kinds=KINDS.get(name), pow_bits=_owner.POW_BITS)
+                            kinds=KINDS.get(name), pow_bits=_owner.POW_BITS,
+                            extra={"attachments": ATTACHMENTS[name]} if name in ATTACHMENTS else None)
         if PORTALS.get(name):                   # make_manifest has no portals: add and re-sign
             data = json.loads(art.body)
             data["portals"] = PORTALS[name]
