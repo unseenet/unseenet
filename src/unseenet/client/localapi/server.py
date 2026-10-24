@@ -214,6 +214,10 @@ async def edit(request):
     return _json(_api(request).edit(_gid(request), await _body(request)))
 
 
+async def pin(request):
+    return _json(await _api(request).pin(_gid(request), await _body(request)))
+
+
 async def withdraw(request):
     data = await _body(request)
     return _json(await _api(request).withdraw(_gid(request), str(data.get("id", ""))))
@@ -369,6 +373,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
+    ("POST", "/api/groups/{gid}/pin", pin),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/contacts", contacts),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),

@@ -9,6 +9,8 @@ Part of ``LocalAPI`` (see __init__.py)."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import api as _a   # LocalAPI itself, joined after the parts
 
@@ -94,9 +96,40 @@ class Groups:
                "write": {"post": _perm(s.write_permission(gid, kind=KIND_POST)),
                          "chat": _perm(s.write_permission(gid, kind=KIND_CHAT))},
                # files: what the group takes, and whether its node carries them (#442)
-               "files": self._files_policy(data), "node_files": s.node_files_known(gid)}
+               "files": self._files_policy(data), "node_files": s.node_files_known(gid),
+               # pinned posts, newest pin first, and whether you may pin (UN-RFC 0033, #442)
+               "pins": self._pins(s, gid), "max_pins": self._max_pins(data),
+               "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
+        return out
+
+    @staticmethod
+    def _max_pins(data: dict) -> int:
+        from ....core import pins as pn
+        try:
+            return pn.max_pins(data)
+        except ValueError:
+            return pn.MAX_PINS_DEFAULT
+
+    @staticmethod
+    def _pins(s: Session, gid: str) -> list[dict]:
+        """The pins in force (UN-RFC 0033 section 4.2), each with the pinned post when
+        this client has it, and ``beyond_window``: older than the group keeps posts, so
+        it is gone at once when unpinned - a client warns first (section 7.1)."""
+        days = int(s.manifest_data(gid).get("retention_days", 0) or 0)
+        now = datetime.now(timezone.utc)
+        by_id = s.cache.get(gid, {})
+        out = []
+        for p in s.pins(gid):
+            m = next((x for x in by_id.values() if x.message_id == p["id"]), None)
+            out.append({"id": p["id"], "note": p["note"], "by": p["by"],
+                        "by_label": s.label_of(p["by"]), "pinned": p["pinned"].isoformat(),
+                        "subject": m.subject if m and m.readable else None,
+                        "who": s.identity_label(m.author_key, m.from_name) if m else None,
+                        "date": m.date.isoformat() if m and m.date else None,
+                        "beyond_window": bool(days and m and m.date
+                                              and now - m.date > timedelta(days=days))})
         return out
 
     @staticmethod
@@ -141,6 +174,9 @@ class Groups:
         if "write" in head:                     # a real group: may you answer each post?
             for row, (m, _) in zip(out, rows):
                 row["reply"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_POST))
+            pinned = {p["id"] for p in head["pins"]}
+            for row, (m, _) in zip(out, rows):
+                row["pinned"] = m.message_id in pinned
         return {"group": head, "rows": out}
 
     @staticmethod

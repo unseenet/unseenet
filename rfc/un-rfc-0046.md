@@ -495,6 +495,42 @@ the short form, never instead of them and never as part of a post.
   "published": true}`.
 - `{"remove": true}` removes yours; what others kept cannot be taken back.
 
+## 4.12 Pinned Posts
+
+The owner and moderators of a group may pin posts at the top of it, and
+nodes keep a pinned post beyond the group's window (UN-RFC 0033). The
+head of a group (section 4.3) has
+
+```
+"pins": [{"id": "<message-id>", "note": "...", "by": "<key>", "by_label": "...",
+          "pinned": "<ISO 8601>", "subject": "..." or null, "who": "..." or null,
+          "date": "<ISO 8601>" or null, "beyond_window": false}, ...],
+"max_pins": 5, "may_pin": true
+```
+
+`pins` are the pins in force, newest pin first, as every client of this
+project and every node works them out (UN-RFC 0033 section 4.2): only
+pins by the owner and moderators of the current manifest count, at most
+`max_pins`, and not of withdrawn posts. `subject`, `who` and `date` are
+the pinned post's, null while the runtime does not have it. `note` is
+text the pinner wrote: show it as text. `may_pin` says whether you may
+pin here: you own or moderate the group and it takes pins. Each row also
+has `pinned`. A front end shows the pins above the threads, or as a bar
+above a chat, and keeps each pinned post in its place too (UN-RFC 0033
+sections 7.2 and 7.3). When there are `max_pins` pins already, a new pin
+makes the last of `pins` stop counting: a front end MUST say which
+before pinning (UN-RFC 0033 section 7.1).
+
+`POST /api/groups/<id>/pin` with `{"id": "<message-id>", "note": "..."}`
+pins a post (a note is at most 256 characters), and with `{"id": ...,
+"unpin": true}` unpins it; it answers `{"ok": true, "marker":
+"<message-id of the marker>", "pins": [...]}`. Refused with 400 for
+anyone but the owner and moderators, in a group whose `max_pins` is 0,
+or to unpin a post that is not pinned. A pin with `beyond_window` true is
+of a post older than the group keeps posts: unpinned, it is gone at
+once, so a front end MUST say so before unpinning it (UN-RFC 0033
+section 7.1).
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

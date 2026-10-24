@@ -151,6 +151,21 @@ class Writing:
         s.emit(ev.GroupUpdated(m.group))
         return {"ok": True}
 
+    async def pin(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/pin`` (section 4.12): the owner or a moderator pins a
+        post at the top of the group, kept beyond its window, with an optional note -
+        or unpins it with ``"unpin": true`` (UN-RFC 0033). Answers the pins now."""
+        s = self._ready()
+        if gid not in s.data["groups"] and gid not in s.data["subscribed"]:
+            raise NotFound("no such group")
+        mid = str(data.get("id") or "").strip()
+        if not mid:
+            raise SessionError("which post? give its id")
+        marker = await s.pin(gid, mid, str(data.get("note") or ""), unpin=bool(data.get("unpin")))
+        await self._fetch(gid)
+        s.emit(ev.GroupUpdated(gid))
+        return {"ok": True, "marker": marker, "pins": self._pins(s, gid)}
+
     def mentioned(self, gid: str, subject: str, body: str) -> dict:
         """``POST /api/groups/{gid}/mentioned`` (section 4.5): before posting, whom a
         text mentions by name and whether notices may be sent here (UN-RFC 0032) - for asking
