@@ -180,28 +180,109 @@ def check_article(art: Article, manifest_data: dict | None) -> list[tuple[str, i
     return blobs
 
 
+def _files(files) -> list[tuple]:
+    files = [tuple(f) + (None,) * (5 - len(f)) for f in files]
+    if len(files) > MAX_PER_ARTICLE:
+        raise ValueError(f"at most {MAX_PER_ARTICLE} files on a post")
+    if sum(len(f[2]) for f in files) > MAX_TOTAL:
+        raise ValueError(f"at most {MAX_TOTAL // (1024 * 1024)} MiB of files on a post")
+    return files
+
+
+def _attachment_value(bid: str, name, media_type: str, data: bytes, alt, dim,
+                      key: bytes | None = None) -> str:
+    value = (f"{bid}; type={media_type}; size={len(data)}; "
+             f"name={b64((name or 'file').encode()[:MAX_NAME])}")
+    if alt and alt.strip():
+        value += f"; alt={b64(_cut(alt.strip(), MAX_ALT))}"
+    if dim:
+        value += f"; dim={int(dim[0])}x{int(dim[1])}"
+    if key is not None:
+        value += f"; key={b64(key)}"
+    return value
+
+
 def attachment_headers(files) -> list[tuple[str, str]]:
     """The ``Blobs`` and ``Attachment-<n>`` headers (sections 4.1-4.3) for a plain
     article's files, given as ``(name, media type, octets)``, optionally followed by
     the alternative text and the picture's ``(width, height)``; the name is sent as
     base64 of its first 128 octets, the text as base64 of its first 512."""
-    files = [tuple(f) + (None,) * (5 - len(f)) for f in files]
+    files = _files(files)
     if not files:
         return []
-    if len(files) > MAX_PER_ARTICLE:
-        raise ValueError(f"at most {MAX_PER_ARTICLE} files on a post")
-    if sum(len(f[2]) for f in files) > MAX_TOTAL:
-        raise ValueError(f"at most {MAX_TOTAL // (1024 * 1024)} MiB of files on a post")
     headers = [("Blobs", " ".join(f"{blob_id(f[2])}={len(f[2])}" for f in files))]
     for i, (name, media_type, data, alt, dim) in enumerate(files, 1):
-        value = (f"{blob_id(data)}; type={media_type}; size={len(data)}; "
-                 f"name={b64(name.encode()[:MAX_NAME])}")
-        if alt and alt.strip():
-            value += f"; alt={b64(_cut(alt.strip(), MAX_ALT))}"
-        if dim:
-            value += f"; dim={int(dim[0])}x{int(dim[1])}"
-        headers.append((f"Attachment-{i}", value))
+        headers.append((f"Attachment-{i}",
+                        _attachment_value(blob_id(data), name, media_type, data, alt, dim)))
     return headers
+
+
+# --- encrypted blobs (section 3.3), for closed groups and inboxes ------------
+
+ENC_AD = DS("UNSEENET-BLOB-ENC-1")
+
+
+def encrypt_file(octets: bytes) -> tuple[bytes, bytes]:
+    """``(key, blob)``: the file encrypted with a fresh random key for this file only
+    (section 3.3) - never a key derived from the file."""
+    from . import crypto
+    key = os.urandom(32)
+    return key, crypto.aead_encrypt(key, octets, ENC_AD)
+
+
+def decrypt_file(key: bytes, blob: bytes) -> bytes:
+    """The file in an encrypted blob; ``ValueError`` when the key does not open it."""
+    from . import crypto
+    try:
+        return crypto.aead_decrypt(key, blob, ENC_AD)
+    except crypto.CryptoError as exc:
+        raise ValueError("the file does not open with its key") from exc
+
+
+def encrypted_attachment_headers(files):
+    """For an encrypted article's files (sections 3.3, 4.3): ``(outer, inner, blobs)``
+    - the outer ``Blobs`` header nodes read, the inner ``Attachment-<n>`` headers with
+    each file's ``key``, and the ``(blob ID, ciphertext)`` to upload. Files as for
+    ``attachment_headers``."""
+    files = _files(files)
+    if not files:
+        return [], [], []
+    inner, blobs = [], []
+    for i, (name, media_type, data, alt, dim) in enumerate(files, 1):
+        key, blob = encrypt_file(data)
+        bid = blob_id(blob)
+        blobs.append((bid, blob))
+        inner.append((f"Attachment-{i}",
+                      _attachment_value(bid, name, media_type, data, alt, dim, key)))
+    outer = [("Blobs", " ".join(f"{bid}={len(blob)}" for bid, blob in blobs))]
+    return outer, inner, blobs
+
+
+def inner_attachments(art: Article, inner_headers, types=None) -> tuple[list[dict], dict]:
+    """The attachments of an encrypted article as a member shows them, and their file
+    keys by blob ID - checked as section 4.4 says after decryption: the inner headers
+    name exactly the outer ``Blobs``, each 40 octets larger than its file, every one
+    with a key, and of a type the group allows (5.2). ``([], {})`` otherwise."""
+    try:
+        blobs = dict(parse_blobs(art))
+        found = parse_attachments(inner_headers)
+    except ArticleError:
+        return [], {}
+    if not blobs or {a["blob"] for a in found} != set(blobs):
+        return [], {}
+    keys = {}
+    for a in found:
+        if blobs[a["blob"]] != a["size"] + ENC_OVERHEAD or not a.get("key") \
+                or not type_allowed(a["type"], types):
+            return [], {}
+        try:
+            key = b64decode(a["key"])
+        except ValueError:
+            return [], {}
+        if len(key) != 32:
+            return [], {}
+        keys[a["blob"]] = key
+    return shown_attachments(inner_headers), keys
 
 
 def _cut(text: str, limit: int) -> bytes:

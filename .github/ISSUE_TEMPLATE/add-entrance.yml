@@ -1,0 +1,80 @@
+name: Add my entrance to the list of web entrances
+description: Ask for your web entrance to be in the signed list that web clients and the jump page use (UN-RFC 0043).
+title: "Add entrance: "
+labels: ["entrance-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Web clients and the jump page (`unseenet-entrances.html`) offer the entrances on
+        the project's signed list, so the network can be reached from a browser even when
+        one entrance is blocked. Fill this in, and a check runs at once. At every address
+        you give - over HTTPS, and over Tor for the onion - it reads
+        `/.well-known/unseenet-entrance`, compares **every file of the web client** you
+        serve with the signed version, and opens a tunnel to a known node. It also posts
+        a challenge, which you put in `ENTRANCE_CLAIM` on the entrance: that shows you run
+        it. When a maintainer accepts the request, your entrance is added to
+        `src/unseenet/entrances.json` and the new list is posted to `unseenet.entrances`.
+
+        Listed entrances are checked every day: one that cannot be reached for 10 days is
+        taken off the list (with a note after 3 days), and one that serves files other
+        than the signed web client is taken off **at once**.
+
+        Before you ask, read [Being listed](https://unseenet.org/entrance/listed/) and
+        [Your responsibility](https://unseenet.org/entrance/responsibility/).
+  - type: input
+    id: name
+    attributes:
+      label: Entrance name
+      description: A short label, as the list shows it (letters, digits, - and _).
+      placeholder: my-entrance
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Open-web address
+      description: "`https://` and the host, nothing after it: a name or the public IP address. Leave it empty for an onion-only entrance."
+      placeholder: "https://203.0.113.7/"
+    validations:
+      required: false
+  - type: input
+    id: onion
+    attributes:
+      label: Onion address
+      description: Printed by `install.sh` at the end (`ENTRANCE_ONION` in /etc/unseenet-entrance.env).
+      placeholder: xyz...xyz.onion
+    validations:
+      required: false
+  - type: input
+    id: operator
+    attributes:
+      label: Operator key
+      description: Your own identity key - the same as `ENTRANCE_OPERATOR` on the entrance.
+      placeholder: "ed25519:..."
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: Contact (optional)
+      description: Where people reach you about the entrance, e.g. your Unseenet name or inbox. At most 120 characters.
+    validations:
+      required: false
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: A few words for users - where it runs, who runs it. At most 200 characters.
+      placeholder: "Small entrance on a free VM in Frankfurt, run by a student group"
+    validations:
+      required: true
+  - type: checkboxes
+    id: promises
+    attributes:
+      label: As the operator
+      options:
+        - label: I run this entrance and intend to keep it running for a while.
+          required: true
+        - label: The entrance follows UN-RFC 0043 section 5 - in memory only, no logs, no CDN or proxy on someone else's machine in front.
+          required: true

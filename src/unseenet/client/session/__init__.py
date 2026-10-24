@@ -207,6 +207,9 @@ class Message:
     page_removed: bool = False            # ... a removal of that path
     blobs: tuple = ()                     # the blob IDs it carries (UN-RFC 0027, Blobs)
     attachments: tuple = ()               # ... as shown: blob, type, size, name, alt, dim (4.2)
+    # encrypted files (closed groups, inboxes): each file's key by blob ID (0027, 3.3);
+    # never shown or sent anywhere
+    file_keys: dict = field(default_factory=dict, repr=False)
 
     @property
     def author_fp(self) -> str:

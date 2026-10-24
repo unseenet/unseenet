@@ -9,6 +9,28 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **"Add my entrance"** (unseenet-entrance#3, UN-RFC 0043 8.1), as for nodes:
+  an issue form; a check that reaches the entrance over HTTPS and its onion,
+  compares every file of the web client it serves with the signed version
+  (read from its own `/.well-known/unseenet-releases.json` and checked against
+  the project key), tunnels to a known node, and looks for the request's
+  challenge in `ENTRANCE_CLAIM`; on `accepted`, the entrance goes into
+  `entrances.json` and the new list is posted. A **daily check** takes an
+  entrance off at once if it serves changed files, after 10 days if it
+  fails (a note after 3), and only notes an old version; the project's own
+  entrances get an issue instead. Docs: *Being listed*.
+- Encrypted files (#497, UN-RFC 0027 sections 3.3, 4.3, 4.4, 5.3): pictures and
+  files in closed groups and in private posts and chats, each file encrypted
+  with a fresh key that travels inside the encrypted article; members check the
+  inner headers against `Blobs` and the group's types before showing them.
+  Submissions to moderated groups carry their files to the moderators
+  encrypted, and the approving moderator checks and uploads the plain ones.
+  New inboxes take pictures (up to 4 MiB each), older ones are given them, and
+  *Pictures in private posts* in the TUI's commands turns it off
+  (`Session.set_inbox_files`). The TUI attaches files when writing a private
+  post, and with Ctrl+F in a chat with a person; the local client API takes
+  `files` on `POST /api/private` (UN-RFC 0046 section 4.4). Encrypted blobs
+  are carried only by nodes whose operator turned on `encrypted`.
 - Pictures where they were forgotten (#496): a new personal feed or site
   takes pictures by default (up to 4 MiB each; `feed-start`/`site-start
   --no-files` for none), and the TUI offers it once for one made before.

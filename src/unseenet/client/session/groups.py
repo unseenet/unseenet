@@ -253,7 +253,10 @@ class GroupsMixin:
         keys += [k for k in data.get("moderators", []) if k not in keys]
         return [(personal_inbox_id(crypto.key_from_text(k)), crypto.key_from_text(k)) for k in keys]
 
-    async def _submit(self, group_id: str, subject: str, build) -> str:
+    async def _submit(self, group_id: str, subject: str, build, files=None) -> str:
+        """Send a post to a moderated group's moderators (UN-RFC 0009 section 3). Its
+        ``files`` go with it as encrypted blobs of the inbox article, while the post
+        names them as the plain blobs it will carry once approved (UN-RFC 0027, 5.3)."""
         self.mark_in_use()               # writing anything is using the identity (#270)
         bits = await self.required_pow(group_id)
         art = await self._compute(lambda: build(bits))
@@ -263,7 +266,7 @@ class GroupsMixin:
             try:
                 await self.send_private(inbox, f"Submission to {short_group_id(group_id)}: {subject}",
                                         raw, owner_key=owner_key, content_type=SUBMISSION_TYPE,
-                                        remember=False)
+                                        remember=False, files=files or None)
                 delivered += 1
             except (SessionError, OSError, ConnectionError) as exc:
                 errors.append(str(exc))
@@ -315,14 +318,35 @@ class GroupsMixin:
         from ...core.groups import approve
         if not self.moderates(art.group):
             raise SessionError("you do not moderate this group")
+        blobs = await self._submitted_files(msg, art)
         approve(art, self.identity())
         try:
-            await self._post_article(art)
+            await self._post_article(art, blobs=blobs)
         except SessionError as exc:
             if "duplicate" not in str(exc).lower():
                 raise                       # a duplicate: someone else approved it first
         self._queue_notices(self.notice_bundle(art))     # UN-RFC 0032 section 4.3
         self._moderation_done(msg)
+
+    async def _submitted_files(self, msg: "Message", art: Article) -> list[tuple[str, bytes]]:
+        """The plain blobs of a submitted post with files (UN-RFC 0027 section 5.3): the
+        files sent with the submission, decrypted, each matching a blob the post names
+        - checked before approving, uploaded with the approved post."""
+        from ...core import blobs as bl
+        try:
+            named = dict(bl.parse_blobs(art))
+        except ArticleError as exc:
+            raise SessionError(f"the submission names its files wrongly: {exc}") from exc
+        if not named:
+            return []
+        plain = {}
+        for a in msg.attachments:
+            octets = await self.fetch_blob(msg.group, a["blob"])
+            plain[bl.blob_id(octets)] = octets
+        if set(plain) != set(named) or any(len(plain[b]) != n for b, n in named.items()):
+            raise SessionError("the files sent with this submission are not the ones it names "
+                               "- not approved")
+        return list(plain.items())
 
     async def reject_submission(self, msg: "Message", reason: str = "") -> None:
         """Moderator: turn a submission down (UN-RFC 0009 section 3). With a ``reason``,

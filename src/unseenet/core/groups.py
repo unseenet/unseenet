@@ -539,14 +539,17 @@ def encrypted_article(group_id: str, epoch: int, keys: crypto.GroupKeys, author:
                       *, from_name: str, subject: str, body: str,
                       references: list[str] | None = None, kind: str = KIND_POST,
                       content_type: str | None = None, pow_bits: int = 18,
-                      extra: list[tuple[str, str]] | None = None) -> Article:
+                      extra: list[tuple[str, str]] | None = None,
+                      inner_extra: list[tuple[str, str]] | None = None) -> Article:
     """An article for a closed group; its kind (UN-RFC 0028) is inside the encryption.
-    ``extra``: outer headers nodes must read, e.g. Supersedes (UN-RFC 0042, 2)."""
+    ``extra``: outer headers nodes must read, e.g. Supersedes (UN-RFC 0042, 2) or
+    ``Blobs``; ``inner_extra``: headers only members read, e.g. ``Attachment-<n>``
+    with the file keys (UN-RFC 0027 section 4.3)."""
     if kind not in MESSAGE_KINDS:
         raise ValueError(f"unknown message kind: {kind}")
     inner = Article([("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),
                      ("Content-Type", content_type or "text/plain; charset=utf-8"),
-                     ("Message-Kind", kind)], body)
+                     ("Message-Kind", kind)] + list(inner_extra or []), body)
     blob = crypto.aead_encrypt(keys.enc_key, inner.to_bytes(), _aad(group_id, epoch))
     outer_body = "\n".join(textwrap.wrap(b64(blob), 76)) + "\n"
     art = new_article(group_id, None, outer_body, references=references,
@@ -595,14 +598,17 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
                   references: list[str] | None = None, content_type: str | None = None,
                   kind: str = KIND_POST, pow_bits: int = 18,
                   extra: list[tuple[str, str]] | None = None,
-                  two_envelopes: bool = False, copy_to: bytes | None = None) -> Article:
+                  two_envelopes: bool = False, copy_to: bytes | None = None,
+                  outer_extra: list[tuple[str, str]] | None = None) -> Article:
     """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
 
     ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box, as do
     ``extra`` inner headers (e.g. a mention notice's, UN-RFC 0032). With
     ``two_envelopes`` it is ``sealedbox2``: the second envelope opens it for
     ``copy_to`` (the sender's own key), or for nobody when that is None - so nobody can
-    tell whether the sender kept a copy (UN-RFC 0044 section 6.1).
+    tell whether the sender kept a copy (UN-RFC 0044 section 6.1). ``outer_extra``:
+    headers nodes must read, i.e. ``Blobs`` (UN-RFC 0027 section 4.3); the files'
+    ``Attachment-<n>`` go in ``extra``, inside.
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
@@ -635,7 +641,7 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     text = b64(box)                     # fixed lines: textwrap breaks at the "-" of base64url,
     outer_body = "\n".join(text[i:i + 76] for i in range(0, len(text), 76)) + "\n"   # and the
     art = new_article(group_id, None, outer_body, references=references,           # size would vary
-                      extra=[("Encrypted", scheme)])
+                      extra=[("Encrypted", scheme)] + list(outer_extra or []))
     return art.finalize(one_time, pow_bits)
 
 

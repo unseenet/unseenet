@@ -356,7 +356,8 @@ class PostingMixin:
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
         files = list(files or [])
-        blobs, file_bits = [], 0
+        blobs, file_bits, inner_files = [], 0, []
+        entry = self.group_entry(group_id)
         if files:
             from ...core import blobs as bl
             # the rules for files from the current manifest: this vault may not have it,
@@ -366,13 +367,16 @@ class PostingMixin:
                 if m is not None:
                     self.group_entry(group_id)["manifest"] = dict(m.raw)
             self.check_files(group_id, files)
-            edit_header += bl.attachment_headers([(f.name, f.media_type, f.octets, f.alt, f.dim)
-                                                  for f in files])
-            blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
-            file_bits = bl.extra_bits_for(sum(len(f.octets) for f in files))
+            described = [(f.name, f.media_type, f.octets, f.alt, f.dim) for f in files]
+            if entry.get("type") == "closed":     # encrypted, keys inside (UN-RFC 0027, 3.3)
+                outer, inner_files, blobs = bl.encrypted_attachment_headers(described)
+                edit_header += outer
+            else:
+                edit_header += bl.attachment_headers(described)
+                blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
+            file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
         shown = from_name or self.display_name()
         author = self.identity()
-        entry = self.group_entry(group_id)
         cert = None
         if entry.get("type") == "closed":
             if not entry["keys"]:
@@ -384,7 +388,8 @@ class PostingMixin:
                 return encrypted_article(
                     group_id, epoch, keys, author, from_name=shown,
                     subject=subject, body=body, references=references, kind=kind,
-                    content_type=content_type, pow_bits=bits, extra=edit_header)
+                    content_type=content_type, pow_bits=bits + file_bits, extra=edit_header,
+                    inner_extra=inner_files)
         else:
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
 
@@ -397,7 +402,7 @@ class PostingMixin:
                 return art.finalize(author, bits + file_bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):
-            return await self._submit(group_id, subject, build)
+            return await self._submit(group_id, subject, build, files=files)
         msgid = (await self._post_with_postage(group_id, build, blobs=blobs)).message_id
         self._remember_mine(msgid)
         if cert:

@@ -18,8 +18,10 @@ is one of the most useful things you can do for the network besides
 
 ## What an entrance does, and does not
 
-- It tunnels a browser's WebSocket to a **known node's** onion service, each
-  on a Tor circuit of its own, and copies bytes both ways, unchanged.
+- It tunnels a browser's WebSocket to a **known node's** onion service and
+  copies bytes both ways, unchanged. One web-client session shares a Tor
+  circuit to each node, as Unseenet's own clients do; other sessions and
+  other visitors never share one.
 - It serves the web client, and the signed lists it reads from the network
   about once an hour: the entrances and the versions of the web client, as
   raw signed articles that clients check themselves.
@@ -54,7 +56,5 @@ are kept.
 ## Being listed
 
 Apps and the jump page find entrances in a signed list kept by the project
-(`unseenet.entrances`, UN-RFC 0043 section 8.1). To have yours in it, open an
-issue in [unseenet-entrance](https://github.com/unseenet/unseenet-entrance/issues)
-with its addresses and who runs it. Set `ENTRANCE_OPERATOR` and
-`ENTRANCE_CONTACT` first, so visitors can see that too.
+(`unseenet.entrances`, UN-RFC 0043 section 8.1). How to get yours on it, and
+how it is checked every day: [Being listed](listed.md).

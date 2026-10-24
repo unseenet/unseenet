@@ -131,6 +131,7 @@ nav:
       - Settings: entrance/settings.md
       - Certificates: entrance/certificates.md
       - New versions, the mirror and blocking: entrance/updates.md
+      - Being listed: entrance/listed.md
       - Your responsibility: entrance/responsibility.md
   - Specification:
       - The UN-RFC series: spec/index.md
