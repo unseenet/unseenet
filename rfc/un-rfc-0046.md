@@ -245,9 +245,10 @@ SHOULD make what is not allowed unavailable up front and show `reason`;
 the node still has the last word.
 
 **Reactions** (UN-RFC 0048). A group's head has `reactions`:
-`{"offered": ["👍", ...], "any": false}`, the emoji the group takes in the
-order to offer them (with `any`, the default set first and any other
-emoji besides); `offered` is empty when the group takes none. In a real
+`{"offered": ["👍", ...], "any": false, "setting": "default"}`, the emoji
+the group takes in the order to offer them (with `any`, the default set
+first and any other emoji besides; `offered` is empty when the group takes
+none) and the owner's choice as section 4.7 takes it. In a real
 group and in the timeline, each row has `reactions`, `[{"emoji": "👍",
 "count": 3, "mine": true}, ...]` in the order they were first given, one
 per key, `react`, a permission whose further codes are `"private"`,

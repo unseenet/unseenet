@@ -114,7 +114,8 @@ class Groups:
                "pins": self._pins(s, gid), "max_pins": self._max_pins(data),
                "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0,
                # the reactions the group takes, in the order to offer them (UN-RFC 0048)
-               "reactions": self._reaction_policy(s, gid),
+               "reactions": {**self._reaction_policy(s, gid),
+                             "setting": self._reaction_setting(data)},
                # its unseenet: address, to copy (UN-RFC 0031 section 3.4.1, #442)
                "address": _addr.group_address(s, gid)}
         if out["owner"] or s.moderates(gid):
@@ -207,6 +208,12 @@ class Groups:
                 for row, (m, _) in zip(out, rows):
                     row["comment"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_CHAT))
         return {"group": head, "rows": out}
+
+    @staticmethod
+    def _reaction_setting(data: dict):
+        """The owner's choice as the settings take it: "default", "none", "any" or a list."""
+        r = data.get("reactions")
+        return "default" if r is None else "none" if r == [] else r
 
     @staticmethod
     def _reaction_policy(s: Session, gid: str) -> dict:

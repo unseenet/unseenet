@@ -29,10 +29,10 @@ async def test_reactions_on_rows_and_reacting(tmp_path, monkeypatch):
     await owner.fetch_group(gid)
     g = api.group(gid)
     assert g["group"]["reactions"] == {"offered": ["👍", "👎", "❤️", "😂", "😮", "😢"],
-                                       "any": False}
+                                       "any": False, "setting": "default"}
     row = _row(g, mid)
     assert row["reactions"] == [] and row["react"]["allowed"]
-    assert row["react_offered"] == g["group"]["reactions"]
+    assert row["react_offered"] == {k: v for k, v in g["group"]["reactions"].items() if k != "setting"}
 
     job = api.react(gid, {"id": mid, "emoji": "👍"})
     assert job["job"]
@@ -47,6 +47,7 @@ async def test_reactions_on_rows_and_reacting(tmp_path, monkeypatch):
         api.react(gid, {"id": mid, "emoji": "🦫"})
     await api.group_settings(gid, {"reactions": ["🦫"]})          # the owner's own set
     assert api.group(gid)["group"]["reactions"]["offered"] == ["🦫"]
+    assert api.group(gid)["group"]["reactions"]["setting"] == ["🦫"]
     await api.group_settings(gid, {"reactions": "none"})
     assert not _row(api.group(gid), mid)["react"]["allowed"]
     with pytest.raises(SessionError):
