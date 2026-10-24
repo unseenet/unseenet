@@ -25,6 +25,8 @@ class Forwarding:
         if art.get("Key-Ripening") and not self._is_ripe_group(art):
             m = self.store.manifest(make_group_id(rp.GROUP_NAME, art.author_key))
             ripe = m.message_id if m is not None else None
+        if art.control and art.control[0] == "manifest":
+            lo = hi = 0.0                # a manifest goes first: its posts wait for it at peers (#384)
         for peer in self.config.peers:
             if peer.name != source and wildmat(peer.groups, art.group):
                 at = not_before or time.time() + random.uniform(lo, hi)
