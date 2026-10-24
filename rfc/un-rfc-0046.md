@@ -237,9 +237,10 @@ SHOULD make what is not allowed unavailable up front and show `reason`;
 the node still has the last word.
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
-- `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" | null}`:
-  null goes back to the owner's choice (UN-RFC 0008 section 3.1, UN-RFC
-  0034 section 3.1).
+- `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" |
+  "pages" | null}`: null goes back to the owner's choice (UN-RFC 0008
+  section 3.1, UN-RFC 0034 section 3.1); `pages` only for a site (section
+  4.15).
 - `POST /api/subscribe` `{"id": "<group ID>", "on": true}`.
 - `GET /api/browse?pattern=<wildmat>`: `{"groups": [<GroupInfo dict>, ...]}`,
   what the node lists.
@@ -619,6 +620,40 @@ Your own feed (UN-RFC 0034 section 5) is started only when you ask:
 A profile of someone else (section 4.8) has `feed`, the Group ID of their
 personal feed, which may not exist, and `following`, whether you follow
 them.
+
+## 4.15 Sites and Pages
+
+A group whose `view` is `pages` is a site (UN-RFC 0035). Its rows (section
+4.3) are every version of every page as they are carried; which versions
+count is the runtime's, with the rules every node uses (UN-RFC 0035
+section 5):
+
+- `GET /api/groups/<id>/site`: `{"id", "label", "title", "home", "owner":
+  {"key", "label"}, "may_write", "max_pages", "index", "address", "pages":
+  [{"path", "title", "home", "id", "who", "who_key", "date", "previous"},
+  ...]}`, the pages in force, the home page first (section 5.2);
+  `previous` says whether a previous version is kept, `may_write` whether
+  you are one of the site's writers, `address` the home page's. Refused
+  with 400 for a group that is not a site.
+- `GET /api/groups/<id>/page?path=<path>`: one page in force, the home page
+  without `path`: `{"path", "title", "home", "address", "row": <row>,
+  "previous": {"id", "who", "date"} or null}`. `row` is as in section 4.3;
+  in its `tree` a link without a scheme, a path in the same site (UN-RFC
+  0035 section 8), is the `unseenet:` address of that page, so a front end
+  opens it as any address (section 4.13). 404 when the page is not in force
+  or not read yet.
+- `POST /api/groups/<id>/page` writes a page, as a job (section 4.4):
+  `{"path", "title", "text", "markdown": true, "files": [...]}` (files as in
+  section 4.10, pictures pointed at by blob ID), `{"path", "remove": true}`
+  removes it, and `{"path", "restore": true}` publishes its previous version
+  again (UN-RFC 0035 section 10.4). `{"path", "text", "markdown", "preview":
+  true}` writes nothing and answers `{"tree"}`, the page as readers will see
+  it, for a preview (UN-RFC 0035 section 9.2). The runtime reads the site first, so the
+  new version names the current one (section 9.2). Refused with 400 for a
+  path that is not valid (section 4.1) or when you do not write the site.
+
+`GET /api/site` and `POST /api/site` `{"title"}` are your personal site, as
+`/api/feed` is your feed (section 4.14, UN-RFC 0035 section 7).
 
 # 5. Events
 

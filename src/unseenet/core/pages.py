@@ -29,6 +29,28 @@ def valid_path(path: str) -> bool:
             and all(_SEGMENT.match(p) and p not in (".", "..") for p in parts))
 
 
+def resolve_link(current: str, href: str) -> str | None:
+    """A link in a page without a scheme (section 8): the path it leads to in the same
+    site, relative to the directory of the ``current`` page as in a file system, or
+    from the site's root with a leading ``/``. ``..`` never goes above the site; a
+    ``#fragment`` is dropped (a client may open the top of the page). None when it is
+    not a valid path."""
+    href = href.split("#", 1)[0].split("?", 1)[0].strip()
+    if not href:
+        return None
+    parts = [] if href.startswith("/") else current.split("/")[:-1]
+    for seg in href.strip("/").split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            if parts:
+                parts.pop()
+            continue
+        parts.append(seg)
+    path = "/".join(parts)
+    return path if valid_path(path) else None
+
+
 def check_manifest_fields(data: dict) -> None:
     """``max_pages`` and ``home`` (section 3); ValueError if invalid."""
     n = data.get("max_pages", MAX_PAGES_DEFAULT)

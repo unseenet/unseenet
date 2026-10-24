@@ -249,9 +249,13 @@ class Groups:
 
     def set_view(self, gid: str, view) -> dict:
         """``POST /api/groups/{gid}/view`` (section 4.3): show a group as threads, as a
-        chat or as a feed (UN-RFC 0034), or null for the group's own choice."""
-        if view not in ("threads", "chat", "feed", None):
-            raise SessionError("view is threads, chat, feed or null")
+        chat, as a feed (UN-RFC 0034) or, for a site, as its pages (UN-RFC 0035), or null
+        for the group's own choice."""
+        if view not in ("threads", "chat", "feed", "pages", None):
+            raise SessionError("view is threads, chat, feed, pages or null")
+        s = self._ready()
+        if view == "pages" and s.manifest_data(gid).get("view") != "pages":
+            raise SessionError("only a site is shown as its pages")
         self._ready().set_view(gid, view)
         return {"ok": True}
 

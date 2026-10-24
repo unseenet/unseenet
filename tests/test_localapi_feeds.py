@@ -79,7 +79,7 @@ async def test_any_group_may_be_shown_as_a_feed(tmp_path, monkeypatch):
     api.set_view(gid, "feed")
     assert api.group(gid)["group"]["view"] == "feed" and "comment" in api.group(gid)["rows"][0]
     api.set_view(gid, None)
-    with pytest.raises(SessionError, match="threads, chat, feed or null"):
+    with pytest.raises(SessionError, match="threads, chat, feed, pages or null"):
         api.set_view(gid, "data")
     await owner.close()
     await other.close()

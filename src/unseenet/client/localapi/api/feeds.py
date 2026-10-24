@@ -111,24 +111,26 @@ class Feeds:
         return {"ok": True, **result}
 
     # --- your own feed (UN-RFC 0034 section 5, UN-RFC 0029 section 2.1) ------------
-    def my_feed(self) -> dict:
-        """``GET /api/feed`` (section 4.14): your personal feed's Group ID, whether you
-        have started it, and what to tell before you do."""
+    def my_feed(self, kind: str = "feed") -> dict:
+        """``GET /api/feed`` (section 4.14), ``GET /api/site`` (section 4.15): your
+        personal feed's or site's Group ID, whether you have started it, and what to
+        tell before you do."""
         s = self._ready()
-        gid = s.personal_group("feed")
+        gid = s.personal_group(kind)
         entry = s.data["groups"].get(gid, {})
         return {"id": gid, "started": bool(entry.get("owner") and entry.get("manifest")),
                 "followed": gid in s.data["subscribed"],
-                "warning": s.personal_group_warning("feed")}
+                "warning": s.personal_group_warning(kind)}
 
-    async def start_feed(self, data: dict) -> dict:
+    async def start_feed(self, data: dict, kind: str = "feed") -> dict:
         """``POST /api/feed`` ``{"comments": "open" | "none", "title": "..."}`` (section
-        4.14): start your personal feed - only when the user asked, after the warning."""
+        4.14), ``POST /api/site`` ``{"title": "..."}`` (section 4.15): start your
+        personal feed or site - only when the user asked, after the warning."""
         s = self._ready()
         comments = str(data.get("comments", "open"))
         if comments not in ("open", "none"):
             raise SessionError("comments is open or none")
-        gid = await s.start_personal_group("feed", comments=comments,
+        gid = await s.start_personal_group(kind, comments=comments,
                                            title=str(data.get("title", ""))[:200])
         s.emit(ev.GroupsChanged())
         return {"ok": True, "id": gid}
