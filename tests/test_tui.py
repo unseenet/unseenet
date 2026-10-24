@@ -1716,8 +1716,11 @@ async def test_tui_shows_a_profile_shared_with_you(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: app.session.private_profile(key, "me") is not None, 400)
         app.action_show_profile(key)
         assert await wait_for(pilot, lambda: isinstance(app.screen, ProfileDialog), 200)
-        texts = [str(w.render()) for w in app.screen.query("Static")]
-        assert any("Shared with you" in t for t in texts) and any("Kun til dig" in t for t in texts)
+        def texts():                                   # drawn a moment later on slow runners
+            return [str(w.render()) for w in app.screen.query("Static")] \
+                if isinstance(app.screen, ProfileDialog) else []
+        assert await wait_for(pilot, lambda: any("Shared with you" in t for t in texts())
+                              and any("Kun til dig" in t for t in texts()), 300)
         await pilot.press("escape")
         await pilot.press("q")
     server.close()

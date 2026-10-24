@@ -122,3 +122,56 @@ def test_a_unix_socket_path_that_is_too_long_is_refused():
     long = "/tmp/" + "x" * 200 + "/monitor.sock"
     with pytest.raises(ValueError, match="too long"):
         asyncio.run(st.serve(None, None, long))
+
+
+def _contact_node(tmp_path, notify=None):
+    """A node whose operator has a contact inbox, with two messages in it."""
+    from unseenet.core import crypto
+    from unseenet.core.groups import inbox_article, make_manifest
+    op = crypto.Identity.generate()
+    contact = make_manifest(op, "operator", "inbox", local=True, pow_bits=8)
+    operator = {"key": op.key_text, "contact": contact.group} | ({"notify": notify} if notify else {})
+    node = Node(Store(tmp_path / "a.sqlite"), NodeConfig(min_pow=8, forward_delay=(0, 0),
+                                                       operator=operator))
+    node.accept(contact.to_bytes())
+    def message():
+        node.accept(inbox_article(contact.group, op.public_key, from_name="R", subject="Report",
+                                  body="Look at this\n", sender=crypto.Identity.generate(),
+                                  pow_bits=8).to_bytes())
+    message(); message()
+    return node, message
+
+
+def test_the_contact_inbox_counted_never_read(tmp_path):
+    """#135: how many messages, how many new since the operator looked - and a warning."""
+    node, message = _contact_node(tmp_path)
+    c = st.contact_state(node, tmp_path)
+    assert c["messages"] == 2 and c["new"] == 2 and c["newest"]
+    assert any("2 new messages in your contact inbox" in w for w in st.warnings(
+        {"tor": {"state": "off"}, "peers": [], "store": {}, "node": {"uptime": 0}, "contact": c}))
+    st.set_contact_seen(tmp_path, c["messages"])               # the operator has looked
+    assert st.contact_state(node, tmp_path)["new"] == 0
+    message()
+    assert st.contact_state(node, tmp_path)["new"] == 1
+
+
+async def test_the_operator_is_told_by_their_own_command(tmp_path):
+    """#135: [operator] notify runs when messages come - the counts only, no shell."""
+    import asyncio
+    out = tmp_path / "told.txt"
+    script = tmp_path / "notify.py"
+    script.write_text("import os, sys\nopen(sys.argv[1], 'a').write("
+                      "os.environ['UNSEENET_CONTACT_NEW'] + ' of ' + os.environ['UNSEENET_CONTACT_MESSAGES'] + '\\n')\n")
+    node, message = _contact_node(tmp_path, notify=f"{sys.executable} {script} {out}")
+    task = asyncio.create_task(st.contact_watch(node, tmp_path, every=0.05))
+    for _ in range(100):
+        await asyncio.sleep(0.05)
+        if out.exists():
+            break
+    message()
+    for _ in range(100):
+        await asyncio.sleep(0.05)
+        if out.exists() and len(out.read_text().splitlines()) == 2:
+            break
+    task.cancel()
+    assert out.read_text().splitlines() == ["2 of 2", "3 of 3"]

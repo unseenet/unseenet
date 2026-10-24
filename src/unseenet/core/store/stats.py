@@ -17,6 +17,14 @@ class Stats:
         """How many articles each group has."""
         return dict(self.db.execute("SELECT group_id, COUNT(*) FROM articles GROUP BY group_id"))
 
+    def group_activity(self, group_id: str, not_by: str = "") -> tuple[int, int | None]:
+        """How many articles a group has, and when the newest arrived (Unix time) -
+        leaving out those by the key ``not_by`` (e.g. the owner's manifests)."""
+        n, newest = self.db.execute(
+            "SELECT COUNT(*), MAX(received) FROM articles WHERE group_id = ? AND author_key != ?",
+            (group_id, not_by)).fetchone()
+        return n, newest
+
     def total_bytes(self) -> int:
         """The octets of all articles held."""
         return self.db.execute("SELECT COALESCE(SUM(LENGTH(raw)), 0) FROM articles").fetchone()[0]

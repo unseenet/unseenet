@@ -60,6 +60,16 @@ def blob_line(b) -> str:
     return (f"Files  {b['count']} ({size(b['bytes'])}), today {size(b['today'])}, "
             f"{b['refused']} refused" + (f", {b['fetching']} fetching" if b.get("fetching") else ""))
 
+def contact_line(c, now: float | None = None) -> str:
+    """The contact inbox (#135): how many messages, how many new - the node cannot read
+    them; c marks them seen once you have read them in your client."""
+    if not c:
+        return "\nInbox  no contact inbox set ([operator] contact)"
+    new = f", [b yellow]{c['new']} new[/b yellow] (c: seen)" if c.get("new") else ""
+    newest = f", newest {ago(c['newest'], now)}" if c.get("newest") else ""
+    return f"\nInbox  {c['messages']} messages{new}{newest}"
+
+
 def ago(t: float | None, now: float | None = None) -> str:
     if not t:
         return "never"
@@ -108,6 +118,7 @@ class MonitorApp(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
+        Binding("c", "seen_contact", "Inbox seen"),
         Binding("n", "next_node", "Next node"),
         Binding("p", "previous_node", "Previous node"),
         Binding("1", "tab('peers')", "Peers"),
@@ -208,7 +219,7 @@ class MonitorApp(App):
             f"Size   {size(store['bytes'])}, {size(store.get('disk_free'))} free\n"
             f"Rules  {policy.get('min_pow', '?')} bits, {policy.get('retention_days', '?')} days, "
             f"new: {policy.get('new_groups', '?')}\n"
-            + blob_line(snap.get("blobs")))
+            + blob_line(snap.get("blobs")) + contact_line(snap.get("contact"), now))
         per = traffic["per_minute"]
         totals = {"accepted": sum(traffic["accepted"].values()), "sent": traffic["sent"],
                   "served": traffic["served"], "rejected": sum(traffic["rejected"].values())}
@@ -252,6 +263,15 @@ class MonitorApp(App):
 
     # --- actions --------------------------------------------------------------
     def action_refresh(self) -> None:
+        self.poll()
+
+    @work(exclusive=True, group="seen", exit_on_error=False)
+    async def action_seen_contact(self) -> None:
+        """You have read the contact inbox in your client: the new count starts again."""
+        try:
+            await fetch(self.nodes[self.index], "seen-contact")
+        except (OSError, ConnectionError, asyncio.TimeoutError, ValueError):
+            return
         self.poll()
 
     def _switch(self, step: int) -> None:
