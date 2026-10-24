@@ -101,6 +101,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   manifest yet (#384): a manifest goes to peers without the random delay,
   and a post that still arrives first is answered "try later" (431) for up
   to 15 minutes instead of being refused.
+- TUI: "Key ripening" in the palette pauses and resumes ripening, and says
+  what it is; the subtitle shows "(ripening paused)", or that the key is as
+  ripe as the machine allows (#358, #440). Your own chat line shows at once,
+  dimmed, "sending ...", then the real one - or red, "not sent" (#325).
+  "Your state" keeps it in the network or on this device only (UN-RFC 0044).
 - **Your sent private posts follow you too** (UN-RFC 0009 2.3, 0044 6, #257
   step 4): a private post can carry two envelopes (`sealedbox2`) - one for the
   recipient, one for you - so any device of yours reads it again from the

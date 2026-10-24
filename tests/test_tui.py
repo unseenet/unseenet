@@ -1461,3 +1461,84 @@ async def test_tui_keeps_your_theme(tmp_path, monkeypatch):
         assert app.session.client_setting("tui", "theme") == "dracula"
         await pilot.press("q")
     server.close()
+
+
+async def test_tui_pauses_and_resumes_ripening(tmp_path, monkeypatch):
+    """#358: the palette's "Key ripening" pauses and resumes ripening, as the GUI does,
+    says what ripening is, and the subtitle shows it paused."""
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        app.action_ripening()
+        assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
+        assert any("Ripening is a calculation" in str(w.render()) for w in app.screen.query("Static"))
+        app.screen.query_one("#ok").press()            # not a mouse click: slow runners miss it
+        assert await wait_for(pilot, lambda: app.runtime.ripening_paused, 400)
+        assert "(ripening paused)" in app.sub_title or "key level" not in app.sub_title
+        app.action_ripening()
+        assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: not app.runtime.ripening_paused, 400)
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_shows_your_chat_line_while_it_is_sent(tmp_path, monkeypatch):
+    """#325: your line is in the chat at once, dimmed, "sending ..."; then the real one,
+    once; or red, "not sent", with the text back in the input."""
+    import asyncio
+    import unseenet.client.session as sess
+    from unseenet.client.session import SessionError
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    gid = await me.create_group("chat.os", "open", view="chat", low_latency=True, min_pow=9)
+    me.data["starter_groups"] = 99
+    await me.close()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert await wait_for(pilot, lambda: gid in app.groups, 300)
+        app.select_group(gid)
+        await pilot.pause(0.3)
+        real = app.session.send_chat
+        go = asyncio.Event()
+        async def slow(g, text):
+            await go.wait()
+            return await real(g, text)
+        monkeypatch.setattr(app.session, "send_chat", slow)
+        def lines():
+            return [str(line.text) for line in app.query_one("#chat-log").lines]
+        app.query_one("#chat-input").focus()
+        await pilot.press(*"Hej", "enter")
+        assert await wait_for(pilot, lambda: any("You: Hej  (sending ...)" in ln for ln in lines()), 200)
+        go.set()
+        assert await wait_for(pilot, lambda: not any("(sending" in ln for ln in lines())
+                              and sum("You: Hej" in ln for ln in lines()) == 1, 400)
+        async def fail(g, text):
+            raise SessionError("the node is away")
+        monkeypatch.setattr(app.session, "send_chat", fail)
+        await pilot.press(*"Igen", "enter")
+        assert await wait_for(pilot, lambda: any("You: Igen  (not sent)" in ln for ln in lines()), 200)
+        assert app.query_one("#chat-input").value == "Igen"
+        await pilot.press("q")
+    server.close()
+
+
+async def test_tui_keeps_your_state_local_when_asked(tmp_path, monkeypatch):
+    """UN-RFC 0044 section 7.4 in the TUI: the palette's "Your state" keeps it local."""
+    app, server = await _app_with_groups(tmp_path, monkeypatch, [])
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert not app.session.state_kept_local()
+        app.action_state_where()
+        assert await wait_for(pilot, lambda: app.screen.__class__.__name__ == "ConfirmDialog", 100)
+        app.screen.query_one("#ok").press()
+        assert await wait_for(pilot, lambda: app.session.state_kept_local(), 400)
+        await pilot.press("q")
+    server.close()

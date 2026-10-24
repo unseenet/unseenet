@@ -1912,6 +1912,8 @@ class UnseenetApp(App):
         super().__init__()
         self.vault_path = vault_path
         self.session: Session | None = None
+        self.runtime: ClientRuntime | None = None
+        self.pending: dict[str, list[dict]] = {}   # your chat lines on their way, per group (#325)
         self.groups: dict[str, GroupInfo] = {}
         self.current_group: str | None = None
         self.messages: dict[str, Message] = {}
@@ -2039,6 +2041,8 @@ class UnseenetApp(App):
     @work(group="ripening", exclusive=True, exit_on_error=False)
     async def ripen_on(self) -> None:
         """Ripen the key further while the client is open (UN-RFC 0025 section 7)."""
+        if self.runtime is None or self.runtime.ripening_paused:
+            return
         try:
             await self.runtime.ripen()
         except (SessionError, OSError, ValueError) as exc:
@@ -2049,6 +2053,10 @@ class UnseenetApp(App):
         more = f"  (+{len(s.nodes) - 1} more)" if len(s.nodes) > 1 else ""
         lv = s.ripening().level                   # UN-RFC 0025 section 7: show the level
         ripe = f"  -  key level {lv}" if lv is not None else ""
+        if ripe and self.runtime is not None and self.runtime.ripening_paused:
+            ripe += " (ripening paused)"                                      # #358
+        elif ripe and s.ripening_limit is not None:
+            ripe += " (as ripe as this machine allows)"                       # #440
         self.sub_title = (f"{s.display_name()} ({s.identity().fingerprint[:4]})  -  {s.node}{more}{ripe}")
 
     # --- groups ---
@@ -2430,6 +2438,13 @@ class UnseenetApp(App):
             if not self.session.is_read(m):
                 self.session.mark_read(m, save=False)
                 changed = True
+        for p in self.pending.get(self.current_group, []):     # yours, on their way (#325)
+            failed = p["state"] == "failed"
+            line = Text("      ", style="dim")
+            line.append("You", style="bold red" if failed else "dim")
+            line.append(": " + p["text"], style="red" if failed else "dim")
+            line.append("  (not sent)" if failed else "  (sending ...)", style="red" if failed else "dim italic")
+            log.write(line)
         if changed:
             self._save_soon()
 
@@ -2529,6 +2544,11 @@ class UnseenetApp(App):
     @work(group="post", exit_on_error=False)
     async def send_chat(self, gid: str, text: str) -> None:
         self.set_status("Sending (computing postage) ...")
+        waiting = [p for p in self.pending.get(gid, []) if p["state"] != "failed"]
+        entry = {"text": text, "state": "sending"}           # shown at once, dimmed (#325)
+        self.pending[gid] = waiting + [entry]
+        if self.current_group == gid:
+            self._render_threads()
         try:
             if gid.startswith(CONTACT):
                 await self.session.send_chat(gid, text)
@@ -2536,6 +2556,9 @@ class UnseenetApp(App):
                 if not await self._accept_portals(gid):
                     self.query_one("#chat-input", Input).value = text
                     self.set_status("")
+                    self.pending[gid].remove(entry)
+                    if self.current_group == gid:
+                        self._render_threads()
                     return
                 msgid = await self.session.send_chat(gid, text)   # UN-RFC 0028
                 if self.session.was_submitted(gid, msgid):
@@ -2548,9 +2571,15 @@ class UnseenetApp(App):
                                     + "  (turn off in Ctrl+P)", timeout=6)
                 await self.session.fetch_group(gid)
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
+            entry["state"] = "failed"
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
             self.query_one("#chat-input", Input).value = text       # give the text back
+            if self.current_group == gid:
+                self._render_threads()
             return
+        finally:
+            if entry["state"] != "failed" and entry in self.pending.get(gid, []):
+                self.pending[gid].remove(entry)                     # the real line is back
         self.set_status("")
         if self.current_group == gid:
             self._render_threads()
@@ -2915,6 +2944,66 @@ class UnseenetApp(App):
         self._watching.clear()
         self.refresh_groups()
         self._start_watches()
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_state_where(self) -> None:
+        """Keep your state in the network (the default) or on this device only
+        (UN-RFC 0044 section 7.4)."""
+        s = self.session
+        if s is None:
+            return
+        local = s.state_kept_local()
+        text = ("Your groups, the people you follow, contacts, settings and what you have read "
+                "are kept in the network, encrypted so only your key can read them - so a new "
+                "stick or phone with your key looks the same after one fetch. Nodes see only a "
+                "block of fixed size.\n\n")
+        text += ("Now they are kept on this device only. Keep them in the network again?" if local else
+                 "Keep them on this device only instead, for an identity that should leave no "
+                 "trace of activity at all - not even an encrypted one? What is in the network "
+                 "now is removed.")
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Your state", text, "Keep in the network" if local else "Keep on this device only",
+                danger=not local)):
+            return
+        try:
+            await s.set_state_kept_local(not local)
+        except (SessionError, OSError, ConnectionError) as exc:
+            self.notify(f"Not changed: {exc}", severity="error", timeout=8)
+            return
+        self.set_status("Your state is kept on this device only." if not local else
+                        "Your state is kept in the network again, from the next sync.")
+
+    @work(group="dialog", exit_on_error=False)
+    async def action_ripening(self) -> None:
+        """Pause or resume ripening your key, with what it is (#358) - as the GUI has it."""
+        s, rt = self.session, self.runtime
+        if s is None or rt is None:
+            return
+        lv = s.ripening().level
+        paused = rt.ripening_paused
+        text = (f"Your key is at level {'-' if lv is None else lv}. Ripening is a calculation "
+                "your client works through step by step while Unseenet is open, on one core. "
+                "It shows that a key is not brand new, so it cannot be thrown away after every "
+                "post - and the riper your key, the less postage each post costs. Level 3 ends "
+                "the extra postage.\n\n")
+        if s.ripening_limit is not None:
+            text += (f"This machine can ripen this key to level {s.ripening_limit}: more needs "
+                     "more memory than it has free.\n\n")
+        text += ("Ripening is paused for this run; it goes on where it was." if paused else
+                 "Pause it on battery or on a warm laptop - it goes on where it was, and is on "
+                 "again at the next start.")
+        if not await self.push_screen_wait(ConfirmDialog(
+                "Key ripening", text, "Resume ripening" if paused else "Pause ripening")):
+            return
+        if paused:
+            await rt.resume_ripening()
+            self.ripen_on()
+            self.set_status("Ripening your key again.")
+        else:
+            self.workers.cancel_group(self, "ripening")       # our own worker, as well
+            await rt.pause_ripening()
+            self.set_status("Ripening paused until you resume it or start again.")
+        self._update_subtitle()
 
     @work(group="dialog", exit_on_error=False)
     async def action_tor(self) -> None:
@@ -3616,6 +3705,17 @@ class UnseenetApp(App):
              "to anyone by their key  [m]", self.action_message),
             ("Contacts", "Your address book: chat, write a private post, rename, remove  [c]",
              self.action_contacts),
+            ("Your state",
+             ("On this device only - keep it in the network again (encrypted)"
+              if self.session.state_kept_local() else
+              "In the network, encrypted: your groups and settings on every device - or on "
+              "this device only"),
+             self.action_state_where),
+            ("Key ripening",
+             ("Paused - resume ripening your key, and what ripening is"
+              if self.runtime is not None and self.runtime.ripening_paused else
+              "Pause ripening your key (on battery, a warm laptop), and what ripening is"),
+             self.action_ripening),
             ("Private posts from new keys",
              ("Hidden: only contacts and keys ripened an hour or more reach you - show all"
               if self.session.private_min_ripe() is not None else
