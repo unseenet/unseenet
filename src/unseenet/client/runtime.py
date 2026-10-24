@@ -33,7 +33,8 @@ from .session import GroupInfo, Session, SessionError
 log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
-RIPEN_TO = 4                  # ripen keys up to this level while running (UN-RFC 0025, 7)
+RIPEN_TO = 3                  # ripen keys up to this level while running (UN-RFC 0025, 7):
+                              # 3 ends the surcharge; 4 needs GBs of memory (#440)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
 RIPEN_RECHECK = 3600.0        # a node that says "-" is asked again this often (#314)
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,

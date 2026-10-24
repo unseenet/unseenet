@@ -165,15 +165,23 @@ sped up by using many computers at once - and that anyone can check in
 milliseconds. The result is published by the key itself, and the riper
 the key, the less postage it pays:
 
-| Ripeness | Takes about | Postage |
-|----------|-------------|---------|
-| Level 0 | 7 minutes | highest - roughly a minute of work per post in an open group |
-| Level 3 | 2½ days | normal - about a second |
-| Level 4 | 10 days | lowest |
+| Ripeness | Takes about | Memory | Postage |
+|----------|-------------|--------|---------|
+| Level 0 | 7 minutes | little | highest - roughly a minute of work per post in an open group |
+| Level 3 | 2½ days | about 1 GB | normal - about a second |
+| Level 4 | 10 days | several GB | lowest |
 
 *(Times measured on one core of a fast desktop. A small ARM server took
 about half as long again; laptops, phones and Raspberry Pis are still to
 be measured.)*
+
+Clients ripen to **level 3** by themselves: that is where the extra
+postage ends. Each step of the calculation needs memory in proportion to
+its length, so the client keeps within what your machine has free - it
+takes shorter steps if it must, and stops at the level the machine can
+reach, and tells you so. On one machine, one key ripens at a time.
+Level 4 is for those who want it and have the memory: `unseenet ripen
+--to 4`.
 
 For you it means that a brand-new identity waits a few minutes before it
 can post, and becomes cheaper to use over the following days while the
