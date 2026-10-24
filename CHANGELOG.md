@@ -33,6 +33,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rules the nodes use, from markers and page articles now kept as they are
   read) and `personal.py` (`start_personal_group()` and the warning UN-RFC
   0029 asks for). The core of #193 and #212 for every client.
+- Key ripening keeps within the machine's memory (#440): proving a segment
+  takes about 0.7 octets an iteration, so clients ripen to **level 3** by
+  default (where the surcharge ends; level 4 needs several GB), choose
+  shorter segments to fit the memory free - a container's limit too - and
+  stop at the level the machine can reach, saying so; one large ripening at
+  a time per machine (a lock). `client/machine.py`, `ripening.memory_for`,
+  `fitting_segment_length`, `reachable_level`; `UNSEENET_RIPENING_MEMORY`
+  (MiB) sets the budget. UN-RFC 0025 sections 3.2 and 7 say a client may.
 - `unseenet read` goes through `Session` too, and `--json` gives each post's
   author, date, references, kind, page and blob IDs (`Message.blobs`, new);
   `withdraw --all --keep-author KEY` leaves the posts by some keys

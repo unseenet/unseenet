@@ -152,6 +152,46 @@ def parse_min(value) -> int | None:
 
 
 # --- segments (section 3.2) ---
+# proving a segment takes memory in proportion to its length: chiavdf's Wesolowski
+# prover keeps intermediate forms, about 0.7 octets an iteration (#440)
+MEMORY_PER_ITERATION = 0.75
+MEMORY_BASE = 64 << 20
+MIN_SEGMENT = 1 << 20
+
+
+def memory_for(length: int) -> int:
+    """About how many octets proving a segment of ``length`` iterations takes."""
+    return int(MEMORY_BASE + MEMORY_PER_ITERATION * length)
+
+
+def fitting_segment_length(t: int, segments: int, budget: int | None) -> int:
+    """The next segment's length on a machine with ``budget`` octets for ripening
+    (section 3.2): the usual length when it fits, else the longest power of two that
+    does - as long as the next level can still be reached within the 64 segments.
+    0 when it cannot: at the top, or as far as this machine can go. ``segments`` is
+    how many the chain has; ``budget`` None means no limit."""
+    length = next_segment_length(t)
+    if not length or budget is None or memory_for(length) <= budget:
+        return length
+    cap = 1 << max(0, int((budget - MEMORY_BASE) / MEMORY_PER_ITERATION)).bit_length() - 1 \
+        if budget > MEMORY_BASE else 0
+    if cap < MIN_SEGMENT:
+        return 0
+    nxt = next_threshold(t)
+    if nxt is not None and (MAX_SEGMENTS - segments) * cap < nxt - t:
+        return 0                     # the next level is out of this machine's reach
+    return min(cap, length)
+
+
+def reachable_level(t: int, segments: int, budget: int | None) -> int | None:
+    """The highest level a chain can reach on this machine, going on from here."""
+    while True:
+        length = fitting_segment_length(t, segments, budget)
+        if not length or segments >= MAX_SEGMENTS:
+            return level(t)
+        t, segments = t + length, segments + 1
+
+
 def next_segment_length(t: int) -> int:
     """How long the next segment should be after *t* iterations: 2^24 until level
     0, then half the work so far (a power of two), at most 2^32, never past the

@@ -100,7 +100,10 @@ The key's ripening is the **chain** of its segments, and its *t* is the
 sum of their `t_i`. Each segment is verified on its own, about 4 ms
 (section 4.1); `y_i` and `pi_i` are 100 octets each.
 
-A chain has at most 64 segments. A client SHOULD choose segment lengths
+A chain has at most 64 segments. A client MAY choose shorter segments
+than below to bound the memory proving needs (section 7), and MAY stop
+below the top level when it cannot reach the next one within the 64
+segments. Otherwise it SHOULD choose segment lengths
 so that a restart loses little and the chain stays short: 2^24
 iterations until level 0, then the largest power of two that is at most
 half the *t* so far, at most 2^32, and never past the threshold of the
@@ -285,6 +288,13 @@ node's local choices can post through another node or run their own.
   while the client is open, keep the chain and the start of its current
   segment in the encrypted vault (UN-RFC 0007), and go on after a
   restart (section 3.2).
+- Proving a segment takes memory in proportion to its length (about
+  0.7 octets an iteration with the prover of the reference
+  implementation). A client SHOULD keep within the memory the machine has
+  free, choosing shorter segments where it must (section 3.2), and SHOULD
+  ripen one key at a time on a machine; where the next level cannot then
+  be reached within 64 segments, it stops below the top and SHOULD say
+  how far this machine can go.
 - A browser client (UN-RFC 0043) ripens in the browser, with a
   WebAssembly build of the VDF. Nobody else ripens keys for it, so
   ripening stays a matter of one's own computer and time.

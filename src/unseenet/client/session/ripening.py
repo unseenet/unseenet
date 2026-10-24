@@ -130,13 +130,34 @@ class RipeningMixin:
         keep it in the vault. False at the top, or when ``run_file`` was removed.
         True also when the chain grew meanwhile from another caller (posting and
         the background may ask at once): that one's segment is kept, not ours."""
+        from .. import machine
         name = name or self.default_identity_name()
         chain = self.ripening(name)
-        length = rp.next_segment_length(chain.t)
+        budget = machine.ripening_budget()
+        length = rp.fitting_segment_length(chain.t, len(chain.segments), budget)
         if not length:
+            if rp.next_segment_length(chain.t):           # not the top: this machine's limit
+                self.ripening_limit = rp.level(chain.t)
+                self.say(f"This machine can ripen this key to level {rp.level(chain.t)}: "
+                         f"more needs more memory than it has free (#440).")
             return False
+        lock = None
+        if rp.memory_for(length) > machine.LOCK_ABOVE:   # a large segment: one at a time
+            lock = machine.RipeningLock()
+            waited = False
+            while not lock.acquire():
+                if run_file is not None and not Path(run_file).exists():
+                    return False                          # stopped while waiting
+                if not waited:
+                    self.say("Another program on this machine is ripening a key; waiting.")
+                    waited = True
+                await asyncio.sleep(15)
         pk = self.identity(name).public_key
-        seg = await self._prove_segment(pk, chain.end, length, run_file)
+        try:
+            seg = await self._prove_segment(pk, chain.end, length, run_file)
+        finally:
+            if lock is not None:
+                lock.release()
         if seg is None:
             return False
         entry = self._ripening_entry(name)

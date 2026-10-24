@@ -36,6 +36,7 @@ class BaseMixin:
         self.unreachable: list[str] = []               # nodes that did not answer last time
         self.cache: dict[str, dict[int, Message]] = {}
         self._acting_as: str | None = None   # act_as(): an identity for this run only
+        self.ripening_limit: int | None = None   # the level this machine can ripen to (#440)
         self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores
         self._high: dict[str, int] = {}               # highest article number fetched
         d = self.vault.data

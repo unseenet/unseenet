@@ -106,6 +106,8 @@ def _ripen_public(args) -> None:
     import json
     from ..client.headless import STATE_VERSION
     from ..core import ripening as rp
+    import time
+    from ..client import machine
     try:
         pk = crypto.key_from_text(args.public_key)
     except crypto.CryptoError as exc:
@@ -121,10 +123,21 @@ def _ripen_public(args) -> None:
         chain = rp.Chain([rp.Segment.from_dict(s) for s in entry["segments"]])
         if chain.level is not None and chain.level >= args.to:
             break
-        length = rp.next_segment_length(chain.t)
+        length = rp.fitting_segment_length(chain.t, len(chain.segments), machine.ripening_budget())
         if not length:
+            if rp.next_segment_length(chain.t):
+                print(f"  this machine can ripen this key to level {_lv(chain.level)}: more needs "
+                      "more memory than it has free (UNSEENET_RIPENING_MEMORY, #440)")
             break
-        entry["segments"].append(rp.prove_segment(pk, chain.end, length).to_dict())
+        lock = machine.RipeningLock() if rp.memory_for(length) > machine.LOCK_ABOVE else None
+        while lock is not None and not lock.acquire():
+            print("  another program on this machine is ripening a key; waiting", flush=True)
+            time.sleep(30)
+        try:
+            entry["segments"].append(rp.prove_segment(pk, chain.end, length).to_dict())
+        finally:
+            if lock is not None:
+                lock.release()
         path.write_text(json.dumps(state, separators=(",", ":")))   # a stop loses one segment
         print(f"  level {_lv(rp.level(chain.t + length))}, t = {chain.t + length:,}", flush=True)
     print(f"{path}: copy it next to the key file as <key file>.state.json")
