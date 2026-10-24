@@ -178,6 +178,11 @@ class Groups:
         s = self._ready()
         if gid == TIMELINE:
             return self._timeline_group(s)
+        if (gid not in s.data["subscribed"] and gid != FOR_YOU and not gid.startswith(CONTACT)
+                and not s.cache.get(gid) and gid not in self._looking):
+            # read without following (#506): fetched now, a GroupUpdated when it is here
+            self._looking.add(gid)
+            self.spawn(self._look(gid))
         head = self._head(s, gid)
         if head["view"] == "chat" and not gid.startswith(CONTACT) and gid != FOR_YOU:
             # read as a chat: every line in the order it came (UN-RFC 0008 section 3.1)
@@ -292,6 +297,18 @@ class Groups:
         if self.runtime is not None:
             self.spawn(self.runtime.refresh())
         return {"ok": True}
+
+    @property
+    def _looking(self) -> set:
+        return self.__dict__.setdefault("_looking_at", set())
+
+    async def _look(self, gid: str) -> None:
+        """A group opened without following it (#506): its posts, once, then an event."""
+        try:
+            await self._fetch(gid)
+        finally:
+            self._looking.discard(gid)
+        self.session.emit(ev.GroupUpdated(gid))
 
     async def _fetch(self, gid: str) -> None:
         with contextlib.suppress(*NETWORK_ERRORS):

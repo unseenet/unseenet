@@ -1085,13 +1085,15 @@ class ProfileDialog(Dialog):
     def __init__(self, key_text: str, label: str, profile, mine: bool = False,
                  hidden: bool = False, shared: str | None = None,
                  feed_started: bool = False, following: bool = False,
-                 site_started: bool = False):
+                 site_started: bool = False, theirs: dict | None = None):
         super().__init__()
         self.key_text, self.label, self.profile = key_text, label, profile
         self.mine, self.hidden = mine, hidden
         # the feed and follow buttons (#495): your own feed, or following them
         self.feed_started, self.following = feed_started, following
         self.site_started = site_started
+        # someone else's feed and site, when they have them: looked at without following
+        self.theirs = theirs or {}
         self.shared = shared             # "with you" / "with this group": private (0022, 6)
 
     def compose(self) -> ComposeResult:
@@ -1134,7 +1136,10 @@ class ProfileDialog(Dialog):
                                  id="my-site")
                 else:
                     yield Button("Following" if self.following else "Follow", id="follow")
-                    yield Button("Their feed", id="their-feed")
+                    if self.theirs.get("feed"):
+                        yield Button("Their feed", id="their-feed")
+                    if self.theirs.get("site"):
+                        yield Button("Their site", id="their-site")
                     yield Button("Show" if self.hidden else "Hide", id="hide")
 
     @on(Button.Pressed, "#hide")
@@ -1156,6 +1161,10 @@ class ProfileDialog(Dialog):
     @on(Button.Pressed, "#their-feed")
     def _their_feed(self) -> None:
         self.dismiss("their-feed")
+
+    @on(Button.Pressed, "#their-site")
+    def _their_site(self) -> None:
+        self.dismiss("their-site")
 
 
 class EditProfileDialog(Dialog):
@@ -1392,7 +1401,8 @@ def save_name(folder: Path, name: str) -> Path:
 
 class ReadScreen(Screen):
     """One message on the whole screen. r replies, m writes privately, n and p
-    go to the next and previous message, f saves its files, Esc goes back."""
+    go to the next and previous message, f saves its files, u shows the author's
+    profile, Esc goes back."""
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("q", "back", "Back", show=False),
@@ -1403,6 +1413,7 @@ class ReadScreen(Screen):
         Binding("space", "page", "Page down", show=False),
         Binding("number_sign", "group_ref", "#group", show=False),
         Binding("f", "save_files", "Save files", show=False),
+        Binding("u", "profile", "Profile", show=False),   # the author's: feed, site, follow
     ]
     CSS = """
     ReadScreen #read-head { padding: 0 1; background: $boost; color: $text; }
@@ -1472,6 +1483,12 @@ class ReadScreen(Screen):
     def action_next(self) -> None:
         if self.app.neighbour(+1) is None:
             self.app.notify("That was the last one")
+
+    def action_profile(self) -> None:
+        if self.msg.readable and self.msg.author_key:
+            self.app.action_show_profile(self.msg.author_key)
+        else:
+            self.app.notify("This post has nobody to show", severity="warning")
 
     def action_previous(self) -> None:
         if self.app.neighbour(-1) is None:
@@ -1996,6 +2013,7 @@ class UnseenetApp(App):
         Binding("a", "add_contact", "Add contact", show=False),
         Binding("D", "withdraw", "Withdraw", show=False),
         Binding("e", "edit", "Edit", show=False),
+        Binding("u", "show_profile", "Profile", show=False),   # the author's (#506)
         Binding("question_mark", "group_info", "About group"),
         Binding("number_sign", "group_ref", "Go to #group", show=False),
         Binding("space", "next_unread", "Next unread"),
@@ -4350,8 +4368,15 @@ class UnseenetApp(App):
         if private is not None:                         # in its own context only (0022, 6)
             p = prof.Profile.from_object(crypto.key_from_text(key), private)
             shared = "with you" if context == "me" else "with this group"
+        theirs = {}
+        if not mine and not hidden:             # their feed and site, to look at (no following)
+            try:
+                theirs = await s.personal_groups_of(key)
+            except (SessionError, OSError, ConnectionError, NNTPError, crypto.CryptoError):
+                theirs = {}
         answer = await self.push_screen_wait(ProfileDialog(
-            key, label, p, mine, hidden, shared, feed_started=s.has_personal_group("feed"),
+            key, label, p, mine, hidden, shared, theirs=theirs,
+            feed_started=s.has_personal_group("feed"),
             site_started=s.has_personal_group("site"),
             following=not mine and s.is_following(key)))
         if answer in ("hide", "show"):
@@ -4371,15 +4396,16 @@ class UnseenetApp(App):
                 return
             self.notify(f"Not following {label} any more", timeout=4)
             self.refresh_groups()
-        elif answer == "their-feed":
-            await self._open_feed_of(key, label)
+        elif answer in ("their-feed", "their-site"):
+            await self._open_personal_of(key, label, answer.split("-")[1])
 
-    async def _open_feed_of(self, key: str, label: str) -> None:
-        """Open someone's personal feed from their profile - if they have started one."""
+    async def _open_personal_of(self, key: str, label: str, kind: str = "feed") -> None:
+        """Open someone's personal feed or site from their profile, to read without
+        following it - if they have started one."""
         s = self.session
-        gid = make_group_id("feed", crypto.key_from_text(key))
+        gid = make_group_id(kind, crypto.key_from_text(key))
         if gid not in s.data["subscribed"]:
-            self.set_status("Looking for their feed ...")
+            self.set_status(f"Opening their {kind} ...")
             try:
                 m = await s.fetch_manifest(gid)
             except (SessionError, OSError, ConnectionError, NNTPError) as exc:
@@ -4388,9 +4414,11 @@ class UnseenetApp(App):
                 return
             self.set_status("")
             if m is None:
-                self.notify(f"{label} has not started a feed", timeout=6)
+                self.notify(f"{label} has not started a {kind}", timeout=6)
                 return
             s.group_entry(gid)["manifest"] = dict(m.raw)
+            self.notify(f"Reading {label}'s {kind} without following it. Follow on their "
+                        "profile (u) brings their feeds into your Timeline.", timeout=8)
         self.select_group(gid)
 
     async def _share_target(self) -> tuple[str, str] | None:
@@ -4618,8 +4646,8 @@ class UnseenetApp(App):
              self.action_node_info),
             ("Show my key", "Your key, to share for private messages and invitations  [k]",
              self.action_show_key),
-            ("Profile of this author", "Who wrote the selected post: names, about, links "
-             "(UN-RFC 0022)", self.action_show_profile),
+            ("Profile of this author (u)", "Who wrote the selected post: names, about, links, "
+             "and their feed and site to look at without following", self.action_show_profile),
             ("Your profile", "Write, change or remove your public profile",
              self.action_edit_profile),
             ("Names", "Claim a name such as @lorensen, see the names you hold  [@]",

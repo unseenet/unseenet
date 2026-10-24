@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- From a person to their feed and site without following them (#506): a
+  profile shows *Their feed* and *Their site* when they have them (looked up
+  with the profile, in one request) and opens them to read; following stays a
+  choice. The TUI opens the selected post's author's profile with `u`, also
+  in the reading screen. The local client API's profile has `theirs` (UN-RFC
+  0046 section 4.14), and `GET /api/groups/<id>` of a group you do not follow
+  fetches it and says when it is here; `Session.personal_groups_of`.
 - **My site** as **My feed** (#495): the TUI lists it at the top of the group
   list, or a dimmed *Start my site*, and your own profile has *Start my site* /
   *My site*; `GET /api/groups` gives `my_site` too (UN-RFC 0046 section 4.3).

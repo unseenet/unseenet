@@ -31,6 +31,7 @@ async def test_a_feed_followed_and_its_timeline(tmp_path, monkeypatch):
     key = owner.identity().key_text
     profile = await theirs.profile(key)
     assert profile["feed"] == gid and profile["following"] is False
+    assert profile["theirs"] == {"feed": gid, "site": None}           # to look at (#506)
     done = await theirs.set_following({"person": key})
     assert done["ok"] and done["new"] == [gid]
     assert (await theirs.profile(key))["following"] is True
@@ -107,6 +108,26 @@ async def test_groups_lists_my_feed_at_the_top_once_started(tmp_path, monkeypatc
     g = api.groups()
     assert g["my_site"] == {"id": site, "started": True, "unread": 0}
     assert all(site not in ids(h["tree"]) for h in g["hierarchies"])
+    await owner.close()
+    await other.close()
+    server.close()
+
+
+async def test_a_feed_read_without_following_it(tmp_path, monkeypatch):
+    """#506: opening someone's feed from their profile fetches it, without following."""
+    import asyncio
+    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    gid = (await api.start_feed({"comments": "open"}))["id"]
+    await owner.post(gid, "", "Til alle\n", kind="chat")
+    theirs = LocalAPI(session=other)
+    profile = await theirs.profile(owner.identity().key_text)   # where you find it
+    assert profile["theirs"]["feed"] == gid
+    first = theirs.group(gid)
+    assert first["rows"] == []                                  # not here yet: fetched now
+    await asyncio.gather(*list(theirs._tasks))
+    rows = theirs.group(gid)["rows"]
+    assert [r["message"]["text"].strip() for r in rows] == ["Til alle"]
+    assert gid not in other.data["subscribed"]                  # looking is not following
     await owner.close()
     await other.close()
     server.close()
