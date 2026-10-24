@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0035                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0008, 0011, 0017, 0029, 0030, 0031, 0042
+Updates: 0000, 0008, 0011, 0017, 0029, 0030, 0031, 0042, 0043
 
                    Unseenet: Pages, Sites and Books
 ```
@@ -106,6 +106,7 @@ A site's manifest MAY contain:
 | `history`   | integer | `1`        | Earlier versions kept per page (1-4)          |
 | `edit`      | string  | `"review"` | `review` or `wiki` (section 10.5)             |
 | `wiki_ripe` | integer | `2`        | Lowest level for direct `wiki` edits (0-4)    |
+| `index`     | string  | `"no"`     | `yes` or `no`: may search engines index the site (section 9.3) |
 
 `(1 + history) × max_pages` MUST NOT be more than 200 (section 6.1). A
 manifest with `"edit": "wiki"` MUST have `comments` set to `open`
@@ -387,6 +388,24 @@ MUST let the reader see the fingerprint.
   10.4).
 - Images are prepared as UN-RFC 0027 section 9.1 requires.
 
+## 9.3 Search Engines
+
+A site can be shown on the open web through the web form of its
+addresses (UN-RFC 0031 section 3.4.1). Whether search engines may index
+it there is the owner's choice, in the manifest field `index`:
+
+- **`no`** (the default): anything that shows the site on the web MUST
+  ask search engines not to index it (a `noindex` robots meta tag or
+  header) and MUST NOT list it in a sitemap.
+- **`yes`:** the owner wants the site to be found. It MAY be indexed and
+  listed in a sitemap.
+
+Groups that are not sites have no such field and MUST NOT be offered
+for indexing. When an owner sets `index` to `yes`, the client SHOULD
+say that search engines and web archives keep copies that the network
+cannot expire or withdraw (section 14). This document says only what
+the field means; how a web entrance shows sites is for UN-RFC 0043.
+
 # 10. Books
 
 ## 10.1 Contents and Reading Order
@@ -544,6 +563,8 @@ capsules, need a document of their own.
   document section 7.1.
 - **UN-RFC 0031** section 3.4: links within a site and to pages
   (section 8).
+- **UN-RFC 0043:** what shows sites on the web follows the manifest
+  field `index` (section 9.3).
 - **UN-RFC 0000** section 6: 0035 is added to the index.
 
 # 13. Rationale
@@ -654,6 +675,11 @@ capsules, need a document of their own.
   and links show where they go (UN-RFC 0031 section 3.4). A page can
   still ask a reader to do something foolish in words; clients cannot
   prevent that.
+- **Indexed sites outlive the network.** A site with `index` set to
+  `yes` can be copied by search engines and web archives, which keep
+  it after its pages expire, are replaced or withdrawn. `no` is the
+  default for that reason, as `X-No-Archive` once was on Usenet; it is
+  a request, which well-behaved search engines follow, not a protection.
 - **Reading patterns.** A reader's node can see which sites are read
   through it, as for any group. Over Tor it does not learn by whom.
 - **Rendering cost.** The 64 KiB limit and the rendering limits of

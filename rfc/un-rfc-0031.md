@@ -92,6 +92,11 @@ Allowed destinations:
 | `unseenet`          | an address inside the network (section 3.4.1)   |
 | `news`              | a Usenet article or group (RFC 5538)             |
 
+An `http` or `https` link that is the web form of an address (section
+3.4.1) is an address, not a link to the web: a client opens it in the
+network as the address it stands for, and does not warn as for the web.
+`web+unseenet` is the same scheme as `unseenet` (section 3.4.1).
+
 Any other destination (`javascript:`, `data:`, `file:` and the rest) is
 shown as text and not as a link. Bare addresses in the text MAY be made
 into links by the same rules.
@@ -136,6 +141,38 @@ Older forms MUST still be read, and SHOULD NOT be written:
 |---------------------------------------------|---------------------------------------|
 | `unseenet:join?g=<group-id>&n=...&p=...`    | `unseenet:<group-id>?n=...&p=...`     |
 | `unseenet:<fingerprint>/<path>`             | `unseenet:site@<fingerprint>?p=<path>` |
+
+**The web form.** Outside the network, people share links in web pages,
+chats and mail, where `unseenet:` does nothing. Every address therefore
+also has a web form: the address without its scheme, under the fixed
+path `/a/` on any web entrance (UN-RFC 0043 section 8.1):
+
+```
+unseenet:<group-id>?p=projects/ovos   https://<host>/a/<group-id>?p=projects/ovos
+unseenet:<group-id>?m=<message-id>    https://<host>/a/<group-id>?m=<message-id>
+unseenet:<fingerprint>                https://<host>/a/<fingerprint>
+```
+
+- The path and parameters are the same on every host, so a link keeps
+  working when one entrance is blocked or gone: another host, or the
+  jump page of UN-RFC 0043 section 8.7, gives the same address.
+- A client MUST read the web form on **any** host, `http` or `https`,
+  and treat it as the address it stands for: it opens it in the
+  network, over Tor, and never fetches the web page. The host is not
+  part of the address and is not trusted for anything; the address
+  itself says whose group it is.
+- When a client writes a web form, it uses a listed entrance, or the
+  host the user has chosen, and SHOULD leave out `n` (a node hint helps
+  nobody who reads the address on the web).
+- `?p=` without `m` means the page as it is now; `?m=` names one
+  article, so it is the permanent address of one version.
+
+**`web+unseenet`.** Browsers let a page register itself only for
+schemes that begin with `web+`. A client in a browser (UN-RFC 0043)
+therefore registers `web+unseenet:`, and every client reads
+`web+unseenet:<...>` exactly as `unseenet:<...>`. Desktop clients MAY
+register `unseenet:` with the operating system. Clients write
+`unseenet:`, never `web+unseenet:`.
 
 ### 3.4.2 Group References
 
@@ -236,6 +273,14 @@ separate matters and need documents of their own.
   leaving Tor, keeps a link's text from lying about its destination.
 - **Rendering cost:** clients SHOULD limit nesting and the size of what
   they render, so a crafted message cannot hang them.
+- **Web forms on any host:** a web form names its host, but the client
+  never asks that host for anything; it opens the address in the
+  network. A web form on a hostile host can therefore lead only to
+  what the address names, which the address's fingerprint pins down,
+  just as for `unseenet:`. Copying such a link into a normal browser
+  does contact the host, which then learns that somebody opened it
+  from that IP address; clients SHOULD say so where they offer to copy
+  a web form.
 
 # Copyright Notice
 
