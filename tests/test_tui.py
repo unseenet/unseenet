@@ -90,19 +90,22 @@ async def test_tui_shows_brackets_literally(tmp_path, monkeypatch):
     server.close()
 
 
-def test_vault_saves_are_private_and_fast(tmp_path):
+def test_vault_saves_are_private_and_fast(tmp_path, monkeypatch):
     import os
-    import time
+    import nacl.pwhash
     v = Vault.open(tmp_path / "v.vault", "pw", **KDF)
     v.data["x"] = 1
     v.save()
     if os.name != "nt":                    # Windows has no Unix file modes
         assert oct(os.stat(tmp_path / "v.vault").st_mode & 0o777) == "0o600"
-    t = time.time()
+    derived = []                           # #413: count key derivations, not seconds -
+    real = nacl.pwhash.argon2id.kdf        # a stalled CI runner made the clock fail
+    monkeypatch.setattr(nacl.pwhash.argon2id, "kdf", lambda *a, **k: derived.append(1) or real(*a, **k))
     for _ in range(20):
         v.save()
-    assert time.time() - t < 5.0          # no key derivation per save (loose: CI runners stall)
+    assert derived == []                   # saving never derives the key again
     assert Vault.open(tmp_path / "v.vault", "pw", **KDF).data["x"] == 1
+    assert derived == [1]                  # opening does, once
 
 
 async def test_tui_inbox_and_operator_contact(tmp_path, monkeypatch):

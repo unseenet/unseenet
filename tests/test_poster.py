@@ -59,7 +59,10 @@ async def test_post_to_several_nodes_with_postage_and_read_back():
         assert art.get("Message-Kind") == "post" and art.get("From") == "News bot"
         assert (await p.post(manifest.group, "Today", "Something happened")).ok  # duplicate is fine
         roots = await p.recent_threads(manifest.group)
-        assert roots == [(result.message_id, "Today")]
+        # the same post twice is one article - unless the two straddle a 10-minute Date
+        # boundary (Date is rounded, UN-RFC 0002), when they are two (#369)
+        assert (result.message_id, "Today") in roots and all(s == "Today" for _, s in roots)
+        assert len(roots) <= 2
         assert (await p.post(manifest.group, "Tomorrow", "More")).ok   # a poster starts threads
     stranger = Poster(crypto.Identity.generate(), [addr_a], tor="none")
     async with stranger:
