@@ -160,6 +160,8 @@ class Accepting:
                 raise ArticleError("group", "group not carried")
             if manifest.local and from_peer:
                 raise ArticleError("group", "local group: never accepted from peers")
+            if manifest.type == "state":                     # UN-RFC 0044 section 3
+                raise ArticleError("permission", "a state group has no articles, only its manifest")
             retention = min(self.config.retention_days, manifest.retention_days)
             if (parse_date(art["Date"]) < now - timedelta(days=retention)
                     and not self._keep_old(art, manifest)):
