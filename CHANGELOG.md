@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Pictures of people in the local client API (#442, UN-RFC 0046 section
+  4.11): every post's row has its author's identicon, `GET /api/pictures`
+  answers the pictures and identicons of many keys - read together with
+  the other authors' and decoded in a separate process, null for hidden or
+  ignored keys or with the new setting `pictures` off - and `POST
+  /api/profile/picture` shows your picture as it would be published,
+  publishes it or removes it; your profile says which is published and the
+  warning before the first. `Session.pictures()`, `make_picture()`,
+  `my_picture()` and `show_pictures()`.
 - Files in the local client API (#442, UN-RFC 0046 section 4.10): posts list
   their files in `attachments`, a group's head says what files it takes
   (`files`) and whether its node carries them (`node_files`), `GET

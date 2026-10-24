@@ -169,6 +169,7 @@ class Groups:
                 "for_me": s.for_me(m, mine, patterns), "who": who, "who_key": key,
                 "contact": bool(key and s.contact_name(key)),
                 "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6
+                "identicon": _identicon(key),                         # UN-RFC 0022 section 8.4
                 "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m)}
 
     @staticmethod

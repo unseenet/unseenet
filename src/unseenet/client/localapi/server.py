@@ -289,6 +289,15 @@ async def profile(request):
     return _json(await _api(request).profile(request.query.get("key")))
 
 
+async def pictures(request):
+    keys = [k for k in request.query.get("keys", "").split(",") if k.strip()]
+    return _json(await _api(request).pictures(keys))
+
+
+async def profile_picture(request):
+    return _json(await _api(request).publish_picture(await _body(request)))
+
+
 async def profile_hide(request):
     data = await _body(request)
     return _json(_api(request).hide_profile(str(data.get("key", "")), bool(data.get("hidden", True))))
@@ -373,6 +382,7 @@ ROUTES = [
     ("GET", "/api/moderation", moderation), ("POST", "/api/moderation", moderation),
     ("GET", "/api/profile", profile), ("POST", "/api/profile", profile),
     ("POST", "/api/profile/hide", profile_hide), ("POST", "/api/passphrase", passphrase),
+    ("GET", "/api/pictures", pictures), ("POST", "/api/profile/picture", profile_picture),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),
     ("POST", "/api/articles", articles), ("POST", "/api/groups/{gid}/manifest", manifest),
