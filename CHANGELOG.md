@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- Tables in Markdown (UN-RFC 0031 section 3.6, amended): GitHub-style tables in
+  posts, chat lines, pages, profiles and group rules, with each column's
+  alignment; `core.markup` gives a `table` node (`align`, `head`, `rows`, cells
+  of inline content, at most 16 columns and 500 rows). The TUI draws them with
+  lines (ASCII on the Linux console), cutting long cells with an ellipsis.
 - From a person to their feed and site without following them (#506): a
   profile shows *Their feed* and *Their site* when they have them (looked up
   with the profile, in one request) and opens them to read; following stays a

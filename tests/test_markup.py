@@ -115,3 +115,38 @@ def test_only_the_articles_own_blobs_are_shown():
     shown = markup.only_carried_images(tree, [own])
     assert markup.image_blobs(shown) == [own]
     assert "[image: not mine]" in json.dumps(shown)
+
+
+TABLE = ("| Group | What | Address |\n|:---|:---:|---:|\n"
+         "| **Around** | the *feed* | `unseenet:x` |\n| Chat | ![p](blob1:{b}) | [link](https://e.org) |\n")
+
+
+def test_tables():
+    """UN-RFC 0031 section 3.6: GFM tables, in posts and chat lines, cells inline only."""
+    bid = "blob1:" + "a" * 52
+    tree = markup.parse(TABLE.format(b="a" * 52))
+    (t,) = tree
+    assert t["t"] == "table" and t["align"] == ["left", "center", "right"]
+    assert [markup.to_text(c) for c in t["head"]] == ["Group", "What", "Address"]
+    assert [markup.to_text(c) for c in t["rows"][0]] == ["Around", "the feed", "unseenet:x"]
+    assert t["rows"][1][1] == [{"t": "image", "blob": bid, "alt": "p"}]
+    assert markup.image_blobs(tree) == [bid]
+    assert markup.only_carried_images(tree, [])[0]["rows"][1][1] == [{"t": "text", "v": "[image: p]"}]
+    assert markup.parse(TABLE.format(b="a" * 52), "chat")[0]["t"] == "table"     # chat too
+    assert kinds(markup.parse("a | b\nc | d")) == ["p"]          # no delimiter row: no table
+    wide = "|" + "|".join(f"c{i}" for i in range(20)) + "|\n|" + "---|" * 20 + "\n"
+    assert len(markup.parse(wide)[0]["head"]) == markup.MAX_TABLE_COLUMNS
+
+
+def test_terminal_tables():
+    from rich.console import Console
+    from unseenet.client import richtext
+    console = Console(width=140, force_terminal=True, color_system=None, record=True)
+    console.print(richtext.blocks(markup.parse(TABLE.format(b="a" * 52))))
+    out = console.export_text()
+    assert "┌" in out and "│ Group" in out and "unseenet:x │" in out          # right-aligned
+    assert "[image: p]" in out and "<https://e.org>" in out
+    long = "| a |\n|---|\n| " + "x" * 80 + " |\n"
+    console = Console(width=140, force_terminal=True, color_system=None, record=True)
+    console.print(richtext.blocks(markup.parse(long)))
+    assert "…" in console.export_text()                         # cut, not wrapped
