@@ -152,6 +152,10 @@ response, so the client can tell the user.
   MUST NOT post such an article to a closed group.
 - Wherever a client lets a user write privately to someone, it SHOULD
   offer both: a chat with them and a post to them.
+- A chat line MAY carry attachments (UN-RFC 0027) as a post does, under
+  the same rules of the group. Where a group takes files, a client that
+  lets users attach files to a post SHOULD let them attach files to a
+  chat line too.
 
 ## 6.2 Showing
 
@@ -161,6 +165,9 @@ response, so the client can tell the user.
   as a thread each.
 - **Chat view:** chat lines in order. Posts are shown as posts,
   with their subject, so they stand out from the lines around them.
+  The attachments of a chat line are shown with it; a client that cannot
+  show a picture there SHOULD at least name the files and say how to
+  open them.
 - **Private messages:** chats per person, oldest first; posts like
   posts in a discussion group. A client MAY show both together, as long
   as the kind of each message is visible. A chat from someone the user
@@ -190,6 +197,8 @@ as the subject.
 - UN-RFC 0008 section 3.1: `view` is how a group is shown; what it
   takes is `kinds` in this document.
 - UN-RFC 0009 section 2.3: `Message-Kind` is added to the inner headers.
+- UN-RFC 0027: attachments are not limited to posts; a chat line carries
+  them in the same way (section 6.1).
 
 # 9. Security and Privacy Considerations
 

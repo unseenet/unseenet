@@ -132,7 +132,10 @@ def client_main(argv=None) -> None:
             s.add_argument("--comments", choices=["open", "none"], default="open",
                            help="whether readers may comment (default open)")
         s.add_argument("--attachments", type=int, metavar="MAX_SIZE",
-                       help="let it carry files up to this many octets (pictures)")
+                       help="let it carry files up to this many octets (default: pictures "
+                            "up to 4 MiB)")
+        s.add_argument("--no-files", action="store_true",
+                       help="carry no files at all (new ones take pictures by default)")
         s.add_argument("--types", help="with --attachments: e.g. image/*")
         s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("profile", help="show or publish your profile (public), or --of someone's")

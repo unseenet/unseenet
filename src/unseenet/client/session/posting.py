@@ -292,9 +292,12 @@ class PostingMixin:
         return art.message_id
 
     async def edit(self, msg: Message, subject: str, body: str,
-                   content_type: str | None = None) -> str:
+                   content_type: str | None = None, files=None) -> str:
         """Post a new version of your own post or chat line (UN-RFC 0042 section 4.3):
-        same group, kind and place in its thread, naming every earlier version."""
+        same group, kind and place in its thread, naming every earlier version.
+
+        ``files``: prepared files for the new version; ``None`` keeps the files of
+        the earlier version (fetched and sent again with it, #496), ``[]`` none."""
         if msg.private:
             raise SessionError("private posts cannot be edited")
         if msg.author_key != self.identity().key_text:
@@ -303,9 +306,22 @@ class PostingMixin:
         if len(versions) > MAX_SUPERSEDES:
             raise SessionError(f"a post can be edited at most {MAX_SUPERSEDES} times")
         original = self.find_message(msg.group, msg.message_id) or msg   # its own References
+        if files is None:
+            files = await self._files_of(msg)
         return await self.post(msg.group, subject, body, references=original.references or None,
                                kind=msg.kind, content_type=content_type or msg.content_type or None,
-                               supersedes=versions)
+                               supersedes=versions, files=files or None)
+
+    async def _files_of(self, msg: Message) -> list:
+        """The files a post carries, as prepared files to send again with a new version."""
+        from ..media import Prepared
+        out = []
+        for a in msg.attachments or []:
+            octets = await self.fetch_blob(msg.group, a["blob"])
+            dim = tuple(a["dim"]) if a.get("dim") else None
+            out.append(Prepared(a.get("name") or "file", a["type"], octets,
+                                alt=a.get("alt") or "", dim=dim))
+        return out
 
     def may_edit(self, msg: Message) -> bool:
         """True when you may publish a new version of this post (UN-RFC 0042): your own,
