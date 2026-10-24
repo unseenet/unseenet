@@ -125,7 +125,7 @@ UN-RFC 0034):
 
 | `view`              | Reaction set                         |
 |---------------------|--------------------------------------|
-| `feed`, `chat`      | the default set: 👍 ❤️ 😂 😮 😢 🙏    |
+| `feed`, `chat`      | the default set: 👍 👎 ❤️ 😂 😮 😢    |
 | `threads` or absent | none                                 |
 | `data`              | none, and `reactions` MUST be absent |
 
@@ -277,7 +277,7 @@ A network profile (UN-RFC 0023) MAY map reactions:
   reaction; a redaction of it is a cancel. Keys that are not one emoji
   are dropped.
 - **Nostr:** a kind 7 event (NIP-25) whose content is one emoji is a
-  reaction; content `+` or empty is 👍; `-` is dropped. A deletion
+  reaction; content `+` or empty is 👍 and `-` is 👎. A deletion
   (kind 5) of it is a cancel.
 - **Usenet** and other networks without reactions: reactions MUST NOT
   be sent out, not even as articles with the emoji as text.
@@ -330,6 +330,11 @@ counted once.
 - **Why off by default in discussion groups?** Reactions belong to the
   feed and the chat; in a discussion they are welcome when the owner
   wants them, and they replace "+1" posts there.
+- **Why 👎 in the default set?** Disagreeing should be as easy as
+  agreeing, without a comment. On networks that rank by votes a
+  thumbs down buries what it is given to; here reactions never order or
+  hide anything (section 7.2), so it is only a counter. Owners who do
+  not want it leave it out of their set.
 - **Why may a channel take reactions but no comments?** An announcement
   wants to know it was read and liked, not to be answered.
 
