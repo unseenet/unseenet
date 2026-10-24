@@ -166,6 +166,9 @@ async def run_node(args) -> None:
     from ..node.pulling import Puller
     feeders += [asyncio.create_task(Puller(node, peer, socks_port).run_forever())
                 for peer in config.peers if peer.pull]
+    if (config.operator or {}).get("contact"):  # tell the operator of new messages (#135)
+        from ..node.stats import contact_watch
+        feeders.append(asyncio.create_task(contact_watch(node, data)))
     if config.blobs is not None:               # blobs follow their article (UN-RFC 0027, 6.3)
         from ..node.blobfetch import BlobFollower
         feeders.append(asyncio.create_task(BlobFollower(node, socks_port).run_forever()))

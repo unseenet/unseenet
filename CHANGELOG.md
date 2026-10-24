@@ -143,6 +143,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (⌂), each with its path; choosing one shows it, Markdown and all; `v`
   switches a site between pages and threads. Writing pages stays with the
   command line (`unseenet page-put`) for now.
+- Nodes tell the operator when the contact inbox has new messages (#135): it
+  counts them without reading them - in `unseenet-monitor` (c: seen), as a
+  warning in `unseenet-node status`, and through an optional `[operator]
+  notify` command run on new ones (counts only, no shell), to pass on to ntfy,
+  Home Assistant or e-mail. Not in the daily health check: it sees only what is
+  public, and the number of reports a node gets is not.
 - **Private profiles** (UN-RFC 0022 section 6, #182): share a profile with one
   person or a closed group only - for those who want no public profile, or
   another one for friends. It is read only by them, shown only there, marked

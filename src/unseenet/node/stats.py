@@ -237,14 +237,81 @@ class Stats:
             # UN-RFC 0027: None when the node carries no blobs
             "blobs": None if cfg.blobs is None else {**store.blob_stats(),
                                                      "fetching": len(node.blob_wait)},
+            "contact": contact_state(node, data_dir),           # #135
         }
         snap["warnings"] = warnings(snap)
         return snap
 
 
+# --- the operator's contact inbox (UN-RFC 0011 section 5, #135) --------------------------
+CONTACT_SEEN = "contact-seen.json"      # how many the operator has seen, in the data folder
+
+
+def _seen_file(data_dir: Path | None) -> Path | None:
+    return data_dir / CONTACT_SEEN if data_dir is not None else None
+
+
+def contact_seen(data_dir: Path | None) -> int:
+    f = _seen_file(data_dir)
+    try:
+        return int(json.loads(f.read_text())["seen"]) if f and f.exists() else 0
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0
+
+
+def set_contact_seen(data_dir: Path | None, n: int) -> None:
+    f = _seen_file(data_dir)
+    if f is not None:
+        f.write_text(json.dumps({"seen": n}))
+
+
+def contact_state(node, data_dir: Path | None) -> dict | None:
+    """The contact inbox as the node can see it - it cannot read it: how many messages,
+    when the newest arrived, and how many since the operator last looked. None when
+    the node has no contact inbox."""
+    gid = (node.config.operator or {}).get("contact")
+    if not gid:
+        return None
+    m = node.store.manifest(gid)
+    owner = m.raw.get("owner", "") if m is not None else ""     # its manifests are not messages
+    n, newest = node.store.group_activity(gid, not_by=owner)
+    seen = contact_seen(data_dir)
+    if n < seen:                              # some expired: what is left was all seen
+        set_contact_seen(data_dir, n)
+        seen = n
+    return {"group": gid, "messages": n, "newest": newest, "new": n - seen}
+
+
+async def contact_watch(node, data_dir: Path | None, every: float = 60.0) -> None:
+    """Run the operator's ``notify`` command (``[operator] notify`` in node.toml) when
+    the contact inbox gets new messages: no shell, the counts in the environment, never
+    anything of the messages (the node cannot read them anyway)."""
+    import shlex
+    cmd = (node.config.operator or {}).get("notify")
+    last = None
+    while True:
+        st = contact_state(node, data_dir)
+        if st and cmd and st["new"] > 0 and (last is None or st["messages"] > last):
+            env = {**os.environ, "UNSEENET_CONTACT_MESSAGES": str(st["messages"]),
+                   "UNSEENET_CONTACT_NEW": str(st["new"]), "UNSEENET_NODE": node.config.name}
+            try:
+                proc = await asyncio.create_subprocess_exec(*shlex.split(cmd), env=env)
+                await asyncio.wait_for(proc.wait(), timeout=30)
+            except (OSError, ValueError, asyncio.TimeoutError) as exc:
+                logging.getLogger("unseenet.node").warning("notify command failed: %s", exc)
+        if st:
+            last = st["messages"]
+        await asyncio.sleep(every)
+
+
 def warnings(snap: dict) -> list[str]:
     """Things an operator should look at."""
     out = []
+    contact = snap.get("contact")
+    if contact and contact.get("new"):
+        n = contact["new"]
+        out.append(f"{n} new message{'s' if n != 1 else ''} in your contact inbox - read "
+                   "them with your client")
     tor = snap["tor"]
     if tor.get("state") == "down":
         out.append("Tor is not running: the node cannot be reached")
@@ -300,11 +367,16 @@ async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
                     continue
                 if parts[0] == "stats":
                     reply = await stats.snapshot(node, data_dir)
+                elif parts[0] == "seen-contact":              # the operator has looked (#135)
+                    st = contact_state(node, data_dir)
+                    if st:
+                        set_contact_seen(data_dir, st["messages"])
+                    reply = {"ok": True}
                 elif parts[0] == "log":
                     n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 100
                     reply = list(stats.log.lines)[-min(n, LOG_LINES):]
                 else:
-                    reply = {"error": "unknown request; try 'stats' or 'log 100'"}
+                    reply = {"error": "unknown request; try 'stats', 'log 100' or 'seen-contact'"}
                 writer.write(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
                 await writer.drain()
         except (ConnectionError, asyncio.TimeoutError, OSError):

@@ -176,12 +176,28 @@ Clients show it when the user presses ++o++. All keys are optional.
 | `contact` | Group ID of your contact inbox, see [Operations](operations.md#operator-contact) |
 | `description` | A few words about the node |
 | `logging` | What the node logs (shown to users) |
+| `notify` | A command run when the contact inbox gets new messages - see below |
 
 ```toml
 [operator]
 key = "ed25519:det5dxev..."
 contact = "operator@ph5fc5hop5232qsz"
 description = "Andreas' test node in Denmark"
+notify = "/usr/local/bin/tell-me"
+```
+
+**Knowing when someone writes.** The node cannot read your contact inbox - that
+is the point of it - but it counts the messages. `unseenet-monitor` shows how
+many there are and how many are new (++c++ marks them seen once you have read
+them in your client), and `unseenet-node status` warns about new ones. With
+`notify`, the node runs your command each time new messages arrive: without a
+shell, with `UNSEENET_CONTACT_NEW`, `UNSEENET_CONTACT_MESSAGES` and
+`UNSEENET_NODE` in its environment and nothing of the messages themselves - so
+you can send it on to ntfy, Home Assistant, e-mail or whatever you use:
+
+```sh
+#!/bin/sh
+curl -s -d "$UNSEENET_CONTACT_NEW new on $UNSEENET_NODE" https://ntfy.sh/your-topic
 ```
 
 ## `[[peer]]`
