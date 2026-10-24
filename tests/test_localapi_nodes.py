@@ -70,6 +70,9 @@ async def test_nodes_in_the_api(two):
     async def nothing(client):
         return None
     await api.session._call(nothing, first)                # connecting learns its own name
+    assert api.status == "Connected to first-node (unlisted)" and api.status_idle   # any node
+    api.session.say("Starting Tor ...")
+    assert not api.status_idle
     st = api.state()
     assert st["node"] == first and st["node_label"] == "first-node (unlisted)"
     assert st["node_names"][first] == {"name": "first-node", "source": "self",

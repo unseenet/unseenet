@@ -32,7 +32,7 @@ class Events:
 
     def _on_event(self, e: ev.Event) -> None:
         if isinstance(e, ev.Status):
-            self.status, self.status_idle = e.text, False
+            self.status, self.status_idle = e.text, e.idle
         elif isinstance(e, ev.Refreshed):
             self.connected = e.error is None
         self._broadcast(e.to_dict())
@@ -63,7 +63,7 @@ class Events:
 
     def _say(self, text: str, idle: bool = False) -> None:
         self.status, self.status_idle = text, idle
-        self._broadcast({**ev.Status(text).to_dict(), "idle": idle})
+        self._broadcast(ev.Status(text, idle).to_dict())
 
     def spawn(self, coro) -> asyncio.Task:
         """Run a coroutine in the background, kept until done and cancelled by ``close``."""
