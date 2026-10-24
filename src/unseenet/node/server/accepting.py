@@ -77,15 +77,19 @@ class Accepting:
 
     # --- key-bound groups whose manifest has not arrived (UN-RFC 0040 section 6) ---
     KB_WAIT_SECONDS = 6 * 3600.0
+    GROUP_WAIT_SECONDS = 15 * 60.0   # an ordinary group's manifest, sent first, comes soon (#384)
 
     KB_WAIT_MAX = 10000
 
-    def _wait_for_manifest(self, group_id: str, source: str | None) -> None:
+    def _wait_for_manifest(self, group_id: str, source: str | None,
+                           wait: float | None = None) -> None:
         """A peer offers an article in a key-bound group we hold no manifest for.
         Rather than refuse it, ask the peer to try again later (431/436), and have
         the next pull from it reconcile, which fetches the manifest. After
         KB_WAIT_SECONDS without it the article is refused as before: the group
-        may simply not exist."""
+        may simply not exist. An ordinary group waits ``wait`` (GROUP_WAIT_SECONDS):
+        its manifest is sent ahead of its posts, so it is only a little behind."""
+        wait = self.KB_WAIT_SECONDS if wait is None else wait
         now = time.monotonic()
         if len(self._kb_waiting) >= self.KB_WAIT_MAX:
             for gid in [g for g, t in self._kb_waiting.items() if now - t > self.KB_WAIT_SECONDS]:
@@ -95,7 +99,7 @@ class Accepting:
             if len(self._kb_waiting) >= self.KB_WAIT_MAX:
                 return
             since = self._kb_waiting[group_id] = now
-        if now - since > self.KB_WAIT_SECONDS:
+        if now - since > wait:
             return
         if source:
             self.reconcile_wanted.add(source)
@@ -151,6 +155,8 @@ class Accepting:
             if manifest is None:
                 if from_peer and is_key_bound(art.group) and not self.store.known_group(art.group):
                     self._wait_for_manifest(art.group, source)
+                elif from_peer and not is_key_bound(art.group):
+                    self._wait_for_manifest(art.group, source, self.GROUP_WAIT_SECONDS)   # #384
                 raise ArticleError("group", "group not carried")
             if manifest.local and from_peer:
                 raise ArticleError("group", "local group: never accepted from peers")
