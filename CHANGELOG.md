@@ -128,6 +128,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   their metadata before they are sent. Edit profile takes a picture file,
   published as your profile picture - the middle square, at most 128 px, no
   metadata. Reading and saving files (f) was there already.
+- Registered names (`@lorensen`) are renewed by themselves in their last 30
+  days, as key-bound groups and names given under yours already were (#424):
+  a `renew` claim in the background, once per name per run and not while one
+  is on its way - so nobody loses a name, and every name under it, by
+  forgetting. Domain names need nothing.
 - TUI: a site is shown as its pages (#212) - one row a page, the home page first
   (⌂), each with its path; choosing one shows it, Markdown and all; `v`
   switches a site between pages and threads. Writing pages stays with the
