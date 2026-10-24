@@ -263,3 +263,28 @@ async def test_owner_tools_post_other_keys_through_their_own_session(tmp_path, m
         assert "Key-Ripening" in stored
     assert (tmp_path / "keys" / f"{crypto.fingerprint(other.public_key)}.state.json").exists()
     server.close()
+
+
+async def test_a_paused_ripening_is_kept_until_resumed(tmp_path):
+    """#337: a pause is remembered with the key in the vault, so the next start stays
+    paused until the user resumes it; it is not part of the state other devices get."""
+    ident = crypto.Identity.generate()
+    s = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
+    rt = ClientRuntime(s, ripen_to=2)
+    assert not rt.ripening_paused
+    await rt.pause_ripening()
+    assert s.ripening_kept_paused()
+    again = Session.from_key(ident, tmp_path / "bot.json", status=lambda *_: None)
+    later = ClientRuntime(again, ripen_to=2)
+    later.open()
+    assert later.ripening_paused                    # a new start: still paused
+    later._background_started = True
+    later._start_ripening()
+    assert later._ripen_task is None
+    await later.resume_ripening()
+    assert not again.ripening_kept_paused()
+    await later.stop()
+    assert not ClientRuntime(Session.from_key(ident, tmp_path / "bot.json",
+                                              status=lambda *_: None)).ripening_paused
+    from unseenet.client.session.state import SETTINGS
+    assert "ripening" not in SETTINGS               # this device's, not your state's

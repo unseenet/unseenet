@@ -3141,9 +3141,10 @@ class UnseenetApp(App):
         if s.ripening_limit is not None:
             text += (f"This machine can ripen this key to level {s.ripening_limit}: more needs "
                      "more memory than it has free.\n\n")
-        text += ("Ripening is paused for this run; it goes on where it was." if paused else
-                 "Pause it on battery or on a warm laptop - it goes on where it was, and is on "
-                 "again at the next start.")
+        text += ("Ripening is paused until you resume it, also after a restart; it goes on "
+                 "where it was." if paused else
+                 "Pause it on battery or on a warm laptop - it stays paused, also after a "
+                 "restart, until you resume it here, and goes on where it was.")
         if not await self.push_screen_wait(ConfirmDialog(
                 "Key ripening", text, "Resume ripening" if paused else "Pause ripening")):
             return
@@ -3154,7 +3155,7 @@ class UnseenetApp(App):
         else:
             self.workers.cancel_group(self, "ripening")       # our own worker, as well
             await rt.pause_ripening()
-            self.set_status("Ripening paused until you resume it or start again.")
+            self.set_status("Ripening paused until you resume it.")
         self._update_subtitle()
 
     # --- addresses (UN-RFC 0031 section 3.4.1, #357) ---

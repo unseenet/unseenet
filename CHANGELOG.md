@@ -310,6 +310,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- A paused key ripening stays paused over a restart until you resume it (#337):
+  kept with the key in the vault, on that device only. The TUI says so, and the
+  local client API (UN-RFC 0046 section 4.1) keeps it the same way.
 - The project's bot channels are feeds by default and take pictures (#475):
   `tools/project/create_groups.py` sets `view: feed` for the six of them and
   `attachments` (`image/*`, 512 KiB) for all but The Conversation.

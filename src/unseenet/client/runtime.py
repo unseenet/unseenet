@@ -60,7 +60,7 @@ class ClientRuntime:
         self._run_file = None                         # removing it stops a segment at once
         self._ripen_stop: asyncio.Event | None = None  # set: stop waiting for a node (#314)
         self._ripen_task: asyncio.Task | None = None  # the background ripening, one at a time
-        self._ripen_paused = False                    # pause_ripening() (#337), this run only
+        self._ripen_paused = self._kept_paused()      # pause_ripening() (#337), until resumed
         self._ripen_switch = asyncio.Lock()           # pause and resume, one after the other
         self.refresh_seconds = refresh_seconds
         self.watch_retry = watch_retry                # None: a random, growing wait (#297)
@@ -77,6 +77,7 @@ class ClientRuntime:
         """Steps 1 and 2: follow the starter groups, load the offline cache.
         Returns the number of saved posts that can be read now."""
         s = self.session
+        self._ripen_paused = self._ripen_paused or self._kept_paused()   # the vault is open now
         s.subscribe_starter_groups()
         loaded = s.load_offline()
         s.emit(ev.GroupsChanged())
@@ -317,12 +318,26 @@ class ClientRuntime:
     def ripening_paused(self) -> bool:
         return self._ripen_paused
 
+    def _kept_paused(self) -> bool:
+        try:
+            return self.session.ripening_kept_paused()
+        except (SessionError, AttributeError, KeyError):  # no vault open, or no identity yet
+            return False
+
+    def _keep_paused(self, paused: bool) -> None:
+        try:
+            self.session.set_ripening_kept_paused(paused)
+        except (SessionError, AttributeError, KeyError, OSError):
+            pass                                          # this run still follows it
+
     async def pause_ripening(self) -> None:
         """Stop ripening in the background until ``resume_ripening()``: a warm
-        phone, a laptop on battery. For this run only; the next start ripens
-        again. A post that needs a riper key still ripens what it needs."""
+        phone, a laptop on battery. Remembered in the vault with the key, so the
+        next start stays paused too. A post that needs a riper key still ripens
+        what it needs."""
         async with self._ripen_switch:
             self._ripen_paused = True
+            self._keep_paused(True)
             self.stop_ripening()
             task, self._ripen_task = self._ripen_task, None
             if task is not None and not task.done():
@@ -335,6 +350,7 @@ class ClientRuntime:
         begins it as usual."""
         async with self._ripen_switch:
             self._ripen_paused = False
+            self._keep_paused(False)
             if self._background_started:
                 self._start_ripening()
 
