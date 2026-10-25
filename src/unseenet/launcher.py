@@ -30,7 +30,7 @@ def self_test(network: bool = True, node: str | None = None) -> int:
     try:   # everything the client loads, so a build missing a part fails here
         import nacl.bindings  # noqa: F401
         from .cli import client_main  # noqa: F401
-        from .client import tui  # noqa: F401
+        import unseenet_tui.app  # noqa: F401  (the terminal client, from unseenet-tui)
         from .core import crypto
         crypto.Identity.generate()
     except Exception as exc:  # noqa: BLE001
@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args[:1] == ["--version"]:
         print(f"unseenet {__version__}")
     else:
-        from .client.tui import main as tui_main
+        from unseenet_tui.app import main as tui_main
         tui_main(args)
 
 

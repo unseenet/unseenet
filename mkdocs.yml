@@ -82,7 +82,7 @@ nav:
       - Terminal client:
           - Portable (Linux, macOS, Windows): portable.md
           - Bootable (USB, SSD etc.): bootable.md
-          - Using the terminal client: client.md
+          - Using the terminal client: https://unseenet.org/client/
       - Updating: updating.md
   - More ways to use it:
       - Gateways to other networks: gateways.md

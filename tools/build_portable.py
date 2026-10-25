@@ -49,6 +49,9 @@ TOOLS = ROOT / "tools"
 DIST_URL = "https://dist.torproject.org/torbrowser/"
 TOR_KEY = TOOLS / "keys" / "torbrowser-signing-key.asc"
 TOR_KEY_FINGERPRINT = "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290"   # Tor Browser Developers
+# The terminal client (unseenet-tui, #548) until it is on PyPI: its main branch.
+TUI = os.environ.get("UNSEENET_TUI",
+                     "unseenet-tui @ https://github.com/unseenet/unseenet-tui/archive/refs/heads/main.tar.gz")
 PLATFORMS = ("linux-x86_64", "windows-x86_64", "macos-aarch64", "macos-x86_64")
 TOP = "Unseenet"
 MARKER = "UNSEENET-PORTABLE"
@@ -165,6 +168,8 @@ def pyinstaller(plat: str, work: Path) -> Path:
            # Textual and Rich import parts of themselves lazily, by name
            "--collect-all", "textual", "--collect-submodules", "rich",
            "--collect-submodules", "unseenet", "--collect-data", "unseenet",
+           # the terminal client, from unseenet-tui (#548)
+           "--collect-submodules", "unseenet_tui",
            # PyNaCl's libsodium comes through cffi, which PyInstaller does not see
            "--collect-all", "nacl", "--hidden-import", "_cffi_backend", "--hidden-import", "chiavdf",
            "--collect-data", "certifi",            # HTTPS for updates (unseenet.update)
@@ -196,8 +201,9 @@ def pyinstaller(plat: str, work: Path) -> Path:
     cmd.append(str(entry))
     try:
         import textual  # noqa: F401
+        import unseenet_tui  # noqa: F401
     except ImportError:
-        sys.exit('the terminal client needs Textual: pip install ".[tui]" pyinstaller')
+        sys.exit(f'the terminal client is not installed: pip install . "{TUI}" pyinstaller')
     log("running PyInstaller")
     subprocess.run(cmd, check=True, cwd=work)
     return work / "dist" / "unseenet"

@@ -81,13 +81,3 @@ def test_manifest_rules_type():
     assert "rules_type" not in json.loads(art.body)     # no rules, no type
     assert Manifest.from_article(make_manifest(owner, "dk.snak", "open", rules="x",
                                                pow_bits=0)).rules_type is None
-
-
-def test_tui_shows_markdown_profiles_and_rules():
-    import pytest
-    pytest.importorskip("textual")
-    from unseenet.client.tui import manifest_text
-    shown = manifest_text(HOME, markup.MARKDOWN_TYPE).plain
-    assert "Andreas" in shown and "# Andreas" not in shown and "**" not in shown
-    assert "[image: me]" in shown
-    assert "# Andreas" in manifest_text(HOME, None).plain   # plain stays as written

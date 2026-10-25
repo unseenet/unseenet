@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The terminal client has moved to [unseenet-tui](https://github.com/unseenet/unseenet-tui)**
+  (#548), with its history: `pipx install unseenet-tui` once it is on PyPI,
+  until then `pipx install git+https://github.com/unseenet/unseenet-tui`. The
+  `tui` extra and the `unseenet-tui` command are gone from this package; the
+  portable and bootable builds include the terminal client as before.
+
 - **Development builds from unseenet-portable and unseenet-bootable** are
   trusted on the development channel: their release key is pinned next to
   this repository's (#549, #550).

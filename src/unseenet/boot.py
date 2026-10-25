@@ -266,7 +266,7 @@ def self_test() -> int:
     check("certificates for HTTPS (updates)",
           ssl.create_default_context().cert_store_stats()["x509_ca"] > 0)
     try:
-        from .client import tui  # noqa: F401
+        import unseenet_tui.app  # noqa: F401  (the terminal client, from unseenet-tui)
         from . import monitor  # noqa: F401
         import nacl.bindings  # noqa: F401
         check("client, monitor and cryptography load", True)
