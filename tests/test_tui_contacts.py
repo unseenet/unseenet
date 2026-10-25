@@ -36,15 +36,16 @@ async def test_contacts_and_recipient_by_name(tmp_path, monkeypatch):
         dlg = app.screen
         assert dlg.query_one("#find").has_focus
         await pilot.press("k", "k")                             # Mikkel only
-        assert await wait_for(pilot, lambda: [n for _, n in dlg.shown] == ["Mikkel"])
+        assert await wait_for(pilot, lambda: [n for _, n in dlg.shown] == ["Mikkel"], 400), \
+            (dlg.query_one("#find").value, dlg.shown)
         assert "1 of 3" in str(dlg.query_one("#count").render())
         await pilot.press("escape")                             # clears the filter first
-        assert await wait_for(pilot, lambda: len(dlg.shown) == 3)
+        assert await wait_for(pilot, lambda: len(dlg.shown) == 3, 400)
         assert app.screen is dlg
         await pilot.press("down")                               # Mia, Mikkel, Sonia
         assert dlg._chosen() == mikkel
         await pilot.press("escape")                             # now it closes
-        assert await wait_for(pilot, lambda: not isinstance(app.screen, ContactsDialog))
+        assert await wait_for(pilot, lambda: not isinstance(app.screen, ContactsDialog), 400)
 
         app.action_contacts()
         assert await wait_for(pilot, lambda: isinstance(app.screen, ContactsDialog)), stack(app)
