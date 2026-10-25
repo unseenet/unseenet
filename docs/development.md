@@ -380,10 +380,14 @@ one node at a time.
    the changelog agree, runs the tests, builds, publishes to PyPI with
    trusted publishing (no API tokens stored anywhere) and creates the
    GitHub release with the changelog section as notes.
-5. `.github/workflows/portable.yml` builds the portable zips on Linux,
-   Windows and macOS (Apple silicon and Intel), unpacks and self-tests each
-   one, combines the USB zip, and attaches them with `SHA256SUMS.txt` to the
-   release.
+5. The portable zips and the bootable images are built in their own
+   repositories, [unseenet-portable](https://github.com/unseenet/unseenet-portable)
+   and [unseenet-bootable](https://github.com/unseenet/unseenet-bootable)
+   (#549, #550): bump the core in unseenet-portable's `versions.toml`, merge
+   and tag there. They build on Linux, Windows and macOS (Apple silicon and
+   Intel), unpack and self-test each one, boot the images in QEMU, and make
+   that repository's release with `SHA256SUMS.txt`; then sign it with
+   `tools/project/sign_release.py`.
 6. `.github/workflows/announce.yml` posts the release notes to
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.
@@ -425,20 +429,23 @@ git tag -a v0.2.1a1 -m "Unseenet 0.2.1a1" && git push origin v0.2.1a1
 It is published to PyPI and GitHub as a pre-release (pip takes it only
 with `--pre`) and announced as a test release.
 
-**Development builds** need nothing: each night (03:17 UTC) the *portable*
-workflow checks whether the software on `main` changed since the build
-`dev` was made from, and if so builds the zips with a
-version from `tools/dev_version.py` (`0.2.1.dev3`: three commits after
-v0.2.0; written into the build only, never committed) and replaces the
-pre-release [`dev`](https://github.com/unseenet/unseenet/releases/tag/dev)
-with them. Its notes are the Unreleased changelog and the commits since
-the last tag. They are not published to PyPI.
+**Development builds** need nothing: each night (03:17 UTC)
+[unseenet-portable](https://github.com/unseenet/unseenet-portable) checks
+whether `main` of the core, the terminal or the graphical client changed
+since its last `dev` build, and if so builds the zips - the core's version
+from `tools/dev_version.py` (`0.2.1.dev3`: three commits after v0.2.0;
+written into the build only, never committed) - and replaces its pre-release
+[`dev`](https://github.com/unseenet/unseenet-portable/releases/tag/dev);
+[unseenet-bootable](https://github.com/unseenet/unseenet-bootable) makes the
+images from them two hours later. They are not published to PyPI.
 
 Merging to `main` builds nothing (#544); only the tests run. To get a build
-sooner, run the *portable* workflow by hand (Actions, "Run workflow"):
-*publish* `dev` replaces the development build (on `main`), `artifact` only
-leaves the zips and the image in the run's artifacts - use that to try a
-branch. *force* builds even when nothing changed. Before a release, check `tools/tor-version.txt`
+sooner, run the *build* workflow of unseenet-portable by hand (Actions, "Run
+workflow"): *publish* `dev` replaces the development build, `artifact` only
+leaves the builds in the run's artifacts. *force* builds even when nothing
+changed. The build tools are still here (`tools/build_portable.py`,
+`tools/image/`) and are run from a checkout of this repository, until they
+move there. Before a release, check `tools/tor-version.txt`
 against `python tools/build_portable.py --check-tor` (the *tor-update*
 workflow opens an issue when Tor has a newer stable release).
 

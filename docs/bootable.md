@@ -12,7 +12,7 @@ your keys and groups come along either way.
 
 Take `unseenet-<version>-x86_64.img.xz` from the
 [releases](https://github.com/unseenet/unseenet/releases) (or the newest
-[development build](https://github.com/unseenet/unseenet/releases/tag/dev)),
+[development build](https://github.com/unseenet/unseenet-bootable/releases/tag/dev)),
 and check it against `SHA256SUMS.txt` like the zips.
 
 Write it to a stick of 2 GB or more. **Everything on the stick is erased.**

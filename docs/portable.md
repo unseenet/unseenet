@@ -47,7 +47,7 @@ Check the download against `SHA256SUMS.txt` from the same release:
 |------|---------|-------|-----|
 | **Release** | `0.3.1` | [Releases](https://github.com/unseenet/unseenet/releases) | Everyday use |
 | **Test release** | `0.3.1a1` (alpha), `b1`, `rc1` | Releases, marked *Pre-release* | Trying what comes next, before it is released |
-| **Development build** | `0.3.1.dev3` | [Development build](https://github.com/unseenet/unseenet/releases/tag/dev) | The newest code: built each night when something changed, replaced each time |
+| **Development build** | `0.3.1.dev3` | [Development build](https://github.com/unseenet/unseenet-portable/releases/tag/dev) | The newest code: built each night when something changed, replaced each time |
 
 A development build is made and self-tested automatically each night when
 the code has changed, so you can try a fix the next morning. `0.3.1.dev3` is the third
@@ -210,7 +210,7 @@ unseenet --version
 ## How the builds are made
 
 Every release is built by GitHub Actions from the tagged source, in the
-open: [`.github/workflows/portable.yml`](https://github.com/unseenet/unseenet/blob/main/.github/workflows/portable.yml)
+open: [unseenet-portable's `build.yml`](https://github.com/unseenet/unseenet-portable/blob/main/.github/workflows/build.yml)
 and [`tools/build_portable.py`](https://github.com/unseenet/unseenet/blob/main/tools/build_portable.py).
 
 - **Tor** is the Tor Project's
