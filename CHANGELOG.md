@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Development builds from unseenet-portable and unseenet-bootable** are
+  trusted on the development channel: their release key is pinned next to
+  this repository's (#549, #550).
+
 - **Development builds** are made each night when `main` changed, by hand,
   and on release tags - no longer after every merge (#544). Sticks on the
   development channel get at most one update a day.

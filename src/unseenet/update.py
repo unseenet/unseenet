@@ -57,7 +57,8 @@ PURPOSE_RELEASE = crypto.PURPOSE_RELEASE
 # unseenet's own, and the one the build repositories share (#549, #550), made with
 # tools/project/new_release_key.py. Both are trusted while unseenet still builds.
 DEV_RELEASE_KEY = "ed25519:clbv6765nyz74fxm5qb4ktmdtuyotgxe3h3yozjlgneh7jserf2a"
-DEV_RELEASE_KEYS: tuple[str, ...] = (DEV_RELEASE_KEY,)
+BUILD_REPOS_RELEASE_KEY = "ed25519:hmkki7rxa52zur5syjlrc4hqz6h63fyi7ac6hbxegrbpotxgbvla"   # portable, bootable
+DEV_RELEASE_KEYS: tuple[str, ...] = (DEV_RELEASE_KEY, BUILD_REPOS_RELEASE_KEY)
 TRUSTED = {"stable": (PROJECT_KEY,), "dev": (PROJECT_KEY, *DEV_RELEASE_KEYS)}
 
 REPO = "https://github.com/unseenet/unseenet"
