@@ -7,6 +7,28 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-25
+
+**Feeds, sites, pictures and files. Update the nodes first, then the
+clients.** 0.5 nodes carry what 0.5 clients write - files (blobs), profile
+pictures, pinned posts, sites and reactions - and 0.5 clients expect them.
+Pre-alpha: there is no compatibility code for older nodes, so a 0.5 client
+on a 0.4 node misses these.
+
+- **People:** a *Timeline* of the feeds you follow, **My feed** and **My
+  site**, pages, pictures and files in posts, chats and private posts,
+  profile pictures, pins, reactions, tables in Markdown, private profiles,
+  and `unseenet:` addresses you can copy and open - in the terminal client
+  and, with unseenet-gui 0.2, in the graphical one. Your groups, people and
+  sent private posts follow you to other devices. New vaults also start in
+  `unseenet.chat` and the demo site and feed.
+- **Node operators:** files, profile pictures and sites are your choice and
+  off until you turn them on in `node.toml`: `[blobs] enabled = true`,
+  `avatars = "accept"`, `sites = "accept"` (the installer and the Docker
+  image ask). See [configuration](https://unseenet.org/node/configuration/).
+- **Bots, gateways and other services:** `Poster.post(..., files=)` and
+  `post_article(blobs=)` post with files; require `unseenet>=0.5,<0.6`.
+
 ### Added
 
 - **Nodes by name** (#518): a node is shown by its name on the signed
@@ -1351,7 +1373,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/unseenet/unseenet/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/unseenet/unseenet/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/unseenet/unseenet/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/unseenet/unseenet/compare/v0.4.1...v0.4.2
