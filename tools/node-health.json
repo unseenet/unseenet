@@ -1,6 +1,6 @@
 {
   "canaries": {
-    "date": "2026-10-22",
+    "date": "2026-10-25",
     "posted": [
       "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
       "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
@@ -10,28 +10,66 @@
   },
   "key_bound": {
     "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a": {
-      "date": "2026-10-22",
+      "date": "2026-10-25",
       "lacking": [],
       "over": false,
-      "reference": "unseenet-node4"
+      "reference": "unseenet-node1"
     },
     "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka": {
-      "date": "2026-10-22",
+      "date": "2026-10-25",
       "lacking": [],
       "over": false,
-      "reference": "unseenet-node4"
+      "reference": "unseenet-node2"
     },
     "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya": {
-      "date": "2026-10-22",
-      "lacking": [],
+      "date": "2026-10-25",
+      "lacking": [
+        "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
+        "10c70d0b5518cfb536fb65a658bd6c3bd60b979c12dc92c1546c35d1b76b68f9",
+        "183d1a3e32bcd95d67a6c5e78e443277f69a09f93b8670c7f6922e6c9e72fe36",
+        "1a7eef6496d1557b46508b1a7a5c3fb38e1d6c226cd71a6636d9cf0eb2858562",
+        "39266dd906e23dd1bed1c48d36be3cad23e8d38bc6d020a658a9791ae2125def",
+        "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
+        "4048b033d391015792deb74d74740b73dff87afa67c88431fa97c6a1eca435a0",
+        "44da8f9014fb7f382d322de58cc9ff02c455721a1c7be6be4586f838b8a45858",
+        "55db29ee9a0c0023cb9f94b35e1d6b2a6e0f2eec6a1e57fe1bdd389d9b429b19",
+        "62ee27e34218ff476bfacd0096a56db7b6dad9fa25d329167c3e3db8674e1d50",
+        "6782b19554daf5c9c2179e543cf624929225a89adb3faeec2b742b2653688c35",
+        "6d6b1a1675b3403ebd56af4d281b49732b15095e179f875782ed1991636cb979",
+        "797c86ab6f4c75730d77d652dbe7932de0698890e6b81cd33f924f600042de7c",
+        "8b7323a6ae8228c0033b75ba8704e7302fb1f7163c838f5352ec784f364cf007",
+        "c7aef03884eb6fd18620a2fc605a2d742fb1733c1b5617b7fb83c8545dd09c2f",
+        "dc5c14edf1bfeb05ab16302ee793fc217c6aa1458ec5872ac5b997314b2f0f70",
+        "ebc6cc1f427d9f2eea19d0d783ff3a5ae6a444e9dd4532caf9cce2291664105c",
+        "fbcf3833ce2d98ad34430c020470e6119b7b4cbc43a7af18b91c253caede6e60"
+      ],
       "over": false,
-      "reference": "unseenet-node4"
+      "reference": "unseenet-node1"
     },
     "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq": {
-      "date": "2026-10-22",
-      "lacking": [],
+      "date": "2026-10-25",
+      "lacking": [
+        "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
+        "10c70d0b5518cfb536fb65a658bd6c3bd60b979c12dc92c1546c35d1b76b68f9",
+        "183d1a3e32bcd95d67a6c5e78e443277f69a09f93b8670c7f6922e6c9e72fe36",
+        "1a7eef6496d1557b46508b1a7a5c3fb38e1d6c226cd71a6636d9cf0eb2858562",
+        "39266dd906e23dd1bed1c48d36be3cad23e8d38bc6d020a658a9791ae2125def",
+        "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
+        "4048b033d391015792deb74d74740b73dff87afa67c88431fa97c6a1eca435a0",
+        "44da8f9014fb7f382d322de58cc9ff02c455721a1c7be6be4586f838b8a45858",
+        "55db29ee9a0c0023cb9f94b35e1d6b2a6e0f2eec6a1e57fe1bdd389d9b429b19",
+        "62ee27e34218ff476bfacd0096a56db7b6dad9fa25d329167c3e3db8674e1d50",
+        "6782b19554daf5c9c2179e543cf624929225a89adb3faeec2b742b2653688c35",
+        "6d6b1a1675b3403ebd56af4d281b49732b15095e179f875782ed1991636cb979",
+        "797c86ab6f4c75730d77d652dbe7932de0698890e6b81cd33f924f600042de7c",
+        "8b7323a6ae8228c0033b75ba8704e7302fb1f7163c838f5352ec784f364cf007",
+        "c7aef03884eb6fd18620a2fc605a2d742fb1733c1b5617b7fb83c8545dd09c2f",
+        "dc5c14edf1bfeb05ab16302ee793fc217c6aa1458ec5872ac5b997314b2f0f70",
+        "ebc6cc1f427d9f2eea19d0d783ff3a5ae6a444e9dd4532caf9cce2291664105c",
+        "fbcf3833ce2d98ad34430c020470e6119b7b4cbc43a7af18b91c253caede6e60"
+      ],
       "over": false,
-      "reference": "unseenet-node3"
+      "reference": "unseenet-node1"
     }
   },
   "nodes": {}
