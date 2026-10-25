@@ -217,7 +217,9 @@ Screen { background: $surface; }
 #chat-log { height: 1fr; padding: 0 1; }
 #chat-pins { height: auto; padding: 0 1; background: $boost; display: none; }
 #chat-pins.shown { display: block; }
-#chat-input { margin: 0 1; }
+#chat-input { margin: 0 1; height: auto; min-height: 3; max-height: 8;
+  border: tall $border-blurred; padding: 0 1; }
+#chat-input:focus { border: tall $accent; }
 #status { height: 1; background: $boost; color: $text-muted; padding: 0 1; }
 .unread { text-style: bold; }
 
@@ -249,6 +251,49 @@ ModalScreen { align: center middle; }
 # ======================================================================
 # Dialogs
 # ======================================================================
+
+class ChatBox(TextArea):
+    """The chat line (#530): Enter sends; Alt+Enter (or Shift+Enter where the terminal
+    tells them apart, or Ctrl+J) starts a new line, since a chat line may hold several
+    (UN-RFC 0031 section 3.3). Grows with its text up to a few lines. ``value`` and
+    ``Submitted`` keep the shape of the Input it replaces."""
+
+    NEWLINE_KEYS = ("alt+enter", "shift+enter", "ctrl+j", "ctrl+enter")
+
+    class Submitted(Message_):
+        def __init__(self, box: "ChatBox", value: str):
+            super().__init__()
+            self.input, self.value = box, value
+
+        @property
+        def control(self) -> "ChatBox":
+            return self.input
+
+    def __init__(self, placeholder: str = "", **kw):
+        super().__init__("", soft_wrap=True, show_line_numbers=False, tab_behavior="focus", **kw)
+        self.placeholder = placeholder
+
+    @property
+    def value(self) -> str:
+        return self.text
+
+    @value.setter
+    def value(self, text: str) -> None:
+        self.load_text(text)
+        self.move_cursor(self.document.end)
+
+    async def _on_key(self, event) -> None:
+        if event.key == "enter":
+            event.stop(); event.prevent_default()
+            if not self.disabled:
+                self.post_message(self.Submitted(self, self.text))
+            return
+        if event.key in self.NEWLINE_KEYS:
+            event.stop(); event.prevent_default()
+            self.insert("\n")
+            return
+        await super()._on_key(event)
+
 
 class Dialog(ModalScreen):
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
@@ -2297,21 +2342,21 @@ class UnseenetApp(App):
     def _update_chat_input(self, gid: str | None) -> None:
         """The chat line is unavailable, with the reason as its placeholder, where a
         chat line would be refused - not after you typed one (#181)."""
-        box = self.query_one("#chat-input", Input)
+        box = self.query_one("#chat-input", ChatBox)
         p = (self.session.write_permission(gid, kind=KIND_CHAT)
              if gid and not gid.startswith(CONTACT) and gid not in ACROSS else None)
         if p is not None and not p:
             box.disabled, box.placeholder = True, p.reason
         else:
             box.disabled = False
-            box.placeholder = "Write a message - Enter sends, Esc for the shortcuts" + (
+            box.placeholder = "Write a message - Enter sends, Alt+Enter new line, Esc for the shortcuts" + (
                 ", Ctrl+F attaches files" if gid and self._chat_takes_files(gid) else "")
         self._show_chat_files(gid)
 
     def _focus_view(self, gid: str) -> None:
         if self.view_of(gid) != "chat":
             self.query_one("#threads").focus()
-        elif self.query_one("#chat-input", Input).disabled:
+        elif self.query_one("#chat-input", ChatBox).disabled:
             self.query_one("#chat-log").focus()
         else:
             self.query_one("#chat-input").focus()
@@ -2351,8 +2396,8 @@ class UnseenetApp(App):
                 with Vertical(id="chat"):
                     yield Static("", id="chat-pins", markup=False)
                     yield RichLog(id="chat-log", wrap=True, markup=False, highlight=False)
-                    yield Input(placeholder="Write a message - Enter sends, Esc for the shortcuts",
-                                id="chat-input")
+                    yield ChatBox(placeholder="Write a message - Enter sends, Alt+Enter new "
+                                  "line, Esc for the shortcuts", id="chat-input")
         yield Static("", id="status", markup=False)
         yield Footer()
 
@@ -3064,8 +3109,8 @@ class UnseenetApp(App):
         self._render_threads()
         self._focus_view(gid)
 
-    @on(Input.Submitted, "#chat-input")
-    def _chat_submit(self, event: Input.Submitted) -> None:
+    @on(ChatBox.Submitted, "#chat-input")
+    def _chat_submit(self, event: ChatBox.Submitted) -> None:
         text = event.value.strip()
         if not text or not self.current_group or event.input.disabled:
             return
@@ -3105,7 +3150,7 @@ class UnseenetApp(App):
 
     def _show_chat_files(self, gid: str | None) -> None:
         """What goes with the next chat line, under the chat input."""
-        box = self.query_one("#chat-input", Input)
+        box = self.query_one("#chat-input", ChatBox)
         files = self.chat_files.get(gid or "", [])
         box.border_subtitle = (f"+ {len(files)} file{'s' if len(files) > 1 else ''}: "
                                + ", ".join(Path(f).name for f in files)
@@ -3150,7 +3195,7 @@ class UnseenetApp(App):
                 await self.session.send_chat(gid, text, files=prepared)
             else:
                 if not await self._accept_portals(gid):
-                    self.query_one("#chat-input", Input).value = text
+                    self.query_one("#chat-input", ChatBox).value = text
                     self.set_status("")
                     self.pending[gid].remove(entry)
                     if self.current_group == gid:
@@ -3171,7 +3216,7 @@ class UnseenetApp(App):
         except (SessionError, OSError, ConnectionError, ValueError) as exc:
             entry["state"] = "failed"
             self.notify(f"Not sent: {exc}", severity="error", timeout=8)
-            self.query_one("#chat-input", Input).value = text       # give the text back
+            self.query_one("#chat-input", ChatBox).value = text       # give the text back
             if files:
                 self.chat_files[gid] = files                        # and the files
                 self._show_chat_files(gid)
