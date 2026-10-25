@@ -1,54 +1,24 @@
 name: docs
+# The docs this repository keeps, checked strictly on pull requests (and
+# by hand). unseenet.org itself is built and published by unseenet/unseenet-docs,
+# which gathers these pages and the UN-RFCs (#547).
 on:
-  push:
-    branches: [main]
-    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/build_docs.sh", "site-extra/**", "tools/docs_hooks.py", "tools/guide_diagram.py", "src/unseenet/core/about.py", ".github/workflows/docs.yml",
-            # the developers' reference is generated from these docstrings
+  pull_request:
+    paths: ["docs/**", "rfc/**", "mkdocs.yml", "tools/docs_check.sh",
             "src/unseenet/client/session/**", "src/unseenet/client/localapi/**",
             "src/unseenet/node/server/**", "src/unseenet/core/store/**"]
-  # After a release or a new development build, so the front page shows its version
-  workflow_run:
-    workflows: [release, portable]
-    types: [completed]
   workflow_dispatch:
-
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
+env:
+  DISABLE_MKDOCS_2_WARNING: "true"
 jobs:
-  build:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event != 'pull_request')
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0               # tags, for the version on the front page without network
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install mkdocs-material "mkdocstrings[python]" mkdocs-redirects ruff
-      - run: tools/build_docs.sh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}   # the front page asks for the newest releases
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - run: pip install mkdocs-material "mkdocstrings[python]"
+      - run: tools/docs_check.sh

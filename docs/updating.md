@@ -93,7 +93,7 @@ leaves the maintainer's computer. **Development builds** are signed in
 GitHub Actions with a separate release key, which the updater accepts only
 when you ask for a development build. So even someone who took over the
 GitHub project could not send an update to sticks that follow releases. See
-[the project's keys](project/keys.md).
+[the project's keys](https://unseenet.org/project/keys/).
 
 It also refuses an older version than the one you have (unless you give
 `--force`), and a zip meant for another kind of installation.

@@ -13,7 +13,7 @@ There are three ways in:
 |---|---|---|
 | A program in Python | `Session` (and `ClientRuntime`) | this page, then [the Session reference](session.md) |
 | A program in any language | The local client API: HTTP and a WebSocket on 127.0.0.1 | [UN-RFC 0046](../spec/un-rfc-0046.md) and [Local client API](localapi.md) |
-| Only reading, with a newsreader | ONNTP, which is NNTP over Tor | [Other newsreaders](../other-clients.md) |
+| Only reading, with a newsreader | ONNTP, which is NNTP over Tor | [Other newsreaders](https://unseenet.org/other-clients/) |
 
 ## A client in Python
 

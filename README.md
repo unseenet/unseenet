@@ -68,7 +68,7 @@ The heart of Unseenet: the protocol and the code every other part builds on.
 | **The terminal client** | [`src/unseenet/client/tui.py`](src/unseenet/client/tui.py) | `unseenet-tui`, for now. It moves to [unseenet-tui](https://github.com/unseenet/unseenet-tui) (#548). |
 | **Builds** | [`tools/build_portable.py`](tools/build_portable.py), [`tools/image/`](tools/image/) | The portable zips and the bootable image, for now. They move to unseenet-portable and unseenet-bootable (#549, #550); see [builds](#builds). |
 | **The project** | [`tools/project/`](tools/project/), [`src/unseenet/*.json`](src/unseenet/) | The owner's scripts (no secrets), the known-node, entrance and hierarchy lists, the network health checks. |
-| **The site** | [`docs/`](docs/), [`mkdocs.yml`](mkdocs.yml) | unseenet.org, for now. It moves to [unseenet-docs](https://github.com/unseenet/unseenet-docs) (#547); this repo keeps the docs of what it holds: the CLI, the node, the local API and the developers' reference. |
+| **Docs** | [`docs/`](docs/) | The pages about what this repository holds - the node, the local API, the developers' reference, and for now the clients and builds - gathered into unseenet.org by [unseenet-docs](https://github.com/unseenet/unseenet-docs) (#547). `tools/docs_check.sh` previews and checks them. |
 
 ### Getting started
 
