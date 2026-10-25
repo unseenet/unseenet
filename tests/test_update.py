@@ -61,6 +61,13 @@ def test_versions_order_pre_releases():
     assert update.version_key("0.3.0") > update.version_key("0.3.0a2.dev10")
 
 
+def test_versions_order_post_releases():
+    """A bundle rebuilt with newer clients (0.6.0.post1) is offered over 0.6.0 (#546)."""
+    order = ["0.6.0rc1", "0.6.0", "0.6.0.post1.dev3", "0.6.0.post1", "0.6.0.post2",
+             "0.6.1.dev1", "0.6.1"]
+    assert sorted(reversed(order), key=update.version_key) == order
+
+
 def test_stable_trusts_only_the_project_key(keys, tmp_path):
     project, release = keys
     sums = sums_for(update_zip(tmp_path, {"a": "1"}))
@@ -189,6 +196,36 @@ def test_command_downloads_checks_and_updates(keys, tmp_path, monkeypatch, capsy
     with pytest.raises(SystemExit) as exit_:
         update.main(["--media", str(media), "--yes", "--no-tor", "--force"])
     assert exit_.value.code == 2 and "not trusted" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("serving", [update.RELEASE_REPOS[0], update.REPO])
+def test_command_finds_the_release_in_any_release_repo(keys, tmp_path, monkeypatch, capsys,
+                                                         serving):
+    """The build repos first, unseenet as fallback; a repo without the files is no error."""
+    project, release = keys
+    media = stick(tmp_path, OLD)
+    z = update_zip(tmp_path, {"boot/vmlinuz-lts": "new kernel"}, version="9.0.1.post1")
+    sums = sums_for(z)
+    served = {update.SUMS: sums, update.SIG: update.signature_text(sums, project).encode(),
+              z.name: z.read_bytes()}
+    asked = []
+
+    def fake_fetch(url, socks_port, dest=None, progress=None):
+        asked.append(url)
+        if not url.startswith(serving + "/"):
+            raise update.UpdateError(f"not found: {url}")
+        data = served[url.rsplit("/", 1)[1]]
+        if dest is None:
+            return data
+        dest.write_bytes(data)
+        return b""
+
+    monkeypatch.setattr(update, "fetch", fake_fetch)
+    with pytest.raises(SystemExit) as exit_:
+        update.main(["--media", str(media), "--yes", "--no-tor"])
+    assert exit_.value.code == 0
+    assert (media / "boot/vmlinuz-lts").read_text() == "new kernel"
+    assert asked[0].startswith(update.RELEASE_REPOS[0])     # the new place is asked first
 
 
 def test_offline_zip_needs_its_signed_sums(keys, tmp_path, capsys):
