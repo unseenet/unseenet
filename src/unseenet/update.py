@@ -53,9 +53,12 @@ from .core import crypto
 from .known_nodes import ENTRANCES_GROUP, PROJECT_KEY, RELEASES_GROUP
 
 PURPOSE_RELEASE = crypto.PURPOSE_RELEASE
-# CI signs development builds with this key (GitHub secret UNSEENET_RELEASE_KEY).
+# CI signs development builds with a release key (GitHub secret UNSEENET_RELEASE_KEY):
+# unseenet's own, and the one the build repositories share (#549, #550), made with
+# tools/project/new_release_key.py. Both are trusted while unseenet still builds.
 DEV_RELEASE_KEY = "ed25519:clbv6765nyz74fxm5qb4ktmdtuyotgxe3h3yozjlgneh7jserf2a"
-TRUSTED = {"stable": (PROJECT_KEY,), "dev": (PROJECT_KEY, DEV_RELEASE_KEY)}
+DEV_RELEASE_KEYS: tuple[str, ...] = (DEV_RELEASE_KEY,)
+TRUSTED = {"stable": (PROJECT_KEY,), "dev": (PROJECT_KEY, *DEV_RELEASE_KEYS)}
 
 REPO = "https://github.com/unseenet/unseenet"
 # Where releases are looked for, in order (#546): the build repos the portable zips

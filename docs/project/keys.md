@@ -11,8 +11,8 @@ project of their own.
 | Key | Kept | Can |
 |-----|------|-----|
 | **Project key** `ed25519:det5dxev...` (fingerprint `ph5fc5hop5232qsz`) | Only in the maintainer's encrypted owner vault, offline backups | Change the project's groups: who may post, the registrar's keys, the claim inbox |
-| **GitHub poster** | Repository secret `UNSEENET_ANNOUNCE_SEED` of unseenet and unseenet-entrance, and the owner vault | Post in `unseenet.announce`, `unseenet.nodes`, `unseenet.entrances`, `unseenet.releases`, `unseenet.hierarchies`, `unseenet.checkgroups` |
-| **Release key** `ed25519:clbv6765...` | Repository secret `UNSEENET_RELEASE_KEY` only | Sign the checksums of development builds, which sticks accept only on the development channel |
+| **GitHub poster** | Repository secret `UNSEENET_ANNOUNCE_SEED` of unseenet, unseenet-entrance and unseenet-portable, and the owner vault | Post in `unseenet.announce`, `unseenet.nodes`, `unseenet.entrances`, `unseenet.releases`, `unseenet.hierarchies`, `unseenet.checkgroups` |
+| **Release keys** `ed25519:clbv6765...` (unseenet) and one shared by unseenet-portable and unseenet-bootable | Repository secret `UNSEENET_RELEASE_KEY` only - never in a file, not even the owner vault; a lost one is simply replaced | Sign the checksums of development builds, which sticks accept only on the development channel |
 | **Registrar keys**, one per replica | On each replica's machine, in its vault | Sign name certificates in `unseenet.names` |
 | **Registrar inbox key** | The owner vault and every replica's vault | Open claims; nothing else |
 | **Bot keys**, one per bot ([unseenet-bots](https://github.com/unseenet/unseenet-bots)) | On `unseenet-node3`, user `bots`, in `/home/bots/.config/unseenet-bots/` | Post new threads in their own channel |
@@ -47,9 +47,9 @@ the command line.
 | `change_passphrase.py` | Encrypts the owner vault again under a new passphrase, checks that it opens, and keeps the old file until you delete it. |
 | `create_groups.py` | Lists every group the project owns, with its type, posters, view and rules. Creates those that do not exist yet, and gives existing ones a new manifest when their view, title, description, rules or `min_pow` differ from the list. |
 | `sign_release.py vX.Y.Z` | Signs a release's `SHA256SUMS.txt` with the project key and uploads `SHA256SUMS.txt.sig`, so [sticks](../bootable.md#updating) will update to it. Run it when the release's workflows are done. |
-| `share_poster.py REPO` | Puts the GitHub poster key into another of the project's repositories as a secret (unseenet-entrance, which posts new versions of the web client). |
+| `share_poster.py REPO` | Puts the GitHub poster key into another of the project's repositories as a secret (unseenet-entrance, which posts new versions of the web client; unseenet-portable, which announces development builds). |
 | `poster_profile.py` | Publishes the GitHub poster's public profile with the bot mark, so readers who click its name see what it is: the About text from [`poster_profile.md`](https://github.com/unseenet/unseenet/blob/main/tools/project/poster_profile.md), the project's links and the project icon as its picture. Takes `--dry-run`. |
-| `new_release_key.py` | Makes a new release key for development builds and puts it straight into the repository secret (never in a file); prints the public key to pin in `src/unseenet/update.py`. |
+| `new_release_key.py [REPO ...]` | Makes a new release key for development builds and puts it straight into the repository secrets (never in a file) - by default unseenet-portable and unseenet-bootable, which share one; prints the public key to add to `DEV_RELEASE_KEYS` in `src/unseenet/update.py`. |
 | `setup_registrar.py` | Creates the registrar's inbox key and claim inbox, and sets which replicas' keys may issue names (`--add`, `--remove`). |
 
 `create_groups.py` and `setup_registrar.py` take `--dry-run`, which signs

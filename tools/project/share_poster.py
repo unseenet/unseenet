@@ -7,7 +7,8 @@ The GitHub poster is the key the project key lists as a poster in its
 channels (create_groups.py). It is kept in the owner vault and as the secret
 UNSEENET_ANNOUNCE_SEED of unseenet/unseenet. This puts the same secret into
 the repository given, so that its CI can post too: unseenet-entrance posts new
-versions of the web client in unseenet.releases.
+versions of the web client in unseenet.releases, and unseenet-portable
+announces its development builds there (#549).
 
 The seed goes straight from the vault to ``gh secret set`` and is never shown
 or written to a file. To take it away again, delete the secret on GitHub; if
@@ -26,7 +27,7 @@ from _owner import open_owner_session
 from unseenet.core import crypto
 
 SECRET = "UNSEENET_ANNOUNCE_SEED"
-ALLOWED = {"unseenet/unseenet", "unseenet/unseenet-entrance"}
+ALLOWED = {"unseenet/unseenet", "unseenet/unseenet-entrance", "unseenet/unseenet-portable"}
 
 
 def main() -> None:
