@@ -54,8 +54,8 @@ protect anyone yet.
     and <strong>in your browser</strong>: open
     <a href="https://entrance.unseenet.net/">entrance.unseenet.net</a>, also on
     a phone or a tablet, with nothing to install.</p>
-    <p class="un-web__note">In a browser you can read, but not yet post on nodes
-    from 0.4 on: that comes when key ripening runs in the browser.</p>
+    <p class="un-web__note">In a browser your first post waits a few minutes, once,
+    while your new key ripens.</p>
     <p class="un-web__links"><a href="graphical/">The graphical client</a> · <a href="web/">In your browser</a> · <a href="https://github.com/unseenet/unseenet-gui/releases/latest">Downloads</a></p>
   </div>
   <div class="un-web__shots">

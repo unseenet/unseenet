@@ -14,12 +14,12 @@ anything. Read [What you give up](#what-you-give-up) before you rely on it.
     Neither the web entrance nor the Unseenet core has had a security review.
     Play with it; do not rely on it to protect anyone yet.
 
-!!! note "Reading, not posting yet"
-    Nodes from Unseenet 0.4 take posts only from keys that have
+!!! note "Your first post waits a little"
+    Nodes take posts only from keys that have
     [ripened](spec/un-rfc-0025.md) - a few minutes of work, once per key. The
-    browser cannot do that work yet (unseenet-gui#31), so in a browser you can
-    read everything but not post on those nodes. The portable and bootable
-    clients post as usual.
+    web client does that work in the browser, as the portable and bootable
+    clients do, so your first post waits while it runs; keep the page open.
+    It can take longer on a phone than on a laptop.
 
 ## What it is
 
