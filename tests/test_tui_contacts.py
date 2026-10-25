@@ -27,7 +27,8 @@ async def test_contacts_and_recipient_by_name(tmp_path, monkeypatch):
         assert app._recipient("Mi") is None                     # Mikkel and Mia: say which
         assert app._recipient("nobody") is None
         assert app._recipient(mia) == mia                       # a key still works
-        assert [n for _, n in s_contacts(app, "mi")] == ["Mia", "Mikkel"]   # any part, any case
+        # the keys are random, so the words searched for are long enough not to be in one
+        assert [n for _, n in s_contacts(app, "IKKEL")] == ["Mikkel"]      # any part, any case
         assert s_contacts(app, sonia.split(":", 1)[1][:12]) == [(sonia, "Sonia")]  # a key
         assert s_contacts(app, "nobody") == []
 
@@ -35,7 +36,7 @@ async def test_contacts_and_recipient_by_name(tmp_path, monkeypatch):
         assert await wait_for(pilot, lambda: isinstance(app.screen, ContactsDialog)), stack(app)
         dlg = app.screen
         assert dlg.query_one("#find").has_focus
-        await pilot.press("k", "k")                             # Mikkel only
+        await pilot.press(*"ikkel")                             # Mikkel only
         assert await wait_for(pilot, lambda: [n for _, n in dlg.shown] == ["Mikkel"], 400), \
             (dlg.query_one("#find").value, dlg.shown)
         assert "1 of 3" in str(dlg.query_one("#count").render())
@@ -49,7 +50,7 @@ async def test_contacts_and_recipient_by_name(tmp_path, monkeypatch):
 
         app.action_contacts()
         assert await wait_for(pilot, lambda: isinstance(app.screen, ContactsDialog)), stack(app)
-        await pilot.press("s", "o", "n", "enter")               # Enter chats with Sonia
+        await pilot.press(*"sonia", "enter")                    # Enter chats with Sonia
         assert await wait_for(pilot, lambda: app.current_group and sonia in app.current_group), \
             (app.current_group, stack(app))
         await pilot.press("q")
