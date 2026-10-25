@@ -1,10 +1,13 @@
 """Sign a development build's SHA256SUMS.txt in CI (the dev pre-release).
 
-    UNSEENET_RELEASE_KEY=<hex seed> python tools/sign_sums.py zips/SHA256SUMS.txt
+    UNSEENET_RELEASE_KEY=<hex seed> python tools/sign_sums.py [--no-update-zip] zips/SHA256SUMS.txt
 
 Writes SHA256SUMS.txt.sig next to it. The key is the release key, trusted only
 for the dev channel (unseenet.update); stable releases are signed by the
 maintainer with the project key (tools/project/sign_release.py).
+
+--no-update-zip: the sums are of portable builds only (unseenet-portable); the
+bootable image's update zip is in unseenet-bootable's own sums (#549, #550).
 """
 
 from __future__ import annotations
@@ -23,11 +26,15 @@ def main() -> None:
     seed = os.environ.get("UNSEENET_RELEASE_KEY", "").strip()
     if not seed:
         sys.exit("UNSEENET_RELEASE_KEY is not set")
-    sums_path = Path(sys.argv[1])
+    args = sys.argv[1:]
+    no_update_zip = "--no-update-zip" in args
+    args = [a for a in args if a != "--no-update-zip"]
+    sums_path = Path(args[0])
     sums = sums_path.read_bytes()
     sig = update.signature_text(sums, Identity.from_seed(bytes.fromhex(seed)))
     update.check_signature(sums, sig, "dev")      # fails if the secret is not the pinned key
-    update.update_zip_in(update.parse_sums(sums))  # and if the update zip is missing
+    if not no_update_zip:
+        update.update_zip_in(update.parse_sums(sums))  # and if the update zip is missing
     sums_path.with_name(update.SIG).write_text(sig)
     print(f"signed {sums_path}")
 
