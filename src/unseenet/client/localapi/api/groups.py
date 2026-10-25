@@ -39,7 +39,9 @@ class Groups:
                 continue                # listed as "My feed"/"My site" at the top instead (#495)
             tops.setdefault(g["hierarchy"], []).append(g)
         # every contact, also those whose chat is closed (they leave "people" then)
-        contacts = [{"id": CONTACT + k, "key": k, "name": name, "closed": s.chat_closed(k)}
+        # "names": the names they hold, so a client can search on them too (#523)
+        contacts = [{"id": CONTACT + k, "key": k, "name": name, "closed": s.chat_closed(k),
+                     "names": s.held_names(k)}
                     for k, name in s.contacts()]
         return {"groups": groups, "people": people, "contacts": contacts,
                 "hierarchies": [{"name": h, "tree": self._tree(h, gs)}
