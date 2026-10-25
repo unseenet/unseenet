@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Development builds** are made each night when `main` changed, by hand,
+  and on release tags - no longer after every merge (#544). Sticks on the
+  development channel get at most one update a day.
+
 ## [0.5.0] - 2026-10-25
 
 **Feeds, sites, pictures and files. Update the nodes first, then the

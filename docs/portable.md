@@ -47,10 +47,10 @@ Check the download against `SHA256SUMS.txt` from the same release:
 |------|---------|-------|-----|
 | **Release** | `0.3.1` | [Releases](https://github.com/unseenet/unseenet/releases) | Everyday use |
 | **Test release** | `0.3.1a1` (alpha), `b1`, `rc1` | Releases, marked *Pre-release* | Trying what comes next, before it is released |
-| **Development build** | `0.3.1.dev3` | [Development build](https://github.com/unseenet/unseenet/releases/tag/dev) | The newest code: built after every change, replaced each time |
+| **Development build** | `0.3.1.dev3` | [Development build](https://github.com/unseenet/unseenet/releases/tag/dev) | The newest code: built each night when something changed, replaced each time |
 
-A development build is made and self-tested automatically after every change
-to the code, so you can try a fix the same day. `0.3.1.dev3` is the third
+A development build is made and self-tested automatically each night when
+the code has changed, so you can try a fix the next morning. `0.3.1.dev3` is the third
 change after 0.3.0. It may have bugs a release would not. If you report one,
 give the version: the About screen (F1) shows it, or `unseenet --version`.
 
