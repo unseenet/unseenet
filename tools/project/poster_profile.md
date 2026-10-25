@@ -6,18 +6,18 @@ no person reads or writes here.
 
 ## Where it posts
 
-- [unseenet.announce](unseenet:join?g=unseenet.announce@ph5fc5hop5232qsz) -
+- [unseenet.announce](unseenet:unseenet.announce@ph5fc5hop5232qsz) -
   releases and important news
-- [unseenet.nodes](unseenet:join?g=unseenet.nodes@ph5fc5hop5232qsz) -
+- [unseenet.nodes](unseenet:unseenet.nodes@ph5fc5hop5232qsz) -
   the list of known nodes
-- [unseenet.hierarchies](unseenet:join?g=unseenet.hierarchies@ph5fc5hop5232qsz) and
-  [unseenet.checkgroups](unseenet:join?g=unseenet.checkgroups@ph5fc5hop5232qsz) -
+- [unseenet.hierarchies](unseenet:unseenet.hierarchies@ph5fc5hop5232qsz) and
+  [unseenet.checkgroups](unseenet:unseenet.checkgroups@ph5fc5hop5232qsz) -
   hierarchies and their groups
-- [unseenet.canary](unseenet:join?g=unseenet.canary@ph5fc5hop5232qsz) -
+- [unseenet.canary](unseenet:unseenet.canary@ph5fc5hop5232qsz) -
   the project's warrant canary
 
 ## Want to talk?
 
-Questions go to [unseenet.help](unseenet:join?g=unseenet.help@ph5fc5hop5232qsz),
-and the project talks in [unseenet](unseenet:join?g=unseenet@ph5fc5hop5232qsz).
+Questions go to [unseenet.help](unseenet:unseenet.help@ph5fc5hop5232qsz),
+and the project talks in [unseenet](unseenet:unseenet@ph5fc5hop5232qsz).
 The project is run by [Andreas](unseenet:b4xkhrco5yii4dw7).
