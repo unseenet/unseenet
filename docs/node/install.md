@@ -103,7 +103,7 @@ Starting Tor ...
 Node is reachable at f6vnchi5....onion
 ```
 
-Then connect to it with the [client](../client.md). A new node carries no
+Then connect to it with the [client](https://unseenet.org/client/). A new node carries no
 groups yet: create one, or [peer](peering.md) with a node that has some.
 
 ## Manual installation

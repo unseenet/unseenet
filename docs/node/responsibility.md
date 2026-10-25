@@ -33,7 +33,7 @@ node is open to anyone.
   host, drop it from your node with `--drop-group` (see
   [Operations](operations.md#dropping-a-group)). The node deletes it and
   refuses it from then on.
-- **Read your contact inbox.** Readers can [report a post](../client.md#reporting-a-post)
+- **Read your contact inbox.** Readers can [report a post](https://unseenet.org/client/#reporting-a-post)
   to you through your node's contact inbox (UN-RFC 0011). Look at reports
   and act on them: drop the group, or turn on
   [`honour_blocks`](configuration.md#honour_blocks-maintainers-blocks) to

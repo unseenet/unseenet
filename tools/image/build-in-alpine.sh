@@ -104,7 +104,9 @@ mkinitfs -F "ata base cdrom ext4 keymap mmc nvme scsi squashfs usb virtio" \
 
 log "Unseenet itself (a Python environment for the running system)"
 python3 -m venv /opt/unseenet
-/opt/unseenet/bin/pip install -q --no-cache-dir "/src[tui,monitor]"
+# the terminal client comes from unseenet-tui (#548); UNSEENET_TUI names which
+TUI=${UNSEENET_TUI:-"unseenet-tui @ https://github.com/unseenet/unseenet-tui/archive/refs/heads/main.tar.gz"}
+/opt/unseenet/bin/pip install -q --no-cache-dir "/src[monitor]" "$TUI"
 sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" \
     /opt/unseenet/lib/python3*/site-packages/unseenet/__init__.py
 find /opt/unseenet -name __pycache__ -type d -prune -exec rm -rf {} +

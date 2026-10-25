@@ -49,7 +49,7 @@ restored.)
 
 If the group is **yours** - created by an identity you have - remove it
 from the whole network instead, with `unseenet group-remove` or in the
-client (see [Leaving and removing groups](../client.md#leaving-and-removing-groups)).
+client (see [Leaving and removing groups](https://unseenet.org/client/#leaving-and-removing-groups)).
 
 The command works while the node is running.
 

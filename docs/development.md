@@ -73,10 +73,14 @@ groups = "dk.*,comp.*"
 key = "ed25519:..."            # the friend's node key (UN-RFC 0016)
 ```
 
-The documentation is built with `tools/build_docs.sh` (`pip install
-mkdocs-material "mkdocstrings[python]" mkdocs-redirects`). The screenshots of the client in
-[Using the client](client.md) are made by `tools/docs_screenshots.py`: it
-starts a node on your machine without Tor, fills it with made-up people,
+The site unseenet.org is built by
+[unseenet-docs](https://github.com/unseenet/unseenet-docs), which gathers the
+pages of this repository's `docs/` and the UN-RFCs (#547);
+`tools/docs_check.sh` previews and checks the pages kept here
+(`pip install mkdocs-material "mkdocstrings[python]"`). The screenshots of the
+terminal client in [Using the client](https://unseenet.org/client/) are made by
+`tools/docs_screenshots.py` in [unseenet-tui](https://github.com/unseenet/unseenet-tui):
+it starts a node on your machine without Tor, fills it with made-up people,
 groups and posts, drives `unseenet-tui` headless and writes
 `docs/img/client-*.svg`. Run it again when the client's look changes, and
 commit the files.
@@ -84,7 +88,7 @@ commit the files.
 The recordings on the front page are made the same way, from the same
 made-up content:
 
-- `tools/docs_recording.py` runs the real client in a pseudo-terminal,
+- `tools/docs_recording.py` (in unseenet-tui) runs the real client in a pseudo-terminal,
   types into it and saves `docs/img/demo.cast`, which the bundled
   [asciinema player](https://github.com/asciinema/asciinema-player) plays
   (`pip install pexpect`; `--gif docs/img/demo.gif` also renders the GIF for

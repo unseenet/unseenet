@@ -65,7 +65,6 @@ The heart of Unseenet: the protocol and the code every other part builds on.
 | **The core** | [`src/unseenet/core/`](src/unseenet/core/), [`client/session/`](src/unseenet/client/session/) | The library: articles, signing and keys, the vault, proof-of-work and key ripening, groups, profiles, pages, files; `Session`, which every client (CLI, TUI, the graphical client, bots, gateways) is built on; the local client API (`client/localapi/`). On PyPI as [`unseenet`](https://pypi.org/project/unseenet/). |
 | **The node** | [`src/unseenet/node/`](src/unseenet/node/), [`deploy/`](deploy/), [`docker/`](docker/) | `unseenet-node`, the server that stores groups and peers with other nodes over Tor; the installer, systemd units and Docker image; `unseenet-monitor`, the node operator's terminal view; `unseenet-registrar` for names. |
 | **The command-line client** | [`src/unseenet/cli/`](src/unseenet/cli/) | `unseenet`: everything the core can do, from a shell or a script - the client to show and test the core. |
-| **The terminal client** | [`src/unseenet/client/tui.py`](src/unseenet/client/tui.py) | `unseenet-tui`, for now. It moves to [unseenet-tui](https://github.com/unseenet/unseenet-tui) (#548). |
 | **Builds** | [`tools/build_portable.py`](tools/build_portable.py), [`tools/image/`](tools/image/) | The portable zips and the bootable image, for now. They move to unseenet-portable and unseenet-bootable (#549, #550); see [builds](#builds). |
 | **The project** | [`tools/project/`](tools/project/), [`src/unseenet/*.json`](src/unseenet/) | The owner's scripts (no secrets), the known-node, entrance and hierarchy lists, the network health checks. |
 | **Docs** | [`docs/`](docs/) | The pages about what this repository holds - the node, the local API, the developers' reference, and for now the clients and builds - gathered into unseenet.org by [unseenet-docs](https://github.com/unseenet/unseenet-docs) (#547). `tools/docs_check.sh` previews and checks them. |
@@ -77,7 +76,7 @@ The heart of Unseenet: the protocol and the code every other part builds on.
 | **Portable (Linux, macOS, Windows) · Terminal** | Download a zip from the [releases](https://github.com/unseenet/unseenet/releases), unzip, start. Tor is included. [Guide](https://unseenet.org/portable/) |
 | **Bootable (USB, SSD etc.) · Terminal** | Unseenet in a text console, from memory. [Guide](https://unseenet.org/bootable/) |
 | **Graphical client** | Unseenet in a window, Portable or Bootable: [unseenet-gui](https://github.com/unseenet/unseenet-gui). [Guide](https://unseenet.org/graphical/) |
-| **Python** | `pipx install "unseenet[tui]"`, then `unseenet-tui` (needs Python 3.11+ and `tor`). [Using the client](https://unseenet.org/client/) |
+| **Python** | The terminal client: `pipx install unseenet-tui`, then `unseenet-tui` (needs Python 3.11+ and `tor`); the core and CLI alone: `pipx install unseenet`. [Using the client](https://unseenet.org/client/) |
 | **Other newsreaders** | Read with tin, Thunderbird and friends. [Guide](https://unseenet.org/other-clients/) |
 | **A node** | `curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh \| sudo bash` on Debian or Ubuntu, or [Docker](https://unseenet.org/node/docker/). [Guide](https://unseenet.org/node/install/) |
 
@@ -102,7 +101,7 @@ Unseenet is made in several repositories, each released on its own:
 | Repository | What it is |
 |---|---|
 | [unseenet](https://github.com/unseenet/unseenet) | The protocol (UN-RFCs), the core library, the node and the command-line client |
-| [unseenet-tui](https://github.com/unseenet/unseenet-tui) | The terminal client (moving here from unseenet, unseenet#548) |
+| [unseenet-tui](https://github.com/unseenet/unseenet-tui) | The terminal client |
 | [unseenet-gui](https://github.com/unseenet/unseenet-gui) | The graphical client - in a window, booted, or in a browser |
 | [unseenet-portable](https://github.com/unseenet/unseenet-portable) | Builds the portable clients, Terminal and Graphical, with Tor inside (unseenet#549) |
 | [unseenet-bootable](https://github.com/unseenet/unseenet-bootable) | Builds the bootable images, Terminal and Graphical, and later a node image (unseenet#550) |

@@ -3,7 +3,7 @@
 The graphical client is Unseenet in a window: your groups on the left,
 threads you click through, chat that looks like chat, your private posts and
 contacts, and the groups you run. It uses the same groups, keys and vault as
-the [terminal client](client.md), and lives in its own repository,
+the [terminal client](https://unseenet.org/client/), and lives in its own repository,
 [unseenet/unseenet-gui](https://github.com/unseenet/unseenet-gui).
 
 !!! warning "Pre-alpha"
@@ -104,7 +104,7 @@ first post waits a few minutes more, once, while your new key
 - A light and a dark theme, and phones and other narrow screens. On the
   bootable image also the network, Wi-Fi, the keyboard, restart and shut down.
 
-Not yet - use the [terminal client](client.md): Tor bridges and several
+Not yet - use the [terminal client](https://unseenet.org/client/): Tor bridges and several
 identities. **Updating** a stick or portable folder of the graphical client
 is not there yet either, because its builds are not signed yet: download the
 new release for now.
@@ -139,7 +139,7 @@ opened by themselves, because following one would leave Tor. The
 ## With pip
 
 You need Python 3.11 or newer and Tor installed (the portable and bootable
-builds bring their own), as for the [terminal client](client.md):
+builds bring their own), as for the [terminal client](https://unseenet.org/client/):
 
 ```sh
 pip install unseenet-gui

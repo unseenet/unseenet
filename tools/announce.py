@@ -74,14 +74,14 @@ def release_post(tag: str) -> tuple[str, str]:
                 f"{changelog_section(version)}\n"
                 f"Downloads:  {REPO}/releases/tag/{tag}\n"
                 f"Check them against SHA256SUMS.txt from the same page.\n\n"
-                f"With Python:  pipx install --pip-args=--pre \"unseenet[tui]\"\n")
+                f"With Python:  pipx install --pip-args=--pre unseenet-tui\n")
         return f"Unseenet {version} - test release", body
     body = (f"Unseenet {version} is out.\n\n"
             f"{changelog_section(version)}\n"
             f"Downloads, with Tor inside for Windows, macOS and Linux, and the\n"
             f"all-in-one USB zip:\n  {REPO}/releases/tag/{tag}\n"
             f"Check them against SHA256SUMS.txt from the same page.\n\n"
-            f"With Python:  pipx upgrade unseenet   (or: pipx install \"unseenet[tui]\")\n")
+            f"With Python:  pipx upgrade unseenet-tui   (or: pipx install unseenet-tui)\n")
     return f"Unseenet {version} released", body
 
 

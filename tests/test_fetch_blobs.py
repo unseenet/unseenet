@@ -169,14 +169,3 @@ def test_alt_and_dim_in_the_headers():
     assert "alt=" not in plain and "dim=" not in plain                  # as before
     [_, (_, cut)] = bl.attachment_headers([("a.png", "image/png", data, "æ" * 400, None)])
     assert bl.shown_attachments([("Attachment-1", cut)])[0]["alt"] == "æ" * 256   # 512 octets
-
-
-def test_the_terminal_lists_files_and_saves_them_under_safe_names(tmp_path):
-    from unseenet.client import tui
-    text = tui.attachments_text([{"blob": "b", "type": "image/png", "size": 12345,
-                                  "name": "foto.png", "alt": "En hund", "dim": [40, 30]}]).plain
-    assert "foto.png - picture, 12 KiB, 40×30" in text and "En hund" in text
-    (tmp_path / "a.png").write_text("x")
-    assert tui.save_name(tmp_path, "../../etc/a.png") == tmp_path / "a (2).png"   # never a path
-    assert tui.save_name(tmp_path, ".bashrc") == tmp_path / "bashrc"              # nothing hidden
-    assert tui.save_name(tmp_path, "") == tmp_path / "file"
