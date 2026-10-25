@@ -1358,7 +1358,7 @@ async def test_tui_chat_input_says_why_you_cannot_write(tmp_path, monkeypatch):
     async with app.run_test(size=(120, 36)) as pilot:
         assert await app_ready(pilot, app)
         app.select_group(gid)
-        box = app.query_one("#chat-input", Input)
+        box = app.query_one("#chat-input")
         assert await wait_for(pilot, lambda: app.current_group == gid and box.disabled, 300)
         assert "only the owner and posters" in box.placeholder
         assert app.focused is None or app.focused.id != "chat-input"
@@ -1797,4 +1797,41 @@ async def test_tui_footer_keys_of_the_view_and_next_unread(tmp_path, monkeypatch
         app.query_one("#chat-input").focus()
         await pilot.pause(0.2)
         assert not app.check_action("next_unread", ())              # typing: the letters are text
+    server.close()
+
+
+async def test_tui_chat_line_on_several_lines(tmp_path, monkeypatch):
+    """#530: Enter sends, Alt+Enter (and Shift+Enter, Ctrl+J) start a new line."""
+    import unseenet.client.session as sess
+    monkeypatch.setattr(sess, "DEFAULT_POW", 10)
+    node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    gid = await me.create_group("chat.lines", "open", view="chat", low_latency=True, min_pow=9)
+    me.data["starter_groups"] = 99
+    await me.close()
+    monkeypatch.setenv("UNSEENET_PASSPHRASE", "pw")
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    app = UnseenetApp(tmp_path / "me.vault")
+    async with app.run_test(size=(140, 40)) as pilot:
+        assert await app_ready(pilot, app), stack(app)
+        assert await wait_for(pilot, lambda: gid in app.groups, 300)
+        app.select_group(gid)
+        await pilot.pause(0.3)
+        sent = []
+        async def keep(g, text, files=None):
+            sent.append(text)
+            return "<x@y>"
+        monkeypatch.setattr(app.session, "send_chat", keep)
+        box = app.query_one("#chat-input")
+        box.focus()
+        await pilot.press(*"one", "alt+enter", *"two", "shift+enter", *"three", "ctrl+j", *"four")
+        assert box.value == "one\ntwo\nthree\nfour"
+        assert not sent
+        await pilot.press("enter")
+        assert await wait_for(pilot, lambda: sent == ["one\ntwo\nthree\nfour"], 200), sent
+        assert box.value == ""
+        assert "Alt+Enter new line" in str(box.placeholder)
     server.close()
