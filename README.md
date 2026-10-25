@@ -89,9 +89,11 @@ any time while Unseenet is pre-alpha.
 ### Builds
 
 Merging to `main` runs the tests, nothing more. The portable zips and the
-bootable image are built **each night** when the software changed (the
-[development build](https://github.com/unseenet/unseenet/releases/tag/dev)),
-**by hand** from the Actions tab, and for **releases** (version tags). See
+bootable images are built in [unseenet-portable](https://github.com/unseenet/unseenet-portable)
+and [unseenet-bootable](https://github.com/unseenet/unseenet-bootable):
+**each night** when the core or a client changed (their
+[development build](https://github.com/unseenet/unseenet-portable/releases/tag/dev)),
+**by hand**, and for **releases**. See
 [Development](https://unseenet.org/development/#test-releases-and-development-builds).
 
 ## Part of Unseenet

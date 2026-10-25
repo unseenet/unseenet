@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The portable and bootable builds are made in unseenet-portable and
+  unseenet-bootable** (#549, #550), nightly, by hand and for releases; this
+  repository no longer builds them. Development builds are
+  [there](https://github.com/unseenet/unseenet-portable/releases/tag/dev).
+
 - **The terminal client has moved to [unseenet-tui](https://github.com/unseenet/unseenet-tui)**
   (#548), with its history: `pipx install unseenet-tui` (0.1.0 is the client
   of unseenet 0.5). The `unseenet-tui` command is gone from this package, and
