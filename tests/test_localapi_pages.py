@@ -120,3 +120,18 @@ async def test_a_site_its_pages_and_versions(tmp_path, monkeypatch):
     await owner.close()
     await other.close()
     server.close()
+
+
+async def test_a_sites_index_setting(tmp_path, monkeypatch):
+    """A site says whether it wants to be indexed by search engines through the web
+    form (UN-RFC 0035 section 3, gui#98): settable in the local API, yes or no."""
+    server, owner, other, api = await _setup(tmp_path, monkeypatch)
+    gid = (await api.start_feed({"title": "Min side"}, "site"))["id"]
+    assert api.site(gid)["index"] == "no"
+    await api.group_settings(gid, {"index": "yes"})
+    assert api.site(gid)["index"] == "yes"
+    with pytest.raises(SessionError):
+        await api.group_settings(gid, {"index": "maybe"})
+    await owner.close()
+    await other.close()
+    server.close()

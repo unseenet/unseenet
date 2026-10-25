@@ -75,6 +75,8 @@ class Running:
                 changes["reactions"] = []
             elif r != "any" and not (isinstance(r, list) and all(isinstance(e, str) for e in r)):
                 raise SessionError('reactions is "default", "none", "any" or a list of emoji')
+        if "index" in changes and changes["index"] not in ("yes", "no"):
+            raise SessionError('index is "yes" or "no"')    # a site's (UN-RFC 0035 section 3)
         if "kinds" in changes:
             if changes["kinds"] not in KINDS:
                 raise SessionError("kinds is both, post or chat")
