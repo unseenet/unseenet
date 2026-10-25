@@ -151,6 +151,9 @@ in the old style, fast on any machine. It shares a stick and a vault with the gr
   <dt>Chat and discussion, side by side</dt>
   <dd>Chat groups for quick talk, discussion groups with real threads and
   quoting, and private chats and posts - all in the same program.</dd>
+  <dt>Feeds, sites and pictures</dt>
+  <dd>Follow people's feeds in one timeline, publish a site of pages, and
+  share pictures and files - carried by the nodes like everything else.</dd>
   <dt>Nobody owns the network</dt>
   <dd>You connect to a node. Nodes replicate groups to each other, the way
   Usenet servers did, and anyone can run one.</dd>

@@ -70,7 +70,9 @@ and a vault. Do not run both on the same vault at the same time.
    backups. Choose *Another node* for an address you were given.
 
 You start in the project's groups - `unseenet`, `unseenet.announce`,
-`unseenet.help` and `unseenet.test` - so there is something to read. The
+`unseenet.help`, `unseenet.chat` and `unseenet.test`, and the demo site and
+feed `unseenet.demo.site` and `unseenet.demo.feed` - so there is something to
+read. The
 first connection takes 10-30 seconds while Tor builds its circuits. Your
 first post waits a few minutes more, once, while your new key
 [ripens](spec/un-rfc-0025.md); the client shows how far it is. Stuck? Ask in
@@ -83,7 +85,15 @@ first post waits a few minutes more, once, while your new key
 - Read and write: threads and chats (closed groups decrypted), posts, replies
   and chat lines in Markdown with emoji, *For you* (replies and mentions),
   `#group` links, editing your own posts, your signature.
-- Private chats and posts with anyone, by key; contacts as an address book.
+- Feeds and sites (from 0.5): *Timeline* with the feeds you follow, **My
+  feed** and **My site**, creating a group as a feed or a site, pages with an
+  index, and a person's feed and site from their profile.
+- Pictures and files (from 0.5): in posts, chat lines and private posts, as
+  the group allows; profile pictures.
+- Pins, reactions and tables in Markdown (from 0.5); a ⋯ menu on every post
+  and chat line to edit, withdraw, pin or copy its `unseenet:` address.
+- Private chats and posts with anyone, by key; contacts as an address book;
+  private profiles shared with one person or a closed group.
 - People: names (`@you`), profiles (an author's name opens theirs; *Your
   profile* writes yours), ignoring people, hiding bots.
 - Groups you run: create open, moderated, channel or closed groups, invite
