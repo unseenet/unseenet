@@ -71,7 +71,7 @@ The client then subscribes you to the project's groups - `unseenet`
 (the project), `unseenet.announce` (releases and news), `unseenet.help`
 (ask anything) and `unseenet.test` (say hello) - so there is something to read. You can
 unsubscribe from them like any other group; they are not added again.
-Stuck? Ask in `unseenet.help` - see [Getting help](help.md).
+Stuck? Ask in `unseenet.help` - see [Getting help](https://unseenet.org/help/).
 
 The first connection takes 10-30 seconds while Tor builds its circuits, and
 can take a few tries right after Tor starts; the client retries by itself.
@@ -305,7 +305,7 @@ that slower, and withdraw posts you do not want (see below).
 ## Blocked in a hierarchy
 
 A hierarchy can have a **maintainer** - for example an organisation that
-runs `dk.*` ([how it works](guide/groups.md#names-and-hierarchies)). A maintainer can block
+runs `dk.*` ([how it works](https://unseenet.org/guide/groups/#names-and-hierarchies)). A maintainer can block
 someone in its whole hierarchy, with a public reason - say a person who
 posts threats in group after group. A maintainer it has given a part of
 the hierarchy to, such as `dk.snak.*`, can block within that part.
@@ -798,7 +798,7 @@ unseenet --help
 | `read GROUP_ID` | Read a group, with each post's Message-ID (`--json`: author, date, references, kind, page and files of each) |
 | `withdraw GROUP_ID MESSAGE_ID ... [--yes]` | [Withdraw posts](#withdrawing-a-post): your own, or any in a group you own or moderate |
 | `withdraw GROUP_ID --all [--keep MESSAGE_ID] [--keep-author KEY]` | Withdraw every post in a group you own or moderate, but those you keep |
-| `bridges [MODE]` | Show or set [Tor bridges](tor.md) |
+| `bridges [MODE]` | Show or set [Tor bridges](https://unseenet.org/tor/) |
 
 Global options go before the command: `--vault FILE` picks the vault and
 `--identity NAME` the identity for this command (default: the first), and

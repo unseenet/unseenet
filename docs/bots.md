@@ -125,7 +125,7 @@ profile that says it is a bot.
 | The Conversation | `alt.news.theconversation` | the opening of articles, with a link |
 | EFF Deeplinks | `alt.privacy.eff` | posts on digital rights and privacy |
 | NASA | `alt.space.nasa` | NASA's Image of the Day |
-| Unseenet help | `unseenet.help` | answers to questions, from the docs, issues and pull requests ([Getting help](help.md)) |
+| Unseenet help | `unseenet.help` | answers to questions, from the docs, issues and pull requests ([Getting help](https://unseenet.org/help/)) |
 
 The news bots post in channels: only the bot starts threads, and anyone
 may comment on a post. They are built on `unseenet.core.poster` and live,

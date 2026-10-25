@@ -76,7 +76,7 @@ read. The
 first connection takes 10-30 seconds while Tor builds its circuits. Your
 first post waits a few minutes more, once, while your new key
 [ripens](spec/un-rfc-0025.md); the client shows how far it is. Stuck? Ask in
-`unseenet.help` - see [Getting help](help.md).
+`unseenet.help` - see [Getting help](https://unseenet.org/help/).
 
 ## What it can do
 

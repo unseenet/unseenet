@@ -181,7 +181,7 @@ command line: `unseenet cli bridges obfs4`.
 
 On Tails, or with a Tor that is already running, the client uses that Tor
 and its bridges instead - see
-[Using a Tor that is already running](tor.md#using-a-tor-that-is-already-running).
+[Using a Tor that is already running](https://unseenet.org/tor/#using-a-tor-that-is-already-running).
 
 ## Checking a copy
 

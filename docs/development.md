@@ -454,7 +454,7 @@ the release notes can say what changed and link to the discussion:
 4. End the changelog line with the issue number: `- ... (#12)`. The release
    notes are made from `CHANGELOG.md`, so the number becomes a link there.
 5. Update the docs the change touches. If it changes how something works,
-   also the chapter of [How it works](guide/index.md) (`docs/guide/`) that
+   also the chapter of [How it works](https://unseenet.org/guide/) (`docs/guide/`) that
    describes it - those pages explain the design in prose and go stale
    quietly. The pull request template has the checklist.
 
