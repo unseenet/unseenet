@@ -105,6 +105,9 @@ class ReactionsMixin:
         of an edited post counts for the version shown (UN-RFC 0042)."""
         alias = {v: m.message_id for m in self.cache.get(group_id, {}).values()
                  for v in m.versions}
+        # who wrote each article: a reaction from its own author is not counted
+        # (UN-RFC 0048 section 3.3)
+        author = {m.message_id: m.author_key for m in self.cache.get(group_id, {}).values()}
         held = self._reactions_of(group_id).values()
         # a changed reaction names the one it replaces (section 5): that one is gone,
         # even before the cancel-like withdrawal reaches us (Dates are rounded)
@@ -115,6 +118,8 @@ class ReactionsMixin:
                 continue
             seen.add(m.message_id)
             tgt = m.references[-1]
+            if m.author_key and author.get(alias.get(tgt, tgt)) == m.author_key:
+                continue
             when = int(m.date.timestamp()) if m.date else 0
             items.append((m.message_id, m.author_key, when, alias.get(tgt, tgt), m.reaction))
         return rx.count(items)

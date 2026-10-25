@@ -313,3 +313,23 @@ def test_cli_reaction_options():
         _, extra = _group_fields(SimpleNamespace(reactions=given))
         assert extra["reactions"] == want
     assert "reactions" not in _group_fields(SimpleNamespace())[1]
+
+
+def test_a_reaction_from_the_author_is_not_counted():
+    """UN-RFC 0048 section 3.3: a client that offers it anyway gains nothing."""
+    from types import SimpleNamespace
+    from unseenet.client.session.reactions import ReactionsMixin
+
+    class S(ReactionsMixin):
+        pass
+
+    s = S()
+    when = datetime(2026, 10, 25, tzinfo=timezone.utc)
+    post_ = SimpleNamespace(message_id="<p@x>", author_key="A", versions=[])
+    def r(mid, key):
+        return SimpleNamespace(message_id=mid, author_key=key, date=when, references=["<p@x>"],
+                               reaction="👍", supersedes=[])
+    s.cache = {"g": {1: post_}}
+    s.reaction_msgs = {"g": {1: r("<1@x>", "A"), 2: r("<2@x>", "B")}}
+    c = s.all_reactions("g")["<p@x>"]
+    assert c.count("👍") == 1 and c.of("A") is None

@@ -98,6 +98,11 @@ root or feed entry, a comment or a reply at any depth, a post or a chat
 line. A reaction MUST NOT target a control article or another
 reaction.
 
+A key does not react to its own articles: a reaction whose `Author-Key`
+is the target's `Author-Key` is not offered (section 7.3) and not
+counted (section 7.1). A node that holds the target MAY reject such a
+reaction; clients MUST NOT rely on that.
+
 # 4. Which Reactions a Group Takes
 
 ## 4.1 Manifest Field
@@ -270,6 +275,9 @@ A client counts reactions per target and emoji, one per key (section
 reads anyway (UN-RFC 0034 section 4.4), and fetch no reaction articles
 unless the reader asks who reacted.
 
+A client MUST NOT count a reaction from the target's own author (section
+3.3), nor show it as the reader's own.
+
 A client MAY count only keys of some standing (UN-RFC 0025), and MAY
 show besides a count how many of the reacting keys are the reader's
 contacts. It MUST make clear what it counts.
@@ -293,6 +301,8 @@ contacts. It MUST make clear what it counts.
 - A client offers to react to an article only where the group's
   reaction set is not empty and the reader may post (write controls are
   not offered where writing is impossible).
+- A client does not offer to react to the reader's own articles
+  (section 3.3).
 - It offers the group's reaction set, in its order. Where the set is
   `"any"`, it offers the default set first and a way to choose any
   other emoji.
@@ -394,6 +404,10 @@ counted once.
   cannot be checked by the node, and an edit is not allowed. A reaction
   that says "none" needs no new mechanism: the latest from a sender
   counts, as it does everywhere.
+- **Why not your own articles?** Liking what you wrote yourself tells
+  nobody anything and only inflates the count. Clients would not offer
+  it anyway; not counting it means a client that does offer it gains
+  nothing.
 - **Why may a channel take reactions but no comments?** An announcement
   wants to know it was read and liked, not to be answered.
 
