@@ -3,6 +3,24 @@ contact_links:
   - name: Security problem
     url: https://github.com/unseenet/unseenet/security/advisories/new
     about: Report a vulnerability privately. Please do not open a public issue for it.
+  - name: The graphical client
+    url: https://github.com/unseenet/unseenet-gui/issues/new
+    about: Bugs and ideas for the graphical client go to unseenet-gui.
+  - name: The terminal client
+    url: https://github.com/unseenet/unseenet-tui/issues/new/choose
+    about: Bugs and ideas for the terminal client go to unseenet-tui.
+  - name: Portable builds
+    url: https://github.com/unseenet/unseenet-portable/issues/new/choose
+    about: A portable build that does not start, or the stick - unseenet-portable.
+  - name: Bootable images
+    url: https://github.com/unseenet/unseenet-bootable/issues/new/choose
+    about: A bootable image that does not boot or misbehaves - unseenet-bootable.
+  - name: Web entrances
+    url: https://github.com/unseenet/unseenet-entrance/issues/new
+    about: The client in a browser, or running an entrance - unseenet-entrance.
+  - name: Gateways, bots, the help bot, the site
+    url: https://github.com/unseenet
+    about: Each has its own repository (unseenet-gateway, -bots, -helpbot, -docs); open the issue there.
   - name: Question or just say hello
-    url: https://unseenet.org/client/
-    about: The documentation answers most questions. You can also post in unseenet.test on Unseenet itself.
+    url: https://unseenet.org/help/
+    about: Ask in unseenet.help on Unseenet itself.
