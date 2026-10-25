@@ -75,18 +75,6 @@ nav:
   # unseenet.org with the rest (its sources.yml), at the same addresses.
   # This config is for previewing and for the strict check in pull requests
   # (tools/docs_check.sh); links to pages elsewhere are full unseenet.org addresses.
-  - Getting started:
-      - Graphical client:
-          - Portable and bootable: graphical.md
-          - In your browser (phones, tablets too): web.md
-      - Terminal client:
-          - Portable (Linux, macOS, Windows): portable.md
-          - Bootable (USB, SSD etc.): bootable.md
-          - Using the terminal client: https://unseenet.org/client/
-      - Updating: updating.md
-  - More ways to use it:
-      - Gateways to other networks: gateways.md
-      - Bots: bots.md
   - Running a node:
       - Installation: node/install.md
       - Configuration: node/configuration.md
@@ -95,13 +83,6 @@ nav:
       - Monitor: node/monitor.md
       - Docker: node/docker.md
       - Your responsibility: node/responsibility.md
-  - Running an entrance:
-      - What it is, and installation: entrance/index.md
-      - Settings: entrance/settings.md
-      - Certificates: entrance/certificates.md
-      - New versions, the mirror and blocking: entrance/updates.md
-      - Being listed: entrance/listed.md
-      - Your responsibility: entrance/responsibility.md
   - Specification: spec/index.md
   - Developers:
       - Write a client: developers/index.md
