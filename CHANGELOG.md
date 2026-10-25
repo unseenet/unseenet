@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The node's container image** is published for releases only (`:<version>`,
+  `:latest`), no longer as `:dev` after every merge; `:dev` comes from a run
+  by hand.
+
 - **The portable and bootable builds are made in unseenet-portable and
   unseenet-bootable** (#549, #550), nightly, by hand and for releases; this
   repository no longer builds them. Development builds are
