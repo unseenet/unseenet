@@ -524,8 +524,18 @@ MIRROR_PATH = "mirror/{channel}/{name}"         # on an entrance that mirrors re
 
 def release_post(sums: bytes, sig: str, channel: str) -> tuple[str, str]:
     """(subject, body) of the post in unseenet.releases that carries a release's
-    checksums and their signature, unchanged. Only one that checks out is made."""
-    rel = check_release(sums, sig, channel, "linux-x86_64")
+    checksums and their signature, unchanged. Only one that checks out is made.
+
+    The sums are a portable build's (unseenet-portable) or a bootable image's
+    (unseenet-bootable, with the update zip): either names the version (#550)."""
+    for what in ("linux-x86_64", "x86_64-update"):
+        try:
+            rel = check_release(sums, sig, channel, what)
+            break
+        except UpdateError as exc:
+            problem = exc
+    else:
+        raise problem
     return (f"Unseenet {rel.version}",
             f"Unseenet {rel.version}, {channel}\n\n{SUMS}:\n{sums.decode()}\n{SIG}:\n{sig}")
 

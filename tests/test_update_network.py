@@ -25,6 +25,19 @@ def test_post_carries_the_signed_sums_unchanged(trusted):
     assert rel.version == "9.9.9" and rel.signed_by == KEY.key_text
 
 
+def test_posts_for_the_portable_and_the_bootable_sums_alone(trusted):
+    """unseenet-portable and unseenet-bootable each sign and post their own sums (#550)."""
+    portable = ("a" * 64 + "  unseenet-9.9.9-linux-x86_64.zip\n").encode()
+    images = ("b" * 64 + "  unseenet-9.9.9-x86_64.img.xz\n"
+              + "c" * 64 + "  unseenet-9.9.9-x86_64-update.zip\n").encode()
+    for sums in (portable, images):
+        subject, _ = update.release_post(sums, update.signature_text(sums, KEY), "dev")
+        assert subject == "Unseenet 9.9.9"
+    nothing = ("d" * 64 + "  something-else.txt\n").encode()
+    with pytest.raises(update.UpdateError):
+        update.release_post(nothing, update.signature_text(nothing, KEY), "dev")
+
+
 def test_a_changed_post_does_not_check_out(trusted):
     _, body = update.release_post(SUMS, update.signature_text(SUMS, KEY), "stable")
     channel, sums, sig = update.parse_release_post(body.replace("a" * 64, "c" * 64))
