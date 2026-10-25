@@ -10,6 +10,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - **Development builds** are made each night when `main` changed, by hand,
   and on release tags - no longer after every merge (#544). Sticks on the
   development channel get at most one update a day.
+- **Updating sticks** looks for releases in unseenet-portable and
+  unseenet-bootable first, then here, so sticks keep updating when the builds
+  move to their own repos (#546). Bundles rebuilt with newer clients
+  (`0.6.0.post1`) are offered over `0.6.0`.
 
 ## [0.5.0] - 2026-10-25
 

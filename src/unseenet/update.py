@@ -58,6 +58,12 @@ DEV_RELEASE_KEY = "ed25519:clbv6765nyz74fxm5qb4ktmdtuyotgxe3h3yozjlgneh7jserf2a"
 TRUSTED = {"stable": (PROJECT_KEY,), "dev": (PROJECT_KEY, DEV_RELEASE_KEY)}
 
 REPO = "https://github.com/unseenet/unseenet"
+# Where releases are looked for, in order (#546): the build repos the portable zips
+# and the bootable images come from, then this repo, where they were until 0.6.
+# Where a file comes from does not matter for trust: it must match the signed sums.
+RELEASE_REPOS = ("https://github.com/unseenet/unseenet-portable",
+                 "https://github.com/unseenet/unseenet-bootable",
+                 REPO)
 SUMS = "SHA256SUMS.txt"
 SIG = SUMS + ".sig"
 # What a release offers: one zip per kind of installation (see stick_kind)
@@ -84,22 +90,26 @@ class UpdateError(Exception):
 # ----------------------------------------------------------------------
 def version_key(v: str) -> tuple:
     """Order versions as PEP 440 does, for the parts Unseenet uses:
-    0.3.0.dev1 < 0.3.0a1.dev2 < 0.3.0a1 < 0.3.0b1 < 0.3.0rc1 < 0.3.0 < 0.3.1.dev1.
+    0.3.0.dev1 < 0.3.0a1.dev2 < 0.3.0a1 < 0.3.0b1 < 0.3.0rc1 < 0.3.0
+    < 0.3.0.post1.dev1 < 0.3.0.post1 < 0.3.1.dev1. A post-release (``.postN``) is a
+    rebuild of a bundle with the same core and newer clients (#546).
     """
-    m = re.match(r"^v?(\d+(?:\.\d+)*)(?:(a|b|rc)(\d+))?(?:\.dev(\d+))?", v.strip())
+    m = re.match(r"^v?(\d+(?:\.\d+)*)(?:(a|b|rc)(\d+))?(?:\.post(\d+))?(?:\.dev(\d+))?",
+                 v.strip())
     if not m:
-        return ((-1,), (-2, 0), (0, 0))
+        return ((-1,), (-2, 0), -1, (0, 0))
     release = tuple(int(x) for x in m.group(1).split("."))
     release += (0,) * (4 - len(release))
-    phase, num, dev = m.group(2), m.group(3), m.group(4)
+    phase, num, post, dev = m.group(2), m.group(3), m.group(4), m.group(5)
     if phase:
         pre = ({"a": 0, "b": 1, "rc": 2}[phase], int(num))
-    elif dev:
+    elif dev and not post:
         pre = (-1, 0)              # X.devN comes before every pre-release of X
     else:
         pre = (3, 0)               # the release itself comes after all of them
+    postkey = int(post) if post else 0
     devkey = (0, int(dev)) if dev else (1, 0)   # a dev build comes before what it builds up to
-    return (release, pre, devkey)
+    return (release, pre, postkey, devkey)
 
 
 def stick_version(media: Path) -> str:
@@ -221,12 +231,34 @@ class _OnionConn(http.client.HTTPConnection):
         self.sock.settimeout(120)
 
 
-def release_url(channel: str, name: str, version: str | None = None) -> str:
+def release_url(channel: str, name: str, version: str | None = None, repo: str = REPO) -> str:
     if channel == "dev":
-        return f"{REPO}/releases/download/dev/{name}"
+        return f"{repo}/releases/download/dev/{name}"
     if version:
-        return f"{REPO}/releases/download/v{version}/{name}"
-    return f"{REPO}/releases/latest/download/{name}"
+        return f"{repo}/releases/download/v{version}/{name}"
+    return f"{repo}/releases/latest/download/{name}"
+
+
+def release_urls(channel: str, name: str, version: str | None = None) -> list[str]:
+    """``name`` in each of RELEASE_REPOS, in the order they are tried."""
+    return [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
+
+
+def from_github(channel: str, what: str, socks_port: int | None) -> tuple[list[Release], list[str]]:
+    """The signed releases for ``what`` in every release repo, and what went wrong where.
+
+    Each build repo signs the sums of its own files, so a repo without ``what`` is no
+    error as long as another one has it."""
+    found: list[Release] = []
+    problems: list[str] = []
+    for repo in RELEASE_REPOS:
+        try:
+            sums = fetch(release_url(channel, SUMS, repo=repo), socks_port)
+            sig = fetch(release_url(channel, SIG, repo=repo), socks_port).decode("utf-8", "replace")
+            found.append(check_release(sums, sig, channel, what))
+        except UpdateError as exc:
+            problems.append(f"{urlsplit(repo).path.strip('/')}: {exc}")
+    return found, ([] if found else problems)
 
 
 def fetch(url: str, socks_port: int | None, dest: Path | None = None,
@@ -637,12 +669,9 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         print(f"Looking for the newest {args.channel} release (GitHub and the network) ...")
         found: list[Release] = []
         problems: list[str] = []
-        try:
-            sums = fetch(release_url(args.channel, SUMS), socks_port)
-            sig = fetch(release_url(args.channel, SIG), socks_port).decode("utf-8", "replace")
-            found.append(check_release(sums, sig, args.channel, what))
-        except UpdateError as exc:
-            problems.append(f"GitHub: {exc}")
+        on_github, missed = from_github(args.channel, what, socks_port)
+        found += on_github
+        problems += [f"GitHub {m}" for m in missed]
         onions: list[str] = []
         if socks_port:
             bodies, onions = asyncio.run(from_network(socks_port))
@@ -673,7 +702,7 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
     with tempfile.TemporaryDirectory(prefix="unseenet-update-") as tmp:
         zip_path = args.zip or Path(tmp) / rel.zip_name
         if not args.zip:
-            sources = [release_url(args.channel, rel.zip_name, rel.version)]
+            sources = release_urls(args.channel, rel.zip_name, rel.version)
             if socks_port and onions:
                 sources += [base + MIRROR_PATH.format(channel=args.channel, name=rel.zip_name)
                             for base in mirrors_with(onions, args.channel, rel.version, socks_port)]
