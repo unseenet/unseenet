@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0049                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0002, 0005, 0023, 0032, 0034
+Updates: 0000, 0002, 0005, 0007, 0023, 0032, 0034
 
             Unseenet: Imported Posts and the Time of Posting
 ```
@@ -19,7 +19,8 @@ says so in `Origin-*` headers, already defined for gateways, and the
 original date is shown and used for order, but never for retention,
 postage or what counts as new. One rule, *old on arrival*, keeps
 imported articles and late gatewayed messages out of notifications and
-For you.
+For you. And the other way: a person can export their own data as a
+file, and move their profile and posts to a new key with it.
 
 # 1. Motivation
 
@@ -44,7 +45,8 @@ Today only the future is closed: UN-RFC 0002 section 2.5 rejects a
 `Date` more than one hour ahead, and UN-RFC 0012 section 3 rejects one
 older than the window. Inside the window a client can choose any date in
 the past. This document closes that, and gives the original date its
-own place.
+own place, and gives people their own data back as a file
+(section 7).
 
 Gateways solved half of this already: UN-RFC 0023 section 4.2 uses the
 time of import as `Date` and keeps the other network's date in
@@ -119,7 +121,7 @@ client, and peers will take it if it is inside the window. Nobody can
 tell when an article really entered the network except the node it
 entered at, and that node is not trusted (UN-RFC 0001). What section 3.2
 gives is that honest nodes refuse it, so backdating needs a dishonest
-node and is limited to the window. Section 11 lists recording the time a
+node and is limited to the window. Section 12 lists recording the time a
 node first saw an article as an open issue.
 
 # 4. Origin Headers
@@ -146,7 +148,8 @@ and the article is the author's in every way, including editing
 `Origin-Network` takes the network names gateways use (UN-RFC 0023
 section 3.1) where one exists, otherwise a lowercase name of the
 network: `facebook`, `x`, `instagram`, `mastodon`, `bluesky`,
-`tiktok`, `nostr`, `matrix`, `usenet`.
+`tiktok`, `nostr`, `matrix`, `usenet`, and `unseenet` for an
+article moved from another Unseenet key (section 7.3).
 
 ## 4.2 Origin-Date
 
@@ -267,7 +270,59 @@ long that will take, and keeps what remains on the machine until it is
 posted. Because `Date` is the time of posting (section 3.1), each
 imported article lives its group's full retention from then.
 
-# 7. Gateways
+# 7. Exporting Your Data
+
+The other networks give people their data as a file; so does Unseenet.
+An **export** is what a client makes when a person asks for their own
+data, and it is also what an importer reads to move a profile to a new
+key (section 7.3).
+
+## 7.1 Contents
+
+An export is a zip file with:
+
+| Path             | Contents                                                       |
+|------------------|----------------------------------------------------------------|
+| `export.json`    | Version `1`, the key's fingerprint, when it was made, which node(s) it was made from, and an index of what follows |
+| `profile.json`   | The profile manifest's fields (UN-RFC 0022), and `profile/` with its picture |
+| `articles/`      | The person's own articles, one file each, exactly as signed (UN-RFC 0002), named by Message-ID |
+| `files/`         | The blobs those articles refer to (UN-RFC 0027)                |
+| `sites/`         | The person's sites: pages as articles plus their pictures (UN-RFC 0035) |
+| `state.json`     | Their state in the network (UN-RFC 0044): groups followed, contacts, closed chats |
+| `index.html`     | A plain page listing it all, readable without Unseenet         |
+
+Articles are kept as signed so that anyone can check them against the
+key without trusting the export or whoever holds it.
+
+## 7.2 What an Export Never Holds
+
+- **Keys.** Secret keys belong in the vault, and an export that is
+  copied, mailed or left on a stick must not let anyone post as the
+  person. An export is not a backup of the identity.
+- **Private posts and chats in the clear, by default.** They are in the
+  export only if the person chooses so, and then the export MUST be
+  encrypted with a passphrase they give (UN-RFC 0007). Unencrypted, an
+  export of private messages would be easier to read than the vault.
+- **Other people's articles,** except that a private post or chat the
+  person chose to include holds both sides of the conversation, as the
+  person's inbox did.
+
+A client MUST say that an export holds what the nodes still carry
+(their retention, UN-RFC 0012) and what the client has kept itself, not
+everything the person ever wrote.
+
+## 7.3 A New Key with the Old Profile
+
+An importer reads an export as one more source with `Origin-Network:
+unseenet` (section 4.1). Each imported article carries `Origin-Date`
+from the old article's `Date` and, if the person chooses, `Origin-ID`
+(the old Message-ID) and `Origin-Proof` (the old article, as signed).
+With the proof anyone can check that the old key wrote it, which links
+the two keys for good; without it, nothing in the new articles points to
+the old key. People who change keys to get away from the old one leave
+the proof out, which is the default.
+
+# 8. Gateways
 
 Nothing changes in how a gateway builds an article (UN-RFC 0023 section
 4.2): `Date` is the time of import and the other network's date is in
@@ -275,7 +330,7 @@ Nothing changes in how a gateway builds an article (UN-RFC 0023 section
 3.2 applies to it, and section 5 now tells clients what to do with what
 it already sends.
 
-# 8. Changes to Other Documents
+# 9. Changes to Other Documents
 
 - **UN-RFC 0002** section 2.5: `Date` is the time of posting (section
   3.1); nodes reject a `POST` more than 1 hour in the past (section
@@ -288,13 +343,15 @@ it already sends.
 - **UN-RFC 0023** section 4.3: the origin headers are defined for every
   imported article, by gateways and by authors (section 4.1); section
   8: clients also apply section 5 of this document.
+- **UN-RFC 0007**: an export with private posts or chats is encrypted
+  with a passphrase (section 7.2).
 - **UN-RFC 0032**: an importer sends no mention notices (section 6.2);
   an article old on arrival is not added to For you (section 5.2).
 - **UN-RFC 0034** sections 4.1 and 7: an imported entry is ordered by
   its origin date (section 5.3).
 - **UN-RFC 0000** section 6: 0049 is added to the index.
 
-# 9. Rationale
+# 10. Rationale
 
 - **Why not let `Date` be the original date?** Everything the network
   counts, it counts from `Date` (section 1). Two meanings in one header
@@ -322,7 +379,7 @@ it already sends.
   define what readers need. One set of headers means one way to show
   them in every client.
 
-# 10. Security and Privacy Considerations
+# 11. Security and Privacy Considerations
 
 - **The link to another account.** A self-import with a name, a picture
   and posts ties the key to a person on another network for good.
@@ -340,10 +397,14 @@ it already sends.
 - **False origin dates** are possible and cannot be detected; clients
   show them as claims (section 4.2). `Origin-Proof` lets networks that
   sign their messages prove them.
+- **Exports** hold no keys and, by default, no private messages; with
+  private messages they are encrypted (section 7.2). Moving to a new key
+  links the keys only when the person includes `Origin-Proof` (section
+  7.3).
 - **Backdating by a dishonest node** remains possible inside the window
   (section 3.5).
 
-# 11. Open Issues
+# 12. Open Issues
 
 - **Time first seen.** A node could record when it first saw an
   article, and show it to its own clients, so that an article whose
@@ -353,6 +414,10 @@ it already sends.
   Bluesky) could let an importer carry `Origin-Proof`, so a reader can
   check the post is real and its date honest. Which networks, and how,
   is left to the importer's profiles.
+- **"Moved to a new key."** The old key could sign a statement pointing
+  to the new one, as Mastodon's "Moved", so followers can follow along.
+  It is useful, and dangerous when the old key was stolen: the thief
+  could move everyone to their own key. Left for a later document.
 - **Sites from other networks.** Section 6 covers posts and profiles.
   Pages imported into a site (UN-RFC 0035) may want an origin date per
   page.
