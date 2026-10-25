@@ -1,6 +1,6 @@
-name: Bug in the client
-description: Something is wrong in unseenet-tui, the command line client or Portable.
-title: "Client: "
+name: Bug in the command-line client
+description: Something is wrong in `unseenet`, the command-line client, or in the core library.
+title: "CLI: "
 labels: ["bug", "area: client", "triage"]
 body:
   - type: markdown
@@ -21,15 +21,14 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Start the client
-        2. Press g
+        1. unseenet ...
+        2. ...
         3. ...
   - type: dropdown
     id: how
     attributes:
       label: How do you run it?
       options:
-        - Portable (Linux, macOS, Windows)
         - pip install
         - From source (git checkout)
     validations:
@@ -50,7 +49,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: "`unseenet.exe --version`, `unseenet-tui --version`, or the About screen (F1)."
+      description: "`unseenet --version`"
       placeholder: unseenet 0.2.0
     validations:
       required: true
@@ -59,6 +58,6 @@ body:
     attributes:
       label: Logs
       description: |
-        `data/unseenet-tui-errors.log` and the end of `data/unseenet-tor/tor.log`
-        (next to `unseenet.vault`). With Portable, `--self-test` output helps too.
+        The command's output with `--verbose`, and the end of `unseenet-tor/tor.log`
+        (next to `unseenet.vault`).
       render: text
