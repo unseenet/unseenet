@@ -588,10 +588,30 @@ class PeopleMixin:
                     seen[m.author_key] = max(seen.get(m.author_key, 0.0), at)
         return sorted(seen, key=seen.get, reverse=True)[:limit]
 
-    def contacts(self) -> list[tuple[str, str]]:
-        """(key, name) sorted by name."""
-        return sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
-                      key=lambda kv: kv[1].lower())
+    def contacts(self, query: str = "") -> list[tuple[str, str]]:
+        """(key, name) sorted by name; with ``query``, only those it finds (#523):
+        any part of the name you gave them, of their key or of a name they hold
+        (``sonia@lorensen``), case-insensitive - so a long address book is quick to
+        search, and a pasted key finds its contact."""
+        out = sorted(((k, v["name"]) for k, v in self.data["contacts"].items()),
+                     key=lambda kv: kv[1].lower())
+        q = query.strip().lower()
+        if not q:
+            return out
+        return [(k, n) for k, n in out if any(q in t for t in self.contact_words(k, n))]
+
+    def contact_words(self, key: str, name: str = "") -> list[str]:
+        """What a search for a contact looks at, lower-cased: the name you gave them,
+        their key (with and without its ``ed25519:``) and the names they hold."""
+        return [name.lower(), key.lower(), key.split(":", 1)[-1].lower(),
+                *(n.lower() for n in self.held_names(key))]
+
+    def held_names(self, key: str) -> list[str]:
+        """The names a key holds (``sonia@lorensen``), as shown; [] if none known."""
+        try:
+            return [naming.name_text(c.name) for c in naming.names_of(self, key)]
+        except Exception:                 # no names known yet: nothing to show
+            return []
 
     # --- reporting a post (#74): private messages to those who can act on it ---
     async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:

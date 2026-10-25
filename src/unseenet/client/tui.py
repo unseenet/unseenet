@@ -28,8 +28,9 @@ from rich.text import Text
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.markup import escape
 from textual.screen import ModalScreen, Screen
-from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input, Label, RichLog,
-                             Select, Static, TextArea, Tree)
+from textual.widgets import (Button, Checkbox, DataTable, Footer, Header, Input, Label,
+                             OptionList, RichLog, Select, Static, TextArea, Tree)
+from textual.widgets.option_list import Option
 
 from .. import __version__
 from ..portable import portable_root
@@ -1002,13 +1003,21 @@ class KeyListDialog(Dialog):
 
 class ContactsDialog(Dialog):
     """Your address book (c): everyone you have named, and what to do with them -
-    chat, write a post, rename, remove (UN-RFC 0028: both kinds, one place)."""
+    chat, write a post, rename, remove (UN-RFC 0028: both kinds, one place).
 
-    BINDINGS = [Binding("escape", "cancel", "Close")]
+    Type to find someone (#523): the filter looks at the name you gave them, their
+    key and the names they hold. Up and Down move in the list, Enter chats, Esc clears
+    the filter first and closes on the second press."""
 
-    def __init__(self, contacts: list[tuple[str, str]]):
+    BINDINGS = [Binding("escape", "cancel", "Close"),
+                Binding("down", "move(1)", show=False, priority=True),
+                Binding("up", "move(-1)", show=False, priority=True)]
+
+    def __init__(self, contacts: list[tuple[str, str]], find=None):
         super().__init__()
         self.contacts = contacts
+        self.find = find or (lambda q: [kv for kv in contacts if q.lower() in kv[1].lower()])
+        self.shown = list(contacts)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
@@ -1017,10 +1026,9 @@ class ContactsDialog(Dialog):
                 yield Static("No contacts yet. Press a on a post or a message to add its author "
                              "under a name of your own.", markup=False)
             else:
-                yield Label(f"{len(self.contacts)} people, under the names you gave them. "
-                            "Pick one, then what to do.", classes="hint", markup=False)
-                yield Select([(name, key) for key, name in self.contacts], prompt="Choose",
-                             value=self.contacts[0][0], allow_blank=False, id="who")
+                yield Input(placeholder="Find: a name, a key or sonia@lorensen", id="find")
+                yield Label(self._count(), classes="hint", id="count", markup=False)
+                yield OptionList(*self._options(), id="who")
             with Horizontal(classes="buttons"):
                 yield Button("Close", id="cancel")
                 if self.contacts:
@@ -1029,11 +1037,67 @@ class ContactsDialog(Dialog):
                     yield Button("Write a post", id="post")
                     yield Button("Chat", variant="primary", id="chat")
 
+    def on_mount(self) -> None:
+        if self.contacts:
+            self.query_one("#find", Input).focus()
+            self.query_one("#who", OptionList).highlighted = 0
+
+    def _count(self) -> str:
+        n, total = len(self.shown), len(self.contacts)
+        if n == total:
+            return (f"{total} people, under the names you gave them. "
+                    "Type to find someone, Enter to chat.")
+        return f"{n} of {total} contacts" if n else "No contacts match"
+
+    def _options(self) -> list:
+        return [Option(name, id=key) for key, name in self.shown]
+
+    @on(Input.Changed, "#find")
+    def _filter(self, event: Input.Changed) -> None:
+        self.shown = self.find(event.value) if event.value.strip() else list(self.contacts)
+        who = self.query_one("#who", OptionList)
+        who.clear_options()
+        who.add_options(self._options())
+        who.highlighted = 0 if self.shown else None
+        self.query_one("#count", Label).update(self._count())
+
+    def action_move(self, step: int) -> None:
+        if not self.contacts:
+            return
+        who = self.query_one("#who", OptionList)
+        if not self.shown:
+            return
+        at = who.highlighted if who.highlighted is not None else -step
+        who.highlighted = max(0, min(len(self.shown) - 1, at + step))
+
+    def action_cancel(self) -> None:
+        if self.contacts:
+            find = self.query_one("#find", Input)
+            if find.value:
+                find.value = ""
+                return
+        self.dismiss(self.CANCEL_RESULT)
+
+    def _chosen(self) -> str | None:
+        who = self.query_one("#who", OptionList)
+        if who.highlighted is None or not self.shown:
+            return None
+        return self.shown[who.highlighted][0]
+
+    @on(Input.Submitted, "#find")
+    def _enter(self) -> None:
+        if (key := self._chosen()):
+            self.dismiss(("chat", key))
+
+    @on(OptionList.OptionSelected, "#who")
+    def _picked(self, event: OptionList.OptionSelected) -> None:
+        if event.option.id:
+            self.dismiss(("chat", event.option.id))
+
     @on(Button.Pressed, "#chat, #post, #rename, #remove")
     def _act(self, event: Button.Pressed) -> None:
-        who = self.query_one("#who", Select).value
-        if isinstance(who, str):
-            self.dismiss((event.button.id, who))
+        if (key := self._chosen()):
+            self.dismiss((event.button.id, key))
 
 
 class ReportDialog(Dialog):
@@ -3471,7 +3535,8 @@ class UnseenetApp(App):
     @work(group="dialog", exit_on_error=False)
     async def action_contacts(self) -> None:
         """c: your address book - chat, write a post, rename or remove."""
-        result = await self.push_screen_wait(ContactsDialog(self.session.contacts()))
+        result = await self.push_screen_wait(ContactsDialog(self.session.contacts(),
+                                                            find=self.session.contacts))
         if not result:
             return
         what, key = result

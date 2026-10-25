@@ -67,7 +67,7 @@ async def test_a_closed_chat_leaves_the_list_and_comes_back(two):
     assert me.chat_closed(key) and me.chat_partners() == []
     assert [p["key"] for p in api.groups()["people"]] == []
     assert api.groups()["contacts"] == [{"id": "contact:" + key, "key": key, "name": "Sonia",
-                                         "closed": True}]
+                                         "closed": True, "names": []}]
     assert me.contact_name(key) == "Sonia"                  # still a contact, messages stay
     # a later line from her opens it again: dated after the closing
     me.data["closed_chats"][key] = "2026-01-01T00:00:00Z"
