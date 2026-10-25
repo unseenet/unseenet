@@ -195,8 +195,9 @@ missing group secrets are added.
 
 After a copy the two vaults are separate files. What is in the state
 (UN-RFC 0044) follows the key and is merged as usual. Group secrets of
-closed groups joined later on one device do not reach the other (section
-9).
+closed groups joined later on one device do not reach the other; to
+bring them over, the user copies again (section 3.6 adds missing group
+secrets). They are never put in the network (section 4.5).
 
 ## 3.8 Devices That Cannot Open an Onion Service
 
@@ -236,7 +237,8 @@ several sets of words.
 
 When an identity is created, the client SHOULD show its words and ask
 the user to write them down, then ask for three of them back as a
-check. The user MAY skip this; the client then reminds them later,
+check. With the words the client MUST say, in plain language, that they
+bring back the identity but not access to closed groups (section 4.5). The user MAY skip this; the client then reminds them later,
 gently and not more than once a week, until it is done.
 
 The words can be shown again at any time with *Show recovery words…*,
@@ -250,8 +252,9 @@ Writing the words on paper is the recommended way. A client MAY also
 offer:
 
 - **Print**: a page with the identity's name, fingerprint, the 24
-  words, a QR code of the words, and a short text on how to restore and
-  why the page must be kept safe.
+  words, a QR code of the words, and a short text on how to restore,
+  that closed groups do not come back, and why the page must be kept
+  safe.
 - **Save as file**: a plain text file with the same content.
 
 Both MUST be deliberate choices, behind a warning that whoever has the
@@ -292,10 +295,15 @@ client says so plainly and starts with the default groups.
 
 ## 4.5 What Does Not Come Back
 
-- **Group secrets of closed groups.** They are kept only in the vault
-  (UN-RFC 0044 section 2). The client lists the closed groups the state
-  says the user follows, and offers to ask each group's owner, by
-  private post, to invite the user again.
+- **Access to closed groups.** Their group secrets are kept only in
+  the vault (UN-RFC 0044 section 2) and are never put in the network,
+  not even sealed to the identity's own key. This is the price of
+  recovery words, and it is deliberate: if the words also opened closed
+  groups, whoever finds the words would have every closed group too.
+  After a restore the client MUST say plainly that closed groups do not
+  come back, list the closed groups the state says the user follows,
+  and offer to ask each group's owner, by private post, to invite the
+  user again. A copy from another device (section 3) does bring them.
 - **The cache**, which nodes provide again.
 - Anything older than the network keeps (UN-RFC 0012).
 
@@ -370,20 +378,15 @@ document is accepted.
 - **BIP39's word list.** It is well known, chosen so words are easy to
   tell apart, and has libraries everywhere. Using its encoding but not
   its PBKDF2 step lets the words be the existing seed.
+- **Closed groups do not come back.** One secret - the words - opening
+  the identity, its state and every closed group would make the words
+  worth far more to whoever finds them. Losing closed groups on a
+  restore is the price, and clients say so up front.
 - **24 words.** The seed is 256 bits. Fewer words would mean a weaker
   key or a different key than the one users already have.
 
 # 9. Open Questions
 
-- **Closed-group secrets.** Should there be an optional backup of them,
-  sealed to the identity's key and kept in the network, so that recovery
-  words bring closed groups back too? UN-RFC 0044 section 2 keeps them
-  out of the network on purpose: one key would then open both the state
-  and every closed group.
-- **Keeping devices in step.** Group secrets of closed groups joined
-  after a copy do not reach the other device. A second envelope to the
-  member's own key, as for sent private posts (UN-RFC 0044 section 6),
-  could solve it, with the same question as above.
 - **Browser clients as the old device.** An entrance could relay the
   copy stream (it would see only SPAKE2 messages and ciphertext). Is
   that worth the extra load and trust?
