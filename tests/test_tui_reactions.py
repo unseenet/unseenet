@@ -41,7 +41,13 @@ async def test_tui_react_and_take_back(tmp_path, monkeypatch):
     s.new_identity("me", "Me")
     s.add_node(f"127.0.0.1:{port}")
     gid = await s.create_group("dk.noter", "open", min_pow=10, view="feed")
-    entry = await s.post(gid, "Hej", "Første opslag\n")
+    mine = await s.post(gid, "Mit", "Mit eget opslag\n")
+    o = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
+    o.new_identity("o", "O")
+    o.add_node(f"127.0.0.1:{port}")
+    await o.fetch_group(gid)
+    entry = await o.post(gid, "Hej", "Første opslag\n")
+    await o.close()
     other = await s.create_group("dk.debat", "open", min_pow=10)
     await s.post(other, "Emne", "tekst\n")
     await s.close()
@@ -54,6 +60,9 @@ async def test_tui_react_and_take_back(tmp_path, monkeypatch):
         app.select_group(gid)
         assert await wait_for(pilot, lambda: app.current_group == gid and entry in app.messages,
                               400)
+        assert await wait_for(pilot, lambda: mine in app.messages, 400)
+        app.current_message = app.messages[mine]                       # your own: no l (#524)
+        assert not app.check_action("react", ())
         app.current_message = app.messages[entry]
         assert app.check_action("react", ()) is True
 
