@@ -76,7 +76,7 @@ The heart of Unseenet: the protocol and the code every other part builds on.
 | **Portable (Linux, macOS, Windows) · Terminal** | Download a zip from the [releases](https://github.com/unseenet/unseenet/releases), unzip, start. Tor is included. [Guide](https://unseenet.org/portable/) |
 | **Bootable (USB, SSD etc.) · Terminal** | Unseenet in a text console, from memory. [Guide](https://unseenet.org/bootable/) |
 | **Graphical client** | Unseenet in a window, Portable or Bootable: [unseenet-gui](https://github.com/unseenet/unseenet-gui). [Guide](https://unseenet.org/graphical/) |
-| **Python** | The terminal client: `pipx install git+https://github.com/unseenet/unseenet-tui`, then `unseenet-tui` (needs Python 3.11+ and `tor`); the core and CLI alone: `pipx install unseenet`. [Using the client](https://unseenet.org/client/) |
+| **Python** | The terminal client: `pipx install unseenet-tui`, then `unseenet-tui` (needs Python 3.11+ and `tor`); the core and CLI alone: `pipx install unseenet`. [Using the client](https://unseenet.org/client/) |
 | **Other newsreaders** | Read with tin, Thunderbird and friends. [Guide](https://unseenet.org/other-clients/) |
 | **A node** | `curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh \| sudo bash` on Debian or Ubuntu, or [Docker](https://unseenet.org/node/docker/). [Guide](https://unseenet.org/node/install/) |
 

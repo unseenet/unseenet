@@ -38,6 +38,7 @@ classifiers = [
 
 [project.optional-dependencies]
 api = ["aiohttp>=3.9"]                 # unseenet serve, the local client API (UN-RFC 0046)
+tui = ["unseenet-tui>=0.1"]          # the terminal client, its own package (#548)
 monitor = ["textual>=0.80"]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "textual>=0.80", "aiohttp>=3.9"]
 
