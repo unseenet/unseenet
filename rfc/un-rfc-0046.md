@@ -379,7 +379,8 @@ not (you do not own or moderate the group).
   (`title`, `description`, `rules`, `rules_type`, `view`, `kinds` as for
   creating, `min_pow`, `low_latency`, `retention_days`, `comments`,
   `comment_days`, `files` as for creating, `reactions`: `"default"`,
-  `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4):
+  `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4,
+  `index`: `"yes"` or `"no"` for a site, UN-RFC 0035 section 3):
   a new manifest (UN-RFC 0004, 0014, 0030). Any other field is `400`.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
