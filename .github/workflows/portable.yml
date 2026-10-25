@@ -1,22 +1,33 @@
 name: portable
 # Portable builds with Tor inside, for Linux, Windows and macOS, plus one
-# all-in-one USB zip. Runs on version tags (attached to the release), on every
-# push to main that changes the software (the "dev" pre-release, replaced each
-# time, versioned like 0.2.1.dev3), by hand, and when the build itself changes.
+# all-in-one USB zip and the bootable image. Not on every merge (#544):
+# - nightly: the "dev" pre-release (replaced each time, versioned like 0.2.1.dev3),
+#   but only when main changed the software since the build "dev" was made from;
+# - by hand: publish to "dev" (main only) or only as workflow artifacts, e.g. to
+#   try a branch; "force" builds even when nothing changed;
+# - version tags: attached to the release;
+# - pull requests that change the build itself.
 on:
   push:
     tags: ["v*"]
-    branches: [main]
-    paths:
-      - "src/**"
-      - "tools/**"
-      - "pyproject.toml"
-      - ".github/workflows/portable.yml"
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "dev = replace the dev pre-release (main only); artifact = workflow artifacts only"
+        type: choice
+        options: [dev, artifact]
+        default: dev
+      force:
+        description: "Build even if nothing changed since the current dev build"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "tools/build_portable.py"
       - "tools/portable/**"
+      - "tools/image/**"
       - "tools/tor-version.txt"
       - "src/unseenet/launcher.py"
       - "src/unseenet/portable.py"
@@ -26,12 +37,47 @@ on:
 permissions:
   contents: read
 
-concurrency:                     # a newer push to main replaces a running dev build
+concurrency:                     # a newer run on main replaces a running dev build
   group: portable-${{ github.ref }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
+  gate:
+    # Nightly and by hand: is there anything new since the build "dev" was made
+    # from? Tags and pull requests always build. Everything below waits for this.
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$EVENT" != schedule ] && [ "$EVENT" != workflow_dispatch ] || [ "$FORCE" = true ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$EVENT" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0   # a branch: always build, as artifacts
+          fi
+          DEV=$(git ls-remote origin refs/tags/dev | cut -f1)
+          if [ -z "$DEV" ] || ! git cat-file -e "$DEV^{commit}" 2>/dev/null; then
+            echo "No dev build to compare with: building."
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --quiet "$DEV" HEAD -- src tools pyproject.toml .github/workflows/portable.yml; then
+            echo "Nothing changed in the software since the dev build ($DEV): skipping."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   tor:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     # Download the Tor Expert Bundles and check their OpenPGP signatures here,
     # where gpg is; the builds below get them with a SHA-256 to check.
     runs-on: ubuntu-latest
@@ -217,9 +263,12 @@ jobs:
 
   dev:
     # The newest build of main as the pre-release "dev": one release, replaced
-    # each time, so others can try a fix before it is released.
+    # by the next nightly build, so others can try a fix before it is released.
     needs: [usb, image]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish == 'dev'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -238,7 +287,7 @@ jobs:
           TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           {
-            echo "**Development build $VERSION** - the newest code on \`main\`, built and self-tested automatically. Not a release: it may have bugs that a release would not. For everyday use, take the newest [release](https://github.com/unseenet/unseenet/releases)."
+            echo "**Development build $VERSION** - the newest code on \`main\`, built and self-tested automatically each night when something changed. Not a release: it may have bugs that a release would not. For everyday use, take the newest [release](https://github.com/unseenet/unseenet/releases)."
             echo
             echo "Built from $GITHUB_SHA. Found a bug? [Report it](https://github.com/unseenet/unseenet/issues/new/choose) and give the version $VERSION."
             echo

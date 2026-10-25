@@ -421,17 +421,20 @@ git tag -a v0.2.1a1 -m "Unseenet 0.2.1a1" && git push origin v0.2.1a1
 It is published to PyPI and GitHub as a pre-release (pip takes it only
 with `--pre`) and announced as a test release.
 
-**Development builds** need nothing: every push to `main` that changes the
-software runs the *portable* workflow, which builds the zips with a
+**Development builds** need nothing: each night (03:17 UTC) the *portable*
+workflow checks whether the software on `main` changed since the build
+`dev` was made from, and if so builds the zips with a
 version from `tools/dev_version.py` (`0.2.1.dev3`: three commits after
 v0.2.0; written into the build only, never committed) and replaces the
 pre-release [`dev`](https://github.com/unseenet/unseenet/releases/tag/dev)
 with them. Its notes are the Unreleased changelog and the commits since
 the last tag. They are not published to PyPI.
 
-The portable builds can also be made without a release: run the
-*portable* workflow by hand (Actions, "Run workflow") and download the zips
-from the run's artifacts. Before a release, check `tools/tor-version.txt`
+Merging to `main` builds nothing (#544); only the tests run. To get a build
+sooner, run the *portable* workflow by hand (Actions, "Run workflow"):
+*publish* `dev` replaces the development build (on `main`), `artifact` only
+leaves the zips and the image in the run's artifacts - use that to try a
+branch. *force* builds even when nothing changed. Before a release, check `tools/tor-version.txt`
 against `python tools/build_portable.py --check-tor` (the *tor-update*
 workflow opens an issue when Tor has a newer stable release).
 
