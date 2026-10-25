@@ -25,9 +25,14 @@ async def test_reactions_on_rows_and_reacting(tmp_path, monkeypatch):
     server, owner, other, api = await _setup(tmp_path, monkeypatch)
     gid = (await api.create_group({"name": "dk.noter", "type": "open"}))["id"]
     await api.group_settings(gid, {"view": "feed"})
-    mid = await owner.post(gid, "Hej", "tekst\n")
+    own = await owner.post(gid, "Mit", "mit eget\n")
+    await other.fetch_group(gid)
+    mid = await other.post(gid, "Hej", "tekst\n")
     await owner.fetch_group(gid)
     g = api.group(gid)
+    assert not _row(g, own)["react"]["allowed"]
+    with pytest.raises(SessionError):                            # your own post (#524)
+        api.react(gid, {"id": own, "emoji": "👍"})
     assert g["group"]["reactions"] == {"offered": ["👍", "👎", "❤️", "😂", "😮", "😢"],
                                        "any": False, "setting": "default"}
     row = _row(g, mid)

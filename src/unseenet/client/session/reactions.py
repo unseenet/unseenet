@@ -69,6 +69,10 @@ class ReactionsMixin:
                               "private")
         if msg is not None and (msg.kind == rx.KIND_REACTION or not msg.readable):
             return Permission(False, "You cannot react to that", "target")
+        if msg is not None and msg.author_key and msg.author_key == self._my_key_text():
+            # your own post, comment or chat line: a like from yourself says nothing
+            # to anyone and only inflates the count (#524)
+            return Permission(False, "You cannot react to your own post", "own")
         if not self.reaction_set(group_id):
             return Permission(False, "This group takes no reactions", "no_reactions")
         entry = self.data["groups"].get(group_id, {})
@@ -87,6 +91,13 @@ class ReactionsMixin:
             return Permission(True)
         base = self.write_permission(group_id, kind=None)
         return base
+
+    def _my_key_text(self) -> str | None:
+        """Your key, or None before a vault is open."""
+        try:
+            return self.identity().key_text
+        except Exception:
+            return None
 
     # --- counting (sections 5 and 7.1) ---
     def all_reactions(self, group_id: str) -> dict[str, rx.Counts]:
