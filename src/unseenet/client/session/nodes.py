@@ -506,12 +506,18 @@ class NodesMixin:
                 self.tor = None
 
     async def node_info(self, node: str | None = None) -> dict:
-        """UN-RFC 0011 node information, or {} if the node does not offer it."""
+        """UN-RFC 0011 node information, or {} if the node does not offer it - with
+        ``carries``, how many groups the node itself carries (one LIST ACTIVE), so a client
+        can show both that and how many of yours you read there (unseenet-gui#153)."""
         async def run(c: Client) -> dict:
-            if c.capability("UNSEENET-NODEINFO") is None:
-                return {}
-            lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
-            info = json.loads(lines[0]) if lines else {}
-            self._keep_node_name(node or self.node, info)     # its own name, newest (#518)
+            info = {}
+            if c.capability("UNSEENET-NODEINFO") is not None:
+                lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
+                info = json.loads(lines[0]) if lines else {}
+                self._keep_node_name(node or self.node, info)     # its own name, newest (#518)
+            try:
+                info["carries"] = len(await c.list_active())
+            except (NNTPError, OSError, ValueError):
+                pass                                  # a node that will not list: unknown
             return info
         return await self._call(run, node)

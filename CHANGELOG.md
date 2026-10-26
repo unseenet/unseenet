@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **`node_info()` says what a node carries**: `carries`, how many groups it lists
+  (one LIST ACTIVE on the same connection), so a client can show it beside how
+  many of yours you read there (unseenet-gui#153).
+
 - **The rules' help, readable** (#615): one thing a line, the rule on the left and
   what it means on the right - every condition, every count - at most 64
   characters wide, so it fits beside an editor without scrolling sideways. Tests:
