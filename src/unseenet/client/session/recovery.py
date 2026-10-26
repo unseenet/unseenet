@@ -128,8 +128,8 @@ class RecoveryMixin:
                                                      "manifest": dict(m.raw)})
                 out["profile"] = m.raw.get("profile")
             result = await self.sync_state(write=False)
-        except SessionError:
-            out["state"] = "unreachable"
+        except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError):
+            out["state"] = "unreachable"          # no node answered: the words still worked
             return out
         out["state"] = "read" if result == "read" else "none"
         self.save()

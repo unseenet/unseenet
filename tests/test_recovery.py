@@ -239,3 +239,12 @@ async def test_the_cli(tmp_path, monkeypatch, capsys):
 def test_the_word_list_is_in_the_package():
     assert len(rc.wordlist()) == 2048 and rc.wordlist()[0] == "abandon"
     assert crypto.Identity.from_seed(rc.seed_from_words(["abandon"] * 23 + ["art"])).seed == bytes(32)
+
+
+async def test_restore_without_a_network(tmp_path):
+    s = _session(tmp_path)
+    s.add_node("127.0.0.1:9")                   # nobody answers there
+    s.restore_identity(rc.words_from_seed(bytes(32)))
+    found = await s.restore_from_network()
+    assert found["state"] == "unreachable" and found["closed_groups"] == []
+    await s.close()
