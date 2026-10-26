@@ -207,6 +207,62 @@ the QR code or meeting point, when its entrance allows a connection to
 the one-time onion address. It cannot be the old device in this
 version (section 9).
 
+## 3.9 The Connection
+
+The old device's one-time onion service listens on virtual port 9119.
+Every message on the connection is a 4-octet length, big-endian,
+followed by that many octets. A message is at most 64 KiB, except the
+copy (step 5), which is at most 1 MiB. A device that receives anything
+else, or a message out of order, closes the connection; the old device
+then removes its onion service (the code is used up, section 3.2).
+
+1. **Hello.** Each side sends `UNSEENET-COPY-1` (ASCII) and checks the
+   other's. A later version of this document changes the number.
+2. **SPAKE2.** Each side sends its SPAKE2 message (section 3.4). The
+   password is the code in its normal form, `<n>-<word1>-<word2>` with
+   full words in lower case, however it was typed; the old device is
+   SPAKE2's side A with identity `unseenet-copy-old`, the new device side
+   B with `unseenet-copy-new`, both ASCII.
+3. **Confirmation.** In `H(DS("UNSEENET-COPY-CONFIRM-1") || role || K)`
+   (section 3.4) `role` is the sender's SPAKE2 identity, so the two
+   confirmations differ. The new device sends its confirmation; the old
+   device checks it and only then sends its own; the new device checks
+   that. Either side closes on a wrong one.
+4. **Check words.** Both show the check words (section 3.5): the first
+   22 bits of `check_value`, most significant first, as two numbers of
+   11 bits, each picking a word from the BIP39 English list. The new
+   device waits; the old device waits for the user, at most until the
+   code's 10 minutes are over. If the user says the words do not match,
+   or cancels, the old device closes the connection without sending
+   anything.
+5. **The copy.** The old device sends `aead(copy_key, payload, aad)`:
+   a 24-octet nonce followed by the XChaCha20-Poly1305 ciphertext
+   (UN-RFC 0003 section 4.2), with `aad` the ASCII `UNSEENET-COPY-1`.
+   `payload` is canonical JSON (UN-RFC 0004):
+
+   ```
+   {"v": 1,
+    "identities": {"<name>": {"seed": "<64 hex>", "display": "...",
+                              "signature": "..."}},
+    "default": "<name>",
+    "groups": {"<group ID>": {"keys": {"<epoch>": "<64 hex>"}}}}
+   ```
+
+   `identities` holds the chosen identities (section 3.6), with their
+   name in the vault, `display` and `signature` (which may be absent);
+   `default` is one of them; `groups` holds the secrets of the closed
+   groups to copy, per epoch, and is empty when the user left them out.
+6. **Acknowledgement.** The new device writes its vault (section 3.7)
+   and sends `aead(copy_key, answer, aad)`, `answer` being
+   `{"ok": true, "added": ["<name>", ...]}` or `{"ok": false, "error":
+   "..."}`. Both close the connection, and the old device removes its
+   onion service.
+
+A client that reaches Tor without its control port - a Tor it did not
+start and may not control, such as the system Tor on Tails - cannot
+open an onion service and cannot be the old device. It can be the new
+device, and says so when the user tries to copy from it.
+
 # 4. Recovery Words
 
 ## 4.1 Encoding
