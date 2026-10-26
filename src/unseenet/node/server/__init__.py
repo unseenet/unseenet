@@ -28,7 +28,9 @@ import asyncio
 from email.utils import format_datetime
 import fnmatch
 from pathlib import Path
+import hashlib
 import hmac
+import json
 import logging
 import os
 import random
@@ -72,6 +74,7 @@ class PeerConfig:
 
 
 BLOB_WAIT_SECONDS = 600.0      # UN-RFC 0027 6.3: forward without the blobs after this
+BACKFILL_MAX = 5000            # #543: stored articles whose files are fetched per start
 
 
 @dataclass

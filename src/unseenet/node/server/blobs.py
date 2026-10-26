@@ -91,6 +91,39 @@ class Blobs:
                                           "until": time.time() + BLOB_WAIT_SECONDS}
         return True
 
+    def backfill_blobs(self, limit: int = BACKFILL_MAX) -> int:
+        """Fetch the files of stored articles the node now carries but lacks (#543):
+        after blobs were turned on, or ``encrypted`` or ``groups`` widened. They join
+        the articles waiting for blobs (section 6.3), with no peer of origin, so the
+        follower asks every peer carrying the group; they are already stored and
+        forwarded, so nothing is held back. Not charged to the daily quotas (8.1):
+        they were posted before. Returns how many articles were added, at most
+        ``limit``; the rest come with the next start or as peers send them again."""
+        if self.config.blobs is None:
+            return 0
+        added = 0
+        for mid, gid, refs in self.store.articles_missing_blobs():
+            if added >= limit:
+                break
+            if mid in self.blob_wait:
+                continue
+            raw = self.store.get(mid)
+            if raw is None:
+                continue
+            try:
+                art = Article.from_bytes(raw)
+            except ArticleError:
+                continue
+            if not self.config.carries_blobs(gid, bl.encrypted(art)):
+                continue
+            missing = {b: n for b, n in refs if n <= self.config.max_blob}
+            if not missing:
+                continue
+            self.blob_wait[mid] = {"group": gid, "source": None, "missing": missing,
+                                   "until": time.time() + BLOB_WAIT_SECONDS}
+            added += 1
+        return added
+
     def fetching(self, bid: str) -> bool:
         """True while the node is fetching this blob for an article it holds back
         (UN-RFC 0027 section 6.3): BLOB then answers ``436`` (try later)."""

@@ -1,8 +1,9 @@
 """Peers: what is queued for each, and how far the node has pulled from each.
 
 Belongs here: the peer queues (``enqueue``, ``due``, ``reschedule`` - also when blobs
-came, UN-RFC 0027 section 6.3), the pull state (UN-RFC 0017) and when to reconcile next
-(UN-RFC 0040 section 6).
+came, UN-RFC 0027 section 6.3), the pull state (UN-RFC 0017), when to reconcile next
+(UN-RFC 0040 section 6), and the policy the node last ran with, so a changed policy
+forgets the refusals it made (#543).
 
 Part of ``Store`` (see __init__.py)."""
 
@@ -34,6 +35,33 @@ class Peers:
         self.db.execute("INSERT OR REPLACE INTO reconcile_state VALUES (?, ?)",
                         (peer, int(next_at)))
         self.db.commit()
+
+    # --- the node's policy (#543) ---
+    def policy_seen(self) -> str | None:
+        """The fingerprint of the policy the node last ran with, or None (never, or
+        a store from before #543)."""
+        row = self.db.execute("SELECT policy FROM node_policy").fetchone()
+        return row[0] if row else None
+
+    def set_policy(self, fingerprint: str) -> None:
+        """Note the policy the node runs with now (see ``policy_seen``)."""
+        self.db.execute("DELETE FROM node_policy")
+        self.db.execute("INSERT INTO node_policy VALUES (?)", (fingerprint,))
+        self.db.commit()
+
+    def forget_policy_refusals(self) -> int:
+        """After a change of policy: forget the articles refused for it (reason
+        ``group``: not carried, sites, profiles, pictures, new groups, a peer's accept,
+        #132), reconcile with every peer at once (UN-RFC 0040 section 6), and pull from
+        each again from the start of retention (UN-RFC 0017) - what the node already
+        has is not fetched again, but what it refused is listed once more. Refusals
+        for the article itself (postage, signature, permission) stay. Returns how
+        many refusals were forgotten."""
+        n = self.db.execute("DELETE FROM refused WHERE reason='group'").rowcount
+        self.db.execute("DELETE FROM reconcile_state")
+        self.db.execute("DELETE FROM pull_state")
+        self.db.commit()
+        return n
 
     # --- peer queues ---
     def enqueue(self, peer: str, message_id: str, not_before: float) -> None:

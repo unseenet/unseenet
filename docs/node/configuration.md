@@ -7,6 +7,15 @@ installed with the script. After changing it:
 sudo systemctl restart unseenet-node
 ```
 
+**Changing what the node carries.** When you change what decides which
+posts the node takes from its peers - `new_groups`, `trusted_owners`,
+`excludes`, `profiles`, `avatars`, `sites`, `[blobs]` or a peer's
+`accept` - the node notices at the next start. It forgets the posts it
+refused under the old setting, catches up with its peers again from the
+start of retention, and fetches the files of posts it already holds if
+it now carries them. The start says so in one line. Nothing is needed by
+hand; what the node already has is not fetched twice.
+
 ## Example
 
 ```toml

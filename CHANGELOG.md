@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A node that changes what it carries fetches what it refused before** (#543).
+  When `new_groups`, `trusted_owners`, `excludes`, `profiles`, `avatars`,
+  `sites`, `[blobs]` or a peer's `accept` differ from the last run, the node
+  forgets the posts it refused for the old setting, reconciles and pulls from
+  its peers again, and fetches the files of stored posts it now carries. No
+  more `DELETE FROM refused` by hand.
+
 - **`unseenet passphrase`** (#579): the command line can give the vault a new
   passphrase, as *Change passphrase* in the clients does. The new one is asked
   for twice, or taken from `UNSEENET_NEW_PASSPHRASE` for scripts; copies of the

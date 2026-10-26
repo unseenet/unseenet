@@ -204,6 +204,9 @@ CREATE TABLE IF NOT EXISTS reconcile_state (    -- UN-RFC 0040 section 6: when t
     peer       TEXT PRIMARY KEY,
     next_at    INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS node_policy (        -- the policy the node last ran with (#543)
+    policy     TEXT NOT NULL
+);
 """
 
 KB_LEVELS = 4          # running sums down to the first 4 nibbles (65 536 prefixes) of key
