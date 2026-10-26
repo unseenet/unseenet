@@ -116,8 +116,8 @@ class AttachmentsMixin:
         return None if c is None else c.capability("UNSEENET-BLOB") is not None
 
     async def fetch_blob(self, group_id: str, blob_id: str) -> bytes:
-        """The file a post in this group carries, from the group's node: checked against
-        its blob ID and size before anything else is done with it (section 9.2), and
+        """The file a post in this group carries, from the group's node - or, when that
+        node has not got it, from your other nodes: checked against its blob ID and size before anything else is done with it (section 9.2), and
         kept in memory for a while. In closed groups and inboxes the blob is decrypted
         with the file's key from the post (UN-RFC 0027 section 3.3) and checked again.
         ``SessionError`` with a sentence for the user when it cannot be had."""
@@ -138,7 +138,30 @@ class AttachmentsMixin:
                 if exc.code == 436:
                     return "later"
                 raise
-        got = await self._call(run, self.node_for(group_id))
+        # the group's node first; if it has not got the file (it may not carry files, or not
+        # for this group), your other nodes - a file is the same wherever it comes from, and
+        # is checked against its ID below (UN-RFC 0027 section 9.2)
+        first = self.node_for(group_id)
+        order = [first] + [n for n in self.data.get("nodes", []) if n != first]
+        answers = []
+        got = None
+        for node in order:
+            try:
+                got = await self._call(run, node)
+            except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError,
+                    asyncio.TimeoutError):
+                got = "unreachable" if node != first else "unreachable-first"
+            if isinstance(got, (bytes, bytearray)):
+                break
+            answers.append(got)
+        else:
+            # nobody had it: say the most useful thing - one is still fetching it, else the
+            # group's node's answer
+            got = "later" if "later" in answers else (answers[0] if answers else None)
+            if got == "unreachable-first":
+                raise SessionError("the group's node does not answer right now")
+            if got == "unreachable":
+                got = None
         if got == "none":
             raise FileUnavailable("this node carries no files - another node may", "none")
         if got == "later":

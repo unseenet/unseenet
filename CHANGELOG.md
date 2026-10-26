@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A file the group's node lacks comes from your other nodes**: `fetch_blob` asks
+  the node a group is read from first, then your other nodes, before saying a
+  picture cannot be had - found when node1 and node2 carried files for `dk.test.*`
+  only, so pictures in other groups were on node3 and node4 but not where they
+  were read from. The file is checked against its ID wherever it comes from.
+
 - **`node_info()` says what a node carries**: `carries`, how many groups it lists
   (one LIST ACTIVE on the same connection), so a client can show it beside how
   many of yours you read there (unseenet-gui#153).
