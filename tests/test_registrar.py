@@ -6,6 +6,7 @@ import pytest
 
 import unseenet.client.session as sess
 import unseenet.core.groups as groups
+from unseenet import hierarchies as hz
 from unseenet import names as nm
 from unseenet.client.session import Session
 from unseenet.core import crypto
@@ -50,10 +51,10 @@ class World:
         s.add_node(self.addr)
         return s
 
-    def registrar(self, i):
+    def registrar(self, i, root=None):
         s = self.session(f"replica{i}", self.replicas[i], self.inbox_key)
         return Registrar(s, self.group, tlds=lambda: TLDS,
-                         dns_txt=lambda n: self.dns.get(n, []), now=lambda: self.clock)
+                         dns_txt=lambda n: self.dns.get(n, []), now=lambda: self.clock, root=root)
 
     async def user(self, name):
         s = self.session(name, crypto.Identity.generate())
@@ -124,6 +125,45 @@ async def test_claim_two_replicas_agree_and_the_user_hears(world):
     assert "top-level domain" in refused["name microsoft: refused"]
     assert "reserved" in refused["name unseenet: refused"]
     await alice.close(), await bob.close(), await r1.s.close(), await r2.s.close()
+
+
+async def test_names_of_others_go_to_their_owners(world):
+    """UN-RFC 0019 section 4.5: a hierarchy's name to its maintainer (or nobody),
+    a top-level domain to whoever its registry names under nic.<tld>."""
+    bob, carol, dave = await world.user("bob"), await world.user("carol"), await world.user("dave")
+    root = {**hz.builtin_root_list()[1],
+            "openorg": hz.Hierarchy("openorg", "governed", maintainer=carol.identity().key_text)}
+    r1 = world.registrar(0, root=root)
+    world.dns[nm.tld_record_name("microsoft")] = [nm.dns_record_value(dave.identity().key_text)]
+    for name in ("torproject", "matrix", "openorg", "microsoft"):
+        await world.claim(bob, "claim", name)
+    await world.process(r1)
+    refused = {s: b for s, b in await replies(bob)}
+    assert "hierarchy torproject.*" in refused["name torproject: refused"]
+    assert "hierarchy matrix.*" in refused["name matrix: refused"]
+    assert "maintainer" in refused["name openorg: refused"]
+    assert "_unseenet.nic.microsoft" in refused["name microsoft: refused"]
+
+    await world.claim(carol, "claim", "openorg")
+    await world.claim(dave, "claim", "microsoft")
+    await world.process(r1)
+    assert nm.current(world.certs_for(r1, "openorg"))[0].key == carol.identity().key_text
+    assert nm.current(world.certs_for(r1, "microsoft"))[0].key == dave.identity().key_text
+
+    # the project gets no hierarchy name it does not maintain (section 4.1 item 3)
+    project = world.session("project", world.project)
+    await project.ensure_inbox()
+    await world.claim(project, "claim", "torproject")
+    await world.process(r1)
+    assert not world.certs_for(r1, "torproject")
+
+    # a hierarchy that changes hands: carol's name is not renewed (section 6.3)
+    r1.root["openorg"] = hz.Hierarchy("openorg", "governed", maintainer=dave.identity().key_text)
+    await world.claim(carol, "renew", "openorg")
+    await world.process(r1)
+    assert "maintainer" in {s: b for s, b in await replies(carol)}["name openorg: refused"]
+    for s in (bob, carol, dave, project, r1.s):
+        await s.close()
 
 
 async def test_project_may_hold_reserved_names_and_limits_apply(world):

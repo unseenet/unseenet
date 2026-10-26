@@ -28,7 +28,9 @@ CLAIM_POW = 24                                        # section 6.2
 MAX_NAMES_PER_KEY = 3                                 # section 6.2
 DNS_PREFIX = "_unseenet"                              # section 6.4
 
-# Section 9, and the names UN-RFC 0018 section 9 reserves.
+# Section 9, and the names UN-RFC 0018 section 9 reserves. They are the project's.
+# Other hierarchies in the root list are not copied here: the registrar reads the
+# root list and gives their names to their maintainers (section 4.1 item 3).
 RESERVED = frozenset({
     "admin", "abuse", "help", "info", "node", "nodes", "operator", "postmaster", "registrar",
     "root", "security", "support", "system", "unseenet", "usenet",
@@ -98,6 +100,12 @@ def dns_record_name(domain: str) -> str:
         local, parent = split_sub(domain)
         return f"{local}.{DNS_PREFIX}.{parent}"
     return f"{DNS_PREFIX}.{domain}"
+
+
+def tld_record_name(tld: str) -> str:
+    """``_unseenet.nic.microsoft``: where a registry proves a registered name equal
+    to its top-level domain (section 4.5)."""
+    return dns_record_name(f"nic.{tld}")
 
 
 def dns_record_value(key_text: str) -> str:

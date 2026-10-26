@@ -75,6 +75,14 @@ def _newest(posts, parse):
     return best
 
 
+async def read_root_list(s: "Session") -> dict[str, hz.Hierarchy] | None:
+    """The newest root list the project has posted (UN-RFC 0018), or None if
+    none could be read. Does not touch the vault; the registrar uses it."""
+    best = _newest(await _read(s, hz.HIERARCHIES_GROUP, kn.PROJECT_KEY),
+                   lambda body: hz.parse_root_list(body))
+    return best[2][1] if best else None
+
+
 async def refresh(s: "Session") -> bool:
     """Read the root list, the hierarchy lists the client needs, and the names.
 
