@@ -3,8 +3,8 @@
 Installed with pip, the client works in the current directory, as it always
 has: ``unseenet.vault`` and ``unseenet-tor/`` next to where you start it.
 
-A **portable build** (the zips made by ``tools/build_portable.py``, e.g. on a
-USB stick) is laid out like this::
+A **portable build** (the zips made by unseenet-portable's
+``tools/build_portable.py``, e.g. on a USB stick) is laid out like this::
 
     Unseenet/
       UNSEENET-PORTABLE          marker: this is a portable installation

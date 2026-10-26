@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The portable builds' tools have moved to
+  [unseenet-portable](https://github.com/unseenet/unseenet-portable)**
+  (unseenet-portable#6), with their history: `tools/build_portable.py`,
+  `tools/portable/`, `tools/tor-version.txt`, Tor Browser's key in
+  `tools/keys/`, and the weekly *tor-update* check. `tools/sign_sums.py`,
+  `tools/announce.py` and `tools/dev_version.py` stay here; the bootable
+  image's `tools/image/` until unseenet-bootable#5.
+
 - **A posting queue** (#569, `Session.posting_queue`): many posts - an importer's,
   a bot's, a gateway's - posted in the order given, each through `Session.post`
   when its turn comes (so its `Date` is the time of posting, UN-RFC 0049), as
