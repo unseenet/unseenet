@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A posting queue** (#569, `Session.posting_queue`): many posts - an importer's,
+  a bot's, a gateway's - posted in the order given, each through `Session.post`
+  when its turn comes (so its `Date` is the time of posting, UN-RFC 0049), as
+  fast as postage and ripening allow, waiting for the next day at a file quota
+  and trying again after network failures, with refused posts set aside with
+  the reason; kept in a JSON file (0600) or by the caller, with an estimate of
+  how long the rest takes.
+
 - **No posting into the past; imported posts keep their original date** (#568,
   #566, UN-RFC 0049). Nodes refuse a `POST` whose `Date` is more than an hour
   old (`441 date`), except an article a moderator validly approves; articles
