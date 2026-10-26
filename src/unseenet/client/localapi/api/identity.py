@@ -230,6 +230,12 @@ class Identity:
             raise SessionError(f"unknown action {action!r}")
         return {"text": text}
 
+    def notifications(self) -> dict:
+        """``GET /api/notifications``: what new has landed in For you since the last
+        time any client asked - for the front end to tell the reader, as the reader
+        chose (``settings``). Asking marks them as told."""
+        return self._ready().notifications()
+
     def settings(self) -> dict:
         """``GET /api/settings`` (section 4.8): your settings, with a preview of your
         signature as it will be signed."""
@@ -238,7 +244,8 @@ class Identity:
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
                 "private_min_ripe": s.private_min_ripe(),
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
-                "pictures": s.show_pictures(), "state_local": s.state_kept_local()}
+                "pictures": s.show_pictures(), "state_local": s.state_kept_local(),
+                "notifications": s.notification_settings()}
 
     async def change_settings(self, data: dict) -> dict:
         """``POST /api/settings``: as ``set_settings``, and ``state_local`` - keep your
@@ -286,7 +293,7 @@ class Identity:
         Markdown, notices, the ripening level private senders need, blocked posts, bots."""
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
-                               "show_blocked", "hide_bots", "pictures"}
+                               "show_blocked", "hide_bots", "pictures", "notifications"}
         if unknown:
             raise SessionError(f"unknown setting {sorted(unknown)[0]}")
         level = data.get("private_min_ripe")
@@ -309,5 +316,11 @@ class Identity:
             s.set_hide_bots(bool(data["hide_bots"]))
         if "pictures" in data:
             s.set_show_pictures(bool(data["pictures"]))
+        if "notifications" in data:
+            n = data["notifications"] or {}
+            if not isinstance(n, dict):
+                raise SessionError("notifications is {on, content}")
+            s.set_notification_settings(on=n["on"] if "on" in n else ...,
+                                        content=n["content"] if "content" in n else ...)
         self._redraw_all(s)
         return self.settings()

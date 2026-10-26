@@ -440,6 +440,18 @@ not (you do not own or moderate the group).
   MAY keep a copy in the browser for its first paint, but these are what
   count.
 
+- `GET /api/notifications`: what new has landed in *For you* since any client
+  last asked - private chats and posts to you, replies and mentions; not your
+  own, not reactions, not what was old on arrival (UN-RFC 0049 section 5.2).
+  `{"settings", "count", "items": [{"id", "group", "why": "private" | "reply" |
+  "mention", "chat", "who", "text"}]}`; `who` and `text` only when
+  `settings.content` is true. Asking marks them as told. The first time ever it
+  answers none and notes what is unread then. `settings` is the reader's choice,
+  also in `GET /api/settings` as `notifications` and changed there with
+  `{"notifications": {"on": true | false | null, "content": bool}}` (`on` null:
+  ask the first time); it is kept with the state (UN-RFC 0044), so it is the
+  same in every client. Front ends tell only while they run: there is no push.
+
 ## 4.9 Articles from a Program
 
 For a service (section 3.2), such as a gateway, that builds what it posts:

@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **What is new to tell about** (unseenet-gui#126, unseenet-tui#4):
+  `Session.notifications()` and `GET /api/notifications` give what has landed in
+  For you since a client last asked - private chats and posts, replies and
+  mentions; not your own, not reactions, not what was old on arrival - so every
+  client notifies alike. The choice (`on`: yes, no, or ask once; `content`:
+  sender and excerpt, off by default) is a setting kept with your state, the
+  same in every client. No push: only a running client asks.
+
 - **The bootable image's tools have moved to
   [unseenet-bootable](https://github.com/unseenet/unseenet-bootable)**
   (unseenet-bootable#5), with their history: `tools/image/`.
