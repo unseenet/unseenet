@@ -395,7 +395,8 @@ class PostingMixin:
             self.check_files(group_id, files)
             described = [(f.name, f.media_type, f.octets, f.alt, f.dim) for f in files]
             if entry.get("type") == "closed":     # encrypted, keys inside (UN-RFC 0027, 3.3)
-                outer, inner_files, blobs = bl.encrypted_attachment_headers(described)
+                outer, inner_files, blobs = bl.encrypted_attachment_headers(
+                    described, (self.manifest_data(group_id).get("attachments") or {}).get("max_size"))
                 edit_header += outer
             else:
                 edit_header += bl.attachment_headers(described)

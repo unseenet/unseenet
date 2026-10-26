@@ -59,12 +59,12 @@ def test_files_are_encrypted_with_a_fresh_key_each_time():
     outer, inner, blobs = bl.encrypted_attachment_headers(files)
     outer2, _, blobs2 = bl.encrypted_attachment_headers(files)
     assert blobs[0][0] != blobs2[0][0]                     # never convergent (3.3)
-    assert len(blobs[0][1]) == len(plain) + bl.ENC_OVERHEAD
+    assert len(blobs[0][1]) == bl.PAD + bl.ENC_OVERHEAD          # padded (3.3)
     assert plain not in blobs[0][1]
     art = Article([("Blobs", outer[0][1])], "")
     shown, keys = bl.inner_attachments(art, inner)
     assert shown[0]["size"] == len(plain) and shown[0]["name"] == "a.txt"
-    assert bl.decrypt_file(keys[blobs[0][0]], blobs[0][1]) == plain
+    assert bl.decrypt_file(keys[blobs[0][0]], blobs[0][1], len(plain)) == plain   # padding cut off
     # what 4.4 and 5.2 make a member's client refuse
     assert bl.inner_attachments(art, inner, types=["image/*"]) == ([], {})
     assert bl.inner_attachments(Article([("Blobs", outer2[0][1])], ""), inner) == ([], {})
@@ -85,7 +85,10 @@ async def test_a_picture_in_a_closed_group(net, tmp_path):
     art = _stored(node, msgid)
     assert art.get("Blobs") and not any(n.lower().startswith("attachment-") for n, _ in art.headers)
     (bid, size), = bl.parse_blobs(art)
-    assert node.blobs.get(bid) != files[0].octets and size == len(files[0].octets) + 40
+    assert node.blobs.get(bid) != files[0].octets
+    # padded (UN-RFC 0027 3.3): the node sees only the size class, not the file's length
+    assert size == bl.padded_size(len(files[0].octets), bl.PICTURES["max_size"]) + 40
+    assert size % bl.PAD == 40 and size != len(files[0].octets) + 40
     bob.subscribe(fam)
     await bob.fetch_group(fam)
     msg = bob.find_message(fam, msgid)
@@ -160,3 +163,14 @@ async def test_a_picture_submitted_to_a_moderated_group(net, tmp_path):
     msg = user.find_message(gid, msgid)
     assert [a["blob"] for a in msg.attachments] == [plain]
     assert await user.fetch_blob(gid, plain) == files[0].octets
+
+
+def test_padding_rules():
+    assert bl.padded_size(1) == bl.PAD and bl.padded_size(bl.PAD) == bl.PAD
+    assert bl.padded_size(bl.PAD + 1) == 2 * bl.PAD
+    assert bl.padded_size(100_000, limit=110_000) == 110_000          # never over the group's limit
+    assert bl.padded_size(100_000, limit=90_000) == 100_000           # never under the file
+    assert bl.fits_padding(bl.PAD + 40, 10) and bl.fits_padding(50, 10)  # padded, or not (a limit)
+    assert not bl.fits_padding(bl.PAD + 41, 10) and not bl.fits_padding(49, 10)
+    key, blob = bl.encrypt_file(b"hej")
+    assert len(blob) == bl.PAD + 40 and bl.decrypt_file(key, blob, 3) == b"hej"

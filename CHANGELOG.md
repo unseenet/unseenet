@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Encrypted files are padded** (#486, UN-RFC 0027 3.3 and 4.4, #598): before
+  encryption a file in a closed group, private post or chat is padded with zeros
+  to the next 64 KiB (never beyond the group's `max_size`), so nodes see only its
+  size class, not a length that could tell a known picture; readers cut it back
+  to the size in the inner header and accept a blob between the file plus 40 and
+  its 64 KiB-rounded size plus 40, whatever the group's limit is now.
+
 - **Reactions to private chats and posts** (#513, UN-RFC 0048 section 4.3): a
   reaction to a private message someone sent you is itself one, sealed to their
   inbox, with any emoji; changing it is sending another (naming the one it

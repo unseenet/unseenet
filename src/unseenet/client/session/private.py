@@ -253,7 +253,8 @@ class PrivateMixin:
                     self.group_entry(group_id)["manifest"] = dict(m.raw)
             self.check_files(group_id, files)
             outer, inner_files, blobs = bl.encrypted_attachment_headers(
-                [(f.name, f.media_type, f.octets, f.alt, f.dim) for f in files])
+                [(f.name, f.media_type, f.octets, f.alt, f.dim) for f in files],
+                (self.manifest_data(group_id).get("attachments") or {}).get("max_size"))
             inner = list(inner or []) + inner_files
             file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
         two = await self.takes_sealedbox2(group_id)        # both ends can (UN-RFC 0009, 2.3)
