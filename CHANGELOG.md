@@ -7,6 +7,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The bootable image tells its clients so** (`UNSEENET_BOOTABLE=1`), so they
+  leave out what must not happen there, such as saving recovery words.
+
 - **Copy an identity to another device** (#572, UN-RFC 0050 section 3): the
   old device shows a short code (`7-guitar-tunnel`) and a QR code, the new
   device types or scans it, both show the same two check words, and only

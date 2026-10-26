@@ -461,7 +461,10 @@ class BootMenu(App):
         self.query_one("#status", Static).update("\n".join(lines))
 
     def _env(self) -> dict:
-        env = dict(os.environ)
+        """The clients' environment: where the stick's data is, and that they run on the
+        bootable image - where they offer less (no saving recovery words, UN-RFC 0050
+        section 4.3; no opening links)."""
+        env = dict(os.environ, UNSEENET_BOOTABLE="1")
         if self.media is not None:
             env["UNSEENET_HOME"] = str(self.media)
         return env
