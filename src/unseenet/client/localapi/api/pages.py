@@ -83,6 +83,33 @@ class Pages:
                     "id": prev.message_id, "who": s.identity_label(prev.author_key, prev.from_name),
                     "date": prev.date.isoformat() if prev.date else None}}
 
+    async def publish_folder(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/site`` (section 4.15, #538): publish a folder of
+        Markdown (and HTML) as the site's pages - ``{"folder", "prune": false,
+        "dry_run": true}``. A dry run answers at once what would be sent
+        (``changes``, ``notes``, ``problems``, as ``Session.publish_site``); otherwise
+        it is a job, as a post is, sending only what changed."""
+        s = self._ready()
+        site = self._site_data(s, gid)
+        if not self._may_write(s, site):
+            raise SessionError("only the site's writers write its pages")
+        folder = str(data.get("folder", "")).strip()
+        if not folder:
+            raise SessionError("which folder?")
+        prune = bool(data.get("prune"))
+        if data.get("dry_run", True):
+            return await s.publish_site(gid, folder, dry_run=True, prune=prune)
+
+        async def send() -> str:
+            done = await s.publish_site(gid, folder, prune=prune)
+            if done["problems"]:
+                raise SessionError("; ".join(done["problems"]))
+            return f"{done['sent']} page(s)"
+
+        async def after(_msgid: str) -> None:
+            s.emit(ev.GroupUpdated(gid))
+        return {"job": self._new_job(gid, send, after)}
+
     def write_page(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/page`` (section 4.15): write a page - ``{"path",
         "title", "text", "markdown": true, "files"}`` - remove it (``{"path", "remove":

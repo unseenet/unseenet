@@ -7,6 +7,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Publish a folder as a site** (#538): `client.siteimport.plan(folder)` turns a
+  folder of Markdown - and HTML pages, their content without their design - into
+  a site's pages: paths made safe (`Guide/First Steps.md` -> `guide/first-steps`),
+  titles from front matter or the first heading, raw HTML turned into Markdown,
+  links between the files made site links, pictures cleaned of metadata and made
+  smaller when too large, limits checked, `.siteignore`; every change in a report
+  with file and line. `Session.publish_site` sends only what changed (a new
+  version naming the old), `prune` removes pages no longer there, `dry_run` sends
+  nothing. CLI: `unseenet site-publish FOLDER SITE [--dry-run] [--prune] [--yes]`.
+
 - **What is new to tell about** (unseenet-gui#126, unseenet-tui#4):
   `Session.notifications()` and `GET /api/notifications` give what has landed in
   For you since a client last asked - private chats and posts, replies and
