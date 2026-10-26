@@ -27,7 +27,9 @@ class Feeds:
         followed by its comments as its own feed has them, each row with ``reply`` and
         ``comment`` for the entry's own feed - writing goes to that feed."""
         head = self._timeline_head(s)
-        entries = s.timeline(limit=TIMELINE_LIMIT)
+        scored = s.scored_timeline(limit=TIMELINE_LIMIT) if s.rule_set() else None   # UN-RFC 0051
+        entries = [m for m, _ in scored] if scored is not None else s.timeline(limit=TIMELINE_LIMIT)
+        result = {m.message_id: r for m, r in scored} if scored is not None else {}
         under: dict[str, list] = {}
         for gid in {m.group for m in entries}:
             current = None
@@ -46,6 +48,10 @@ class Feeds:
                        address=_addr.post_address(s, m.group, m.message_id))
             out.append(row)
         self._add_reactions(s, out, rows)       # UN-RFC 0048 section 7.2
+        if scored is not None:                  # the entries' scores; comments keep theirs off
+            for row, (m, depth) in zip(out, rows):
+                if depth == 0:
+                    self._score_rows([row], [result[m.message_id]])
         if self.runtime is not None:            # a feed followed but not read yet
             self.spawn(self._unknown_manifests())
         return {"group": head, "rows": out}

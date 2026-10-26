@@ -16,6 +16,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   what you have seen and the threads you watch or ignore (UN-RFC 0044 4.5), and
   gives the timeline and a group's threads as your rules have them - replies never
   reordered. The state now keeps fields a client does not know.
+  The local API has them (`/api/rules`, `/api/rules/check`, `/api/threads`,
+  `/api/groups/{gid}/seen`; rows with `score`, `actions`, `hidden`, `why` only
+  when you have rules, UN-RFC 0046 4.20), and so does the CLI: `unseenet rules
+  show|set|check|on|off|clear`, `unseenet thread watch|ignore|clear`,
+  `unseenet timeline --why`.
 
 - **`unseenet.help.news`** (unseenet-helpbot#21): the help bot's plain-language
   news about releases, a feed open for comments for 30 days; in the project's

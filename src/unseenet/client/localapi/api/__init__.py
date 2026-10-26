@@ -131,10 +131,11 @@ from .pages import Pages  # noqa: E402
 from .nodes import Nodes  # noqa: E402
 from .recovery import Recovery  # noqa: E402
 from .copying import Copying  # noqa: E402
+from .rules import Rules  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying):
+               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

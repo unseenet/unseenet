@@ -147,14 +147,72 @@ async def c_timeline(app: App, args) -> None:
             await s.fetch_group(gid)
         except Exception as exc:  # noqa: BLE001 - one feed that cannot be read is skipped
             print(f"{gid}: {exc}", file=sys.stderr)
-    rows = s.timeline(limit=getattr(args, "limit", None) or 50)
-    out = [{"id": m.message_id, "feed": m.group, "feed_label": s.group_label(m.group),
-            "author": s.label_of(m.author_key), "date": m.date.isoformat() if m.date else None,
-            "subject": m.subject, "text": m.body.strip().splitlines()[0][:120] if m.body.strip() else ""}
-           for m in rows]
-    text = "\n".join(f"{r['date'][:16] if r['date'] else '?':16}  {r['feed_label']:24}  "
-                     f"{r['author']}: {r['subject'] or r['text']}" for r in out) or "The timeline is empty."
-    emit(args, text, {"entries": out})
+    limit = getattr(args, "limit", None) or 50
+    scored = s.scored_timeline(limit)            # your own rules, if any (UN-RFC 0051)
+    rules = bool(s.rule_set())
+    out = []
+    for m, res in scored:
+        row = {"id": m.message_id, "feed": m.group, "feed_label": s.group_label(m.group),
+               "author": s.label_of(m.author_key), "date": m.date.isoformat() if m.date else None,
+               "subject": m.subject, "text": m.body.strip().splitlines()[0][:120] if m.body.strip() else ""}
+        if rules:
+            row.update(score=res.score, why=res.explain())
+        out.append(row)
+    lines = []
+    for r in out:
+        score = f"{r['score']:+5d}  " if rules else ""
+        lines.append(f"{score}{r['date'][:16] if r['date'] else '?':16}  {r['feed_label']:24}  "
+                     f"{r['author']}: {r['subject'] or r['text']}")
+        if rules and getattr(args, "why", False):
+            lines += ["        " + ln for ln in r["why"].splitlines()]
+    emit(args, "\n".join(lines) or "The timeline is empty.", {"entries": out, "rules": rules})
+
+
+async def c_rules(app: App, args) -> None:
+    """``unseenet rules [show | set [FILE] | check [FILE] | on | off | clear]``: your own
+    rules for your feed and groups (UN-RFC 0051) - they run only here and go with your
+    identity. ``set`` and ``check`` read FILE, or stdin when it is ``-`` or missing;
+    ``off`` keeps the text to turn on again; ``clear`` removes them."""
+    s = _session(app, args)
+    what = getattr(args, "what", None) or "show"
+    if what in ("set", "check"):
+        src = getattr(args, "file", None) or "-"
+        text = sys.stdin.read() if src == "-" else Path(src).read_text()
+        rs = s.check_feed_rules(text) if what == "check" else s.set_feed_rules(text)
+    elif what in ("on", "off"):
+        s.set_rules_on(what == "on")
+        rs = s.check_feed_rules(s.feed_rules())
+    elif what == "clear":
+        rs = s.set_feed_rules("")
+    else:
+        rs = s.check_feed_rules(s.feed_rules())
+    problems = [{"line": p.line, "message": p.message} for p in rs.problems]
+    state = "on" if s.rules_on() else "off (kept)"
+    if what == "show":
+        text = (s.feed_rules().rstrip("\n") + "\n\n" if s.feed_rules() else "No rules: the feed is "
+                "newest first and threads are as they are.\n")
+        text += f"{len(rs.rules)} rule(s) used, {state}."
+    else:
+        verb = {"set": "Kept", "check": "Checked", "on": "Turned on", "off": "Turned off",
+                "clear": "Removed"}[what]
+        text = f"{verb}: {len(rs.rules)} rule(s) used" + ("" if what == "clear" else f", {state}") + "."
+    if problems:
+        text += "\n" + "\n".join(f"line {p['line']}: {p['message']}" for p in problems)
+    emit(args, text, {"text": s.feed_rules(), "on": s.rules_on(), "rules": len(rs.rules),
+                      "problems": problems})
+    if what == "check" and problems:
+        sys.exit(1)
+
+
+async def c_thread(app: App, args) -> None:
+    """``unseenet thread watch|ignore|clear MSGID``: watch a thread (its replies land in
+    For you), ignore it, or neither - kept in your state (UN-RFC 0044 section 4.5)."""
+    s = _session(app, args)
+    mid = args.msgid if args.msgid.startswith("<") else f"<{args.msgid}>"
+    s.set_thread_mark(mid, "" if args.what == "clear" else
+                      {"watch": "watched", "ignore": "ignored"}[args.what])
+    mark = s.thread_mark(mid)
+    emit(args, f"{mid}: {mark or 'neither watched nor ignored'}", {"id": mid, "mark": mark})
 
 
 async def c_address(app: App, args) -> None:
@@ -224,5 +282,5 @@ async def c_open(app: App, args) -> None:
     emit(args, text, out)
 
 
-__all__ = ['c_profile', 'c_follow', 'c_unfollow', 'c_following', 'c_timeline', 'c_address',
+__all__ = ['c_profile', 'c_follow', 'c_unfollow', 'c_following', 'c_timeline', 'c_rules', 'c_thread', 'c_address',
            'c_open', '_is_group', '_group_of', '_confirm']

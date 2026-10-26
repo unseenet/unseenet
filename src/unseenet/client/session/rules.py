@@ -50,8 +50,23 @@ class RulesMixin:
         self.save()
         return self.rule_set()
 
+    def rules_on(self) -> bool:
+        """Whether your rules are used (they can be turned off without losing them)."""
+        return not self.data.get("feed_rules_off")
+
+    def set_rules_on(self, on: bool) -> None:
+        """Use your rules, or turn them off in one action - the text stays, to turn them
+        on again (UN-RFC 0051 section 3)."""
+        if on:
+            self.data.pop("feed_rules_off", None)
+        else:
+            self.data["feed_rules_off"] = True
+        self.save()
+
     def rule_set(self) -> sc.RuleSet:
-        """Your rules, parsed (kept until they change)."""
+        """Your rules, parsed (kept until they change); none while they are turned off."""
+        if not self.rules_on():
+            return sc.RuleSet()
         text = self.feed_rules()
         cached = getattr(self, "_rule_cache", None)
         if cached is None or cached[0] != text:

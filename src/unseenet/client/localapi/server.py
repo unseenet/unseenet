@@ -289,6 +289,24 @@ async def ignore(request):
     return _json(_api(request).ignored())
 
 
+async def rules(request):
+    if request.method == "GET":
+        return _json(_api(request).rules())
+    return _json(_api(request).set_rules(await _body(request)))
+
+
+async def rules_check(request):
+    return _json(_api(request).check_rules(await _body(request)))
+
+
+async def seen(request):
+    return _json(_api(request).mark_seen(_gid(request), await _body(request)))
+
+
+async def threads_mark(request):
+    return _json(_api(request).thread_mark(await _body(request)))
+
+
 async def report(request):
     if request.method == "GET":
         return _json(await _api(request).report_targets(_gid(request), request.query.get("id", "")))
@@ -520,6 +538,9 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/contacts", contacts), ("POST", "/api/chats/close", close_chat),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),
+    ("GET", "/api/rules", rules), ("POST", "/api/rules", rules),           # UN-RFC 0051
+    ("POST", "/api/rules/check", rules_check), ("POST", "/api/threads", threads_mark),
+    ("POST", "/api/groups/{gid}/seen", seen),
     ("GET", "/api/groups/{gid}/report", report), ("POST", "/api/groups/{gid}/report", report),
     ("POST", "/api/groups/{gid}/block", block),
     ("POST", "/api/groups/{gid}/settings", group_settings),
