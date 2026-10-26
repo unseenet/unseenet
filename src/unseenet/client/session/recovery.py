@@ -12,7 +12,7 @@ Access to closed groups does not come back (4.5): ``closed_groups_to_rejoin`` li
 them and ``ask_to_be_invited`` asks an owner, by private post, to invite you again.
 
 Belongs here: everything about recovery words above the encoding. Copying an
-identity to another device (section 3) has a file of its own.
+identity to another device (section 3) is in ``copying.py``.
 """
 
 from __future__ import annotations

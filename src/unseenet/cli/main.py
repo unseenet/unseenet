@@ -21,7 +21,7 @@ from .following import *  # noqa: F403
 
 COMMANDS = {
     "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase,
-    "id-words": c_id_words, "id-restore": c_id_restore, "node-add": c_node_add, "groups": c_groups,
+    "id-words": c_id_words, "id-restore": c_id_restore, "copy-to": c_copy_to, "copy-from": c_copy_from, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
@@ -65,6 +65,17 @@ def client_main(argv=None) -> None:
     s.add_argument("name", nargs="?", help="its name in this vault (default: restored-<fp>)")
     s.add_argument("--display", help="display name shown in From")
     s.add_argument("--offline", action="store_true", help="only put it in the vault")
+    s = sub.add_parser("copy-to", help="copy identities to another device (code or QR, over Tor)",
+                       description="Offer this vault's identities to another device (UN-RFC "
+                                   "0050). Nothing is sent until you confirm the check words.")
+    s.add_argument("--names", help="only these identities, comma-separated (default: all)")
+    s.add_argument("--no-group-secrets", action="store_true",
+                   help="leave out the closed groups' secrets")
+    s.add_argument("--yes", action="store_true", help="do not ask whether the check words match")
+    s = sub.add_parser("copy-from", help="get identities from another device with its code",
+                       description="Get identities from another device (UN-RFC 0050) with the "
+                                   "code it shows, or the text of its QR code.")
+    s.add_argument("code")
     sub.add_parser("passphrase", help="give the vault a new passphrase",
                    description="Give the vault a new passphrase. The current one is the one it was "
                                "opened with; the new one is asked for twice, or taken from "

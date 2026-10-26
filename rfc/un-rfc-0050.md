@@ -52,7 +52,7 @@ from nothing (section 4).
   this identity; it may already have other identities.
 - **Copy**: the keys end up on both devices. The old device keeps
   everything. A user may copy to any number of devices.
-- **Code**: the short one-time code of a copy, such as `7-guitar-tulip`.
+- **Code**: the short one-time code of a copy, such as `7-guitar-tunnel`.
 - **Recovery words**: 24 words that encode one identity's seed.
 
 # 3. Copying an Identity
@@ -62,7 +62,7 @@ from nothing (section 4).
 On the old device the user chooses *Copy to another device…*. The
 client asks for the vault passphrase if the vault is locked, lets the
 user choose what to copy (section 3.6), and shows a QR code and a code
-such as `7-guitar-tulip`.
+such as `7-guitar-tunnel`.
 
 On the new device the user chooses *Get identity from another device*,
 offered at first start next to *Create a new identity* and *Restore

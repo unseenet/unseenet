@@ -12,6 +12,7 @@ joined here from parts, one file per area:
     kept.py        pins and pages                                XUN-RECONCILE, XUN-MANIFESTS
     blobs.py       blobs                    posting_commands.py  POST
     blocks.py      maintainers' blocks      blob_commands.py     BLOBPOST, BLOB
+                                            meet_commands.py     XUNMEET (UN-RFC 0050)
     edits.py       edits (Supersedes)
     forwarding.py  queueing for peers
 
@@ -173,6 +174,7 @@ from .reading_commands import ReadingCommands  # noqa: E402
 from .peering_commands import PeeringCommands  # noqa: E402
 from .posting_commands import PostingCommands  # noqa: E402
 from .blob_commands import BlobCommands  # noqa: E402
+from .meet_commands import MeetCommands  # noqa: E402
 
 
 class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Edits, Forwarding):
@@ -180,6 +182,6 @@ class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Block
     Split into parts by area (node/server/*.py, see above)."""
 
 
-class Session(ConnectionBase, AuthCommands, ListsCommands, ReadingCommands, PeeringCommands, PostingCommands, BlobCommands):
+class Session(ConnectionBase, AuthCommands, ListsCommands, ReadingCommands, PeeringCommands, PostingCommands, BlobCommands, MeetCommands):
     """One ONNTP connection to a node, from a client or a peer. Split into parts
     by area (node/server/*_commands.py, see above)."""

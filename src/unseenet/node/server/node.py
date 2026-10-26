@@ -44,6 +44,9 @@ class NodeBase:
         # UN-RFC 0027 section 6.3: articles from peers whose blobs we are fetching,
         # Message-ID -> {"group", "source", "missing": {blob ID: octets}, "until"}
         self.blob_wait: dict[str, dict] = {}
+        # UN-RFC 0050 section 3.3: the meeting point, in memory only, never logged:
+        # number -> {"address", "tag", "misses", "until"}
+        self.meetings: dict[int, dict] = {}
 
     def watch(self, pattern: str) -> asyncio.Queue:
         """A queue that receives the Message-ID and group of every new article whose group
