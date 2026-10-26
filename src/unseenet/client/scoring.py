@@ -39,6 +39,25 @@ MAX_BYTES = 2048                 # the rules as kept in the state (UN-RFC 0044)
 MAX_RULES = 64
 MAX_POINTS = 10_000              # a rule's points and caps stay within this
 
+# What every client shows in its editor when you have no rules, so you see what rules
+# look like (UN-RFC 0051 section 3): a suggestion, yours only when you save it, never
+# applied by itself. One text, so every client offers the same.
+SUGGESTION = """# Your own rules - they run only here, and go with your identity.
+# Lines starting with # are comments: take a rule out by putting # in front of it.
+# Without rules the feed is newest first and threads are as they are.
+
+[feed]
++10 if author in following           # people I follow first
++2  per time I reacted to author  max 20
+-30 if seen                          # what I have scrolled past, further down
++15 if new replies since seen
+sort by score, then date
+
+[groups]
++20 if I posted in thread
+hide if thread in ignored
+"""
+
 LISTS = ("following", "contacts", "ignored")
 THREAD_LISTS = ("watched", "ignored")
 COUNTERS = {

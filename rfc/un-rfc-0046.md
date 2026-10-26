@@ -904,7 +904,9 @@ client core, so every front end shows the same order and the same
 - `GET /api/rules`: `{"text", "on", "rules", "problems"}` - the rules as
   the user wrote them, whether they are used, how many rules are used,
   and `problems`, `[{"line", "message"}]`, the lines that are not
-  (UN-RFC 0051 section 6).
+  (UN-RFC 0051 section 6); and `suggestion`, the commented rule set every
+  client offers when the user has none - shown in full, used only if the
+  user saves it (UN-RFC 0051 section 3).
 - `POST /api/rules` `{"text", "on"}`, either or both: keep `text` as the
   rules ("" removes them; 400 when longer than 2048 bytes), and turn them
   on or off - off keeps the text (UN-RFC 0051 section 3). Answers as
