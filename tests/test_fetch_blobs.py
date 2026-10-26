@@ -169,3 +169,20 @@ def test_alt_and_dim_in_the_headers():
     assert "alt=" not in plain and "dim=" not in plain                  # as before
     [_, (_, cut)] = bl.attachment_headers([("a.png", "image/png", data, "æ" * 400, None)])
     assert bl.shown_attachments([("Attachment-1", cut)])[0]["alt"] == "æ" * 256   # 512 octets
+
+
+async def test_a_file_the_group_s_node_lacks_comes_from_your_other_nodes(net):
+    """Found on the project's nodes: node1 and node2 carried files for dk.test.* only, so
+    a picture in alt.space.nasa was on node3 and node4 but not on the node it was read
+    from. The client asks your other nodes before saying it cannot be had."""
+    node, session = net
+    with_files, without = await node(max_size=1048576), await node()
+    me = session("me", with_files)
+    gid, sent = await _group_with_a_picture(me, png())
+    await me.fetch_group(gid)
+    other = session("other", without)                 # the group is read from this one
+    other.add_node(with_files)                         # one of your other nodes has it
+    other.cache[gid] = me.cache[gid]
+    assert other.node_for(gid) == without
+    assert await other.fetch_blob(gid, bl.blob_id(sent.octets)) == sent.octets
+    assert (await other.picture(gid, bl.blob_id(sent.octets))).width == 40
