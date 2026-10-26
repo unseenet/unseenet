@@ -355,6 +355,19 @@ A network profile (UN-RFC 0023) MAY map reactions:
 - **Usenet** and other networks without reactions: reactions MUST NOT
   be sent out, not even as articles with the emoji as text.
 
+Going out, a gateway speaks as one user of the other network, and those
+networks count one reaction per sender. So a gateway that exports
+reactions (a group whose `gateway` field has `direction` `both`) shows
+*that* readers in Unseenet reacted, never how many: while at least one
+key in Unseenet gives an emoji to a message that came from the other
+network, the gateway's own reaction with that emoji is on it there; when
+the last one takes it back, the gateway takes its own back (a redaction,
+a deletion). It counts neither its own imported reactions nor reactions
+to messages that did not come from that network, and sends nothing for
+them. The number stays in Unseenet: telling the other network how many
+read along there would say more about Unseenet's readers than they
+chose to.
+
 A gatewayed reaction whose emoji is not in the group's reaction set is
 dropped, not changed to another emoji.
 
