@@ -31,7 +31,7 @@ from .client import naming
 from .client.session import Message, Session, SessionError
 from .core import crypto
 from .core.article import new_article
-from .core.groups import personal_inbox_id
+from .core.groups import personal_inbox_id, split_group_id
 
 log = logging.getLogger("unseenet.registrar")
 
@@ -133,6 +133,7 @@ class Registrar:
         self.owner = manifest.get("owner")
         self.trusted = {k for k in [self.owner, *manifest.get("posters", [])] if k}
         self.claims_group = manifest.get("claims")
+        self._own_claims_inbox()
         if self.me.key_text not in self.trusted:
             raise SessionError(f"this registrar key is not a poster in {self.group}")
         if not self.fixed_root:
@@ -280,6 +281,23 @@ class Registrar:
         except (SessionError, OSError, ConnectionError) as exc:
             log.warning("could not answer %s: %s", c.id, exc)
 
+    def _own_claims_inbox(self) -> None:
+        """Mark the claim inbox as ours when the vault holds its key, so that it is
+        renewed like any client's own inbox (UN-RFC 0029 section 4, #607). An inbox
+        from before UN-RFC 0029 has no ``expires``; only its owner takes such a manifest."""
+        if not self.claims_group:
+            return
+        try:
+            _, fp = split_group_id(self.claims_group)
+        except ValueError:
+            return
+        for name in self.s.data["identities"]:
+            if self.s.identity(name).fingerprint == fp:
+                entry = self.s.group_entry(self.claims_group)
+                if not entry.get("owner"):
+                    entry.update({"type": "inbox", "owner": True})
+                return
+
     # --- one round ------------------------------------------------------------------------
 
     async def read_claims(self) -> list[Claim]:
@@ -325,6 +343,9 @@ class Registrar:
         del handled[:-MAX_HANDLED]
         await self.converge()
         await self.renew_domains()
+        renewed = await self.s.renew_key_bound(now=self.now())   # the claim inbox (#607)
+        if renewed:
+            log.info("renewed %s", ", ".join(renewed))
         self.s.save()
 
     async def converge(self) -> None:

@@ -331,3 +331,25 @@ def _history_dates(monkeypatch):
     from datetime import timedelta
     from unseenet.node import server as node_server
     monkeypatch.setattr(node_server, "POST_PAST", timedelta(days=3650))
+
+
+async def test_the_registrar_renews_its_claim_inbox(world):
+    """#607: the claim inbox is renewed like any client's own inbox (UN-RFC 0029, 4)."""
+    data = {"v": 1, "name": "inbox", "type": "inbox", "owner": world.inbox_key.key_text,
+            "serial": 2, "min_pow": 8, "retention_days": 30}
+    world.node.accept(manifest_article(world.inbox_key, world.claims, data, pow_bits=8,
+                                       now=world.clock, lifetime=timedelta(days=5)).to_bytes())
+    r1 = world.registrar(0)
+    await r1.run_once()
+
+    alice = await world.user("alice")
+    await alice.fetch_group(world.claims)
+    m = alice.manifest_data(world.claims)
+    assert m["serial"] == 3
+    assert groups.stored_expires(m) - world.clock > timedelta(days=30)
+    # and a replica without the inbox key leaves it alone
+    r2 = Registrar(world.session("keyless", world.replicas[1]), world.group,
+                   tlds=lambda: TLDS, dns_txt=lambda n: [], now=lambda: world.clock)
+    await r2.read_group()
+    assert not r2.s.group_entry(world.claims).get("owner")
+    await alice.close(), await r1.s.close(), await r2.s.close()
