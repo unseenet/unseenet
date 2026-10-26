@@ -20,7 +20,7 @@ from .following import *  # noqa: F403
 
 
 COMMANDS = {
-    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "node-add": c_node_add, "groups": c_groups,
+    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
@@ -50,6 +50,11 @@ def client_main(argv=None) -> None:
     s.add_argument("name")
     s.add_argument("--display", help="display name shown in From")
     sub.add_parser("whoami", help="list identities")
+    sub.add_parser("passphrase", help="give the vault a new passphrase",
+                   description="Give the vault a new passphrase. The current one is the one it was "
+                               "opened with; the new one is asked for twice, or taken from "
+                               "UNSEENET_NEW_PASSPHRASE for scripts. Copies of the vault elsewhere "
+                               "keep the old passphrase.")
     s = sub.add_parser("node-add", help="add a node address (xyz.onion or host:port)")
     s.add_argument("address")
     s = sub.add_parser("groups", help="list groups on the node")

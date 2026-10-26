@@ -4,7 +4,7 @@ The CLI is one more client on the shared core, like the TUI and unseenet-gui: wh
 does goes through ``Session`` (``unseenet.client.session``). Split by area:
 
     node.py       unseenet-node: node.toml, the node key, running a node
-    basics.py     id-new, whoami, node-add
+    basics.py     id-new, id-import, whoami, node-add, passphrase
     groups.py     groups, group-create, group-edit, group-show, group-remove, invite
     messages.py   post, withdraw, read, react
     network.py    tor, bridges, gateways
@@ -62,6 +62,7 @@ class App:
         self.vault = vault
         self.tor: TorProcess | None = None
         self._session = None
+        self.passphrase: str | None = None
 
     @property
     def session(self):
@@ -162,6 +163,7 @@ async def client_command(args) -> None:
     except VaultError as exc:
         sys.exit(str(exc))
     app = App(vault)
+    app.passphrase = passphrase       # `unseenet passphrase` checks it as the current one
     app.acting_as = getattr(args, "identity", None)
     try:
         await COMMANDS[args.cmd](app, args)
