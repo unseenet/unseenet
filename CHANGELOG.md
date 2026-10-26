@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **`unseenet passphrase`** (#579): the command line can give the vault a new
+  passphrase, as *Change passphrase* in the clients does. The new one is asked
+  for twice, or taken from `UNSEENET_NEW_PASSPHRASE` for scripts; copies of the
+  vault elsewhere keep the old passphrase.
+
 - **The node's container image** is published for releases only (`:<version>`,
   `:latest`), no longer as `:dev` after every merge; `:dev` comes from a run
   by hand.
