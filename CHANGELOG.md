@@ -7,6 +7,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **No posting into the past; imported posts keep their original date** (#568,
+  #566, UN-RFC 0049). Nodes refuse a `POST` whose `Date` is more than an hour
+  old (`441 date`), except an article a moderator validly approves; articles
+  from peers are checked against the window as before. A client refused that
+  way - an article that waited in a queue, offline or through a long ripening -
+  gives it the time of posting and posts it again. Anyone may put the origin
+  headers (`Origin-Network`, `Origin-Date`, `Origin-ID`, `Origin-From`) on their
+  own posts (`Session.post(origin=...)`, `origin` in the local API's post,
+  `unseenet post --origin-network/--origin-date`); messages carry their origin
+  and whether they are *old on arrival* (first published more than a day
+  before they came in), which are not new and never in For you. Feeds, the
+  timeline and threads with imports are ordered by the origin date. **Update
+  the nodes first.**
+
 - **The bootable image tells its clients so** (`UNSEENET_BOOTABLE=1`), so they
   leave out what must not happen there, such as saving recovery words.
 

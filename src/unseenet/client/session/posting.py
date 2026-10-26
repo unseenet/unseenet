@@ -203,11 +203,27 @@ class PostingMixin:
         try:
             return await self._send_article(art, node, blobs)
         except SessionError as exc:
+            if _too_old(str(exc)) and self._redate(art, name):
+                return await self._send_article(art, node, blobs)
             if name is None or "ripening: unknown" not in str(exc) \
                     or art.group == self.ripe_group(name):
                 raise
             await self.publish_ripening(name, node)    # this node lacks our chain: send it
             return await self._send_article(art, node, blobs)
+
+    def _redate(self, art: Article, name: str | None) -> bool:
+        """UN-RFC 0049 section 3.4: refused with ``441 date`` because it waited more than
+        an hour (a queue, a long ripening, offline) - give it the time of posting and sign
+        it again with the same postage, which makes a new Message-ID. Not for an article
+        a member key signed too (closed groups), nor a moderator's approval, whose Date
+        is the author's. True if it was done."""
+        if name is None or art.get("Member-Signature") or art.get("Approved-By"):
+            return False
+        from ...core.article import format_date
+        bits = art.proven_pow()
+        art.set("Date", format_date(datetime.now(timezone.utc)))
+        art.finalize(self.identity(name), bits)
+        return True
 
     async def post_article(self, art: Article, node: str | None = None,
                            sign_with: crypto.Identity | None = None, *,
@@ -335,11 +351,14 @@ class PostingMixin:
                    content_type: str | None = None,
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
-                   from_name: str | None = None, files=None) -> str:
+                   from_name: str | None = None, files=None, origin: dict | None = None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
 
         ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
         UN-RFC 0046 section 4.9); ``from_name`` replaces your display name.
+        ``origin``: an import of your own from another network (UN-RFC 0049 section 4) -
+        ``{"network", "date", "id", "from"}``, the date when it was first published
+        there; its ``Date`` is still the time of posting.
         ``files`` are prepared files (``prepare_files``): checked against the group
         first, then sent as blobs with the post, which pays their extra postage
         (UN-RFC 0027 sections 4.5, 6)."""
@@ -355,6 +374,13 @@ class PostingMixin:
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
+        if origin:
+            from ...core import origins
+            try:
+                edit_header += origins.origin_headers(origin.get("network", ""), origin.get("date"),
+                                                      origin.get("id", ""), origin.get("from", ""))
+            except origins.OriginError as exc:
+                raise SessionError(str(exc)) from exc
         files = list(files or [])
         blobs, file_bits, inner_files = [], 0, []
         entry = self.group_entry(group_id)
@@ -423,3 +449,8 @@ def _blob_refusal(text: str) -> str:
             "limit": "today's limit for files on this node is reached - try tomorrow",
             "hash": "the file was damaged on the way - try again"}.get(word, f"file: {text}")
 
+
+
+def _too_old(text: str) -> bool:
+    """A node's ``441 date`` for a Date more than an hour in the past (UN-RFC 0049 3.2)."""
+    return "date" in text and "in the past" in text

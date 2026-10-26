@@ -74,11 +74,22 @@ class Writing:
         if (s.notice_settings()["send"] if notify is None else bool(notify)) and s.may_notify(gid):
             keys = [k for _, k in s.mentioned(subject, body)][:MAX_MENTION_NOTICES]
 
+        origin = data.get("origin") or None                 # UN-RFC 0049: your own import
+        if origin is not None and not isinstance(origin, dict):
+            raise SessionError("origin is {network, date, id, from}")
+        if origin:
+            from ....core import origins
+            try:
+                origins.origin_headers(str(origin.get("network", "")), origin.get("date"),
+                                       str(origin.get("id") or ""), str(origin.get("from") or ""))
+            except origins.OriginError as exc:
+                raise SessionError(str(exc)) from exc
+
         async def send() -> str:
-            if kind == KIND_CHAT and not refs and not files:
+            if kind == KIND_CHAT and not refs and not files and not origin:
                 return await s.send_chat(gid, body)
             return await s.post(gid, subject, body, references=refs or None, kind=kind,
-                                files=files or None)
+                                files=files or None, origin=origin)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval

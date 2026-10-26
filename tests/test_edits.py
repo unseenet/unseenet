@@ -234,3 +234,13 @@ async def test_session_edit_a_chat_line(net):
     await me.edit(line, "", "hej allesammen, hvordan går det\n")
     [line] = me.visible(await me.fetch_group(gid))
     assert line.kind == "chat" and "går" in line.body and line.edited
+
+
+@pytest.fixture(autouse=True)
+def _history_dates(monkeypatch):
+    """These tests build history with old Dates, or move the clock, as nodes see articles
+    over time; the rule that a POST is not more than an hour in the past (UN-RFC 0049
+    section 3.2) has its own tests in test_origins.py."""
+    from datetime import timedelta
+    from unseenet.node import server as node_server
+    monkeypatch.setattr(node_server, "POST_PAST", timedelta(days=3650))

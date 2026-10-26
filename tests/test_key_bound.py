@@ -189,3 +189,13 @@ async def test_client_renews_at_once_when_expiry_is_near(tmp_path):
         make_manifest(me, "inbox", "inbox", pow_bits=BITS)).raw})
     near = datetime.now(timezone.utc) + timedelta(days=700)     # 30 days left
     assert await s.renew_key_bound(now=near) == [gid]
+
+
+@pytest.fixture(autouse=True)
+def _history_dates(monkeypatch):
+    """These tests build history with old Dates, or move the clock, as nodes see articles
+    over time; the rule that a POST is not more than an hour in the past (UN-RFC 0049
+    section 3.2) has its own tests in test_origins.py."""
+    from datetime import timedelta
+    from unseenet.node import server as node_server
+    monkeypatch.setattr(node_server, "POST_PAST", timedelta(days=3650))
