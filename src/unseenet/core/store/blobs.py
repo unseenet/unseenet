@@ -24,6 +24,20 @@ class Blobs:
         self.db.execute("DELETE FROM blob_meta WHERE blob_id=?", (bid,))
         self.db.commit()
 
+    def articles_missing_blobs(self) -> list[tuple[str, str, list[tuple[str, int]]]]:
+        """Stored articles that reference blobs this node neither stores nor refused:
+        (Message-ID, group, [(blob ID, octets)]), for fetching them once the node
+        carries them (#543)."""
+        out: dict[str, tuple[str, list]] = {}
+        for mid, bid, gid, size in self.db.execute(
+                "SELECT r.message_id, r.blob_id, r.group_id, r.size FROM blob_refs r "
+                "JOIN articles a ON a.message_id = r.message_id "
+                "WHERE r.blob_id NOT IN (SELECT blob_id FROM blob_meta) "
+                "AND r.blob_id NOT IN (SELECT blob_id FROM refused_blobs) "
+                "ORDER BY r.message_id"):
+            out.setdefault(mid, (gid, []))[1].append((bid, size))
+        return [(mid, gid, refs) for mid, (gid, refs) in out.items()]
+
     def blob_refs(self, message_id: str) -> list[tuple[str, int]]:
         """The blobs an article references: ``(blob id, size)``."""
         return list(self.db.execute("SELECT blob_id, size FROM blob_refs WHERE message_id=?",

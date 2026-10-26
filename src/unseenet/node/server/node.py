@@ -80,6 +80,38 @@ class NodeBase:
         self._listeners.append(event)
         return event
 
+    def policy_fingerprint(self) -> str:
+        """A hash of what decides which articles from peers the node takes (#543):
+        new groups, trusted owners, exclusions, profiles, pictures, sites, files, and
+        what each peer may give. Postage, size and retention are left out: articles
+        refused for those are refused for themselves."""
+        cfg = self.config
+        b = cfg.blobs
+        policy = {"new_groups": cfg.new_groups, "trusted_owners": sorted(cfg.trusted_owners),
+                  "excludes": cfg.excludes, "profiles": cfg.profiles, "avatars": cfg.avatars,
+                  "sites": cfg.sites,
+                  "blobs": None if b is None else {"groups": b.get("groups", "*"),
+                                                   "encrypted": bool(b.get("encrypted", False)),
+                                                   "max_size": cfg.max_blob},
+                  "peers": sorted((p.name, p.accept) for p in cfg.peers)}
+        text = json.dumps(policy, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    def policy_changed(self) -> dict | None:
+        """At start (``unseenet-node run``): if the policy is not the one the node last
+        ran with, forget the refusals it made, reconcile and pull again, and fetch the
+        files of stored articles it now carries (#543). None when nothing changed (or
+        the first run, which only notes the policy). Otherwise what was done."""
+        now, before = self.policy_fingerprint(), self.store.policy_seen()
+        self.store.set_policy(now)
+        if before is None or before == now:
+            return None
+        forgotten = self.store.forget_policy_refusals()
+        blobs = self.backfill_blobs()
+        log.info("the node's policy changed: forgot %d refusal(s), reconciling and pulling "
+                 "again; fetching the files of %d stored article(s)", forgotten, blobs)
+        return {"refusals_forgotten": forgotten, "blob_articles": blobs}
+
     def node_info(self) -> dict:
         """The node's information (UN-RFC 0011 section 4): name, software, node key, its
         policy (new groups, postage, ripening, retention, size, blocks, profiles, pictures,

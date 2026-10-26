@@ -129,6 +129,11 @@ async def run_node(args) -> None:
     print(f"Node key: {node_key.key_text}  (give it to the operators you peer with)")
     node = Node(Store(data / "articles.sqlite"), config, key=node_key)
     logging.getLogger("unseenet").addHandler(node.stats.log)   # the monitor's log lines
+    changed = node.policy_changed()      # #543: a new policy forgets what the old refused
+    if changed:
+        print(f"Policy changed since the last run: forgot {changed['refusals_forgotten']} "
+              f"refusal(s), reconciling and pulling again, fetching the files of "
+              f"{changed['blob_articles']} stored article(s)")
     host, port = args.listen.rsplit(":", 1)
     server = await node.serve(host, int(port))
     print(f"ONNTP listening on {args.listen}")
