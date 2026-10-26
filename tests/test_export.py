@@ -115,7 +115,9 @@ async def test_the_local_api(two, tmp_path):
     api = LocalAPI(session=me)
     out = await api.export({"path": str(tmp_path / "a.zip")})
     assert out["path"].endswith("a.zip") and "retention" in out["note"]
-    assert (tmp_path / "a.zip").stat().st_mode & 0o777 == 0o600
+    import os
+    if os.name == "posix":                                   # Windows has no such modes
+        assert (tmp_path / "a.zip").stat().st_mode & 0o777 == 0o600
 
 
 async def test_the_cli(tmp_path, monkeypatch, capsys):
