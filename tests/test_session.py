@@ -848,6 +848,52 @@ async def test_ask_for_give_and_revoke_a_name_under_a_name(tmp_path, monkeypatch
     server.close()
 
 
+async def test_a_service_keeps_its_name_under_a_name(tmp_path, monkeypatch):
+    """#592: a bot (Session.from_key) shows help@unseenet without code of its own -
+    its first post makes its inbox, the name is given there, a later post carries it."""
+    from datetime import datetime, timedelta, timezone
+    from unseenet import names as nm
+    from unseenet.client import naming
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    reg = crypto.Identity.generate()
+    project, reader = person("project"), person("reader")
+    bot = Session.from_key(crypto.Identity.generate(), tmp_path / "bot.state.json",
+                           name="helpbot", display="Unseenet help (bot)", status=lambda *_: None)
+    bot.add_node(addr)
+    assert bot.service and not project.service
+    held = nm.make_certificate(reg, "unseenet", project.identity().key_text, 1)
+    for p in (project, reader, bot):
+        _registrar_store(p, reg, [held])
+    await project.ensure_inbox()
+    gid = await project.create_group("unseenet.help", "open", min_pow=10)
+    for p in (reader, bot):
+        p.subscribe(gid)
+
+    await bot.post(gid, "Hello", "First post.\n")          # makes the bot's inbox
+    await naming.give_subname(project, "help@unseenet", bot.identity().key_text)
+    await bot.post(gid, "Again", "Same day: names are kept once a day.\n")
+    assert naming.my_names(bot) == []
+    naming._store(bot)["kept"] = nm.rfc3339(datetime.now(timezone.utc) - timedelta(days=2))
+    await bot.post(gid, "Tomorrow", "Now with a name.\n")
+    assert [c.name for c in naming.my_names(bot)] == ["help@unseenet"]
+
+    await reader.fetch_group(gid)
+    assert naming.identity_label(reader, bot.identity().key_text) == "help@unseenet"
+    for p in (project, reader, bot):
+        await p.close()
+    server.close()
+
+
 async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
     """#109: replies to your posts and posts naming your certified names; a display
     name or someone else's name under yours does not count."""
