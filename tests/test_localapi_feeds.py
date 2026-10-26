@@ -90,7 +90,7 @@ async def test_any_group_may_be_shown_as_a_feed(tmp_path, monkeypatch):
 
 async def test_groups_lists_my_feed_at_the_top_once_started(tmp_path, monkeypatch):
     """#495: ``GET /api/groups`` gives ``my_feed`` and ``my_site``, and leaves them out
-    of the hierarchies once started, where every client shows them as "My feed/site"."""
+    of the hierarchies once started, where every client shows them as "Your feed/site"."""
     server, owner, other, api = await _setup(tmp_path, monkeypatch, sites="accept")
     g = api.groups()
     assert g["my_feed"] == {"id": api.my_feed()["id"], "started": False, "unread": 0}
