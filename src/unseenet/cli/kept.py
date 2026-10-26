@@ -96,6 +96,42 @@ async def c_page_put(app: App, args) -> None:
          {"path": args.path, "message_id": mid, "files": [f.name for f in files]})
 
 
+async def c_site_publish(app: App, args) -> None:
+    """``unseenet site-publish FOLDER SITE [--dry-run] [--prune] [--yes]``: publish a
+    folder of Markdown (and HTML) as the site's pages (#538). Prints what was changed
+    on the way and what would be sent, and asks first unless ``--yes``."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        plan = await s.publish_site(args.group, args.folder, dry_run=True, prune=args.prune)
+    except SessionError as exc:
+        sys.exit(f"Not published: {exc}")
+    marks = {"new": "+", "changed": "~", "unchanged": "=", "remove": "-", "kept": " "}
+    if not getattr(args, "json", False):
+        for c in plan["changes"]:
+            files = f"  ({len(c['files'])} picture(s))" if c["files"] else ""
+            note = "  (not in the folder; --prune removes it)" if c["action"] == "kept" else ""
+            print(f"{marks[c['action']]} {c['path']}  {c['title']}{files}{note}")
+        for n in plan["notes"]:
+            print(f"Note: {n}", file=sys.stderr)
+        for p in plan["problems"]:
+            print(f"Problem: {p}", file=sys.stderr)
+    if plan["problems"]:
+        emit(args, "Not published.", plan)
+        sys.exit(1)
+    todo = sum(c["action"] in ("new", "changed", "remove") for c in plan["changes"])
+    if args.dry_run or not todo:
+        emit(args, "Nothing to send." if not todo else f"Would send {todo} page(s).", plan)
+        return
+    if not args.yes and input(f"Send {todo} page(s)? [y/N] ").strip().lower() not in ("y", "yes"):
+        sys.exit("Not published.")
+    try:
+        done = await s.publish_site(args.group, args.folder, prune=args.prune)
+    except SessionError as exc:
+        sys.exit(f"Not published: {exc}")
+    emit(args, f"Sent {done['sent']} page(s).", done)
+
+
 async def c_page_remove(app: App, args) -> None:
     """``unseenet page-remove SITE PATH``: remove a page from a site you write in."""
     from ..client.session import SessionError
@@ -159,5 +195,5 @@ async def c_site_start(app: App, args) -> None:
     await _start(app, args, "site")
 
 
-__all__ = ['c_pin', 'c_pins', 'c_page_put', 'c_page_remove', 'c_pages', 'c_feed_start',
+__all__ = ['c_pin', 'c_pins', 'c_page_put', 'c_site_publish', 'c_page_remove', 'c_pages', 'c_feed_start',
            'c_site_start', '_read', '_start', '_local_images']

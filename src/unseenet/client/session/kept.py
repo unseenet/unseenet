@@ -15,6 +15,7 @@ Part of ``Session`` (see __init__.py)."""
 from __future__ import annotations
 
 from . import *  # noqa: F403  - the module's names, as when this was one file
+from ...core import blobs as bl
 from .. import session as _s   # names tests patch on the module, read at call time
 
 
@@ -142,6 +143,60 @@ class KeptMixin:
         return await self.post(group_id, title, text, content_type=content_type,
                                supersedes=self._versions_of(group_id, path) or None,
                                extra=[("Page", path)], files=files)
+
+    async def publish_site(self, group_id: str, folder, *, dry_run: bool = False,
+                           prune: bool = False, progress=None) -> dict:
+        """Publish a folder of Markdown (and HTML) as the pages of a site you write in
+        (#538, ``client.siteimport``): unchanged pages are left as they are, changed ones
+        get a new version naming the old (UN-RFC 0042), new ones are put; with
+        ``prune`` pages no longer in the folder are removed. ``dry_run`` does all but
+        send. Answers ``{"plan", "changes": [{"path", "title", "action", "source",
+        "files"}], "notes", "problems", "sent"}``; nothing is sent when there are
+        problems. ``progress(done, total, path)`` is called as pages go."""
+        from .. import siteimport
+        self._writes_pages(group_id)
+        await self.fetch_group(group_id)                 # the versions in force
+        plan = siteimport.plan(folder, self.manifest_data(group_id))
+        current = {p["path"]: p["current"] for p in self.site(group_id)["pages"]}
+        changes = []
+        for page in plan.pages:
+            cur = current.get(page.path)
+            want = sorted(bl.blob_id(f.octets) for f in page.files)
+            if cur is None:
+                action = "new"
+            elif (cur.subject == page.title and (cur.body or "").rstrip() == page.text.rstrip()
+                  and sorted(a.get("blob", "") for a in cur.attachments) == want):
+                action = "unchanged"
+            else:
+                action = "changed"
+            changes.append({"path": page.path, "title": page.title, "action": action,
+                            "source": page.source, "files": [f.name for f in page.files]})
+        planned = {p.path for p in plan.pages}
+        for path, cur in current.items():
+            if path not in planned:
+                changes.append({"path": path, "title": cur.subject,
+                                "action": "remove" if prune else "kept", "source": None,
+                                "files": []})
+        out = {"changes": changes, "notes": [str(n) for n in plan.notes],
+               "problems": list(plan.problems), "sent": 0}
+        if dry_run or plan.problems:
+            return out
+        todo = [c for c in changes if c["action"] in ("new", "changed", "remove")]
+        for i, c in enumerate(todo, 1):
+            if progress is not None:
+                progress(i - 1, len(todo), c["path"])
+            if c["action"] == "remove":
+                await self.remove_page(group_id, c["path"])
+            else:
+                page = plan.page(c["path"])
+                await self.put_page(group_id, page.path, page.text, page.title,
+                                    files=page.files or None)
+            out["sent"] += 1
+        if progress is not None and todo:
+            progress(len(todo), len(todo), "")
+        if todo:
+            await self.fetch_group(group_id)             # the site as it now is
+        return out
 
     async def remove_page(self, group_id: str, path: str) -> str:
         """Remove a page from a site (``Page-Removed``): its versions stop counting, and
