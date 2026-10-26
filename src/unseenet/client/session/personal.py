@@ -53,7 +53,7 @@ class PersonalMixin:
 
     def has_personal_group(self, kind: str) -> bool:
         """Whether this identity has started its personal feed or site in this vault:
-        followed and owned here - what clients show as "My feed" or "My site"."""
+        followed and owned here - what clients show as "Your feed" or "Your site"."""
         gid = self.personal_group(kind)
         return (gid in self.data["subscribed"]
                 and bool(self.data["groups"].get(gid, {}).get("owner")))
