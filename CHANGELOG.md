@@ -7,6 +7,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Recovery words** (#573, UN-RFC 0050 section 4): every identity can be
+  shown as 24 Unseenet recovery words - its seed, BIP39's English word list
+  and checksum - and brought back from them on any device, with the state
+  (UN-RFC 0044) read from the network. Closed groups do not come back; the
+  client lists them and can ask their owners to invite you again. In the
+  core (`core/recovery.py`, `Session.recovery_words`, `restore_identity`,
+  `restore_from_network`, `closed_groups_to_rejoin`, `ask_to_be_invited`),
+  the local API (UN-RFC 0046 section 4.18, `/api/recovery/...`, and
+  `words_written`/`words_reminder` in the state) and the command line
+  (`unseenet id-words`, `unseenet id-restore`). The screens come in
+  unseenet-gui#142 and unseenet-tui#15.
+
 - **A node that changes what it carries fetches what it refused before** (#543).
   When `new_groups`, `trusted_owners`, `excludes`, `profiles`, `avatars`,
   `sites`, `[blobs]` or a peer's `accept` differ from the last run, the node

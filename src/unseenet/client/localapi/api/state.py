@@ -29,7 +29,10 @@ class State:
         if s is not None and s.has_identity():
             ident = s.identity()
             out["identity"] = {"key": ident.key_text, "display": s.display_name(),
-                               "label": s.identity_label(ident.key_text, s.display_name())}
+                               "label": s.identity_label(ident.key_text, s.display_name()),
+                               # UN-RFC 0050 section 4.2: written down, and whether to remind
+                               "words_written": s.words_written(),
+                               "words_reminder": not self.service and s.words_reminder_due()}
             out["node"], out["nodes"] = s.node, list(s.nodes)
             out["node_label"] = s.node_label(s.node) or None               # #518
             out["node_names"] = {a: {k: e[k] for k in ("name", "source", "label")}

@@ -61,7 +61,8 @@ version = { attr = "unseenet.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-unseenet = ["nodes.json", "entrances.json", "hierarchies.json", "checkgroups.json", "emoji.json"]
+unseenet = ["nodes.json", "entrances.json", "hierarchies.json", "checkgroups.json", "emoji.json",
+            "core/data/bip39-english.txt"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -101,4 +101,66 @@ async def c_passphrase(app: App, args) -> None:
          {"ok": True, "vault": str(app.vault.path), "note": COPIES_NOTE})
 
 
-__all__ = ['c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE']
+async def c_id_words(app: App, args) -> None:
+    """``unseenet id-words [NAME]``: show an identity's 24 recovery words (UN-RFC 0050
+    section 4), to write down. Asks for the vault passphrase again on the terminal, even
+    when ``UNSEENET_PASSPHRASE`` opened the vault (section 4.2); ``--yes`` takes the
+    passphrase the vault was opened with, for tests and scripts that know what they do.
+    Prints them only: it never saves them anywhere (section 4.3)."""
+    from ..core import recovery as rc
+    from ..client.session.recovery import NOT_RESTORED
+    from ..client.session import SessionError
+    s = _session(app, args)
+    name = args.name or s.default_identity_name()
+    passphrase = app.passphrase if args.yes else getpass.getpass("Vault passphrase again: ")
+    try:
+        words = s.recovery_words(passphrase or "", name)
+    except SessionError as exc:
+        sys.exit(str(exc))
+    ident = s.identity(name)
+    if args.written:
+        s.note_words_written(name)
+    text = (rc.text_page(s.display_name(name), ident.fingerprint, words)
+            + ("" if args.written else "\nWhen written down: unseenet id-words --written\n"))
+    emit(args, text, {"identity": name, "fingerprint": ident.fingerprint, "words": words,
+                      "note": NOT_RESTORED, "not_a_wallet": rc.NOT_A_WALLET,
+                      "written": s.words_written(name)})
+
+
+async def c_id_restore(app: App, args) -> None:
+    """``unseenet id-restore [NAME]``: bring an identity back from its 24 recovery words,
+    read from stdin - never from the command line, where others could see them - then
+    read its state, name and profile from the network (UN-RFC 0050 section 4.4) and list
+    the closed groups that do not come back (4.5). ``--offline``: only into the vault."""
+    from ..client.session import SessionError
+    from ..client.session.recovery import NOT_RESTORED
+    if sys.stdin.isatty():
+        print("Type the 24 recovery words, then Enter on an empty line:", file=sys.stderr)
+    lines = []
+    for line in sys.stdin:
+        if not line.strip() and lines:
+            break
+        lines.append(line)
+    s = _session(app, args)
+    try:
+        name, ident, new = s.restore_identity(" ".join(lines), args.name, args.display)
+    except SessionError as exc:
+        sys.exit(str(exc))
+    data = {"identity": name, "key": ident.key_text, "fingerprint": ident.fingerprint, "new": new,
+            "note": NOT_RESTORED}
+    text = [f"{name}: {ident.key_text}" + ("" if new else " (already in this vault)")]
+    if not args.offline and s.nodes:
+        found = await s.restore_from_network(name)
+        data.update(found)
+        text.append({"read": "Your state came back from the network.",
+                     "none": "No state was found in the network: you start with the default groups.",
+                     "unreachable": "The network could not be reached: run it again later."}[found["state"]])
+        if found["closed_groups"]:
+            text.append("Closed groups that do not come back - ask their owners to invite you again:")
+            text += [f"  {g['label']}  ({g['group']})" for g in found["closed_groups"]]
+    text.append(NOT_RESTORED)
+    emit(args, "\n".join(text), data)
+
+
+__all__ = ['c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE',
+           'c_id_words', 'c_id_restore']
