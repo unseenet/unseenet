@@ -136,6 +136,7 @@ async def test_private_messages_and_operator_contact(tmp_path, monkeypatch):
 
     # node information and writing to the operator
     info = await b.node_info()
+    assert isinstance(info.get("carries"), int) and info["carries"] >= 1   # what the node carries (gui#153)
     assert info["name"] == "testnode" and info["contact"] == contact.group
     assert info["operator"] == operator.key_text and info["policy"]["min_pow"] == BITS
     await b.send_private(info["contact"], "Misbrug", "Gruppe X er spam\n",
