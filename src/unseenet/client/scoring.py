@@ -58,6 +58,52 @@ sort by score, then date
 hide if thread in ignored
 """
 
+# The language in short, for every client to show beside its editor (and `unseenet rules
+# help`): one text, so it says the same everywhere; tests/test_scoring.py checks that
+# every word the language knows is in it. UN-RFC 0051 is the full description.
+HELP = """YOUR RULES - IN SHORT
+
+One rule a line. Upper or lower case is the same.
+#  starts a comment, also after a rule. Put # in front of a rule to take it out.
+
+WHERE A RULE APPLIES  - a line in brackets; the rules after it apply there
+  [feed]      your feed (the timeline)
+  [groups]    discussion groups shown as threads
+  [dk.*]      groups whose name matches; * is anything
+  [all]       everywhere (also rules before the first bracket)
+
+POINTS  - a post's score starts at 0
+  +10 if author in following
+  -30 if seen
+  +2  per time I reacted to author  max 20     per: points for each; max: a cap
+  -1  per day old  max 30
+
+  Things to count after per:
+    time I reacted to author    contact who reacted    followed who reacted
+    reaction    reply    new reply since seen    day old    hour old
+
+CONDITIONS  - after if; join with and, or, not and ( )
+  author in following | contacts | ignored      author is "Sonia"
+  from a bot      I posted in thread      I reacted
+  thread in watched | ignored      seen      read      new replies since seen
+  subject matches "text"      text matches "text"      has pictures
+  group is dk.*      older than 7 days      newer than 2 hours
+  score >= 10      reactions >= 3      replies >= 5      new replies > 0
+  Comparisons: >=  <=  >  <  =  !=      Times: minutes hours days weeks
+  matches finds the text anywhere in it, in any case - not a pattern.
+
+WHAT HAPPENS  - tested with the final score
+  show if score >= 0         only what this says is shown
+  hide if author in ignored
+  sort by score, then date   the order (also: reactions, replies; add ascending)
+  In groups only, never moving a reply inside its thread:
+  fold if score < -20        dim if score < 0
+  highlight if score >= 30   mark read if thread in ignored
+
+A line that is not understood is skipped and said; the others still work.
+Without rules: the feed is newest first and threads are as they are.
+"""
+
 LISTS = ("following", "contacts", "ignored")
 THREAD_LISTS = ("watched", "ignored")
 COUNTERS = {

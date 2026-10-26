@@ -169,12 +169,16 @@ async def c_timeline(app: App, args) -> None:
 
 
 async def c_rules(app: App, args) -> None:
-    """``unseenet rules [show | set [FILE] | check [FILE] | on | off | clear]``: your own
+    """``unseenet rules [show | help | set [FILE] | check [FILE] | on | off | clear]``: your own
     rules for your feed and groups (UN-RFC 0051) - they run only here and go with your
     identity. ``set`` and ``check`` read FILE, or stdin when it is ``-`` or missing;
     ``off`` keeps the text to turn on again; ``clear`` removes them."""
     s = _session(app, args)
     what = getattr(args, "what", None) or "show"
+    if what == "help":                        # the language in short (UN-RFC 0051)
+        from ..client.scoring import HELP
+        emit(args, HELP.rstrip("\n"), {"help": HELP})
+        return
     if what in ("set", "check"):
         src = getattr(args, "file", None) or "-"
         text = sys.stdin.read() if src == "-" else Path(src).read_text()

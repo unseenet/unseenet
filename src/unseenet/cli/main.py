@@ -219,7 +219,7 @@ def client_main(argv=None) -> None:
     s.add_argument("--limit", type=int, default=50)
     s.add_argument("--why", action="store_true", help="with your rules: why each entry is where it is")
     s = sub.add_parser("rules", help="your own rules for your feed and groups (UN-RFC 0051)")
-    s.add_argument("what", nargs="?", default="show", choices=["show", "set", "check", "on", "off", "clear"])
+    s.add_argument("what", nargs="?", default="show", choices=["show", "help", "set", "check", "on", "off", "clear"])
     s.add_argument("file", nargs="?", help="set, check: a file of rules (- or none: stdin)")
     s = sub.add_parser("thread", help="watch a thread, ignore it, or neither")
     s.add_argument("what", choices=["watch", "ignore", "clear"])

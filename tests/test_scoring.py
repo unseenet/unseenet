@@ -152,3 +152,17 @@ def test_why():
     text = r.explain()
     assert "line 1: +10 if author in following  → +10" in text and "line 2: -30 if seen  → -30" in text
     assert "line 3: dim if score < 0" in text and text.endswith("score -20")
+
+
+def test_the_help_names_every_word():
+    """The help shown beside every client's editor names everything the language knows."""
+    import re
+    words = set(re.findall(r"[a-z]+", sc.HELP.lower()))
+    for name in [*sc.COUNTERS, *sc.ACTIONS, *sc.SORT_KEYS, *sc.LISTS, *sc.THREAD_LISTS,
+                 *sc.UNITS, "ascending", "matches", "pictures", "bot", "posted", "older", "newer",
+                 "if", "per", "max", "and", "or", "not"]:
+        for w in name.split():
+            assert w in words or w + "s" in words, f"{w!r} is not in the help"
+    for op in sc.OPS:
+        assert op in sc.HELP
+    assert max(len(line) for line in sc.HELP.splitlines()) <= 90       # fits beside an editor
