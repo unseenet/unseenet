@@ -117,8 +117,17 @@ blob = nonce || XChaCha20-Poly1305( key, nonce, file,
 ```
 
 (UN-RFC 0003 section 4.2). The key travels inside the encrypted article
-(section 4.3). A blob is therefore 40 octets longer than its file, and
-the same file posted twice gives two unrelated blobs.
+(section 4.3), and the same file posted twice gives two unrelated blobs.
+
+**Padding.** Before encryption, the client appends zero octets to the
+file up to the next multiple of 64 KiB (65 536 octets), but not beyond
+the group's `max_size` (section 5.1; nodes allow an encrypted blob 40
+octets more, section 5.2), so that nodes, which see every blob's size,
+cannot tell a file by its exact length (section 14). The file's own size is in the
+inner `Attachment-<n>` header (section 4.2); after decryption the reader
+takes that many octets and ignores the rest. A blob is therefore
+`padded + 40` octets, where `size <= padded <= ceil(size / 65536) * 65536`.
+Files in open groups are not padded: anyone can read them anyway.
 
 Keys MUST NOT be derived from the file (convergent encryption). That
 would let anyone who has a file confirm that a closed group or inbox
@@ -197,7 +206,10 @@ In articles whose `Attachment-<n>` headers are outer, a node MUST check
 that the set of blob IDs in them equals the set in `Blobs`, and that
 each `size` equals the size given in `Blobs`. In encrypted articles the
 reader's client checks this after decryption, with each size in `Blobs`
-being 40 octets more than the inner `size`, and MUST treat an
+being 40 octets more than the padded file (section 3.3): at least the
+inner `size` plus 40, and at most `ceil(size / 65536) * 65536` plus 40.
+The check does not depend on the group's current limit, so a later
+change of it leaves earlier posts readable. A client MUST treat an
 inconsistent article as having no attachments.
 
 ## 4.5 Postage
@@ -657,9 +669,11 @@ nothing for dot-stuffing to protect.
   itself. Programs outside Unseenet are a way out of Tor, especially for
   the portable client on Windows, macOS or Linux.
 - **Sizes.** Nodes see the size of every blob, also of encrypted ones,
-  and sizes can identify files (a known image has a known size). Clients
-  MAY pad encrypted files, before encryption, to the next multiple of
-  64 KiB.
+  and an exact size can identify a file (a known image has a known
+  size). Encrypted files are therefore padded to a multiple of 64 KiB
+  (section 3.3), which leaves a node only the size class. It costs at
+  most 64 KiB per file, in storage, postage (section 4.5) and the daily
+  quotas (section 8.1), which count the padded blob.
 - **Linking.** The same plain file always has the same blob ID, so
   posting the same picture twice in open groups links the two posts.
   Encrypted blobs are always new (section 3.3).
