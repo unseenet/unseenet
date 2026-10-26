@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Reactions to private chats and posts** (#513, UN-RFC 0048 section 4.3): a
+  reaction to a private message someone sent you is itself one, sealed to their
+  inbox, with any emoji; changing it is sending another (naming the one it
+  changes inside, #599), taking it back is sending an empty one; the latest per
+  verified sender counts, anonymous ones never. Yours are kept with your sent
+  messages, never shown as messages. In the local API on contact and inbox rows
+  (`react`, `reactions`). Also: the `References` of a sealed reaction are inside
+  the sealed article, as the RFC says.
 - **Export your data** (#577, UN-RFC 0049 section 7): `Session.export`,
   `POST /api/export` and `unseenet export [FILE] [--private]` write a zip with
   your own articles exactly as signed (anyone can check them against your key),

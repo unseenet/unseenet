@@ -624,7 +624,7 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
-    if kind not in MESSAGE_KINDS:
+    if kind not in MESSAGE_KINDS and kind != KIND_REACTION:   # UN-RFC 0048 4.3: also a reaction
         raise ValueError(f"unknown message kind: {kind}")
     one_time = crypto.Identity.generate()
     headers = [("From", from_name), ("Subject", "" if kind == KIND_CHAT else subject),

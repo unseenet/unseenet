@@ -305,6 +305,8 @@ class PrivateMixin:
         for i, e in enumerate(self.sent):
             if to is not None and e.get("to") != to:
                 continue
+            if e.get("kind") == "reaction":          # counted under messages, not one
+                continue
             msg = Message(-1 - i, e["msgid"], self.my_inbox, subject=e["subject"],
                           from_name="You", author_key=mine, body=e["body"],
                           references=e.get("references", []), encrypted=True, private=True,
@@ -496,7 +498,9 @@ class PrivateMixin:
             self.sent.append({"to": owner or fp, "group": c["inbox"], "msgid": c["msgid"],
                               "after": 0, "subject": inner.get("Subject", ""),
                               "body": art_body_text(inner.body), "kind": message_kind(inner),
-                              "references": (art.get("References") or "").split(),
+                              "reaction": (inner.get("Reaction") or "").strip(),
+                              "supersedes": ((inner.get("Supersedes") or "").split() or [None])[0],
+                              "references": (inner.get("References") or art.get("References") or "").split(),
                               "date": parse_date(art["Date"]).isoformat(), "from_network": True})
             added += 1
         if added:
@@ -543,6 +547,10 @@ class PrivateMixin:
         msg.content_type = inner.get("Content-Type", "")
         msg.kind = message_kind(inner)
         msg.reaction = (inner.get("Reaction") or "").strip()     # UN-RFC 0048 section 4.3
+        if msg.kind == "reaction":            # its References and Supersedes are inside (4.3)
+            if inner.get("References"):
+                msg.references = inner["References"].split()
+            msg.supersedes = (inner.get("Supersedes") or "").split()[:1]
         msg.reply_inbox = inner.get("Reply-Inbox")
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032

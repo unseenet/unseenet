@@ -212,6 +212,8 @@ class Groups:
             if head["view"] == "feed":          # a comment is a chat line (UN-RFC 0034, 4.2)
                 for row, (m, _) in zip(out, rows):
                     row["comment"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_CHAT))
+        elif gid.startswith(CONTACT) or gid == s.my_inbox:
+            self._add_reactions(s, out, rows)   # private chats and posts (UN-RFC 0048 4.3)
         return {"group": head, "rows": out}
 
     @staticmethod
