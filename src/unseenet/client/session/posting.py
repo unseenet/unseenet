@@ -417,6 +417,7 @@ class PostingMixin:
                     content_type=content_type, pow_bits=bits + file_bits, extra=edit_header,
                     inner_extra=inner_files)
         else:
+            await naming.keep_my_names(self)              # a service's own names, once a day
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
 
             def build(bits):

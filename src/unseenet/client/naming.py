@@ -144,10 +144,48 @@ async def refresh(s: "Session") -> bool:
         await renew_held(s)                     # your own registered names (#424)
     except Exception:  # noqa: BLE001  likewise
         pass
+    st["kept"] = nm.rfc3339(datetime.now(timezone.utc))
     changed = repr(st) != before
     if changed:
         s.save()
     return changed
+
+
+KEEP_EVERY = timedelta(days=1)
+KEEP_TIMEOUT = 120                              # seconds; a post is never held up longer
+
+
+async def keep_my_names(s: "Session") -> None:
+    """Your own names, for a program that never runs ``refresh`` - a bot, a gateway,
+    the help bot (``Session.service``, set by ``Session.from_key``; a service with a
+    vault sets it itself). At most once a day, from ``post``: make sure your inbox exists (a
+    name under a name, like ``help@unseenet``, is sent there, section 5.4), take the
+    certificates that came, read the registrar's group so they count, and renew your
+    registered names. So a service shows its name with no code of its own.
+    Clients that run ``refresh`` have done all this already and skip it. Never
+    raises: what fails is tried again the next day."""
+    import asyncio
+    if not getattr(s, "service", False):
+        return
+    st = _store(s)
+    last = st.get("kept")
+    now = datetime.now(timezone.utc)
+    if last and now - nm.parse_rfc3339(last) < KEEP_EVERY:
+        return
+    st["kept"] = nm.rfc3339(now)
+
+    async def keep() -> None:
+        await s.ensure_inbox()
+        await s.fetch_group(s.my_inbox)
+        take_certificates(s)
+        await _read_names(s, st)
+        await renew_held(s)
+
+    try:
+        await asyncio.wait_for(keep(), KEEP_TIMEOUT)
+    except Exception:  # noqa: BLE001  names are a nicety; the post goes out regardless
+        pass
+    s.save()
 
 
 async def _read_names(s: "Session", st: dict) -> None:

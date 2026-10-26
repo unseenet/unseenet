@@ -38,6 +38,9 @@ class BaseMixin:
         self.reaction_msgs: dict[str, dict[int, Message]] = {}   # beside cache (UN-RFC 0048)
         self._acting_as: str | None = None   # act_as(): an identity for this run only
         self.ripening_limit: int | None = None   # the level this machine can ripen to (#440)
+        # a program, not a person (bot, gateway, help bot): it keeps its own names up
+        # once a day when it posts (naming.keep_my_names), as clients do in refresh
+        self.service = False
         self._raw: dict[str, dict[int, bytes]] = {}   # what the offline cache stores
         self._high: dict[str, int] = {}               # highest article number fetched
         d = self.vault.data
@@ -69,7 +72,9 @@ class BaseMixin:
         """A session for a service with only a key: a gateway, a bot, a registrar
         (client/headless.py). Everything but the key is kept in ``state_path``."""
         from ..headless import KeyStore
-        return cls(KeyStore(identity, state_path, name, display), status=status)
+        s = cls(KeyStore(identity, state_path, name, display), status=status)
+        s.service = True
+        return s
 
     def save(self) -> None:
         """Write the vault to disk (encrypted, UN-RFC 0007)."""
