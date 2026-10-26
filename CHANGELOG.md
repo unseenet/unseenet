@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Export your data** (#577, UN-RFC 0049 section 7): `Session.export`,
+  `POST /api/export` and `unseenet export [FILE] [--private]` write a zip with
+  your own articles exactly as signed (anyone can check them against your key),
+  their files, the sites you write in, your profile and picture, your state and a
+  plain `index.html` - never keys. `--private` adds private posts and chats and
+  encrypts the whole file with a passphrase (`….zip.sealed`). It says it holds
+  only what the nodes still carry and the client kept.
+
 - **Publish a folder as a site** (#538): `client.siteimport.plan(folder)` turns a
   folder of Markdown - and HTML pages, their content without their design - into
   a site's pages: paths made safe (`Guide/First Steps.md` -> `guide/first-steps`),

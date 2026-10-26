@@ -452,6 +452,16 @@ not (you do not own or moderate the group).
   ask the first time); it is kept with the state (UN-RFC 0044), so it is the
   same in every client. Front ends tell only while they run: there is no push.
 
+- `POST /api/export` `{"path", "private": false, "passphrase"}`: write an
+  export of your data as UN-RFC 0049 section 7 says - your own articles as
+  signed, their files, the sites you write in, your profile and picture, your
+  state and an `index.html`; never keys. `path` defaults to Downloads. With
+  `private` the private posts and chats are in it too and the whole file is
+  encrypted with `passphrase` (UN-RFC 0007), named `….zip.sealed`. Answers
+  `{"path", "articles", "files", "sites", "private", "encrypted", "missing",
+  "note"}`; `note` says it holds only what the nodes still carry and the client
+  kept - show it.
+
 ## 4.9 Articles from a Program
 
 For a service (section 3.2), such as a gateway, that builds what it posts:
