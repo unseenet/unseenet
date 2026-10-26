@@ -27,7 +27,7 @@ COMMANDS = {
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
-    "pin": c_pin, "pins": c_pins, "react": c_react, "page-put": c_page_put, "site-publish": c_site_publish, "page-remove": c_page_remove,
+    "pin": c_pin, "pins": c_pins, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
     "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
     "timeline": c_timeline, "address": c_address, "open": c_open,
@@ -166,6 +166,10 @@ def client_main(argv=None) -> None:
     s.add_argument("--title", help="the page's title (default: its path)")
     s.add_argument("--attach", action="append", metavar="FILE",
                    help="a file to send with the page; images in it: ![alt](file:photo.jpg)")
+    s = sub.add_parser("export", help="your data as a file (never your keys)")
+    s.add_argument("file", nargs="?", help="where to write it (default: unseenet-export-<fp>.zip)")
+    s.add_argument("--private", action="store_true",
+                   help="also private posts and chats; the file is then encrypted with a passphrase")
     s = sub.add_parser("site-publish", help="publish a folder of Markdown (and HTML) as a site's pages")
     s.add_argument("folder", help="the folder: .md (and .html) files are pages, index.md the front page")
     s.add_argument("group", help="the site's Group ID")

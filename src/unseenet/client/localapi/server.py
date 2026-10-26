@@ -437,6 +437,10 @@ async def copy_finish(request):
     return _json(await _api(request).copy_finish())
 
 
+async def export(request):
+    return _json(await _api(request).export(await _body(request)))
+
+
 async def notifications(request):
     return _json(_api(request).notifications())
 
@@ -530,7 +534,7 @@ ROUTES = [
     ("POST", "/api/recovery/reminded", recovery_reminded), ("POST", "/api/recovery/check", recovery_check),
     ("POST", "/api/recovery/restore", recovery_restore),
     ("GET", "/api/recovery/closed-groups", recovery_closed_groups), ("POST", "/api/recovery/ask", recovery_ask),
-    ("GET", "/api/notifications", notifications),
+    ("GET", "/api/notifications", notifications), ("POST", "/api/export", export),
     ("GET", "/api/copy", copy_state), ("POST", "/api/copy/offer", copy_offer),
     ("POST", "/api/copy/confirm", copy_confirm), ("POST", "/api/copy/cancel", copy_cancel),
     ("POST", "/api/copy/receive", copy_receive), ("POST", "/api/copy/finish", copy_finish),

@@ -211,4 +211,36 @@ async def c_copy_from(app: App, args) -> None:
 
 
 __all__ = ['c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE',
-           'c_id_words', 'c_id_restore', 'c_copy_to', 'c_copy_from']
+           'c_id_words', 'c_id_restore', 'c_copy_to', 'c_copy_from', 'c_export']
+
+
+async def c_export(app: App, args) -> None:
+    """``unseenet export [FILE] [--private]``: your data as a file (UN-RFC 0049 section
+    7) - your own articles exactly as signed, their files, your sites, profile and
+    state; never keys. ``--private`` adds private posts and chats and encrypts the whole
+    file with a passphrase (asked, or ``UNSEENET_EXPORT_PASSPHRASE``)."""
+    import getpass
+    from ..client.session import SessionError
+    s = _session(app, args)
+    passphrase = None
+    if args.private:
+        passphrase = os.environ.get("UNSEENET_EXPORT_PASSPHRASE")
+        if not passphrase:
+            passphrase = getpass.getpass("A passphrase for the export: ")
+            if passphrase != getpass.getpass("Again: "):
+                sys.exit("The passphrases differ.")
+    dest = args.file or f"unseenet-export-{s.identity().fingerprint[:8]}.zip"
+    try:
+        for gid in list(s.data.get("subscribed", [])):      # your articles, as the nodes have them
+            try:
+                await s.fetch_group(gid)
+            except (SessionError, OSError, ConnectionError):
+                pass
+        out = await s.export(dest, private=args.private, passphrase=passphrase)
+    except SessionError as exc:
+        sys.exit(f"Not exported: {exc}")
+    emit(args, f"Wrote {out['path']}: {out['articles']} articles, {out['files']} files, "
+               f"{out['sites']} sites" + (f", {out['private']} private messages, encrypted"
+                                          if out["encrypted"] else "")
+         + (f"; {out['missing']} could not be had" if out["missing"] else "")
+         + f".\n{out['note']}", out)

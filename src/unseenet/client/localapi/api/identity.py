@@ -230,6 +230,24 @@ class Identity:
             raise SessionError(f"unknown action {action!r}")
         return {"text": text}
 
+    async def export(self, data: dict) -> dict:
+        """``POST /api/export`` (UN-RFC 0049 section 7, #577): write an export of your
+        data - ``{"path", "private": false, "passphrase"}``; ``path`` defaults to
+        Downloads (else your home folder). With ``private`` the file is encrypted with
+        the passphrase. Answers what ``Session.export`` does: path, counts and the note
+        that it holds only what the nodes still carry."""
+        from datetime import datetime, timezone
+        from pathlib import Path
+        s = self._ready()
+        path = str(data.get("path") or "").strip()
+        if not path:
+            folder = Path.home() / "Downloads"
+            folder = folder if folder.is_dir() else Path.home()
+            day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            path = str(folder / f"unseenet-export-{s.identity().fingerprint[:8]}-{day}.zip")
+        return await s.export(path, private=bool(data.get("private")),
+                              passphrase=data.get("passphrase"))
+
     def notifications(self) -> dict:
         """``GET /api/notifications``: what new has landed in For you since the last
         time any client asked - for the front end to tell the reader, as the reader
