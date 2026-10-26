@@ -88,10 +88,10 @@ The heart of Unseenet: the protocol and the code every other part builds on.
 | **The project** | [`tools/project/`](tools/project/), [`src/unseenet/*.json`](src/unseenet/) | The owner's scripts (no secrets), the known-node, entrance and hierarchy lists, the network health checks. |
 | **Docs** | [`docs/`](docs/) | The pages about the node, the CLI, the local API and the developers' reference, gathered into unseenet.org by [unseenet-docs](https://github.com/unseenet/unseenet-docs). |
 
-The portable builds' tools are in
-[unseenet-portable](https://github.com/unseenet/unseenet-portable); the bootable
-image's (`tools/image/`) are still here and run by unseenet-bootable, until
-they move there.
+The build tools are in their own repositories:
+[unseenet-portable](https://github.com/unseenet/unseenet-portable) for the
+portable builds, [unseenet-bootable](https://github.com/unseenet/unseenet-bootable)
+for the bootable images.
 
 ## Get it
 

@@ -90,7 +90,7 @@ made-up content:
   [asciinema player](https://github.com/asciinema/asciinema-player) plays
   (`pip install pexpect`; `--gif docs/img/demo.gif` also renders the GIF for
   the README, with [agg](https://github.com/asciinema/agg)).
-- `tools/image/record.py IMAGE` boots a bootable image in QEMU, goes through
+- unseenet-bootable's `tools/image/record.py IMAGE` boots a bootable image in QEMU, goes through
   the menu and makes a vault, and writes `docs/img/boot.webm` and
   `boot-poster.png` (needs QEMU and ffmpeg; KVM is faster but not needed).
 
@@ -441,10 +441,11 @@ sooner, run the *build* workflow of unseenet-portable by hand (Actions, "Run
 workflow"): *publish* `dev` replaces the development build, `artifact` only
 leaves the builds in the run's artifacts. *force* builds even when nothing
 changed. The portable builds' tools - and the Tor version they pin, checked
-weekly by its *tor-update* workflow - are in
+daily by its *tor-update* workflow - are in
 [unseenet-portable](https://github.com/unseenet/unseenet-portable/tree/main/tools);
-the bootable image's (`tools/image/`) are still here, run from a checkout of
-this repository, until they move to unseenet-bootable.
+the bootable images' in
+[unseenet-bootable](https://github.com/unseenet/unseenet-bootable/tree/main/tools),
+whose releases follow unseenet-portable's.
 
 Between releases, every change that users or node operators would notice
 gets a line under `## [Unreleased]`.
