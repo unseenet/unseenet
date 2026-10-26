@@ -38,7 +38,11 @@ def msg(n, mid, subject, refs=(), minutes=0):
 
 
 async def test_rules_kept_checked_and_turned_off(api):
-    assert api.rules() == {"text": "", "on": True, "rules": 0, "problems": []}
+    first = api.rules()
+    assert {k: first[k] for k in ("text", "on", "rules", "problems")} == {"text": "", "on": True, "rules": 0, "problems": []}
+    from unseenet.client import scoring
+    assert first["suggestion"] == scoring.SUGGESTION and not scoring.parse(scoring.SUGGESTION).problems
+    assert not api.session.feed_rules()                               # offered, not taken
     got = api.set_rules({"text": "+10 if author in following  # friends\n+1 if autor in contacts"})
     assert got["rules"] == 1 and got["problems"][0]["line"] == 2 and "author" in got["problems"][0]["message"]
     assert api.check_rules({"text": "show if score >= 0"}) == {"rules": 1, "problems": []}
