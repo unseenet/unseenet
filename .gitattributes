@@ -1,0 +1,2 @@
+# the BIP39 word list is checked by its SHA-256: never convert its line endings (#573)
+src/unseenet/core/data/bip39-english.txt -text

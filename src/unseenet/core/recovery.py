@@ -46,6 +46,7 @@ class RecoveryError(ValueError):
 def wordlist() -> tuple[str, ...]:
     """The BIP39 English word list, checked against its well-known SHA-256."""
     raw = resources.files("unseenet.core").joinpath("data/bip39-english.txt").read_bytes()
+    raw = raw.replace(b"\r\n", b"\n")        # a checkout or copy on Windows may add CR
     if hashlib.sha256(raw).hexdigest() != WORDLIST_SHA256:
         raise RuntimeError("the BIP39 word list is not the expected one")
     words = tuple(raw.decode().split())
