@@ -192,29 +192,38 @@ class Counts:
         return mine[0] if mine else None
 
 
-def count(items: Iterable[tuple[str, str, int, str, str]]) -> dict[str, Counts]:
+def count(items: Iterable[tuple[str, str, int, str, str]],
+          takebacks: bool = False) -> dict[str, Counts]:
     """Count reactions, one per key per target (section 5): ``items`` are
     ``(message_id, author_key, date, target, emoji)``. A key with several counts
     only the latest by date, and among equal dates the greatest Message-ID.
-    Answers {target: Counts}, emoji in the order they were first given."""
+    Answers {target: Counts}, emoji in the order they were first given.
+
+    ``takebacks`` (inboxes, section 4.3.1): an empty emoji is that key's taking
+    back - it counts as its latest reaction, so the target shows none from it."""
     latest: dict[tuple[str, str], tuple[int, str, str]] = {}
     order: dict[str, list[str]] = {}
     for mid, key, date, tgt, e in items:
-        if not is_emoji(e):
+        if takebacks and not (e or "").strip():
+            e = ""
+        elif not is_emoji(e):
             continue
-        e = _canonical(e)
-        order.setdefault(tgt, [])
-        if e not in order[tgt]:
-            order[tgt].append(e)
+        else:
+            e = _canonical(e)
+            order.setdefault(tgt, [])
+            if e not in order[tgt]:
+                order[tgt].append(e)
         cur = latest.get((tgt, key))
         if cur is None or (date, mid) > (cur[0], cur[1]):
             latest[(tgt, key)] = (date, mid, e)
     out: dict[str, Counts] = {}
     for (tgt, key), (_, mid, e) in latest.items():
+        if not e:                                    # taken back
+            continue
         c = out.setdefault(tgt, Counts())
         c.by_key[key] = (e, mid)
     for tgt, c in out.items():
-        for e in order[tgt]:
+        for e in order.get(tgt, []):
             keys = [k for k, (x, _) in c.by_key.items() if x == e]
             if keys:
                 c.by_emoji[e] = keys

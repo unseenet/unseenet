@@ -64,9 +64,8 @@ class ReactionsMixin:
     def react_permission(self, group_id: str, msg: Message | None = None) -> "Permission":
         """Whether you may react here (to ``msg``), and if not why - so that clients
         offer no reaction controls where reacting is impossible (section 7.3)."""
-        if group_id == self.my_inbox or (msg is not None and msg.private):
-            return Permission(False, "Reactions to private posts come in a later version",
-                              "private")
+        if group_id == getattr(self, "my_inbox", None) or (msg is not None and msg.private):
+            return self._private_react_permission(msg)
         if msg is not None and (msg.kind == rx.KIND_REACTION or not msg.readable):
             return Permission(False, "You cannot react to that", "target")
         if msg is not None and msg.author_key and msg.author_key == self._my_key_text():
@@ -92,6 +91,40 @@ class ReactionsMixin:
         base = self.write_permission(group_id, kind=None)
         return base
 
+    def _private_react_permission(self, msg: Message | None) -> "Permission":
+        """Section 4.3: a private chat line or post someone sent you, with a verified
+        sender (an anonymous one could not count, 4.3.1) - not your own, not a notice."""
+        if msg is None:
+            return Permission(True)
+        if msg.kind == rx.KIND_REACTION or not msg.readable:
+            return Permission(False, "You cannot react to that", "target")
+        if msg.to_key or (msg.author_key and msg.author_key == self._my_key_text()):
+            return Permission(False, "You cannot react to your own post", "own")
+        if not msg.sender_key or not self.reply_target(msg):
+            return Permission(False, "You cannot react to an anonymous message", "anonymous")
+        if self.is_notice(msg) or msg.notices_for:
+            return Permission(False, "You cannot react to a notice", "target")
+        return Permission(True)
+
+    def _sent_reactions(self) -> list[tuple[str, str, int, str, str]]:
+        """Your reactions to private messages, from the sent list: count items."""
+        me = self._my_key_text()
+        out = []
+        for e in self.sent:
+            if e.get("kind") != "reaction" or not e.get("references"):
+                continue
+            try:
+                when = int(datetime.fromisoformat(e["date"]).timestamp())
+            except (KeyError, ValueError):
+                when = 0
+            out.append((e["msgid"], me, when, e["references"][-1], e.get("reaction", "")))
+        return out
+
+    def _sent_superseded(self) -> set[str]:
+        """The Message-IDs of your private reactions that a later one of yours replaced."""
+        return {e["supersedes"] for e in self.sent
+                if e.get("kind") == "reaction" and e.get("supersedes")}
+
     def _my_key_text(self) -> str | None:
         """Your key, or None before a vault is open."""
         try:
@@ -113,16 +146,22 @@ class ReactionsMixin:
         # even before the cancel-like withdrawal reaches us (Dates are rounded)
         replaced = {v for m in held for v in m.supersedes}
         items, seen = [], set(replaced)
+        inbox = group_id == getattr(self, "my_inbox", None)
         for m in held:
             if m.message_id in seen or not m.references:
                 continue
             seen.add(m.message_id)
             tgt = m.references[-1]
+            if inbox and not m.sender_key:           # anonymous: never counted (4.3.1)
+                continue
             if m.author_key and author.get(alias.get(tgt, tgt)) == m.author_key:
                 continue
             when = int(m.date.timestamp()) if m.date else 0
             items.append((m.message_id, m.author_key, when, alias.get(tgt, tgt), m.reaction))
-        return rx.count(items)
+        if inbox:                                    # yours, and taking back (section 4.3)
+            gone = self._sent_superseded()
+            items += [i for i in self._sent_reactions() if i[0] not in gone]
+        return rx.count(items, takebacks=inbox)
 
     def reactions_on(self, msg: Message) -> rx.Counts:
         """The reactions under one article (empty Counts if none)."""
@@ -144,6 +183,8 @@ class ReactionsMixin:
         allowed = self.react_permission(group_id, msg)
         if not allowed:
             raise SessionError(allowed.reason)
+        if msg.private:
+            return await self._react_privately(msg, emoji)
         if not self.reaction_set(group_id).takes(emoji):
             raise SessionError("this group does not take that reaction")
         me = self.identity()
@@ -185,6 +226,37 @@ class ReactionsMixin:
                               supersedes=[mine[1]] if mine else [])
         self.emit(ev.GroupUpdated(group_id, 0))
         return art.message_id
+
+    async def _react_privately(self, msg: Message, emoji: str) -> str | None:
+        """Section 4.3: a reaction to a private message is itself one, sealed to the
+        sender's inbox with its headers inside. Changing is sending another; taking back
+        is sending one with an empty ``Reaction`` (4.3.1) - nodes take no edits or
+        cancels in inboxes. Any emoji. Priced as every sealed private post (4.3.2)."""
+        if not rx.is_emoji(emoji):
+            raise SessionError("that is not an emoji")
+        me = self.identity()
+        mine = self.reactions_on(msg).by_key.get(me.key_text)
+        back = bool(mine and rx.same_emoji(mine[0], emoji))
+        give = "" if back else emoji
+        target = self.reply_target(msg)
+        owner = crypto.key_from_text(msg.sender_key)
+        refs = [*msg.references, msg.message_id]
+        # inside the sealed article (section 4.3): what it answers, and the reaction of
+        # yours it replaces (4.3.1) - inbox Dates are rounded to 10 minutes, so they
+        # cannot tell a change made within them from the reaction it changes
+        inner = [(rx.HEADER, give), ("References", " ".join(refs))]
+        if mine:
+            inner.append(("Supersedes", mine[1]))
+        mid = await self.send_private(target, "", give + "\n" if give else "",
+                                      owner_key=owner, kind=rx.KIND_REACTION, references=None,
+                                      content_type="text/plain; charset=utf-8", extra=inner)
+        for e in reversed(self.sent):                # the sent entry says which emoji
+            if e.get("msgid") == mid:
+                e.update(reaction=give, references=refs, supersedes=mine[1] if mine else None)
+                break
+        self.save()
+        self.emit(ev.GroupUpdated(self.my_inbox, 0))
+        return None if back else mid
 
     async def _withdraw_reaction(self, group_id: str, message_id: str) -> None:
         me = self.identity()
