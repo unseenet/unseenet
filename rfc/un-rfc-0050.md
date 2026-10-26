@@ -218,11 +218,19 @@ then removes its onion service (the code is used up, section 3.2).
 
 1. **Hello.** Each side sends `UNSEENET-COPY-1` (ASCII) and checks the
    other's. A later version of this document changes the number.
-2. **SPAKE2.** Each side sends its SPAKE2 message (section 3.4).
-3. **Confirmation.** The new device sends its confirmation; the old
+2. **SPAKE2.** Each side sends its SPAKE2 message (section 3.4). The
+   password is the code in its normal form, `<n>-<word1>-<word2>` with
+   full words in lower case, however it was typed; the old device is
+   SPAKE2's side A with identity `unseenet-copy-old`, the new device side
+   B with `unseenet-copy-new`, both ASCII.
+3. **Confirmation.** In `H(DS("UNSEENET-COPY-CONFIRM-1") || role || K)`
+   (section 3.4) `role` is the sender's SPAKE2 identity, so the two
+   confirmations differ. The new device sends its confirmation; the old
    device checks it and only then sends its own; the new device checks
    that. Either side closes on a wrong one.
-4. **Check words.** Both show the check words (section 3.5). The new
+4. **Check words.** Both show the check words (section 3.5): the first
+   22 bits of `check_value`, most significant first, as two numbers of
+   11 bits, each picking a word from the BIP39 English list. The new
    device waits; the old device waits for the user, at most until the
    code's 10 minutes are over. If the user says the words do not match,
    or cancels, the old device closes the connection without sending
