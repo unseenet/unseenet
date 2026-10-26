@@ -132,7 +132,7 @@ class PeopleMixin:
         A checked mention notice (UN-RFC 0032) is a 'mention' too."""
         if msg.private:
             return "mention" if self.notice_ok(msg) else None
-        if not msg.readable:
+        if not msg.readable or msg.old_on_arrival:      # UN-RFC 0049 section 5.2
             return None
         keys = {self.identity(n).key_text for n in self.data["identities"]}
         if msg.author_key in keys:

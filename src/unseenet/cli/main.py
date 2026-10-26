@@ -137,6 +137,12 @@ def client_main(argv=None) -> None:
                         "again without their metadata (GPS, time, camera)")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
+    s.add_argument("--origin-network", metavar="NAME",
+                   help="your own post imported from another network, e.g. facebook (UN-RFC 0049)")
+    s.add_argument("--origin-date", metavar="RFC3339",
+                   help="when it was first published there, e.g. 2026-08-03T14:20:00Z")
+    s.add_argument("--origin-id", metavar="ID", help="its ID there (links this key to that account)")
+    s.add_argument("--origin-from", metavar="NAME", help="its author there")
     s = sub.add_parser("pin", help="owner or moderator: pin a post at the top of a group")
     s.add_argument("group")
     s.add_argument("message_id", help="the post's Message-ID")

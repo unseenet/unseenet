@@ -70,3 +70,13 @@ async def test_client_reads_the_newest_signed_list(tmp_path, monkeypatch):
     assert await s.refresh_known_nodes() is False
     await s.close()
     server.close()
+
+
+@pytest.fixture(autouse=True)
+def _history_dates(monkeypatch):
+    """These tests build history with old Dates, or move the clock, as nodes see articles
+    over time; the rule that a POST is not more than an hour in the past (UN-RFC 0049
+    section 3.2) has its own tests in test_origins.py."""
+    from datetime import timedelta
+    from unseenet.node import server as node_server
+    monkeypatch.setattr(node_server, "POST_PAST", timedelta(days=3650))

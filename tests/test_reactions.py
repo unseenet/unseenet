@@ -333,3 +333,13 @@ def test_a_reaction_from_the_author_is_not_counted():
     s.reaction_msgs = {"g": {1: r("<1@x>", "A"), 2: r("<2@x>", "B")}}
     c = s.all_reactions("g")["<p@x>"]
     assert c.count("👍") == 1 and c.of("A") is None
+
+
+@pytest.fixture(autouse=True)
+def _history_dates(monkeypatch):
+    """These tests build history with old Dates, or move the clock, as nodes see articles
+    over time; the rule that a POST is not more than an hour in the past (UN-RFC 0049
+    section 3.2) has its own tests in test_origins.py."""
+    from datetime import timedelta
+    from unseenet.node import server as node_server
+    monkeypatch.setattr(node_server, "POST_PAST", timedelta(days=3650))

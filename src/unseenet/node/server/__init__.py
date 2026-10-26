@@ -75,6 +75,7 @@ class PeerConfig:
 
 
 BLOB_WAIT_SECONDS = 600.0      # UN-RFC 0027 6.3: forward without the blobs after this
+POST_PAST = timedelta(hours=1)  # UN-RFC 0049 3.2: a POST's Date at most this far back
 BACKFILL_MAX = 5000            # #543: stored articles whose files are fetched per start
 
 

@@ -24,15 +24,18 @@ class Accepting:
     # ------------------------------------------------------------------
     def accept(self, raw: bytes, source: str | None = None,
                now: datetime | None = None, from_peer: bool = False,
-               how: str | None = None, staged: dict | None = None) -> Article:
+               how: str | None = None, staged: dict | None = None,
+               held: bool = False) -> Article:
         """Validate and store an article. Raises ArticleError with an RFC 0005 reason.
 
         ``from_peer`` is true for articles pushed by another node (IHAVE/TAKETHIS),
         authenticated or not; ``source`` names the peer when it authenticated.
-        ``how`` is only for the counters: "client", "peer" or "pull".
+        ``how`` is only for the counters: "client", "peer" or "pull". ``held``: a
+        comment kept aside until its thread came (UN-RFC 0030), whose time of posting
+        was checked when it was posted.
         """
         try:
-            art = self._accept(raw, source, now, from_peer, staged)
+            art = self._accept(raw, source, now, from_peer, staged, held)
         except ArticleError as err:
             self.stats.rejected_one(err.reason)
             if err.reason == "later":
@@ -73,7 +76,7 @@ class Accepting:
         for held_at, raw, source, from_peer in self._held.pop(message_id, []):
             if now - held_at <= self.HOLD_SECONDS:
                 try:
-                    self.accept(raw, source=source, from_peer=from_peer)
+                    self.accept(raw, source=source, from_peer=from_peer, held=True)
                 except ArticleError as err:
                     log.debug("held comment not accepted: %s", err)
 
@@ -127,7 +130,7 @@ class Accepting:
         return None
 
     def _accept(self, raw: bytes, source: str | None, now: datetime | None,
-                from_peer: bool, staged: dict | None = None) -> Article:
+                from_peer: bool, staged: dict | None = None, held: bool = False) -> Article:
         art = Article.from_bytes(raw)
         validate_structure(art, raw_size=len(raw), max_size=self.config.max_size, now=now)
         if self.store.seen(art.message_id):
@@ -137,6 +140,16 @@ class Accepting:
             if peer is not None and not wildmat(peer.accept, art.group):
                 raise ArticleError("group", f"not accepted from peer {source}")
         now = now or datetime.now(timezone.utc)
+        # UN-RFC 0049 section 3.2: a POST is posted now, so its Date is not more than an
+        # hour in the past - except an article a moderator approves days later, whose Date
+        # stays the author's. Peers' articles arrive late by design (section 3.3).
+        if not from_peer and not held and parse_date(art["Date"]) < now - _s.POST_PAST:
+            from ...core.groups import has_valid_approval
+            approved = self.store.manifest(art.group)
+            if not (art.get("Approved-By") and approved is not None
+                    and has_valid_approval(art, approved)):     # a forged one does not count
+                raise ArticleError("date", "Date more than an hour in the past: post it again "
+                                           "with the time of posting")
         ctl = art.control
         is_manifest = ctl == ["manifest"]
         if is_manifest and is_key_bound(art.group):

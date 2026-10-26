@@ -230,7 +230,8 @@ class FollowingMixin:
                 if depth == 0 and not msg.private and msg.page is None and msg.readable:
                     rows.append(msg)
         epoch = datetime.min.replace(tzinfo=timezone.utc)
-        rows.sort(key=lambda m: (m.date or epoch, m.message_id), reverse=True)
+        # an import sits where it belongs in its author's history (UN-RFC 0049 5.3)
+        rows.sort(key=lambda m: (m.sort_date or epoch, m.message_id), reverse=True)
         for m in rows:
             self.seen_name(m.author_key)              # remember the names of those followed
         self._save_learnt_labels()

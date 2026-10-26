@@ -7,6 +7,7 @@ The pure part (``threaded``) needs no session; ``Session.threads()`` and
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from ..core.groups import KIND_CHAT
@@ -22,6 +23,8 @@ FEED_DEPTH = 2           # a feed shows comments two levels deep (UN-RFC 0034 se
 
 MAX_DEPTH = 4            # deeper replies are drawn at this depth
 
+
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)   # for what has no date
 
 def threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
     """Threads newest first, each thread in the order its posts came.
@@ -47,7 +50,11 @@ def threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
     out = []
     for root, items in sorted(threads.items(),
                               key=lambda kv: max(pos[x.message_id] for x in kv[1]), reverse=True):
-        for m in sorted(items, key=lambda x: pos[x.message_id]):
+        if any(x.origin_date for x in items):    # imports: by origin date (UN-RFC 0049 5.3)
+            ordered = sorted(items, key=lambda x: (x.sort_date or _EPOCH, pos[x.message_id]))
+        else:
+            ordered = sorted(items, key=lambda x: pos[x.message_id])
+        for m in ordered:
             depth = 0 if m.message_id == root else min(len(m.references), MAX_DEPTH)
             out.append((m, depth))
     return out
@@ -76,7 +83,8 @@ def feed_threaded(msgs: list[Message]) -> list[tuple[Message, int]]:
             entries[root].append(m)
     epoch = datetime.min.replace(tzinfo=timezone.utc)
     out = []
-    for root in sorted(entries, key=lambda r: (by_id[r].date or epoch, pos[r]), reverse=True):
+    # by the origin date of an import, else Date (UN-RFC 0049 section 5.3)
+    for root in sorted(entries, key=lambda r: (by_id[r].sort_date or epoch, pos[r]), reverse=True):
         out.append((by_id[root], 0))
         for m in entries[root]:
             refs = m.references

@@ -390,6 +390,11 @@ class ReadingMixin:
             msg.kind = message_kind(art)                     # UN-RFC 0028
             msg.reaction = (art.get("Reaction") or "").strip()   # UN-RFC 0048
             msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
+            from ...core.origins import origin_of
+            origin = origin_of(art.get, msg.date)              # UN-RFC 0049 section 4
+            if origin is not None:
+                msg.origin_network, msg.origin_date = origin.network, origin.date
+                msg.origin_id, msg.origin_from = origin.id, origin.from_
             if art.get("Blobs"):                             # files it carries (UN-RFC 0027)
                 from ...core import blobs as bl
                 try:
@@ -471,4 +476,4 @@ class ReadingMixin:
         """How many posts in the group you have not read, among those shown (not ignored
         or blocked), from what this client has fetched."""
         return sum(1 for m in self.visible(list(self.cache.get(group_id, {}).values()))
-                   if not self.is_read(m))
+                   if not self.is_read(m) and not m.old_on_arrival)    # UN-RFC 0049 5.2
