@@ -29,9 +29,6 @@ from datetime import datetime, timedelta, timezone
 from _owner import builtin_list, open_owner_session  # noqa: E402
 
 from unseenet.client import naming  # noqa: E402
-from unseenet.core import crypto  # noqa: E402
-from unseenet.core.groups import personal_inbox_id  # noqa: E402
-from unseenet.nntp import NNTPError  # noqa: E402
 
 PARENT = "unseenet"
 LIFETIME = timedelta(days=5 * 365)          # the longest section 5.4 allows
@@ -49,18 +46,6 @@ NAMES = {
     "eff-bot": "ed25519:uangztkgxp6ql2nxj6fy34d2bjspykt5taxfi7i4urrcm2o4kvca",         # alt.privacy.eff
     "nasa-bot": "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq",        # alt.space.nasa
 }
-
-
-async def has_inbox(s, key_text: str) -> bool:
-    gid = personal_inbox_id(crypto.key_from_text(key_text))
-
-    async def exists(c) -> bool:
-        try:
-            await c.group(gid)
-            return True
-        except NNTPError:
-            return False
-    return await s._call(exists, s.node_for(gid))
 
 
 async def run(dry: bool) -> None:
@@ -92,7 +77,7 @@ async def run(dry: bool) -> None:
             if cur and cur.key == key and cur.expires - now > GIVE_AGAIN:
                 print(f"{name}: given, lasts to {cur.expires:%Y-%m-%d}")
                 continue
-            if not await has_inbox(s, key):
+            if not await naming.has_inbox(s, key):
                 waiting.append(name)
                 print(f"{name}: not given yet - {key[:20]}... has no inbox")
                 continue
