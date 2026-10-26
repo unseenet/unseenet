@@ -1,4 +1,4 @@
-"""The menu of the bootable Unseenet image (tools/image): what you see after booting.
+"""The menu of the bootable Unseenet image (unseenet-bootable's tools/image): what you see after booting.
 
     python -m unseenet.boot              the menu on the console
     python -m unseenet.boot --self-test  check the running system (CI, and the

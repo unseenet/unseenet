@@ -3,7 +3,7 @@
     python -m unseenet.update [--media PATH] [--channel stable|dev] [--zip FILE]
                               [--check] [--yes] [--no-tor]
 
-The stick is one FAT partition of ordinary files (tools/image). An update
+The stick is one FAT partition of ordinary files (unseenet-bootable's tools/image). An update
 replaces the system files with those of a newer release's update zip,
 ``unseenet-<version>-x86_64-update.zip``, and never touches ``data/``.
 

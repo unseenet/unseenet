@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The bootable image's tools have moved to
+  [unseenet-bootable](https://github.com/unseenet/unseenet-bootable)**
+  (unseenet-bootable#5), with their history: `tools/image/`.
+
 - **The portable builds' tools have moved to
   [unseenet-portable](https://github.com/unseenet/unseenet-portable)**
   (unseenet-portable#6), with their history: `tools/build_portable.py`,
