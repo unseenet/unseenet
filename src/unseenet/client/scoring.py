@@ -43,7 +43,7 @@ MAX_POINTS = 10_000              # a rule's points and caps stay within this
 # look like (UN-RFC 0051 section 3): a suggestion, yours only when you save it, never
 # applied by itself. One text, so every client offers the same.
 SUGGESTION = """# Your own rules - they run only here, and go with your identity.
-# Lines starting with # are comments: take a rule out by putting # in front of it.
+# Lines starting with # are comments; a # in front of a rule takes it out.
 # Without rules the feed is newest first and threads are as they are.
 
 [feed]
