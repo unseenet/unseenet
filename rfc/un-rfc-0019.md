@@ -76,10 +76,15 @@ reg-name = ALPHA *( ALPHA / DIGIT / "-" )   ; lowercase only
 A registrar MUST refuse a registered name that
 
 1. is a top-level domain in the IANA root zone at the time of the claim
-   (the list published by IANA, e.g. `com`, `dk`, `microsoft`, `app`).
-   The registrar looks this up when it handles the claim; nobody keeps a
-   copy of the list for this purpose;
-2. is reserved in section 9.
+   (the list published by IANA, e.g. `com`, `dk`, `microsoft`, `app`),
+   unless the claiming key is in the TXT record `_unseenet.nic.<tld>`
+   (section 4.5). The registrar looks the list up when it handles the
+   claim; nobody keeps a copy of it for this purpose;
+2. is reserved in section 9, unless the claim comes from the project;
+3. is the name of a top-level hierarchy in the trusted root list (UN-RFC
+   0018) at the time of the claim, unless the claim comes from that
+   hierarchy's maintainer. A hierarchy without a maintainer gives its
+   name to nobody. Names in section 9 are decided by item 2 alone.
 
 ## 4.2 Domain Names
 
@@ -112,6 +117,33 @@ the domain name (section 5.4) or by the domain itself in DNS, checked by
 the registrar (section 6.4). Sub-names are written without a leading
 `@`, like e-mail addresses: `sonia@lorensen`, while other names keep it:
 `@lorensen`.
+
+## 4.5 Names of Others
+
+Some registered names already belong to somebody outside the registrar:
+a top-level domain belongs to its registry, a top-level hierarchy to its
+maintainer. Section 4.1 gives such a name only to its owner, never to
+whoever is quickest:
+
+- **A top-level domain.** Its registry proves itself the way a domain
+  does (section 6.4), with the record
+
+  ```
+  _unseenet.nic.microsoft.  TXT  "unseenet-key=ed25519:..."
+  ```
+
+  Generic top-level domains have the host `nic.<tld>`, run by their
+  registry, so nobody else can publish it. A top-level domain where
+  nobody can publish this record stays closed.
+- **A top-level hierarchy.** Its maintainer in the root list claims it
+  like any registered name. `@torproject` thus becomes the Tor
+  Project's the day it is given `torproject.*`, and is nobody's until
+  then - the project's included.
+
+The registrar checks both again at each renewal (section 6.3).
+Names that only exist as domains below the top level (`maersk`, for
+`maersk.com` and `maersk.dk`) are first come, first served like any
+other: see section 11.
 
 # 5. Name Certificates
 
@@ -276,9 +308,10 @@ The holder renews by sending `renew` before the certificate expires.
 After expiry, only the former holder can renew for 30 days. Then the
 name is free.
 
-A registered name that has become a top-level domain since it was issued
-(section 4.1) keeps its current certificate until it expires, but is not
-renewed.
+The checks of section 4.1 are made again at each renewal. A registered
+name that has since become a top-level domain or the name of a top-level
+hierarchy whose owner is not the holder keeps its current certificate
+until it expires, but is not renewed.
 
 ## 6.4 Domain Names
 
@@ -483,7 +516,12 @@ group (section 7), that is, the project: `admin`, `abuse`, `help`,
 `info`, `node`, `nodes`, `operator`, `postmaster`, `registrar`, `root`,
 `security`, `support`, `system`, `unseenet`, `usenet`, and the names
 reserved in UN-RFC 0018 section 9. The project uses them for itself (for
-example `@unseenet`), so that nobody else can pose as it.
+example `@unseenet`, and `help@unseenet` under it), so that nobody else
+can pose as it.
+
+Hierarchies added to the root list later are covered by section 4.1
+item 3 without being added here: their names go to their maintainers,
+not to the project.
 
 # 10. Signature Purposes
 
@@ -506,8 +544,25 @@ UN-RFC 0003 section 3 is extended with:
 - **Why are top-level domains refused?** `@microsoft` would otherwise go
   to whoever was quickest. Names that are top-level domains already
   belong to somebody in the world outside, and that somebody can use a
-  domain name under it. The cost is that some common words (`app`,
-  `music`, `shop`) cannot be registered.
+  domain name under it, or claim the name itself (section 4.5). The cost
+  is that some common words (`app`, `music`, `shop`) cannot be
+  registered by anybody but their registry.
+- **Why may a registry claim its top-level domain?** Refusing `@microsoft`
+  to everybody kept it from squatters, but also from Microsoft. The
+  record under `nic.<tld>` can only be published by the registry, so
+  letting it claim costs nothing and keeps the name out of the wrong
+  hands just as well.
+- **Why do hierarchy names go to their maintainers?** A hierarchy is a
+  promise to a community; somebody holding `@torproject` or `@matrix`
+  would look as if they spoke for `torproject.*` or `matrix.*`. Reading
+  the root list means a new hierarchy is covered the day it is listed,
+  with nothing copied by hand.
+- **Why not ask DNS proof for `maersk` too?** Nearly every name exists as
+  a domain somewhere (`anna.com`, `sonia.net`), so it would end
+  registered names for everybody without a domain, tie identities to
+  whoever paid for a domain, and make the registrar choose between the
+  owners of `maersk.com` and `maersk.dk`. Those who need proof have
+  domain names, which clients show first (section 8.1).
 - **Why do names not give hierarchies?** A name is cheap and automatic; a
   hierarchy is a promise to a community and needs a charter (UN-RFC
   0018). Joining them would make hierarchies free. It can be added

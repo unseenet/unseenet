@@ -25,7 +25,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from . import hierarchies as hz
 from . import names as nm
+from .client import naming
 from .client.session import Message, Session, SessionError
 from .core import crypto
 from .core.article import new_article
@@ -101,8 +103,13 @@ class Registrar:
     def __init__(self, session: Session, group: str = nm.NAMES_GROUP, *,
                  tlds: Callable[[], set[str] | None] | None = None,
                  dns_txt: Callable[[str], list[str]] = dig_txt,
-                 now: Callable[[], datetime] | None = None):
+                 now: Callable[[], datetime] | None = None,
+                 root: dict[str, hz.Hierarchy] | None = None):
         self.s = session
+        # The root list of hierarchies (section 4.1 item 3): given, or read from the
+        # project's group on each pass, with the list that ships as the fallback.
+        self.fixed_root = root is not None
+        self.root: dict[str, hz.Hierarchy] = root if root is not None else hz.builtin_root_list()[1]
         self.group = group
         self.me = session.identity()                        # the registrar key
         st = session.data.setdefault("registrar", {})
@@ -128,6 +135,11 @@ class Registrar:
         self.claims_group = manifest.get("claims")
         if self.me.key_text not in self.trusted:
             raise SessionError(f"this registrar key is not a poster in {self.group}")
+        if not self.fixed_root:
+            try:
+                self.root = await naming.read_root_list(self.s) or self.root
+            except Exception as exc:  # noqa: BLE001  keep the last list rather than stop
+                log.warning("could not read the root list: %s", exc)
         certs: dict[str, nm.Certificate] = {}
         newest: dict[str, tuple[datetime, set]] = {}
         for m in msgs:
@@ -208,10 +220,16 @@ class Registrar:
             tlds = self.tlds()
             if tlds is None:
                 return name, Outcome(refuse="the list of top-level domains is unavailable; try again later")
-            if name in tlds:
-                return name, Outcome(refuse="the name is an Internet top-level domain")
-            if name in nm.RESERVED and c.sender != self.owner:
-                return name, Outcome(refuse="the name is reserved")
+            if name in tlds and nm.dns_record_value(c.sender) not in self.dns_txt(nm.tld_record_name(name)):
+                return name, Outcome(refuse="the name is an Internet top-level domain; only its "
+                                            f"registry can claim it, with a TXT record "
+                                            f"{nm.tld_record_name(name)} holding its key")
+            if name in nm.RESERVED:
+                if c.sender != self.owner:
+                    return name, Outcome(refuse="the name is reserved")
+            elif name in self.root and c.sender != (self.root[name].maintainer or None):
+                return name, Outcome(refuse=f"the name is the top-level hierarchy {name}.*; only "
+                                            "its maintainer in the root list can hold it")
             if not mine and self.names_held(c.sender, c.date, c.id) >= nm.MAX_NAMES_PER_KEY:
                 return name, Outcome(refuse=f"a key can hold at most {nm.MAX_NAMES_PER_KEY} names")
         elif nm.dns_record_value(c.sender) not in self.dns_txt(nm.dns_record_name(name)):
