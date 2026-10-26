@@ -1,12 +1,13 @@
 {
   "v": 1,
   "hierarchy": "unseenet",
-  "updated": "2026-10-24",
+  "updated": "2026-10-26",
   "groups": [
     {"group": "unseenet@ph5fc5hop5232qsz", "note": "talk about Unseenet"},
     {"group": "unseenet.chat@ph5fc5hop5232qsz", "note": "chat, also the Matrix room #unseenet:unseenet.org"},
     {"group": "unseenet.test@ph5fc5hop5232qsz", "note": "test posts"},
     {"group": "unseenet.help@ph5fc5hop5232qsz", "note": "questions and answers"},
+    {"group": "unseenet.help.news@ph5fc5hop5232qsz", "note": "what's new, in plain words, by the help bot"},
     {"group": "unseenet.announce@ph5fc5hop5232qsz", "note": "releases and news"},
     {"group": "unseenet.admin@ph5fc5hop5232qsz", "note": "hierarchy requests and name disputes"},
     {"group": "unseenet.nodes@ph5fc5hop5232qsz", "note": "data: the node list"},

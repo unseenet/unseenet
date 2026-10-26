@@ -118,6 +118,12 @@ after a while, or right away if you write @helpbot - it can be wrong, and it
 says where its answer comes from. Ideas and talk about the project belong in
 unseenet@""" + FP + "."
 
+NEWS = """What's new in Unseenet, told in plain words by the help bot (unseenet-helpbot#13)
+when the project releases something: what changed for you, what node operators must do,
+and where to get it. Its posts are written by a program from the release notes and can
+be wrong; the official word is in unseenet.announce. Comment to ask about a release -
+stay on it; the bot answers, and so may people. New threads are the bot's."""
+
 BOT_RULES = """Posts here are made by a bot from {source}, credited in each post.
 Comment on a post to talk about it; new threads are the bot's. Be kind, stay
 on the topic of the post, and no advertising."""
@@ -136,6 +142,10 @@ GROUPS = (
      "For trying things out.", TEST, None, 20),
     ("unseenet.help", "open", "threads", "Unseenet help - ask anything",
      "Questions about using Unseenet; people and the help bot answer.", HELP, None, 20),
+    ("unseenet.help.news", "channel", "feed", "What's new in Unseenet - in plain words",
+     "The help bot tells about new releases in ordinary language. Comment to ask; "
+     "the official release notes are in unseenet.announce.",
+     NEWS, "ed25519:6gf6zqd6hzligjk57kdbna3z7uwlnipfgg47v765kitkn2avdxfa", 20),
     ("unseenet.announce", "channel", "threads", "Unseenet announcements: releases and news",
      "Releases, security notices and network news from the Unseenet project.", ANNOUNCE,
      "github_poster", 20),
@@ -191,6 +201,7 @@ GROUPS = (
 
 # Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
 COMMENTS = {
+    "unseenet.help.news": ("open", 30),       # releases are slower than daily news
     "alt.news.wikipedia": ("open", 14),
     "alt.history.onthisday": ("open", 7),
     "alt.news.globalvoices": ("open", 14),

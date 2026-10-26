@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **`unseenet.help.news`** (unseenet-helpbot#21): the help bot's plain-language
+  news about releases, a feed open for comments for 30 days; in the project's
+  groups and the hierarchy list, and a **starter group** (version 4): new clients
+  follow it, and existing ones at their next start.
+
 - **Reactions through a gateway count per outside person** (UN-RFC 0048 section
   9, unseenet-gateway#32): in a gatewayed group, a reaction its gateway (a
   moderator) brought in with `Origin-Network` and `Origin-From` counts for that
