@@ -24,6 +24,7 @@ reads and posts. Clients use the one class; its code is split by area:
     recovery.py   recovery words: showing, reminding, restoring (UN-RFC 0050 section 4)
     copying.py    copying identities to another device (UN-RFC 0050 section 3)
     queue.py      a posting queue: many posts paced by postage, ripening, quotas
+    notify.py     what new has landed in For you, for a client to tell
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -415,9 +416,10 @@ from .reactions import ReactionsMixin  # noqa: E402
 from .recovery import RecoveryMixin  # noqa: E402
 from .copying import CopyingMixin, CopyOffer, CopyReceive  # noqa: E402,F401
 from .queue import QueueMixin, PostingQueue  # noqa: E402,F401
+from .notify import NotifyMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""
