@@ -508,6 +508,38 @@ a petname the first time the user writes to or replies to an identity,
 so that later changes of certificate do not silently change what the
 user sees.
 
+## 8.5 Names Outside the Network
+
+People will give their name where `unseenet:` means nothing: in an
+e-mail signature, on a website, on a business card. There a name looks
+like an e-mail address, so it needs a label.
+
+- A name written outside the network SHOULD carry the word `Unseenet`
+  as its label, in full, as "Mail:" or "Tel:" are used:
+
+  ```
+  Unseenet: andreas@lorensen
+  ```
+
+- Where there is room for a link, the name SHOULD link to the
+  identity's address, `unseenet:<fingerprint>` or its web form (UN-RFC
+  0031 section 3.4.1), so that a reader can check that the name and
+  the key belong together.
+- A name is never written as an address: `unseenet:andreas@lorensen`
+  is not valid (UN-RFC 0031 section 3.4.1), and a client MUST NOT
+  write it. A client reads whatever follows `unseenet:` only as UN-RFC
+  0031 says, and never tries it as a name: `sonia@<16 characters>`
+  could be both, and a guess would open the wrong thing.
+- A client SHOULD accept a name wherever the user can paste an address:
+  `@lorensen`, `@lorensen.dk`, `sonia@lorensen` or `andlo@lorensen.dk`,
+  with or without the label `Unseenet:` before it. It resolves the
+  name as in section 8.3, and MUST show the key it found, and its
+  short form, before the user follows, adds or writes to the identity.
+  Pasted text that is also a whole Group ID (UN-RFC 0004) is offered
+  both ways, and the user chooses. When the name was pasted together
+  with an address and the two name different keys, the client MUST say
+  so and use neither without asking.
+
 # 9. Reserved Names
 
 Besides the top-level domains (section 4.1), the project's registrar
@@ -576,6 +608,14 @@ UN-RFC 0003 section 3 is extended with:
   revoke it at any time, so a long life does not outlast the parent.
 - **Why one level?** `x@sonia@lorensen` would be hard to read and harder
   to reason about. One level covers families and organisations.
+- **Why the word `Unseenet` and not a short form?** `andreas@lorensen`
+  on its own reads as an e-mail address. The short forms that come to
+  mind are taken (USN, UN), and a label in full also tells a reader who
+  has never heard of the network what to search for.
+- **Why not `unseenet:<name>`?** A name can change hands, and an
+  address must keep naming the same thing (UN-RFC 0031). Linking the
+  name to the key's address gives the reader both: something to
+  remember, and something that cannot be swapped.
 
 # 12. Security and Privacy Considerations
 
