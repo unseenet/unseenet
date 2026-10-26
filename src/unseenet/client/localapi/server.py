@@ -366,6 +366,44 @@ async def passphrase(request):
         return _json({"error": f"Could not save the vault: {exc}"}, status=500)
 
 
+async def recovery_words(request):
+    data = await _body(request)
+    return _json(await _api(request).recovery_words(str(data.get("passphrase", "")),
+                                                    data.get("identity") or None))
+
+
+async def recovery_written(request):
+    data = await _body(request)
+    return _json(_api(request).recovery_written(data.get("identity") or None))
+
+
+async def recovery_reminded(request):
+    data = await _body(request)
+    return _json(_api(request).recovery_reminded(data.get("identity") or None))
+
+
+async def recovery_check(request):
+    data = await _body(request)
+    return _json(_api(request).recovery_check(str(data.get("words", ""))))
+
+
+async def recovery_restore(request):
+    data = await _body(request)
+    return _json(await _api(request).recovery_restore(
+        str(data.get("words", "")), str(data.get("display", "")), str(data.get("node", "")),
+        str(data.get("name", ""))))
+
+
+async def recovery_closed_groups(request):
+    return _json(await _api(request).recovery_closed_groups())
+
+
+async def recovery_ask(request):
+    data = await _body(request)
+    return _json(await _api(request).recovery_ask(str(data.get("group", "")),
+                                                  str(data.get("note", ""))))
+
+
 async def names(request):
     if request.method == "POST":
         return _json(await _api(request).name_action(await _body(request)))
@@ -450,6 +488,10 @@ ROUTES = [
     ("GET", "/api/moderation", moderation), ("POST", "/api/moderation", moderation),
     ("GET", "/api/profile", profile), ("POST", "/api/profile", profile),
     ("POST", "/api/profile/hide", profile_hide), ("POST", "/api/profile/share", profile_share), ("POST", "/api/passphrase", passphrase),
+    ("POST", "/api/recovery/words", recovery_words), ("POST", "/api/recovery/written", recovery_written),
+    ("POST", "/api/recovery/reminded", recovery_reminded), ("POST", "/api/recovery/check", recovery_check),
+    ("POST", "/api/recovery/restore", recovery_restore),
+    ("GET", "/api/recovery/closed-groups", recovery_closed_groups), ("POST", "/api/recovery/ask", recovery_ask),
     ("GET", "/api/pictures", pictures), ("POST", "/api/profile/picture", profile_picture),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),

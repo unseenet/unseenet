@@ -20,7 +20,8 @@ from .following import *  # noqa: F403
 
 
 COMMANDS = {
-    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase, "node-add": c_node_add, "groups": c_groups,
+    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase,
+    "id-words": c_id_words, "id-restore": c_id_restore, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
@@ -50,6 +51,20 @@ def client_main(argv=None) -> None:
     s.add_argument("name")
     s.add_argument("--display", help="display name shown in From")
     sub.add_parser("whoami", help="list identities")
+    s = sub.add_parser("id-words", help="show an identity's 24 recovery words, to write down",
+                       description="Show an identity's 24 Unseenet recovery words (UN-RFC 0050). "
+                                   "Whoever has them IS the identity. They are printed only, "
+                                   "never saved. Closed groups do not come back with them.")
+    s.add_argument("name", nargs="?", help="the identity (default: the default one)")
+    s.add_argument("--written", action="store_true", help="note that they are written down")
+    s.add_argument("--yes", action="store_true",
+                   help="do not ask for the passphrase again (scripts and tests)")
+    s = sub.add_parser("id-restore", help="bring an identity back from its recovery words (stdin)",
+                       description="Read 24 recovery words from stdin, put the identity in the "
+                                   "vault, and read its state from the network (UN-RFC 0050).")
+    s.add_argument("name", nargs="?", help="its name in this vault (default: restored-<fp>)")
+    s.add_argument("--display", help="display name shown in From")
+    s.add_argument("--offline", action="store_true", help="only put it in the vault")
     sub.add_parser("passphrase", help="give the vault a new passphrase",
                    description="Give the vault a new passphrase. The current one is the one it was "
                                "opened with; the new one is asked for twice, or taken from "

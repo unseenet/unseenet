@@ -21,6 +21,7 @@ reads and posts. Clients use the one class; its code is split by area:
     following.py  following feeds and people, the timeline (UN-RFC 0034 sections 6, 7)
     state.py      your state in the network, encrypted, merged and written (UN-RFC 0044)
     reactions.py  reactions under articles: counting, reacting (UN-RFC 0048)
+    recovery.py   recovery words: showing, reminding, restoring (UN-RFC 0050 section 4)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -386,9 +387,10 @@ from .personal import PersonalMixin  # noqa: E402
 from .following import FollowingMixin  # noqa: E402
 from .state import StateMixin  # noqa: E402
 from .reactions import ReactionsMixin  # noqa: E402
+from .recovery import RecoveryMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

@@ -20,6 +20,7 @@ The code follows the sections of UN-RFC 0046, one file each:
     files.py      4.10 files on posts: pictures to show, files to save, files to post
     pictures.py   4.11 pictures and identicons of people, and your own picture
     nodes.py      4.17 your nodes: by name, add, remove, the default
+    recovery.py   4.18 recovery words: showing, checking, restoring (UN-RFC 0050)
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -127,10 +128,11 @@ from .addresses import Addresses  # noqa: E402
 from .feeds import Feeds  # noqa: E402
 from .pages import Pages  # noqa: E402
 from .nodes import Nodes  # noqa: E402
+from .recovery import Recovery  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses, Feeds, Pages, Nodes):
+               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

@@ -136,7 +136,8 @@ check `v` and refuse a version it does not know rather than draw wrong.
  "ripening": null}
 ```
 
-Unlocked: `identity` is `{"key": "ed25519:...", "display": "..."}`,
+Unlocked: `identity` is `{"key": "ed25519:...", "display": "...", "label",
+"words_written", "words_reminder"}` (the last two: section 4.18),
 `node` the default node, `node_label` how it is shown (section 4.17),
 `nodes` your node addresses and `node_names` each one's `{"name",
 "source", "label"}`, and `ripening` `{"level": <0-4 or null>, "t":
@@ -789,6 +790,46 @@ given beside the name, for a tooltip or to copy.
   removed (400). An address is an onion address (56 characters and
   `.onion`, with an optional `:port`) or `host:port`; anything else is
   400.
+
+## 4.18 Recovery Words
+
+An identity's 24 recovery words (UN-RFC 0050 section 4) are its key. The
+runtime never keeps them: not in the vault, the state, a log or a file,
+and it never saves or prints them by itself (UN-RFC 0050 section 4.3).
+What a front end does with `page` - save it as a file, print it - is the
+person's deliberate choice, behind that section's warnings.
+
+- `POST /api/recovery/words` `{"passphrase", "identity"}` (`identity`
+  optional, the default one): the vault passphrase again, even though the
+  vault is open (UN-RFC 0050 section 4.2); 400 when it is wrong. Answers
+  `{"identity", "fingerprint", "words", "check", "note", "not_a_wallet",
+  "title", "page"}`: `check` the three positions (1-24) to ask back,
+  `note` that closed groups do not come back, `not_a_wallet` the sentence
+  to show with them, `page` the plain text for *Save as file* or *Print*.
+- `POST /api/recovery/written` `{"identity"}`: the words were written down
+  and checked. `POST /api/recovery/reminded` `{"identity"}`: the front end
+  reminded the person, or they skipped at creation. State's
+  `words_reminder` is true when to remind again: not written down, and not
+  reminded within a week.
+- `POST /api/recovery/check` `{"words"}`: whether the words can be read,
+  for feedback while they are typed; works while locked, keeps nothing.
+  `{"ok": true, "words": [...]}` (the full words; four letters are enough
+  when typing) or `{"ok": false, "kind": "count" | "word" | "checksum",
+  "error", "position"}`.
+- `POST /api/recovery/restore` `{"words", "display", "node", "name"}`:
+  puts the identity in the vault - as the first setup of a new vault
+  (instead of `/api/setup`, and then `node` is needed), or beside the
+  identities already there - makes it the default, reads its state, name
+  and profile from the network, and starts the runtime. Answers
+  `{"identity", "new", "fingerprint", "key", "label", "profile", "state",
+  "closed_groups", "note"}`: `state` is `read`, `none` (nothing in the
+  network: the default groups) or `unreachable`; `closed_groups` as below.
+- `GET /api/recovery/closed-groups`: `{"groups": [{"group", "label",
+  "owner", "mine"}], "note"}` - closed groups you follow whose secret the
+  vault lacks (UN-RFC 0050 section 4.5).
+- `POST /api/recovery/ask` `{"group", "note"}`: asks the group's owner, by
+  private post to their inbox, to invite you again; answers
+  `{"message_id"}`.
 
 # 5. Events
 
