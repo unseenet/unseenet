@@ -168,8 +168,8 @@ state past its size (section 5).
 
 ## 4.5 Seen, Threads and Your Rules
 
-A user's own rules for their feed and groups (#615, the rule format
-in its own UN-RFC) need three things to follow the identity to every
+A user's own rules for their feed and groups (UN-RFC 0051) need three
+things to follow the identity to every
 device. All three are the user's alone: no node, group owner or the
 project ever sees them, and without them a client shows the feed newest
 first and threads as they are.

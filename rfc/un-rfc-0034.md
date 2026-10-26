@@ -282,6 +282,10 @@ the entries of every feed the user follows.
   change. The timeline is what the reader chose to follow, in the order
   it was written. A client MAY offer filters the reader sets, such as
   hiding bots (UN-RFC 0030 section 6) or showing one feed only.
+- The reader's own rules (UN-RFC 0051) may order and filter the
+  timeline - by anything, what others do included - because the reader
+  wrote them, can read why each entry is where it is, and can change or
+  turn them off. Without them the timeline is newest first.
 - Comments in the timeline are shown as in section 4.2. Writing a
   comment from the timeline writes it to the entry's own feed.
 - Entries from feeds the reader does not follow MUST NOT be added to
