@@ -335,6 +335,41 @@ def test_a_reaction_from_the_author_is_not_counted():
     assert c.count("👍") == 1 and c.of("A") is None
 
 
+def test_reactions_through_a_gateway_count_per_outside_author():
+    """UN-RFC 0048 section 9: the gateway (a moderator of a gatewayed group) brings in
+    reactions with Origin-From; each outside person counts once, and only the gateway's
+    Origin-From is believed."""
+    from types import SimpleNamespace
+    from unseenet.client.session.reactions import ReactionsMixin
+
+    manifests = {"g": {"gateway": {"network": "matrix"}, "moderators": ["GW"]}, "h": {"moderators": ["GW"]}}
+
+    class S(ReactionsMixin):
+        def manifest_data(self, gid):
+            return manifests.get(gid, {})
+
+    s = S()
+    when = datetime(2026, 10, 25, tzinfo=timezone.utc)
+
+    def r(mid, key, who, emoji="👍", sec=0):
+        return SimpleNamespace(message_id=mid, author_key=key, date=when + timedelta(seconds=sec),
+                               references=["<p@x>"], reaction=emoji, supersedes=[],
+                               origin_network="matrix" if who else "", origin_from=who, from_name=who)
+    held = {1: r("<1@x>", "GW", "@a:hs"), 2: r("<2@x>", "GW", "@b:hs"), 3: r("<3@x>", "GW", "@c:hs"),
+            4: r("<4@x>", "GW", "@a:hs", "❤️", 60),                 # @a changes: still one
+            5: r("<5@x>", "Z", "@d:hs"), 6: r("<6@x>", "Z", "@e:hs")}  # not the gateway: one key
+    s.cache = {"g": {1: SimpleNamespace(message_id="<p@x>", author_key="A", versions=[])},
+               "h": {1: SimpleNamespace(message_id="<p@x>", author_key="A", versions=[])}}
+    s.reaction_msgs = {"g": dict(held), "h": dict(held)}
+    c = s.all_reactions("g")["<p@x>"]
+    assert c.total() == 4 and c.count("👍") == 3 and c.count("❤️") == 1     # @b @c and Z once; @a
+    assert "GW|matrix:@a:hs" in c.by_key and c.of("Z") == "👍"
+    who = s.who_reacted(SimpleNamespace(group="g", message_id="<p@x>"), "❤️")
+    assert who == ["@a:hs (via matrix)"]
+    h = s.all_reactions("h")["<p@x>"]                       # no gateway field: per key only
+    assert h.total() == 2
+
+
 @pytest.fixture(autouse=True)
 def _history_dates(monkeypatch):
     """These tests build history with old Dates, or move the clock, as nodes see articles

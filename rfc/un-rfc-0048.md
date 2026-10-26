@@ -356,10 +356,20 @@ A network profile (UN-RFC 0023) MAY map reactions:
   be sent out, not even as articles with the emoji as text.
 
 A gatewayed reaction whose emoji is not in the group's reaction set is
-dropped, not changed to another emoji. Reactions coming in through a
-gateway are counted under the gateway's key or the keys it uses for
-outside authors, as the profile says, so that one outside person is
-counted once.
+dropped, not changed to another emoji.
+
+Reactions coming in through a gateway are signed by the gateway key,
+which a gatewayed group names as its moderator (UN-RFC 0023 section
+3.2), and carry `Origin-Network` and `Origin-From` (UN-RFC 0049 section
+4) naming the outside author. In a group whose manifest has a `gateway`
+field, a client counts such a reaction - signed by one of the group's
+moderators, with both headers - under the pair of that key and
+`Origin-Network` and `Origin-From`, as if it were the outside author's
+own key: one outside person is counted once, and each one counts.
+Changing and taking back work as in section 5, per pair. Without
+`Origin-From` it is counted under the gateway's key. `Origin-From` on a
+reaction from any other key is not used for counting, so nobody counts
+twice by writing it.
 
 # 10. Security and Privacy Considerations
 

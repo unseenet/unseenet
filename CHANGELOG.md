@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Reactions through a gateway count per outside person** (UN-RFC 0048 section
+  9, unseenet-gateway#32): in a gatewayed group, a reaction its gateway (a
+  moderator) brought in with `Origin-Network` and `Origin-From` counts for that
+  outside author, so ten Matrix users' 👍 show 10, and one person changing counts
+  once; `Origin-From` from any other key is not believed. "Who" names them
+  "@a:hs (via matrix)".
+
 - **Encrypted files are padded** (#486, UN-RFC 0027 3.3 and 4.4, #598): before
   encryption a file in a closed group, private post or chat is padded with zeros
   to the next 64 KiB (never beyond the group's `max_size`), so nodes see only its

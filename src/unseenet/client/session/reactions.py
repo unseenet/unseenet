@@ -147,6 +147,7 @@ class ReactionsMixin:
         replaced = {v for m in held for v in m.supersedes}
         items, seen = [], set(replaced)
         inbox = group_id == getattr(self, "my_inbox", None)
+        voter = self._gateway_voter(group_id)
         for m in held:
             if m.message_id in seen or not m.references:
                 continue
@@ -157,11 +158,27 @@ class ReactionsMixin:
             if m.author_key and author.get(alias.get(tgt, tgt)) == m.author_key:
                 continue
             when = int(m.date.timestamp()) if m.date else 0
-            items.append((m.message_id, m.author_key, when, alias.get(tgt, tgt), m.reaction))
+            items.append((m.message_id, voter(m), when, alias.get(tgt, tgt), m.reaction))
         if inbox:                                    # yours, and taking back (section 4.3)
             gone = self._sent_superseded()
             items += [i for i in self._sent_reactions() if i[0] not in gone]
         return rx.count(items, takebacks=inbox)
+
+    def _gateway_voter(self, group_id: str):
+        """Who a reaction counts for (section 9): its key - or, in a gatewayed group, for
+        a reaction its gateway (a moderator) brought in with ``Origin-From``, the pair of
+        that key and the outside author, so each outside person counts once."""
+        data = (self.manifest_data(group_id) if hasattr(self, "manifest_data") else None) or {}
+        if not isinstance(data.get("gateway"), dict):
+            return lambda m: m.author_key
+        mods = set(data.get("moderators", []))
+
+        def voter(m):
+            net, who = getattr(m, "origin_network", ""), getattr(m, "origin_from", "")
+            if m.author_key in mods and net and who:
+                return f"{m.author_key}|{net}:{who}"
+            return m.author_key
+        return voter
 
     def reactions_on(self, msg: Message) -> rx.Counts:
         """The reactions under one article (empty Counts if none)."""
@@ -171,8 +188,10 @@ class ReactionsMixin:
         """Who gave ``emoji`` to ``msg``: names or fingerprints (section 7.2)."""
         counts = self.reactions_on(msg)
         keys = next((v for e, v in counts.by_emoji.items() if rx.same_emoji(e, emoji)), [])
-        names = {m.author_key: m.from_name for m in self._reactions_of(msg.group).values()}
-        return [self.identity_label(k, names.get(k, "")) for k in keys]
+        voter = self._gateway_voter(msg.group)
+        names = {voter(m): m.from_name for m in self._reactions_of(msg.group).values()}
+        return [f"{names.get(k) or k.split(':', 1)[-1]} (via {k.split('|')[1].split(':')[0]})"
+                if "|" in k else self.identity_label(k, names.get(k, "")) for k in keys]
 
     # --- reacting (section 7.3) ---
     async def react(self, msg: Message, emoji: str) -> str | None:
