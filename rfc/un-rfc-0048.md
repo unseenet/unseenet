@@ -159,13 +159,21 @@ Inbox articles take no edits (UN-RFC 0042 section 2), and a node cannot
 check who sent a cancel there, because the outer article is signed by a
 one-time key. So in inboxes:
 
-- **Changing** a reaction is sending a new one to the same message. The
-  recipient's client counts, per verified `Sender-Key`, only the latest
-  reaction to a message, by `Date`, and among equal dates the one with
-  the greatest Message-ID (section 5).
+- **Changing** a reaction is sending a new one to the same message. Its
+  sealed inner article carries `Supersedes` with the Message-ID of the
+  sender's previous reaction to that message, as in a group (section 5);
+  the node never sees it. The recipient's client counts, per verified
+  `Sender-Key`, only the latest reaction to a message: a reaction that a
+  later one of the same sender names in `Supersedes` is gone; among the
+  rest, the latest by `Date`, and among equal dates the one with the
+  greatest Message-ID. `Supersedes` is what decides a change made within
+  minutes: inbox `Date`s are rounded to 10 minutes (UN-RFC 0002 section
+  2.5) and Message-IDs are hashes, so neither can tell a reaction from
+  the one that changes it.
 - **Taking back** is sending a reaction whose `Reaction` header is
-  **empty** and whose body is empty. It counts as that sender's latest
-  reaction to the message, so the message then shows none from them.
+  **empty** and whose body is empty, with `Supersedes` as above. It
+  counts as that sender's latest reaction to the message, so the message
+  then shows none from them.
   An empty `Reaction` is valid in inbox articles only; everywhere else
   it is invalid (section 3.2).
 - A reaction without a verified `Sender-Key` (an anonymous private
