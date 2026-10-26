@@ -150,3 +150,20 @@ async def test_the_cli(setup, folder, capsys):
     assert out["sent"] == 0 and len(out["changes"]) == 3
     await cli.c_site_publish(me, _args(group=gid, folder=str(folder)))
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["sent"] == 3
+
+
+async def test_the_local_api(setup, folder, capsys):
+    import asyncio
+    from unseenet.client.localapi import LocalAPI
+    node, me = setup
+    await cli.c_group_create(me, _args(name="dk.have3", type="channel", view="pages"))
+    gid = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["group"]
+    api = LocalAPI(session=me._session)
+    dry = await api.publish_folder(gid, {"folder": str(folder)})
+    assert dry["sent"] == 0 and {c["action"] for c in dry["changes"]} == {"new"}
+    job = (await api.publish_folder(gid, {"folder": str(folder), "dry_run": False}))["job"]
+    for _ in range(100):
+        if len(me._session.site(gid)["pages"]) == 3:
+            break
+        await asyncio.sleep(0.05)
+    assert job and len(me._session.site(gid)["pages"]) == 3

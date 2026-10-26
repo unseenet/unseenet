@@ -742,6 +742,15 @@ section 5):
 `GET /api/site` and `POST /api/site` `{"title"}` are your personal site, as
 `/api/feed` is your feed (section 4.14, UN-RFC 0035 section 7).
 
+- `POST /api/groups/{gid}/site` `{"folder", "prune": false, "dry_run": true}`:
+  publish a folder of Markdown (and HTML) on this machine as the site's pages
+  (#538). A dry run answers at once `{"changes": [{"path", "title", "action":
+  "new" | "changed" | "unchanged" | "remove" | "kept", "source", "files"}],
+  "notes", "problems", "sent": 0}`; otherwise it is a job, as a post is, that
+  sends only what changed (new versions naming the old) and, with `prune`,
+  removes pages no longer in the folder. Problems (too many pages, a page too
+  large) send nothing.
+
 ## 4.16 Private Profiles
 
 A profile can be shared with one person or a closed group, where only

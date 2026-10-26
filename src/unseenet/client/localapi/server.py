@@ -252,6 +252,10 @@ async def page(request):
     return _json(_api(request).write_page(_gid(request), await _body(request)))
 
 
+async def publish_folder(request):
+    return _json(await _api(request).publish_folder(_gid(request), await _body(request)))
+
+
 async def pin(request):
     return _json(await _api(request).pin(_gid(request), await _body(request)))
 
@@ -504,6 +508,7 @@ ROUTES = [
     ("GET", "/api/site", site_), ("POST", "/api/site", site_),
     ("GET", "/api/groups/{gid}/site", group_site),
     ("GET", "/api/groups/{gid}/page", page), ("POST", "/api/groups/{gid}/page", page),
+    ("POST", "/api/groups/{gid}/site", publish_folder),
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
