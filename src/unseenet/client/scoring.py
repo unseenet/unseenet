@@ -64,44 +64,90 @@ hide if thread in ignored
 HELP = """YOUR RULES - IN SHORT
 
 One rule a line. Upper or lower case is the same.
-#  starts a comment, also after a rule. Put # in front of a rule to take it out.
+# starts a comment, also after a rule.
+Put # in front of a rule to take it out for a while.
 
-WHERE A RULE APPLIES  - a line in brackets; the rules after it apply there
-  [feed]      your feed (the timeline)
-  [groups]    discussion groups shown as threads
-  [dk.*]      groups whose name matches; * is anything
-  [all]       everywhere (also rules before the first bracket)
 
-POINTS  - a post's score starts at 0
+WHERE A RULE APPLIES
+A line in brackets; the rules under it apply there.
+
+  [feed]       your feed (the timeline)
+  [groups]     discussion groups shown as threads
+  [dk.*]       groups whose name matches (* is anything)
+  [all]        everywhere - also rules before any bracket
+
+
+POINTS
+Every post starts with score 0. A rule adds or takes points:
+
   +10 if author in following
   -30 if seen
-  +2  per time I reacted to author  max 20     per: points for each; max: a cap
-  -1  per day old  max 30
 
-  Things to count after per:
-    time I reacted to author    contact who reacted    followed who reacted
-    reaction    reply    new reply since seen    day old    hour old
+per gives points for each of something, max sets a cap:
 
-CONDITIONS  - after if; join with and, or, not and ( )
-  author in following | contacts | ignored      author is "Sonia"
-  from a bot      I posted in thread      I reacted
-  thread in watched | ignored      seen      read      new replies since seen
-  subject matches "text"      text matches "text"      has pictures
-  group is dk.*      older than 7 days      newer than 2 hours
-  score >= 10      reactions >= 3      replies >= 5      new replies > 0
-  Comparisons: >=  <=  >  <  =  !=      Times: minutes hours days weeks
-  matches finds the text anywhere in it, in any case - not a pattern.
+  +2 per time I reacted to author  max 20
+  -1 per day old  max 30
 
-WHAT HAPPENS  - tested with the final score
-  show if score >= 0         only what this says is shown
-  hide if author in ignored
-  sort by score, then date   the order (also: reactions, replies; add ascending)
-  In groups only, never moving a reply inside its thread:
-  fold if score < -20        dim if score < 0
-  highlight if score >= 30   mark read if thread in ignored
+What per can count:
+  time I reacted to author   how often you liked this person
+  contact who reacted        your contacts who reacted
+  followed who reacted       people you follow who reacted
+  reaction                   everyone who reacted
+  reply                      replies to the post
+  new reply since seen       replies you have not seen
+  day old, hour old          the post's age
 
-A line that is not understood is skipped and said; the others still work.
-Without rules: the feed is newest first and threads are as they are.
+
+CONDITIONS
+What comes after if. One of these:
+
+  author in following        you follow the author
+  author in contacts         the author is your contact
+  author in ignored          you ignore the author
+  author is "Sonia"          by name or key
+  from a bot                 the author is a bot
+  I posted in thread         you wrote in the thread
+  I reacted                  you reacted to the post
+  thread in watched          you watch the thread
+  thread in ignored          you ignore the thread
+  seen                       you have scrolled past it
+  read                       you have opened it
+  new replies since seen     it has replies you have not seen
+  subject matches "text"     the subject contains text
+  text matches "text"        the post contains text
+  has pictures               it has a picture
+  group is dk.*              it is in a matching group
+  older than 7 days          also minutes, hours, weeks
+  newer than 2 hours
+  score >= 10                the points so far
+  reactions >= 3             also replies, new replies
+
+Compare with  >=  <=  >  <  =  !=
+Join conditions with and, or, not and ( ):
+  +5 if author in contacts and not seen
+matches finds the text anywhere, in any case.
+It is not a pattern.
+
+
+WHAT HAPPENS
+Tested when all points are counted.
+
+  show if score >= 0         show only these
+  hide if author in ignored  hide these
+  sort by score, then date   the order; also by reactions,
+                             replies; add ascending to turn it
+
+In groups only - a reply never moves in its thread:
+  fold if score < -20        closed, with its replies
+  dim if score < 0           shown faded
+  highlight if score >= 30   shown bold
+  mark read if thread in ignored
+
+
+A line that is not understood is skipped, and said.
+The other lines still work.
+Without rules the feed is newest first,
+and threads are as they are.
 """
 
 LISTS = ("following", "contacts", "ignored")

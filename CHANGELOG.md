@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The rules' help, readable** (#615): one thing a line, the rule on the left and
+  what it means on the right - every condition, every count - at most 64
+  characters wide, so it fits beside an editor without scrolling sideways. Tests:
+  every word the language knows is in it, and every example in it is a rule.
+
 - **Your own rules for your feed and groups** (#615, UN-RFC 0051, draft):
   scorefiles as Usenet readers had them, in a small language you can read -
   `+10 if author in following`, `show if score >= 0`, `sort by score, then date`,

@@ -165,4 +165,22 @@ def test_the_help_names_every_word():
             assert w in words or w + "s" in words, f"{w!r} is not in the help"
     for op in sc.OPS:
         assert op in sc.HELP
-    assert max(len(line) for line in sc.HELP.splitlines()) <= 90       # fits beside an editor
+    assert max(len(line) for line in sc.HELP.splitlines()) <= 64       # fits beside an editor, no scrolling
+
+
+def test_the_help_s_examples_are_rules():
+    """Every example in the help is a rule the language understands."""
+    import re
+    starts = ("+", "-", "show ", "hide ", "sort ", "fold ", "dim ", "highlight ", "mark read ")
+    examples = []
+    for line in sc.HELP.splitlines():
+        rule = re.split(r"\s{2,}(?=[a-z(])", line.strip(), maxsplit=1)[0]   # the rule, not the note
+        if rule.startswith(starts) and not rule.startswith("-30 if seen  #"):
+            examples.append(rule)
+    assert len(examples) >= 10
+    for rule in examples:
+        rs = sc.parse(rule)
+        assert not rs.problems and len(rs.rules) == 1, (rule, rs.problems)
+    for cond in ("author in following", "from a bot", "older than 7 days", "score >= 10",
+                 "group is dk.*", 'subject matches "text"', "new replies since seen"):
+        assert not sc.parse(f"+1 if {cond}").problems, cond
