@@ -23,13 +23,14 @@ class Rules:
     def rules(self) -> dict:
         """``GET /api/rules``: your rules as you wrote them, whether they are on, how many
         are used and the lines that are not, each with why - and ``suggestion``, the text
-        every client offers when you have none (never used unless you save it)."""
-        from ...scoring import SUGGESTION
+        every client offers when you have none (never used unless you save it), and
+        ``help``, the language in short, the same in every client."""
+        from ...scoring import HELP, SUGGESTION
         s = self._ready()
         text = s.feed_rules()
         rs = s.check_feed_rules(text)
         return {"text": text, "on": s.rules_on(), "rules": len(rs.rules), "problems": _problems(rs),
-                "suggestion": SUGGESTION}
+                "suggestion": SUGGESTION, "help": HELP}
 
     def set_rules(self, body: dict) -> dict:
         """``POST /api/rules`` with ``text`` (your rules; "" removes them) and/or ``on``
