@@ -108,9 +108,12 @@ The plaintext is canonical JSON (UN-RFC 0004):
  "settings": {"signature": "...", "markdown": true, "notices": {"send": true, "take": true},
               "private_min_ripe": 0, "hide_bots": false, "show_blocked": false,
               "clients": {"tui": {"theme": "nord"}, "gui": {"theme": "dark"}},
+              "feed_rules": "+10 if author in following\nshow if score >= 0",
               "at": "..."},
  "read": {"unseenet.test@ph5fc5hop5232qsz": {"to": "2026-10-20T19:00:00Z",
           "also": ["<abc@unseenet>"]}},
+ "seen": {"unseenet.test@ph5fc5hop5232qsz": "2026-10-20T19:30:00Z"},
+ "threads": {"<ghi@unseenet>": {"is": "watched", "at": "..."}},
  "sent": [{"msgid": "<def@unseenet>", "inbox": "inbox@...", "at": "..."}]}
 ```
 
@@ -141,6 +144,10 @@ profile or a closed chat that is removed stays as `{"removed": true, "at": ...}`
 removal reaches the other clients too; a group or person no longer
 followed moves to `unsubscribed` or `unfollowed`.
 
+A client MUST keep the fields it does not know, unchanged, when it
+writes the state back, so that a newer client's fields survive an older
+client (section 7.2).
+
 ## 4.3 Read Marks, Coarsely
 
 Article numbers belong to one node (UN-RFC 0005), so read marks are by
@@ -159,13 +166,37 @@ and anything about other people beyond their key and the name you gave
 them. Drafts stay on the device: they change often and would push the
 state past its size (section 5).
 
+## 4.5 Seen, Threads and Your Rules
+
+A user's own rules for their feed and groups (UN-RFC 0051) need three
+things to follow the identity to every
+device. All three are the user's alone: no node, group owner or the
+project ever sees them, and without them a client shows the feed newest
+first and threads as they are.
+
+- `settings.feed_rules`: the rules as plain text, at most 2048 bytes in
+  UTF-8. A client MUST NOT apply rules the user did not write or choose;
+  a suggested rule set is only offered, shown in full, and stored here
+  only when the user takes it.
+- `seen`: per group, a date meaning "everything dated up to here has
+  been seen" - shown on screen, not opened. A third state besides unread
+  and read, kept coarsely like `read.to` (section 4.3) and without an
+  `also` list, so it never takes room from read marks.
+- `threads`: threads the user watches or ignores, by the Message-ID of
+  their first post: `{"is": "watched" | "ignored", "at": ...}`, or
+  `{"removed": true, "at": ...}` when no longer either, at most 256
+  entries (the newest kept).
+
 # 5. Size and Padding
 
 The plaintext is padded with spaces after the JSON to the smallest of
 4, 8 or 16 KiB that holds it. A state larger than 16 KiB MUST NOT be
-written; the client drops the oldest `sent` entries, then the oldest
-`also` entries, then read marks of groups it no longer follows, until it
-fits.
+written; the client keeps the newest 256 `threads`, then drops the
+oldest `sent` entries, then `seen` of groups it no longer follows, then
+the oldest `threads`, then the oldest `seen`, then the oldest `also`
+entries, then read marks of groups it no longer follows, until it fits.
+Your rules (`settings.feed_rules`) are never dropped: their 2048 bytes
+are part of what fits.
 
 UN-RFC 0040 section 9 gets the limit for `state@`: 24 KiB for the whole
 manifest article.
@@ -245,7 +276,12 @@ its own, so that two clients never undo each other:
 - `starter`: the higher version.
 - `settings`: the newer `at` wins; two of the same age are joined.
 - `read`: per group, the later `to`; the union of `also`, trimmed.
+- `seen`: per group, the later date.
+- `threads`: per thread, the newer `at`, so "no longer watched" made on
+  one device reaches the others.
 - `sent`: the union, by Message-ID.
+- A field the client does not know: kept as the state with the newer
+  `updated` has it.
 
 The merged state gets `serial` one higher than the highest seen.
 
@@ -328,6 +364,12 @@ None. Decided by the maintainer, 24 Oct 2026:
 2. The state can be kept local, per identity (section 7.4).
 3. 16 KiB is the largest size (section 5): a key-bound manifest is at
    most 24 KiB (UN-RFC 0040 section 9), so 32 KiB would not fit.
+
+Added by the maintainer, 26 Oct 2026 (#615):
+
+4. The state carries the user's own rules, `seen` and watched and
+   ignored threads (section 4.5); the rule format is its own UN-RFC.
+5. Fields a client does not know are kept (section 4.2).
 
 # 12. Changes to Other Documents
 

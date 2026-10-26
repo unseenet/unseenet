@@ -30,7 +30,7 @@ COMMANDS = {
     "pin": c_pin, "pins": c_pins, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
     "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
-    "timeline": c_timeline, "address": c_address, "open": c_open,
+    "timeline": c_timeline, "rules": c_rules, "thread": c_thread, "address": c_address, "open": c_open,
     "names": c_names, "name-claim": c_name_claim, "name-give": c_name_give,
     "name-revoke": c_name_revoke, "name-primary": c_name_primary, "name-requests": c_name_requests,
 }
@@ -214,8 +214,16 @@ def client_main(argv=None) -> None:
     s.add_argument("target")
     s = sub.add_parser("following", help="the people and feeds you follow")
     s.add_argument("--refresh", action="store_true", help="read their profiles again first")
-    s = sub.add_parser("timeline", help="the entries of the feeds you follow, newest first")
+    s = sub.add_parser("timeline", help="the entries of the feeds you follow - newest first, "
+                       "or as your own rules have them")
     s.add_argument("--limit", type=int, default=50)
+    s.add_argument("--why", action="store_true", help="with your rules: why each entry is where it is")
+    s = sub.add_parser("rules", help="your own rules for your feed and groups (UN-RFC 0051)")
+    s.add_argument("what", nargs="?", default="show", choices=["show", "set", "check", "on", "off", "clear"])
+    s.add_argument("file", nargs="?", help="set, check: a file of rules (- or none: stdin)")
+    s = sub.add_parser("thread", help="watch a thread, ignore it, or neither")
+    s.add_argument("what", choices=["watch", "ignore", "clear"])
+    s.add_argument("msgid", help="the Message-ID of the thread's first post")
     s = sub.add_parser("address", help="the unseenet: address of a group, post, page - or you")
     s.add_argument("group", nargs="?")
     s.add_argument("--message", metavar="MSGID")

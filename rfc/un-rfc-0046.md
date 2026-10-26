@@ -895,6 +895,38 @@ What happens to an offer comes as an event (section 5): `{"event":
 - `POST /api/copy/cancel`: stop the copy offered or being received.
   `GET /api/copy`: the copy in progress, `{"role": null}` if none.
 
+## 4.20 Your Own Rules
+
+The user's own rules for their feed and groups (UN-RFC 0051) run in the
+client core, so every front end shows the same order and the same
+"Why?". Without rules nothing in this section changes any other answer.
+
+- `GET /api/rules`: `{"text", "on", "rules", "problems"}` - the rules as
+  the user wrote them, whether they are used, how many rules are used,
+  and `problems`, `[{"line", "message"}]`, the lines that are not
+  (UN-RFC 0051 section 6).
+- `POST /api/rules` `{"text", "on"}`, either or both: keep `text` as the
+  rules ("" removes them; 400 when longer than 2048 bytes), and turn them
+  on or off - off keeps the text (UN-RFC 0051 section 3). Answers as
+  `GET`, and a `groups` event follows (section 5).
+- `POST /api/rules/check` `{"text"}`: `{"rules", "problems"}` for a text,
+  keeping nothing - for an editor that checks as the user types.
+- `POST /api/groups/{gid}/seen` `{"until"}`: everything in the group
+  dated up to `until` (ISO 8601, with a time zone) has been seen - shown
+  on the screen, not opened (UN-RFC 0044 section 4.5). Answers
+  `{"seen_to"}`; it never moves back.
+- `POST /api/threads` `{"id", "mark"}`: watch (`"watched"`) or ignore
+  (`"ignored"`) the thread whose first post is `id`, or neither (`""`).
+
+With rules on, the rows of a threaded group (section 4.3) and the
+entries of the timeline (section 4.14) carry `score`, `actions` (any of
+`fold`, `dim`, `highlight`, `mark read`), `hidden` and `why` (UN-RFC
+0051 section 10); a threaded group's first rows also `thread_mark`. The
+rows come in the order the rules give: threads ordered, replies never
+reordered, and threads whose every post is hidden left out. A client
+SHOULD NOT show a row with `hidden` true, and SHOULD show `why` when the
+user asks why a row is where it is.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

@@ -157,6 +157,7 @@ The protocol is designed to be extended without breaking old software:
 | 0048 | Reactions                                     | Standards Track |
 | 0049 | Imported Posts and the Time of Posting        | Standards Track |
 | 0050 | Copying an Identity, and Recovery Words       | Standards Track |
+| 0051 | Your Own Rules for Your Feed and Your Groups  | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

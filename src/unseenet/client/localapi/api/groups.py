@@ -198,6 +198,11 @@ class Groups:
                                                       key=lambda m: m.number))]
         else:
             rows = s.threads(gid)
+        scored = None                          # your own rules, threads only (UN-RFC 0051 5.3)
+        if (head["view"] == "threads" and gid != FOR_YOU and not gid.startswith(CONTACT)
+                and gid != s.my_inbox and s.rule_set()):
+            got = s.scored_threads(gid)
+            rows, scored = [(m, d) for m, d, _ in got], [r for _, _, r in got]
         mine, patterns = s.my_message_ids(), s._mention_patterns()
         keys = {s.identity(n).key_text for n in s.data["identities"]}
         out = [self._row(s, m, d, mine, patterns, keys) for m, d in rows]
@@ -214,6 +219,11 @@ class Groups:
                     row["comment"] = _perm(s.write_permission(gid, reply_to=m, kind=KIND_CHAT))
         elif gid.startswith(CONTACT) or gid == s.my_inbox:
             self._add_reactions(s, out, rows)   # private chats and posts (UN-RFC 0048 4.3)
+        if scored is not None:
+            self._score_rows(out, scored)
+            for row, (m, d) in zip(out, rows):
+                if d == 0:
+                    row["thread_mark"] = s.thread_mark(m.message_id)
         return {"group": head, "rows": out}
 
     @staticmethod

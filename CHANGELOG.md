@@ -7,6 +7,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Your own rules for your feed and groups** (#615, UN-RFC 0051, draft):
+  scorefiles as Usenet readers had them, in a small language you can read -
+  `+10 if author in following`, `show if score >= 0`, `sort by score, then date`,
+  `#` comments, any case. They run only in your client, travel only in your
+  encrypted state, and without them nothing changes. `client/scoring.py` parses
+  and uses them (with "Why?" and line-numbered problems); the Session keeps them,
+  what you have seen and the threads you watch or ignore (UN-RFC 0044 4.5), and
+  gives the timeline and a group's threads as your rules have them - replies never
+  reordered. The state now keeps fields a client does not know.
+  The local API has them (`/api/rules`, `/api/rules/check`, `/api/threads`,
+  `/api/groups/{gid}/seen`; rows with `score`, `actions`, `hidden`, `why` only
+  when you have rules, UN-RFC 0046 4.20), and so does the CLI: `unseenet rules
+  show|set|check|on|off|clear`, `unseenet thread watch|ignore|clear`,
+  `unseenet timeline --why`.
+
 - **`unseenet.help.news`** (unseenet-helpbot#21): the help bot's plain-language
   news about releases, a feed open for comments for 30 days; in the project's
   groups and the hierarchy list, and a **starter group** (version 4): new clients
