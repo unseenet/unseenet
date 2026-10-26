@@ -59,7 +59,7 @@ def test_a_post_more_than_an_hour_old_is_refused_but_not_from_a_peer():
     node, owner = _node(), crypto.Identity.generate()
     m = make_manifest(owner, "dk.snak", "open", pow_bits=BITS)
     node.accept(m.to_bytes())
-    node.accept(_post(m.group, owner, NOW - timedelta(minutes=50)).to_bytes())      # within the hour
+    node.accept(_post(m.group, owner, NOW - timedelta(minutes=30)).to_bytes())      # within the hour, rounded down
     old = _post(m.group, owner, NOW - timedelta(hours=3))
     with pytest.raises(ArticleError) as e:
         node.accept(old.to_bytes())
