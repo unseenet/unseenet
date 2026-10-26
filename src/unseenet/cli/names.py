@@ -130,6 +130,7 @@ async def c_name_requests(app: App, args) -> None:
 
 
 def names_parsers(sub) -> None:
+    """Add the parsers of the name commands to ``unseenet``'s subcommands."""
     s = sub.add_parser("names", help="your names, and the names you gave under yours")
     s = sub.add_parser("name-claim", help="claim, renew, release or transfer a name (@name, @domain)")
     s.add_argument("name", help="e.g. lorensen or lorensen.dk")
