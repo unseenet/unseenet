@@ -222,24 +222,45 @@ def attachment_headers(files) -> list[tuple[str, str]]:
 ENC_AD = DS("UNSEENET-BLOB-ENC-1")
 
 
-def encrypt_file(octets: bytes) -> tuple[bytes, bytes]:
-    """``(key, blob)``: the file encrypted with a fresh random key for this file only
-    (section 3.3) - never a key derived from the file."""
+PAD = 64 * 1024                       # encrypted files are padded to this (section 3.3)
+
+
+def padded_size(size: int, limit: int | None = None) -> int:
+    """The size an encrypted file is padded to before encryption (section 3.3): the
+    next multiple of 64 KiB, but not beyond ``limit`` (the group's ``max_size``)."""
+    up = -(-size // PAD) * PAD
+    return max(size, min(up, limit)) if limit else up
+
+
+def fits_padding(blob_size: int, size: int) -> bool:
+    """Section 4.4: an encrypted blob is its padded file plus 40 octets - at least the
+    file's ``size`` plus 40, at most 64 KiB-rounded plus 40, whatever the group's limit
+    is now."""
+    return size + ENC_OVERHEAD <= blob_size <= padded_size(size) + ENC_OVERHEAD
+
+
+def encrypt_file(octets: bytes, limit: int | None = None) -> tuple[bytes, bytes]:
+    """``(key, blob)``: the file padded with zeros (``padded_size``) and encrypted with a
+    fresh random key for this file only (section 3.3) - never a key derived from the
+    file. The file's own size travels in the inner ``Attachment-<n>`` header."""
     from . import crypto
     key = os.urandom(32)
-    return key, crypto.aead_encrypt(key, octets, ENC_AD)
+    padded = octets + bytes(padded_size(len(octets), limit) - len(octets))
+    return key, crypto.aead_encrypt(key, padded, ENC_AD)
 
 
-def decrypt_file(key: bytes, blob: bytes) -> bytes:
-    """The file in an encrypted blob; ``ValueError`` when the key does not open it."""
+def decrypt_file(key: bytes, blob: bytes, size: int | None = None) -> bytes:
+    """The file in an encrypted blob, its padding cut off at ``size`` (the inner header's);
+    ``ValueError`` when the key does not open it."""
     from . import crypto
     try:
-        return crypto.aead_decrypt(key, blob, ENC_AD)
+        plain = crypto.aead_decrypt(key, blob, ENC_AD)
     except crypto.CryptoError as exc:
         raise ValueError("the file does not open with its key") from exc
+    return plain if size is None else plain[:size]
 
 
-def encrypted_attachment_headers(files):
+def encrypted_attachment_headers(files, limit: int | None = None):
     """For an encrypted article's files (sections 3.3, 4.3): ``(outer, inner, blobs)``
     - the outer ``Blobs`` header nodes read, the inner ``Attachment-<n>`` headers with
     each file's ``key``, and the ``(blob ID, ciphertext)`` to upload. Files as for
@@ -249,7 +270,7 @@ def encrypted_attachment_headers(files):
         return [], [], []
     inner, blobs = [], []
     for i, (name, media_type, data, alt, dim) in enumerate(files, 1):
-        key, blob = encrypt_file(data)
+        key, blob = encrypt_file(data, limit)
         bid = blob_id(blob)
         blobs.append((bid, blob))
         inner.append((f"Attachment-{i}",
@@ -261,7 +282,7 @@ def encrypted_attachment_headers(files):
 def inner_attachments(art: Article, inner_headers, types=None) -> tuple[list[dict], dict]:
     """The attachments of an encrypted article as a member shows them, and their file
     keys by blob ID - checked as section 4.4 says after decryption: the inner headers
-    name exactly the outer ``Blobs``, each 40 octets larger than its file, every one
+    name exactly the outer ``Blobs``, each its padded file plus 40 octets, every one
     with a key, and of a type the group allows (5.2). ``([], {})`` otherwise."""
     try:
         blobs = dict(parse_blobs(art))
@@ -272,7 +293,7 @@ def inner_attachments(art: Article, inner_headers, types=None) -> tuple[list[dic
         return [], {}
     keys = {}
     for a in found:
-        if blobs[a["blob"]] != a["size"] + ENC_OVERHEAD or not a.get("key") \
+        if not fits_padding(blobs[a["blob"]], a["size"]) or not a.get("key") \
                 or not type_allowed(a["type"], types):
             return [], {}
         try:

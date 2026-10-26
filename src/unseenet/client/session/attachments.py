@@ -146,13 +146,13 @@ class AttachmentsMixin:
                                   "later")
         if got is None:
             raise FileUnavailable("the node does not have this file (any more)", "gone")
-        expected = att["size"] + (bl.ENC_OVERHEAD if key else 0)
-        if bl.blob_id(got) != blob_id or len(got) != expected:
+        right = bl.fits_padding(len(got), att["size"]) if key else len(got) == att["size"]
+        if bl.blob_id(got) != blob_id or not right:
             raise FileUnavailable("the node sent another file than the post names - not shown",
                                   "wrong")
         if key:
             try:
-                got = bl.decrypt_file(key, got)
+                got = bl.decrypt_file(key, got, att["size"])     # padding cut off (3.3)
             except ValueError:
                 got = b""
             if len(got) != att["size"]:
