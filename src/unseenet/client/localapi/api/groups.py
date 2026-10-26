@@ -36,7 +36,7 @@ class Groups:
         tops: dict[str, list[dict]] = {}
         for g in sorted(groups, key=lambda g: g["label"]):
             if g["id"] in on_top:
-                continue                # listed as "My feed"/"My site" at the top instead (#495)
+                continue                # listed as "Your feed"/"Your site" at the top instead (#495)
             tops.setdefault(g["hierarchy"], []).append(g)
         # every contact, also those whose chat is closed (they leave "people" then)
         # "names": the names they hold, so a client can search on them too (#523)

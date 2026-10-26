@@ -100,6 +100,27 @@ The events are in `unseenet.client.events`: `GroupUpdated`, `GroupsChanged`,
 `InboxReady`, `NodeState`, `TorState`, `Ripening`, `PowProgress`, `Status`,
 `Refreshed` and `ReleaseOffer`.
 
+## Words: "your", and "my" only when you speak
+
+Every client words things the same way, so a person moving between them is not
+surprised. Who is speaking decides, not who owns the thing:
+
+- **The client speaks to you** - titles, navigation, dialogs, palette commands,
+  messages: **your**. *Your feed*, *Your site*, *Your rules*, *Your nodes*,
+  *Start your feed*, *Export your data*, *Show your key*. It matches *For you*
+  beside them in the list.
+- **You speak to the client** - a checkbox, a choice or a button in your own
+  words: **my** is right. *Use my rules*, *My own bridges*, *Show on my posts*,
+  and a message you send (*I restored my identity ...*).
+- Without a pronoun when the label is clear without one: *Preferences*, *Edit
+  profile*.
+- Never both in one place: a list or a dialog says *your* or *my*, not each in
+  turn.
+
+This follows the Microsoft Writing Style Guide (second person; *my* sparingly, for
+a person's control over an action) and Google's Material guidelines (*you* and
+*your* for most text; do not mix *my* and *your* in the same context).
+
 ## Where things are
 
 `Session` is one class, written in parts by area - groups, posting, private
