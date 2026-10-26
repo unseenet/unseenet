@@ -219,8 +219,9 @@ from .network import *  # noqa: E402,F401,F403
 from .services import *  # noqa: E402,F401,F403
 from .kept import *  # noqa: E402,F401,F403
 from .following import *  # noqa: E402,F401,F403
+from .names import *  # noqa: E402,F401,F403
 from .main import *  # noqa: E402,F401,F403
-from . import node, basics, groups, messages, network, services, kept, following, main  # noqa: E402
+from . import node, basics, groups, messages, network, services, kept, following, names, main  # noqa: E402
 
 # the parts' names belong to the module too (cli.c_post, cli.node_main, ...)
-__all__ += [n for p in (node, basics, groups, messages, network, services, kept, following, main) for n in p.__all__]
+__all__ += [n for p in (node, basics, groups, messages, network, services, kept, following, names, main) for n in p.__all__]

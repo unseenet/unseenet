@@ -594,6 +594,22 @@ def name_requests(s: "Session") -> list[tuple["Message", dict]]:
     return out
 
 
+async def has_inbox(s: "Session", key_text: str) -> bool:
+    """True if the key's personal inbox is on the node: a name given to a key without
+    one cannot be delivered yet (a service makes its inbox when it first posts)."""
+    from ..core.groups import personal_inbox_id
+    from ..nntp import NNTPError
+    gid = personal_inbox_id(crypto.key_from_text(key_text))
+
+    async def exists(c) -> bool:
+        try:
+            await c.group(gid)
+            return True
+        except NNTPError:
+            return False
+    return await s._call(exists, s.node_for(gid))
+
+
 async def give_subname(s: "Session", name: str, key_text: str,
                        lifetime: timedelta = nm.SUB_LIFETIME_DEFAULT) -> nm.Certificate:
     """As the holder of the parent: issue ``name`` to a key and send it to them."""
