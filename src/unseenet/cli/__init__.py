@@ -4,7 +4,8 @@ The CLI is one more client on the shared core, like the TUI and unseenet-gui: wh
 does goes through ``Session`` (``unseenet.client.session``). Split by area:
 
     node.py       unseenet-node: node.toml, the node key, running a node
-    basics.py     id-new, id-import, id-words, id-restore, whoami, node-add, passphrase
+    basics.py     id-new, id-import, id-words, id-restore, whoami, node-add, passphrase,
+                  copy-to, copy-from
     groups.py     groups, group-create, group-edit, group-show, group-remove, invite
     messages.py   post, withdraw, read, react
     network.py    tor, bridges, gateways

@@ -148,14 +148,17 @@ class TorControl:
     async def authenticate_cookie(self, cookie_path: Path) -> None:
         await self.command(f"AUTHENTICATE {cookie_path.read_bytes().hex()}")
 
-    async def add_onion(self, key: str | None, virtual_port: int, target: str) -> tuple[str, str | None]:
+    async def add_onion(self, key: str | None, virtual_port: int, target: str,
+                        discard: bool = False) -> tuple[str, str | None]:
         """Create an onion service. ``key`` is 'ED25519-V3:<b64>' or None for a new one.
 
         Returns (service_id, private_key_or_None). The key is handed to Tor over the
         control port only, so Tor never writes it to disk (UN-RFC 0007, section 3).
+        ``discard``: a new key that nobody keeps, not even us - a one-time service
+        (UN-RFC 0050 section 3.3).
         """
         keyspec = key or "NEW:ED25519-V3"
-        flags = "" if key is None else " Flags=DiscardPK"
+        flags = " Flags=DiscardPK" if key is not None or discard else ""
         reply = await self.command(f"ADD_ONION {keyspec}{flags} Port={virtual_port},{target}")
         service_id = private = None
         for item in reply:
@@ -166,6 +169,10 @@ class TorControl:
         if not service_id:
             raise TorError("ADD_ONION returned no ServiceID")
         return service_id + ".onion", private
+
+    async def del_onion(self, onion: str) -> None:
+        """Remove an onion service made with ``add_onion`` (``xyz.onion`` or its ID)."""
+        await self.command(f"DEL_ONION {onion.removesuffix('.onion')}")
 
     async def close(self) -> None:
         self.writer.close()

@@ -831,6 +831,39 @@ person's deliberate choice, behind that section's warnings.
   private post to their inbox, to invite you again; answers
   `{"message_id"}`.
 
+## 4.19 Copying to Another Device
+
+Copying identities from one device to another (UN-RFC 0050 section 3)
+takes the user on both devices, so the copy lives in the runtime while
+they compare the check words. One copy at a time, offered or received.
+What happens to an offer comes as an event (section 5): `{"event":
+"copy", "role": "old" | "new", "state", "check_words", "error",
+"added"}`.
+
+- `POST /api/copy/offer` `{"identities", "group_secrets"}`: offer a copy
+  of the vault's identities (all, or the names given) and, unless
+  `group_secrets` is false, the closed groups' secrets. Answers `{"role":
+  "old", "state": "waiting", "code", "qr", "expires", "check_words",
+  "error", "added"}`: `code` to show as text, `qr` the text of the QR code
+  (`unseenet-copy:1:...`), `expires` a Unix time. 400 when this device's
+  Tor cannot open an onion service, or no meeting point answers. When the
+  new device has connected, a `copy` event with `state` `check` and the
+  `check_words` follows.
+- `POST /api/copy/confirm` `{"match"}`: the user's answer. True sends the
+  copy and answers when the new device has it (`state` `done`, `added` the
+  names it added); false sends nothing (`cancelled`).
+- `POST /api/copy/receive` `{"code", "node"}`: on the new device, the
+  typed code or the scanned QR text. Answers `{"role": "new", "state":
+  "check", "check_words"}` once connected; 400 for a wrong code or one
+  nobody is waiting with. Also the first setup of a new vault (instead of
+  `/api/setup`; `node` is then needed).
+- `POST /api/copy/finish`: waits until the old device's user has confirmed
+  the words, adds the copy to the vault, reads the state from the network
+  and starts the runtime. Answers `{"added", "state"}` (`state` as in
+  section 4.18); 400 when the old device stopped.
+- `POST /api/copy/cancel`: stop the copy offered or being received.
+  `GET /api/copy`: the copy in progress, `{"role": null}` if none.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

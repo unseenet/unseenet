@@ -18,6 +18,7 @@ dependencies = [
     "certifi",                      # HTTPS for updates where the system has no certificates
     "markdown-it-py>=3",            # Markdown (UN-RFC 0031); pure Python, Textual uses it too
     "Pillow>=10",                   # pictures on posts lose their metadata (GPS, camera) first (#387)
+    "spake2>=0.9",                  # copying to another device (UN-RFC 0050 3.4); pure Python, MIT
     # key ripening (UN-RFC 0025): only where chiavdf has wheels; elsewhere
     # core.ripening.available() is False (Intel Macs, Android, Pyodide: unseenet-gui#31)
     "chiavdf>=1.1; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or sys_platform == 'win32' or (sys_platform == 'darwin' and platform_machine == 'arm64')",

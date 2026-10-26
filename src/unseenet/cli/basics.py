@@ -162,5 +162,53 @@ async def c_id_restore(app: App, args) -> None:
     emit(args, "\n".join(text), data)
 
 
+async def c_copy_to(app: App, args) -> None:
+    """``unseenet copy-to [--names A,B] [--no-group-secrets]``: offer this vault's
+    identities to another device (UN-RFC 0050 section 3). Shows the code and the QR text,
+    waits for the other device, shows the check words and asks whether they match; only
+    then is anything sent. ``--yes`` answers yes (scripts that compare words otherwise)."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    names = [n.strip() for n in args.names.split(",")] if args.names else None
+    try:
+        offer = await s.start_copy(names, not args.no_group_secrets)
+    except SessionError as exc:
+        sys.exit(str(exc))
+    print(f"On the other device choose 'Get identity from another device' and type:\n\n"
+          f"    {offer.code}\n\nor scan the QR code of: {offer.qr}\n\n"
+          f"The code works once, for 10 minutes. Waiting ...", file=sys.stderr)
+    words = await offer.wait_for_check()
+    if words is None:
+        sys.exit(offer.error or f"The copy {offer.state}.")
+    print(f"\nCheck words: {words[0]} {words[1]}", file=sys.stderr)
+    match = args.yes or (await asyncio.to_thread(
+        input, "Does the other device show the same two words? [y/N] ")).strip().lower() in (
+        "y", "yes", "j", "ja")                  # off the loop: the connection stays answered
+    result = await offer.confirm(match)
+    if result["state"] != "done":
+        sys.exit(result["error"] or f"The copy {result['state']}.")
+    emit(args, "Copied: " + (", ".join(result["added"]) or "nothing new on the other device"), result)
+
+
+async def c_copy_from(app: App, args) -> None:
+    """``unseenet copy-from CODE``: get identities from another device (UN-RFC 0050 section
+    3) with the code it shows (or the QR text). Shows the check words to compare there,
+    then waits for the copy and adds it to this vault."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        got = await s.receive_copy(args.code)
+    except SessionError as exc:
+        sys.exit(str(exc))
+    print(f"Check words: {got.check_words[0]} {got.check_words[1]}\n"
+          "Confirm on the other device that it shows the same two words. Waiting ...",
+          file=sys.stderr)
+    try:
+        added = await got.finish()
+    except SessionError as exc:
+        sys.exit(str(exc))
+    emit(args, "Added: " + (", ".join(added) or "nothing new"), {"added": added})
+
+
 __all__ = ['c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE',
-           'c_id_words', 'c_id_restore']
+           'c_id_words', 'c_id_restore', 'c_copy_to', 'c_copy_from']

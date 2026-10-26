@@ -404,6 +404,35 @@ async def recovery_ask(request):
                                                   str(data.get("note", ""))))
 
 
+async def copy_state(request):
+    return _json(_api(request).copy_state())
+
+
+async def copy_offer(request):
+    data = await _body(request)
+    ids = data.get("identities")
+    return _json(await _api(request).copy_offer([str(i) for i in ids] if ids else None,
+                                                bool(data.get("group_secrets", True))))
+
+
+async def copy_confirm(request):
+    data = await _body(request)
+    return _json(await _api(request).copy_confirm(bool(data.get("match", False))))
+
+
+async def copy_cancel(request):
+    return _json(await _api(request).copy_cancel())
+
+
+async def copy_receive(request):
+    data = await _body(request)
+    return _json(await _api(request).copy_receive(str(data.get("code", "")), str(data.get("node", ""))))
+
+
+async def copy_finish(request):
+    return _json(await _api(request).copy_finish())
+
+
 async def names(request):
     if request.method == "POST":
         return _json(await _api(request).name_action(await _body(request)))
@@ -492,6 +521,9 @@ ROUTES = [
     ("POST", "/api/recovery/reminded", recovery_reminded), ("POST", "/api/recovery/check", recovery_check),
     ("POST", "/api/recovery/restore", recovery_restore),
     ("GET", "/api/recovery/closed-groups", recovery_closed_groups), ("POST", "/api/recovery/ask", recovery_ask),
+    ("GET", "/api/copy", copy_state), ("POST", "/api/copy/offer", copy_offer),
+    ("POST", "/api/copy/confirm", copy_confirm), ("POST", "/api/copy/cancel", copy_cancel),
+    ("POST", "/api/copy/receive", copy_receive), ("POST", "/api/copy/finish", copy_finish),
     ("GET", "/api/pictures", pictures), ("POST", "/api/profile/picture", profile_picture),
     ("GET", "/api/names", names), ("POST", "/api/names", names),
     ("GET", "/api/settings", settings), ("POST", "/api/settings", settings),

@@ -7,6 +7,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Copy an identity to another device** (#572, UN-RFC 0050 section 3): the
+  old device shows a short code (`7-guitar-tunnel`) and a QR code, the new
+  device types or scans it, both show the same two check words, and only
+  when the user confirms them on the old device are the identities - and,
+  unless left out, the closed groups' secrets - sent, straight from device
+  to device over a one-time onion service with SPAKE2. Nodes offer the
+  meeting point for typed codes (`XUNMEET`, in memory only, never logged).
+  In the core (`core/copying.py`, `Session.start_copy` / `receive_copy`),
+  the local API (UN-RFC 0046 section 4.19, `/api/copy/...` and `copy`
+  events) and the command line (`unseenet copy-to`, `unseenet copy-from`).
+  New dependency: `spake2` (pure Python, MIT). UN-RFC 0050 gained section
+  3.9, the connection (#583). Update the nodes first: a 0.6 client opens its
+  meeting at a node that offers `XUNMEET`.
+
 - **Recovery words** (#573, UN-RFC 0050 section 4): every identity can be
   shown as 24 Unseenet recovery words - its seed, BIP39's English word list
   and checksum - and brought back from them on any device, with the state
