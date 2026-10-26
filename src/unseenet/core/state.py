@@ -21,6 +21,8 @@ from .encoding import DS, H
 VERSION = 1
 SIZES = (4 * 1024, 8 * 1024, 16 * 1024)     # section 5: padded to the smallest that holds it
 MAX_ALSO = 64                               # section 4.3: read marks after "to", per group
+MAX_THREADS = 256                           # section 4.5: watched and ignored threads
+MAX_RULES = 2048                            # section 4.5: settings.feed_rules, in bytes (#615)
 MAPS = ("subscribed", "unsubscribed", "following", "unfollowed", "contacts", "ignored", "hidden",
         "closed_chats")
 
@@ -36,7 +38,7 @@ def state_key(seed: bytes) -> bytes:
 
 def empty() -> dict:
     return {"v": VERSION, "updated": "", **{k: {} for k in MAPS}, "starter": 0,
-            "settings": {}, "read": {}, "sent": []}
+            "settings": {}, "read": {}, "seen": {}, "threads": {}, "sent": []}
 
 
 def _canonical(state: dict) -> bytes:
@@ -50,9 +52,23 @@ def fit(state: dict) -> dict:
     s = json.loads(json.dumps(state))
     def size():
         return len(_canonical(s))
+    if len(s.get("threads", {})) > MAX_THREADS:      # section 4.5: the newest kept
+        keep = sorted(s["threads"], key=lambda m: _at(s["threads"][m]))[-MAX_THREADS:]
+        s["threads"] = {m: s["threads"][m] for m in keep}
     while size() > SIZES[-1] and s["sent"]:
         s["sent"].sort(key=lambda e: e.get("at", ""))
         s["sent"].pop(0)
+    for gid in [g for g in s.get("seen", {}) if g not in s["subscribed"]]:   # seen before read
+        if size() <= SIZES[-1]:
+            break
+        del s["seen"][gid]
+    while size() > SIZES[-1] and s.get("threads"):
+        oldest = min(s["threads"], key=lambda m: _at(s["threads"][m]))
+        del s["threads"][oldest]
+    for gid in sorted(s.get("seen", {}), key=lambda g: s["seen"][g]):
+        if size() <= SIZES[-1]:
+            break
+        del s["seen"][gid]
     while size() > SIZES[-1] and any(r.get("also") for r in s["read"].values()):
         biggest = max(s["read"].values(), key=lambda r: len(r.get("also", [])))
         biggest["also"] = biggest["also"][1:]
@@ -94,7 +110,7 @@ def unseal(sealed: str, seed: bytes, group_id: str) -> dict:
     if not isinstance(state, dict) or state.get("v") != VERSION:
         raise StateError("not a state of this version")
     out = empty()
-    out.update({k: v for k, v in state.items() if k in out})
+    out.update(state)          # fields this client does not know are kept (section 4.2)
     return out
 
 
@@ -105,7 +121,9 @@ def _at(entry) -> str:
 def merge(a: dict, b: dict) -> dict:
     """Two states as one (section 7.2): per entry the newer ``at``, a group or person
     is followed if its newest entry says so; the higher starter version; read marks
-    the later ``to`` and the union of ``also``; sent entries united."""
+    the later ``to`` and the union of ``also``; seen the later date and threads the
+    newer ``at`` (section 4.5); sent entries united; fields this client does not know
+    kept from the newer state."""
     out = empty()
     for name, off in (("subscribed", "unsubscribed"), ("following", "unfollowed")):
         keys = set(a[name]) | set(a[off]) | set(b[name]) | set(b[off])
@@ -129,6 +147,15 @@ def merge(a: dict, b: dict) -> dict:
         to = max((m.get("to", "") for m in marks), default="")
         also = sorted({x for m in marks for x in m.get("also", [])})[-MAX_ALSO:]
         out["read"][gid] = {"to": to, "also": also}
+    for gid in set(a.get("seen", {})) | set(b.get("seen", {})):        # section 4.5
+        out["seen"][gid] = max(s["seen"][gid] for s in (a, b) if gid in s.get("seen", {}))
+    for mid in set(a.get("threads", {})) | set(b.get("threads", {})):
+        out["threads"][mid] = max((s["threads"][mid] for s in (a, b) if mid in s.get("threads", {})),
+                                  key=_at)
+    newer, older = (a, b) if a.get("updated", "") >= b.get("updated", "") else (b, a)
+    for k in set(a) | set(b):           # fields this client does not know: the newer state's
+        if k not in out:
+            out[k] = newer.get(k, older.get(k))
     sent = {e["msgid"]: e for s in (a, b) for e in s.get("sent", []) if isinstance(e, dict) and "msgid" in e}
     out["sent"] = sorted(sent.values(), key=lambda e: e.get("at", ""))
     out["updated"] = max(a.get("updated", ""), b.get("updated", ""))

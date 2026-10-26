@@ -53,3 +53,40 @@ def test_no_articles_and_only_state_in_state():
                                         "serial": 1, "state": "c3RhdGU="}, pow_bits=BITS)
     with pytest.raises(ArticleError, match="one group of type state"):
         node.accept(bad.to_bytes())
+
+
+# --- #615: seen, watched and ignored threads, your rules (UN-RFC 0044 section 4.5) ---
+
+def test_seen_and_threads_merge():
+    from unseenet.core import state as st
+    a, b = st.empty(), st.empty()
+    a["seen"] = {"dk.snak@x": "2026-10-26T10:00:00Z", "dk.a@x": "2026-10-20T00:00:00Z"}
+    b["seen"] = {"dk.snak@x": "2026-10-26T12:00:00Z"}
+    a["threads"] = {"<t1@x>": {"is": "watched", "at": "2026-10-26T10:00:00Z"},
+                    "<t2@x>": {"is": "ignored", "at": "2026-10-26T09:00:00Z"}}
+    b["threads"] = {"<t1@x>": {"removed": True, "at": "2026-10-26T11:00:00Z"}}
+    m = st.merge(a, b)
+    assert m["seen"] == {"dk.snak@x": "2026-10-26T12:00:00Z", "dk.a@x": "2026-10-20T00:00:00Z"}
+    assert m["threads"]["<t1@x>"].get("removed") and m["threads"]["<t2@x>"]["is"] == "ignored"
+
+
+def test_fields_a_client_does_not_know_are_kept():
+    from unseenet.core import state as st
+    seed = b"s" * 32
+    s = st.empty()
+    s["settings"] = {"feed_rules": "+10 if author in following", "at": "2026-10-26T10:00:00Z"}
+    s["from_the_future"] = {"x": 1}
+    back = st.unseal(st.seal(s, seed, "state@abc"), seed, "state@abc")
+    assert back["from_the_future"] == {"x": 1} and back["settings"]["feed_rules"].startswith("+10")
+    newer = st.empty(); newer["updated"] = "2026-10-27"; newer["from_the_future"] = {"x": 2}
+    assert st.merge(back, newer)["from_the_future"] == {"x": 2}
+    assert st.merge(back, st.empty())["from_the_future"] == {"x": 1}     # the other does not know it
+
+
+def test_threads_are_kept_to_the_newest():
+    from unseenet.core import state as st
+    s = st.empty()
+    s["threads"] = {f"<t{i}@x>": {"is": "watched", "at": f"2026-10-{1 + i // 100:02d}T00:{i % 60:02d}:{i % 60:02d}Z"}
+                    for i in range(st.MAX_THREADS + 20)}
+    kept = st.fit(s)["threads"]
+    assert len(kept) == st.MAX_THREADS and "<t0@x>" not in kept and f"<t{st.MAX_THREADS + 19}@x>" in kept
