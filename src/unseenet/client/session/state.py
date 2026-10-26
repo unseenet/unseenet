@@ -26,6 +26,7 @@ from ...core import state as st
 WRITE_EVERY = 3600.0              # section 7.1: at most once an hour
 SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "mention_notices",
             "notifications",      # whether, and how, clients tell you of what is new
+            "feed_rules",         # your own rules for your feed and groups (section 4.5, #615)
             "clients")                # each client's own: the TUI's theme, the GUI's (UN-RFC 0044, 4.2)
 
 
@@ -78,6 +79,8 @@ class StateMixin:
             "starter": 1 if starter is True else int(starter or 0),
             "settings": settings,
             "read": self._read_marks(),
+            "seen": dict(d.get("seen_to", {})),                              # section 4.5
+            "threads": {k: {"is": v} for k, v in d.get("threads", {}).items()},
             "sent": [dict(e) for e in d.get("sent_copies", [])],
         }
 
@@ -131,7 +134,7 @@ class StateMixin:
                 k = key.split(":", 1)[1]
                 if k not in snap[section]:
                     s[off][k] = seen[key][1]
-        for section in ("contacts", "ignored", "hidden", "closed_chats"):
+        for section in ("contacts", "ignored", "hidden", "closed_chats", "threads"):
             for k, v in snap[section].items():
                 at = stamp(f"{section}:{k}", v)
                 s[section][k] = {**(v if isinstance(v, dict) else {}), "at": at}
@@ -144,6 +147,7 @@ class StateMixin:
         s["starter"] = snap["starter"]
         s["settings"] = {**snap["settings"], "at": stamp("settings", snap["settings"])}
         s["read"] = snap["read"]
+        s["seen"] = snap["seen"]
         s["sent"] = snap["sent"]
         s["updated"] = now
         return s
@@ -175,6 +179,16 @@ class StateMixin:
                 closed.pop(k, None)
             elif v.get("since"):
                 closed[k] = v["since"]
+        marks = d.setdefault("threads", {})                 # watched and ignored (4.5)
+        for k, v in s.get("threads", {}).items():
+            if v.get("removed"):
+                marks.pop(k, None)
+            elif v.get("is") in ("watched", "ignored"):
+                marks[k] = v["is"]
+        seen_to = d.setdefault("seen_to", {})
+        for gid, to in s.get("seen", {}).items():
+            if isinstance(to, str) and to > seen_to.get(gid, ""):
+                seen_to[gid] = to
         if s["starter"] > (1 if d.get("starter_groups") is True else int(d.get("starter_groups") or 0)):
             d["starter_groups"] = s["starter"]
         settings = {k: v for k, v in s["settings"].items() if k != "at"}
@@ -211,7 +225,7 @@ class StateMixin:
         for k, at in s["unfollowed"].items():
             seen[f"unfollowed:{k}"] = [v("gone"), at]
         for section, field in (("contacts", "name"), ("ignored", "label"), ("hidden", None),
-                               ("closed_chats", "since")):
+                               ("closed_chats", "since"), ("threads", "is")):
             for k, e in s.get(section, {}).items():
                 value = "removed" if e.get("removed") else ({field: e.get(field, "")} if field else True)
                 seen[f"{section}:{k}"] = [v(value), e.get("at", "")]

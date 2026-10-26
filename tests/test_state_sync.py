@@ -161,3 +161,25 @@ async def test_a_clients_own_settings_follow_you_too(network):
     await b.sync_state()
     assert b.client_setting("tui", "theme") == "nord" and b.client_setting("gui", "theme") == "dark"
     assert b.client_setting("tui", "font", "normal") == "normal"
+
+
+async def test_your_rules_seen_and_threads_follow_you(network):
+    """#615: your rules, what you have seen and the threads you watch or ignore go with
+    your state (UN-RFC 0044 section 4.5); "no longer watched" reaches the other too."""
+    from datetime import datetime, timezone
+    _, device = network
+    a = device("stick")
+    a.set_feed_rules("+10 if author in following  # friends first\nshow if score >= 0")
+    a.mark_seen("dk.snak@abcdabcdabcdabcd", datetime(2026, 10, 26, 18, 0, tzinfo=timezone.utc))
+    a.set_thread_mark("<t1@x>", "watched")
+    a.set_thread_mark("<t2@x>", "ignored")
+    assert await a.sync_state() == "written"
+    b = device("phone")
+    await b.sync_state()
+    assert b.feed_rules().startswith("+10 if author in following  # friends first")
+    assert b.seen_to("dk.snak@abcdabcdabcdabcd") == "2026-10-26T18:00:00Z"
+    assert b.thread_mark("<t1@x>") == "watched" and b.thread_mark("<t2@x>") == "ignored"
+    b.set_thread_mark("<t1@x>", "")
+    assert await b.sync_state() == "written"
+    await a.sync_state()
+    assert a.thread_mark("<t1@x>") == "" and a.thread_mark("<t2@x>") == "ignored"
