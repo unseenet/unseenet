@@ -30,9 +30,6 @@ docs/development.md     This file
 src/unseenet/           the package: core, client, node, cli - mapped file by file
                         in docs/developers/code.md ("The code" on the site)
 deploy/                 install-node.sh and the systemd unit
-tools/build_portable.py portable zips with the verified Tor Expert Bundle
-tools/portable/         launchers and README.txt for the zips
-tools/keys/             the Tor Browser Developers' signing key
 tools/announce.py       posts to the project's channels over Tor (announce.yml)
 tools/project/          what the maintainer runs with the project key (see docs)
 tools/node_request.py   checks and adds "Add my node" issues (node-request.yml)
@@ -443,11 +440,11 @@ Merging to `main` builds nothing (#544); only the tests run. To get a build
 sooner, run the *build* workflow of unseenet-portable by hand (Actions, "Run
 workflow"): *publish* `dev` replaces the development build, `artifact` only
 leaves the builds in the run's artifacts. *force* builds even when nothing
-changed. The build tools are still here (`tools/build_portable.py`,
-`tools/image/`) and are run from a checkout of this repository, until they
-move there. Before a release, check `tools/tor-version.txt`
-against `python tools/build_portable.py --check-tor` (the *tor-update*
-workflow opens an issue when Tor has a newer stable release).
+changed. The portable builds' tools - and the Tor version they pin, checked
+weekly by its *tor-update* workflow - are in
+[unseenet-portable](https://github.com/unseenet/unseenet-portable/tree/main/tools);
+the bootable image's (`tools/image/`) are still here, run from a checkout of
+this repository, until they move to unseenet-bootable.
 
 Between releases, every change that users or node operators would notice
 gets a line under `## [Unreleased]`.
