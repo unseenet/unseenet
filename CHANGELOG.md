@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Reports land where they are read** (UN-RFC 0045 section 7.4): a report to an
+  issuer goes to the inbox its `contact` names - a team inbox, say - with that
+  inbox's own owner, else to its personal inbox as before; targets that share an
+  inbox are one. *Reports sent to you* (`reports_sent_to_you`, `/api/reports/received`,
+  `unseenet reports received`) include the team inboxes you read. So the project's
+  issuer, whose contact is `contact@ph5fc5hop5232qsz`, has its reports read in
+  everyday clients. Found by the maintainer: reports to the issuer were only in its
+  own inbox.
+
 - **A hierarchy's contact** (#647, UN-RFC 0018 section 4.1): an entry of the root
   list (and of a list's `sub`) may name `contact`, an inbox where its maintainer is
   reached - a team inbox, so the maintainer key stays offline. Reports to a

@@ -975,6 +975,9 @@ so every front end hides the same posts for the same reasons.
 - `GET /api/reports/mine`: `{"reports": [{"id", "date", "note", "posts",
   "keys"}]}`, newest first; `POST /api/reports/withdraw` `{"id"}`
   withdraws one.
+- A report someone sent the user (section 4.6) has `report` in its row,
+  `{"id", "group", "author_key", "reason"}`: the post it names, so a front
+  end can open it and, for an issuer, publish it.
 - `GET /api/reports/received`: `{"received": [{"message", "subject",
   "date", "id", "group", "author_key"}]}`, the reports others sent the
   user (section 4.6), to publish without the reporter (UN-RFC 0045

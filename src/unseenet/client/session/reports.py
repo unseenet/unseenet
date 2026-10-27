@@ -313,6 +313,19 @@ class ReportsMixin:
         self._report_book = None
         return mid
 
+    def reports_sent_to_you(self) -> list["Message"]:
+        """Reports others sent you: in your inbox and in the team inboxes you read
+        (an issuer's or a hierarchy's contact), newest first."""
+        msgs = list(self.private_messages())
+        for gid in self.data.get("team_keys", {}):
+            msgs += [m for m in self.cache.get(gid, {}).values() if m.readable]
+        seen, out = set(), []
+        for m in sorted(msgs, key=lambda m: m.date or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
+            if m.message_id not in seen and self.received_report(m):
+                seen.add(m.message_id)
+                out.append(m)
+        return out
+
     def received_report(self, msg: "Message") -> tuple[str, str, str, str] | None:
         """(Message-ID, Group ID, author key, reason) named in a report someone sent
         you, so an issuer can publish it - without the reporter (section 7.4). The

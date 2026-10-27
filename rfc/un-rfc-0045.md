@@ -174,8 +174,11 @@ contacts and the reader's own posts are never hidden by reports.
 ## 7.4 Reporting
 
 The client's report action (#74) MAY offer to send a report to an issuer
-the reader follows, as a private post to the issuer's inbox. The issuer
-decides whether to publish it; the reporter's key is not in the published
+the reader follows, as a private post: to the inbox its manifest's
+`contact` names when that is an inbox (typically a team inbox, UN-RFC
+0047, so that those who read reports read them in their everyday
+clients), otherwise to the issuer's personal inbox. The issuer decides
+whether to publish it; the reporter's key is not in the published
 report.
 
 ## 7.5 Issuers Named by a Group's Owner

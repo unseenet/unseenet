@@ -289,7 +289,10 @@ class Groups:
                 "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6
                 "identicon": _identicon(key),                         # UN-RFC 0022 section 8.4
                 "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m),
-                "team": s.team_sender(m)}        # {"group", "name", "verified"} or None (0047)
+                "team": s.team_sender(m),        # {"group", "name", "verified"} or None (0047)
+                # a report sent to you (#74): the post it names, for Open and Publish
+                "report": (dict(zip(("id", "group", "author_key", "reason"), s.received_report(m)))
+                           if m.private and m.readable and s.received_report(m) else None)}
 
     @staticmethod
     def _pool(s: Session, gid: str) -> list[Message]:
