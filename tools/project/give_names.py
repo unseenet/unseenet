@@ -39,6 +39,7 @@ RENEW_PARENT = timedelta(days=60)
 # nasa-bot@unseenet is not mistaken for NASA itself.
 NAMES = {
     "help": "ed25519:6gf6zqd6hzligjk57kdbna3z7uwlnipfgg47v765kitkn2avdxfa",            # unseenet-helpbot
+    "reports": "ed25519:mhgvcdevmx5g2r6tqm5nrsm62k4hp3ahpgpx7re5lqvmw326btmq",         # spam report issuer
     "wikipedia-bot": "ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza",   # alt.news.wikipedia
     "onthisday-bot": "ed25519:ame5agdrby6zyjqusfnpyicxg4nygfai3lqwewz2ctkkjuid3hxa",   # alt.history.onthisday
     "globalvoices-bot": "ed25519:ojyu2pv2v3aye2tw4xbel3ha5loujwxqjao5wnoe55dw7zc4fw7q",

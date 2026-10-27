@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The project's spam report issuer** (`ed25519:mhgvcdevmx5g2r6t…`, made with
+  `report_issuer.py`): named in the list of `unseenet.*` (`report_issuers` in
+  checkgroups.json, UN-RFC 0045 section 7.1) and in the bot channels in `alt.*`
+  (create_groups.py, section 7.5), so their readers follow it by default and can
+  turn it off; `reports@unseenet` in give_names.py. Not named for `dk.*`.
+
 - **A group's owner names report issuers for its group** (#644, UN-RFC 0045 section
   7.5): `report_issuers` in a group's manifest, up to 16; clients follow them by
   default for that group only, next to its hierarchy's, and the reader can turn

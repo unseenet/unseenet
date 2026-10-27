@@ -1,7 +1,8 @@
 {
   "v": 1,
   "hierarchy": "unseenet",
-  "updated": "2026-10-26",
+  "updated": "2026-10-27",
+  "report_issuers": ["ed25519:mhgvcdevmx5g2r6tqm5nrsm62k4hp3ahpgpx7re5lqvmw326btmq"],
   "groups": [
     {"group": "unseenet@ph5fc5hop5232qsz", "note": "talk about Unseenet"},
     {"group": "unseenet.chat@ph5fc5hop5232qsz", "note": "chat, also the Matrix room #unseenet:unseenet.org"},
