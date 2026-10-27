@@ -157,6 +157,7 @@ number their own releases and say which core they need.
 | [unseenet-gateway](https://github.com/unseenet/unseenet-gateway) | Gateways to other networks: Usenet, Nostr, Matrix |
 | [unseenet-bots](https://github.com/unseenet/unseenet-bots) | Bots that keep channels filled with current content |
 | [unseenet-helpbot](https://github.com/unseenet/unseenet-helpbot) | The bot that answers questions in `unseenet.help` |
+| [unseenet-watchman](https://github.com/unseenet/unseenet-watchman) | Automatic spam reports and content labels that readers may choose to follow |
 | [unseenet-stats](https://github.com/unseenet/unseenet-stats) | Statistics for the network |
 | [unseenet-mcp](https://github.com/unseenet/unseenet-mcp) | An MCP server, so a language model can read and post as you (planning) |
 | [unseenet-demo](https://github.com/unseenet/unseenet-demo) | Demo people, feeds and sites, made with the command-line client |
