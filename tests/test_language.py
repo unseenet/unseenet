@@ -44,3 +44,16 @@ def test_lingua_only_when_the_small_words_cannot_tell(monkeypatch):
 def test_lingua_when_installed():
     pytest.importorskip("lingua")
     assert lg.lingua_language(lg.words("Thanks for the help, see you tomorrow morning")) == "en"
+
+
+def test_the_list_of_languages():
+    """One list for every client: the nine a text can be told first, own names, no flags."""
+    from unseenet.core import languages as langs
+    lst = langs.as_list()
+    assert [x["code"] for x in lst[:9]] == list(lg.LANGS) and all(x["recognised"] for x in lst[:9])
+    assert langs.name("da") == "Dansk" and langs.name("sv") == "Svenska" and langs.name("xx") == "xx"
+    assert langs.search("da")[0] == "da" and langs.search("dansk") == ["da"] and langs.search("danish") == ["da"]
+    assert "es" in langs.search("esp")
+    assert len({x["code"] for x in lst}) == len(lst)
+    from unseenet.core.tags import is_language
+    assert all(is_language(x["code"]) for x in lst)

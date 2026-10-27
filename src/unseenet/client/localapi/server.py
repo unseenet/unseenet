@@ -274,6 +274,10 @@ async def language(request):
     return _json(_api(request).language(_gid(request), await _body(request)))
 
 
+async def languages_list(request):
+    return _json(_api(request).languages())
+
+
 async def language_choose(request):
     return _json(_api(request).choose_language(_gid(request), await _body(request)))
 
@@ -632,6 +636,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/react", react),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/groups/{gid}/language", language),
+    ("GET", "/api/languages", languages_list),
     ("POST", "/api/groups/{gid}/language/choose", language_choose),
     ("POST", "/api/contacts", contacts), ("POST", "/api/chats/close", close_chat),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),

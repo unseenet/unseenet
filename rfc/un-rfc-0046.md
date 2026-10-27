@@ -1068,6 +1068,9 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
   `{"codes", "from"}`, `from` being `text`, `answered` (a comment: the
   post it answers), `conversation` (a chat line), `group`, `you`,
   `profile` or `""`. Local and cheap: a client asks at pauses in typing.
+- `GET /api/languages`: `{"languages": [{"code", "name", "english",
+  "recognised"}]}` - the languages to offer, the ones a text can be told
+  to be in first; a language's own name and its code, no flags.
 - `POST /api/groups/{gid}/language/choose` `{"languages"}`: what the user
   writes chat lines and comments in, in that group - winning over the
   suggestion for them; `[]` takes it back. Answers as `language` (`from`

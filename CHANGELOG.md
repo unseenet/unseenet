@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **One list of languages** (asked for by the maintainer, 27 Oct): `core.languages` - code,
+  its own name (*Dansk*, *Svenska*) and its English name, the nine a text can be told in
+  first; `name`, `search` ("da", "dansk" and "danish" find Danish), `GET /api/languages`.
+  No flags: a flag is a country, not a language.
+
 - **Your choice for chat lines and comments wins** (UN-RFC 0052 5a): `choose_chat_language`
   and `POST /api/groups/{gid}/language/choose` - what you chose to write lines in here is
   used for them before the text, the conversation or the group; `[]` takes it back. With
