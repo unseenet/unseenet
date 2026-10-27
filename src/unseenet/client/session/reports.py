@@ -240,10 +240,48 @@ class ReportsMixin:
         """``reports@<fingerprint>`` of this identity, started or not."""
         return rpt.reports_group(self.identity(name).public_key)
 
-    def is_issuer(self) -> bool:
-        """Whether this identity has started its reports group in this vault."""
-        gid = self.my_reports_group()
+    def is_issuer(self, name: str | None = None) -> bool:
+        """Whether an identity (the one in use by default) has started its reports group
+        in this vault."""
+        gid = self.my_reports_group(name)
         return bool(self.data["groups"].get(gid, {}).get("owner"))
+
+    def issuer_names(self) -> list[str]:
+        """The identities in this vault that issue spam reports - yours, or one added
+        beside it (a project's issuer in its maintainer's everyday vault): reports sent
+        to you can then be published from where you read them."""
+        return [n for n in self.data.get("identities", {}) if self.is_issuer(n)]
+
+    def issuer_for(self, name: str | None = None) -> str:
+        """The identity to publish reports as: ``name``, else the one in use if it is
+        an issuer, else the vault's only issuer. SessionError if there is none."""
+        names = self.issuer_names()
+        if name is not None:
+            if name not in names:
+                raise SessionError(f"{name} issues no reports here")
+            return name
+        here = self.default_identity_name()
+        if here in names:
+            return here
+        if len(names) == 1:
+            return names[0]
+        raise SessionError("start your reports group first (start_reports)" if not names
+                           else "which issuer? " + ", ".join(names))
+
+    def _acting(self, name: str):
+        """Act as identity ``name`` for a moment: every key, postage and ripening then
+        is that identity's."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def ctx():
+            before = self._acting_as
+            self._acting_as = name
+            try:
+                yield
+            finally:
+                self._acting_as = before
+        return ctx()
 
     async def start_reports(self, policy: str = "", contact: str = "",
                             automatic: bool = False) -> str:
@@ -275,12 +313,15 @@ class ReportsMixin:
         await self.ensure_inbox()           # reports sent to you arrive there (section 7.4)
         return gid
 
-    async def publish_report(self, posts=(), keys=(), note: str = "") -> str:
-        """Publish a report in your ``reports@`` group: ``posts`` as (Message-ID, Group
-        ID, reason), ``keys`` as (key, reason, until or None for 365 days). The
-        reporter's key is never in it (section 7.4). Returns its Message-ID."""
-        if not self.is_issuer():
-            raise SessionError("start your reports group first (start_reports)")
+    async def publish_report(self, posts=(), keys=(), note: str = "", issuer: str | None = None) -> str:
+        """Publish a report in an issuer's ``reports@`` group: ``posts`` as (Message-ID,
+        Group ID, reason), ``keys`` as (key, reason, until or None for 365 days).
+        ``issuer``: the identity to publish as (``issuer_for``). The reporter's key is
+        never in it (section 7.4). Returns its Message-ID."""
+        name = self.issuer_for(issuer)
+        if name != self.default_identity_name():
+            with self._acting(name):
+                return await self.publish_report(posts, keys, note, name)
         try:
             body = rpt.report_body(posts, keys, note)
         except (ValueError, crypto.CryptoError) as exc:
@@ -291,9 +332,13 @@ class ReportsMixin:
         self._report_book = None
         return art.message_id
 
-    async def my_reports(self) -> list[rpt.Report]:
-        """The reports you have published that are still there, newest first."""
-        gid = self.my_reports_group()
+    async def my_reports(self, issuer: str | None = None) -> list[rpt.Report]:
+        """The reports an issuer here has published that are still there, newest first."""
+        try:
+            name = self.issuer_for(issuer)
+        except SessionError:
+            return []
+        gid = self.my_reports_group(name)
         out = [r for r in map(self._as_report, await self.fetch_group(gid)) if r is not None]
         return sorted(out, key=lambda r: r.date, reverse=True)
 
@@ -307,9 +352,11 @@ class ReportsMixin:
         except rpt.ReportError:
             return None
 
-    async def withdraw_report(self, message_id: str) -> str:
-        """Withdraw one of your reports: what it said no longer counts (section 4)."""
-        mid = await self.withdraw(self.my_reports_group(), message_id)
+    async def withdraw_report(self, message_id: str, issuer: str | None = None) -> str:
+        """Withdraw one of an issuer's reports: what it said no longer counts (section 4)."""
+        name = self.issuer_for(issuer)
+        with self._acting(name):
+            mid = await self.withdraw(self.my_reports_group(name), message_id)
         self._report_book = None
         return mid
 

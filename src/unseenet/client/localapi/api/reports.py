@@ -35,10 +35,17 @@ class Reports:
         or null before you start one)."""
         s = self._ready()
         mine = None
-        if s.is_issuer():
-            m = s.manifest_data(s.my_reports_group())
-            mine = {"group": s.my_reports_group(), "policy": m.get("policy", ""),
-                    "contact": m.get("contact", ""), "automatic": m.get("automatic") is True}
+        try:
+            name = s.issuer_for()                       # yours, or one beside it in the vault
+        except SessionError:
+            name = None
+        if name:
+            gid = s.my_reports_group(name)
+            m = s.manifest_data(gid)
+            mine = {"group": gid, "policy": m.get("policy", ""), "contact": m.get("contact", ""),
+                    "automatic": m.get("automatic") is True, "identity": name,
+                    "label": s.identity_label(s.identity(name).key_text, s.display_name(name))
+                    if name != s.default_identity_name() else "you"}
         return {"issuers": s.report_issuers(), "reasons": list(rpt.REASONS), "mine": mine}
 
     async def follow_issuer(self, body: dict) -> dict:

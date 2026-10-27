@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **An issuer beside your own identity** (27 Oct): a vault may hold an issuer as a
+  second identity - the project's in its maintainer's everyday vault - and reports
+  are then published, listed and withdrawn as that issuer (`issuer_names`,
+  `issuer_for`, `publish_report(..., issuer=)`), while your own identity stays the
+  one in use. `/api/settings` `report_issuer` and `/api/reports` `mine` (with the
+  issuer's `identity` and `label`) count it. `tools/project/issuer_to_vault.py`
+  copies the project's issuer, its reports group and its ripening chain into the
+  everyday vault. So a report in the contact inbox is handled where it is read.
+
 - **Reporting a post is a job** (found 27 Oct): each receiver's sealed copy pays
   postage as an unripe key, a minute or more each, and `POST /api/groups/{gid}/report`
   waited for all of them - the report window said *Sending …* and seemed to hang.

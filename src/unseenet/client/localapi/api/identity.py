@@ -264,7 +264,7 @@ class Identity:
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
                 "pictures": s.show_pictures(), "state_local": s.state_kept_local(),
                 "notifications": s.notification_settings(),
-                "report_issuer": s.is_issuer()}            # UN-RFC 0045: offer publishing
+                "report_issuer": bool(s.issuer_names())}    # UN-RFC 0045: offer publishing
 
     async def change_settings(self, data: dict) -> dict:
         """``POST /api/settings``: as ``set_settings``, and ``state_local`` - keep your
