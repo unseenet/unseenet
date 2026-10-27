@@ -395,18 +395,22 @@ class PrivateMixin:
             return False
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
-    async def send_chat(self, group_id: str, text: str, files=None) -> str:
+    async def send_chat(self, group_id: str, text: str, files=None, languages=None) -> str:
         """Send a chat line (UN-RFC 0028): to a group, or to one person when
         ``group_id`` is ``contact:<key>``. No subject and no signature, unlike
         a post. ``files`` are prepared files, as for ``post()`` (UN-RFC 0028
         section 6.1, #496). Returns the Message-ID. Portals and mention notices
-        are the client's to ask about first, as for ``post()``."""
+        are the client's to ask about first, as for ``post()``. ``languages``: what it is
+        written in; in a group, left out, the suggestion for the group (UN-RFC 0052 5a) -
+        a chat line is not asked about."""
         if group_id.startswith(CONTACT):
             self.open_chat(group_id[len(CONTACT):])       # writing to them opens it again
             owner = crypto.key_from_text(group_id[len(CONTACT):])
             return await self.send_private(personal_inbox_id(owner), "", text,
                                            owner_key=owner, kind=KIND_CHAT, files=files)
-        return await self.post(group_id, "", text, kind=KIND_CHAT, files=files)
+        if languages is None:
+            languages = self.suggest_languages(group_id)[0] or None
+        return await self.post(group_id, "", text, kind=KIND_CHAT, files=files, languages=languages)
 
     def private_posts(self) -> list["Message"]:
         """What the "Private posts" view shows (UN-RFC 0028 section 6.2), oldest first."""

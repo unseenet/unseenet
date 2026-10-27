@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A chat line in a group gets the suggested language** (UN-RFC 0052 5a):
+  `send_chat(..., languages=)`, left out the group's suggestion - a chat line is not
+  asked about, so every client and program does the same.
+
 - **The language of a post** (#671, UN-RFC 0052 section 5a; decided 27 Oct): the author's
   `Content-Language` (1-4 codes such as `da`, `en`), checked for form by nodes, inside
   the encryption in closed groups. People write in several languages by group, so the
