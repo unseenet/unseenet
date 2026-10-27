@@ -241,3 +241,7 @@ async def test_reports_to_an_issuer_land_in_its_team_inbox(net):
     await andreas.fetch_group(team)
     [r] = andreas.reports_sent_to_you()
     assert andreas.received_report(r)[:2] == (post.message_id, gid) and r.group == team
+    from unseenet.client.localapi import LocalAPI
+    row = LocalAPI(session=andreas)._row(andreas, r, 0, set(), [], set())
+    assert row["report"] == {"id": post.message_id, "group": gid,
+                             "author_key": spammer.identity().key_text, "reason": "spam"}
