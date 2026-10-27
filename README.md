@@ -46,6 +46,20 @@ Unseenet brings that model back, with what we have learned since:
   end-to-end encrypted; the nodes that carry them see only ciphertext.
 - **Hard to spam.** Posting costs a little proof-of-work, and new keys must
   ripen before they post cheaply - no central moderation needed.
+- **No algorithm - unless you write one.** Your feed is newest first and a
+  group is its threads in order; nothing is pushed up or down for someone
+  else's reasons. Want friends first or a subject out of sight? Write your
+  own rules: they run only in your client, nobody sees them, and *Show all*
+  shows any view without them.
+- **Moderation without a centre.** Spam reports and content labels come from
+  issuers and labellers *you* choose to follow - the project's, a group
+  owner's, anyone's - and only describe: your client decides what to hide,
+  blur or show, and the nodes decide nothing. Authors warn about their own
+  posts (spoiler, violence, sexual …), and an age guide sets what a child's
+  device shows.
+- **Tags and languages.** Authors tag their posts with topics, a click shows
+  everything with a tag across your groups, and the client suggests the
+  language you write in - from your text, told on your own machine.
 - **Everything people know from today's networks**, on one technique:
   threaded discussions, chats, private posts, feeds you follow, sites and
   pages, pictures and reactions - all articles in groups, carried the same
@@ -63,14 +77,16 @@ The protocol is defined in the **UN-RFC** series, in [`rfc/`](rfc/) and on
 [unseenet.org/spec](https://unseenet.org/spec/). The documents are the
 authority; this code is one implementation. To change the protocol or build
 something compatible, start with [UN-RFC 0000](rfc/un-rfc-0000.md) and
-[0001](rfc/un-rfc-0001.md). All are drafts while Unseenet is pre-alpha.
+[0001](rfc/un-rfc-0001.md). Most are drafts; those marked *Accepted* are
+agreed, but anything may still change while Unseenet is pre-alpha.
 
 | Area | UN-RFCs |
 |---|---|
 | **The basis** - how the network is built, what a post is, keys, the wire, postage, the vault | [0000 Process](rfc/un-rfc-0000.md) · [0001 Architecture](rfc/un-rfc-0001.md) · [0002 Article format](rfc/un-rfc-0002.md) · [0003 Identities and crypto](rfc/un-rfc-0003.md) · [0005 ONNTP transport](rfc/un-rfc-0005.md) · [0006 Proof-of-work postage](rfc/un-rfc-0006.md) · [0007 Data at rest](rfc/un-rfc-0007.md) |
 | **Groups** - owned by a key, their charters, hierarchies, inboxes | [0004 Groups](rfc/un-rfc-0004.md) · [0013 Removing groups](rfc/un-rfc-0013.md) · [0014 Group charters](rfc/un-rfc-0014.md) · [0015 Ownership transfer](rfc/un-rfc-0015.md) · [0018 Hierarchies](rfc/un-rfc-0018.md) · [0029 Key-bound groups](rfc/un-rfc-0029.md) · [0040 Key-bound groups at scale](rfc/un-rfc-0040.md) · [0041 Many manifests at once](rfc/un-rfc-0041.md) · [0047 Team inboxes](rfc/un-rfc-0047.md) |
-| **What people write** - posts and chats, files, Markdown, feeds, sites, reactions | [0008 Chat and low latency](rfc/un-rfc-0008.md) · [0027 Attachments](rfc/un-rfc-0027.md) · [0028 Chats and posts](rfc/un-rfc-0028.md) · [0030 Comments in channels](rfc/un-rfc-0030.md) · [0031 Markdown and emoji](rfc/un-rfc-0031.md) · [0032 Mention notices](rfc/un-rfc-0032.md) · [0033 Pinned posts](rfc/un-rfc-0033.md) · [0034 Feeds and following](rfc/un-rfc-0034.md) · [0035 Pages and sites](rfc/un-rfc-0035.md) · [0042 Editing posts](rfc/un-rfc-0042.md) · [0048 Reactions](rfc/un-rfc-0048.md) |
-| **People and keys** - names, profiles, key ripening, standing, your state | [0009 Inbox and local groups](rfc/un-rfc-0009.md) · [0019 Names for identities](rfc/un-rfc-0019.md) · [0022 Profiles](rfc/un-rfc-0022.md) · [0025 Key ripening](rfc/un-rfc-0025.md) · [0036 Attestations](rfc/un-rfc-0036.md) · [0044 Your state in the network](rfc/un-rfc-0044.md) · [0045 Spam reports](rfc/un-rfc-0045.md) |
+| **What people write** - posts and chats, files, Markdown, feeds, sites, reactions | [0008 Chat and low latency](rfc/un-rfc-0008.md) · [0027 Attachments](rfc/un-rfc-0027.md) · [0028 Chats and posts](rfc/un-rfc-0028.md) · [0030 Comments in channels](rfc/un-rfc-0030.md) · [0031 Markdown and emoji](rfc/un-rfc-0031.md) · [0032 Mention notices](rfc/un-rfc-0032.md) · [0033 Pinned posts](rfc/un-rfc-0033.md) · [0034 Feeds and following](rfc/un-rfc-0034.md) · [0035 Pages and sites](rfc/un-rfc-0035.md) · [0042 Editing posts](rfc/un-rfc-0042.md) · [0048 Reactions](rfc/un-rfc-0048.md) · [0049 Imported posts](rfc/un-rfc-0049.md) · [0052 Tags and languages](rfc/un-rfc-0052.md) |
+| **People and keys** - names, profiles, key ripening, standing, your state | [0009 Inbox and local groups](rfc/un-rfc-0009.md) · [0019 Names for identities](rfc/un-rfc-0019.md) · [0022 Profiles](rfc/un-rfc-0022.md) · [0025 Key ripening](rfc/un-rfc-0025.md) · [0036 Attestations](rfc/un-rfc-0036.md) · [0044 Your state in the network](rfc/un-rfc-0044.md) · [0050 Copying an identity, recovery words](rfc/un-rfc-0050.md) · [0054 Councils and the registrar](rfc/un-rfc-0054.md) |
+| **What you see** - your own rules, reports and labels you choose to follow | [0045 Spam reports](rfc/un-rfc-0045.md) · [0051 Your own rules](rfc/un-rfc-0051.md) · [0053 Content labels](rfc/un-rfc-0053.md) |
 | **Nodes** - finding them, peering, keeping, the project's lists | [0010 Known nodes](rfc/un-rfc-0010.md) · [0011 Node information](rfc/un-rfc-0011.md) · [0012 Retention and archives](rfc/un-rfc-0012.md) · [0016 Peer keys](rfc/un-rfc-0016.md) · [0017 Catch-up by pull](rfc/un-rfc-0017.md) · [0020 Lists from inside the network](rfc/un-rfc-0020.md) · [0021 Listed nodes must be connected](rfc/un-rfc-0021.md) |
 | **The way out** - gateways to other networks, web entrances | [0023 Gateways](rfc/un-rfc-0023.md) · [0024 Usenet gateways](rfc/un-rfc-0024.md) · [0026 Nostr gateways](rfc/un-rfc-0026.md) · [0037 Matrix gateways](rfc/un-rfc-0037.md) · [0038 Gateway cooperation](rfc/un-rfc-0038.md) · [0043 Web entrances](rfc/un-rfc-0043.md) |
 | **Clients** - the API every front end is built on | [0046 The local client API](rfc/un-rfc-0046.md) |
@@ -99,7 +115,7 @@ for the bootable images.
 |---|---|
 | **Use Unseenet** | The [terminal client](https://github.com/unseenet/unseenet-tui) or the [graphical client](https://github.com/unseenet/unseenet-gui), [portable](https://github.com/unseenet/unseenet-portable) with Tor inside, [bootable](https://github.com/unseenet/unseenet-bootable) from a stick, or in a browser through a [web entrance](https://github.com/unseenet/unseenet-entrance). Start here: [Getting started](https://unseenet.org/). |
 | **Run a node** | `curl -fsSL https://raw.githubusercontent.com/unseenet/unseenet/main/deploy/install-node.sh \| sudo bash` on Debian or Ubuntu, or [Docker](https://unseenet.org/node/docker/). [Guide](https://unseenet.org/node/install/) |
-| **The core and the CLI** | `pipx install unseenet` (Python 3.11+ and `tor`), then `unseenet --help`. Build on it: [Write a client](https://unseenet.org/developers/). |
+| **The core and the CLI** | `pipx install unseenet` (Python 3.11+ and `tor`), then `unseenet --help`; `unseenet[language]` adds a larger language model for telling what a text is written in. Build on it: [Write a client](https://unseenet.org/developers/). |
 | **Other newsreaders** | Read the open groups with tin, Thunderbird and friends: [Other newsreaders](https://unseenet.org/other-clients/). |
 
 The project's own groups, `unseenet`, `unseenet.help` and
@@ -114,7 +130,9 @@ checks both, stores the article and passes it to the nodes it peers with,
 without knowing who wrote it or where it came in. Groups are owned by a key
 whose signed manifest says who may post and how the group is shown; closed
 groups and inboxes carry only ciphertext. Everything else - chats, feeds,
-sites, reactions, profiles - is articles in groups too.
+sites, reactions, profiles - is articles in groups too. So are spam reports
+and content labels: signed statements in their issuers' channels, which a
+client applies only for the people who chose to follow them.
 
 Read it chapter by chapter: [How it works](https://unseenet.org/guide/).
 
@@ -160,6 +178,7 @@ number their own releases and say which core they need.
 | [unseenet-watchman](https://github.com/unseenet/unseenet-watchman) | Automatic spam reports and content labels that readers may choose to follow |
 | [unseenet-stats](https://github.com/unseenet/unseenet-stats) | Statistics for the network |
 | [unseenet-mcp](https://github.com/unseenet/unseenet-mcp) | An MCP server, so a language model can read and post as you (planning) |
+| [unseenet-import](https://github.com/unseenet/unseenet-import) | Bring your posts and profile from other networks, with their original dates |
 | [unseenet-demo](https://github.com/unseenet/unseenet-demo) | Demo people, feeds and sites, made with the command-line client |
 
 ## License
