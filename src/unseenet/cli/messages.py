@@ -106,7 +106,8 @@ async def c_post(app: App, args) -> None:
                       if getattr(args, "origin_network", None) else None)   # UN-RFC 0049
             msgid = await s.post(group, "" if kind == KIND_CHAT else subject, body,
                                  references=[*parent.references, parent.message_id] if parent else None,
-                                 kind=kind, content_type=ctype, files=files, origin=origin)
+                                 kind=kind, content_type=ctype, files=files, origin=origin,
+                                 tags=getattr(args, "tag", None))
     except SessionError as exc:
         sys.exit(f"Not posted: {exc}")
     what = "Edited" if target is not None else "Posted"

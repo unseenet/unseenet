@@ -306,6 +306,8 @@ class Manifest:
             check_team_fields(data)                         # UN-RFC 0047 section 3
             from .reports import check_group_issuers
             check_group_issuers(data)                       # UN-RFC 0045 section 7.5
+            from .tags import check_group_tags
+            check_group_tags(data)                          # UN-RFC 0052 section 5
             if data.get("view") == "pages":                 # UN-RFC 0035 section 3
                 from .pages import check_manifest_fields
                 check_manifest_fields(data)
@@ -427,7 +429,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reactions",
                 "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
                 "readers", "team_name",                 # team inboxes (UN-RFC 0047)
-                "report_issuers")                       # a group's own (UN-RFC 0045, 7.5)
+                "report_issuers",                       # a group's own (UN-RFC 0045, 7.5)
+                "tags")                                 # the group's tags (UN-RFC 0052, 5)
 
 
 def check_team_fields(data: dict) -> None:
@@ -476,6 +479,8 @@ def check_extra_fields(data: dict) -> None:
     check_team_fields(data)
     from .reports import check_group_issuers
     check_group_issuers(data)
+    from .tags import check_group_tags
+    check_group_tags(data)
     max_pins(data)
     if data.get("type") != "inbox":
         check_reactions(data)                              # UN-RFC 0048 section 4.1
@@ -851,6 +856,7 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         return
     if "Encrypted" in art:
         raise ArticleError("permission", "encryption only allowed in closed groups")
+    _check_tags(art)                                       # UN-RFC 0052 section 6
     kind = message_kind(art)                               # UN-RFC 0028, section 5
     if kind == KIND_REACTION:                              # UN-RFC 0048 section 6.1
         _check_reaction(art, manifest, thread_root)
@@ -867,6 +873,20 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         _check_comment(art, manifest, thread_root)
         return
     raise ArticleError("permission", f"not allowed to post in {manifest.type} group")
+
+
+def _check_tags(art: Article) -> None:
+    """The form of a ``Tags`` header, as of any other (UN-RFC 0052 section 6). A
+    reaction has none; nothing else about tags concerns a node."""
+    from . import tags as tg
+    if art.get(tg.HEADER) is None:
+        return
+    try:
+        tg.parse(art.get(tg.HEADER))
+    except tg.TagError as exc:
+        raise ArticleError("syntax", str(exc)) from exc
+    if message_kind(art) == KIND_REACTION:
+        raise ArticleError("syntax", "a reaction has no tags")
 
 
 def _check_reaction(art: Article, manifest: Manifest, thread_root: ThreadRoot | None) -> None:

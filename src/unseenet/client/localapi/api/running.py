@@ -80,6 +80,11 @@ class Running:
             if not isinstance(keys, list):
                 raise SessionError("report_issuers is a list of keys")
             changes["report_issuers"] = [_key(k) for k in keys] or None
+        if "tags" in changes:                   # UN-RFC 0052 section 5: the whole list
+            from ....core import tags as _tg
+            if not isinstance(changes["tags"], list):
+                raise SessionError("tags is a list of words")
+            changes["tags"] = _tg.normalize(changes["tags"]) or None
         if "team_name" in changes:              # UN-RFC 0047 section 3
             changes["team_name"] = str(changes["team_name"] or "").strip() or None
         if "index" in changes and changes["index"] not in ("yes", "no"):
