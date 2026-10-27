@@ -87,7 +87,10 @@ body in the canonical JSON of UN-RFC 0004:
   365 days after the article's `Date`; a key report without it, or with a
   later one, is ignored.
 - `reason`, for each entry: `spam`, `flood`, `phishing`, `malware`,
-  `illegal` or `other`.
+  `harassment` (threats and harassment of people), `illegal` or `other`.
+  A reason is why the issuer *sanctions* a post or a key; what a post
+  merely contains (profanity, adult content) is a content label, with
+  rules of its own that never sanction (UN-RFC 0053).
 - `note`: optional, up to 200 characters, for people.
 
 An article holds at most 1000 entries in all. A post report needs no

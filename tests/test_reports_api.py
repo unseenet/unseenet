@@ -140,11 +140,11 @@ async def test_a_report_in_markdown_with_a_picture_and_a_reason(net):
     api = LocalAPI(session=me)
     post = next(m for m in await me.fetch_group(gid) if m.subject == "Trussel")
     got = await api.report_targets(gid, post.message_id)
-    assert [r["id"] for r in got["reasons"]] == ["spam", "illegal", "threats", "other"]
+    assert [r["id"] for r in got["reasons"]] == ["spam", "phishing", "malware", "harassment", "illegal", "other"]
     to_issuer = [t["i"] for t in got["targets"] if t["who"].startswith("Report issuer")]
     buf = io.BytesIO()
     PIL.new("RGB", (8, 8), "red").save(buf, "PNG")
-    started = await api.report(gid, {"id": post.message_id, "targets": to_issuer, "reason": "threats",
+    started = await api.report(gid, {"id": post.message_id, "targets": to_issuer, "reason": "harassment",
                                   "note": "Se **skærmbilledet** - politiet er kontaktet.",
                                   "files": [{"name": "skaerm.png", "data": base64.b64encode(buf.getvalue()).decode(),
                                              "alt": "Skærmbillede af truslen"}]})
@@ -160,7 +160,7 @@ async def test_a_report_in_markdown_with_a_picture_and_a_reason(net):
     [r] = [m for m in issuer.private_messages() if issuer.reported_post(m)]
     assert is_report_type(r.content_type) and r.content_type.startswith("text/markdown")
     assert "**skærmbilledet**" in r.body and len(r.attachments) == 1
-    assert issuer.received_report(r) == (post.message_id, gid, troll.identity().key_text, "other")
+    assert issuer.received_report(r) == (post.message_id, gid, troll.identity().key_text, "harassment")
     assert is_report_type(REPORT_TYPE + "; charset=utf-8")      # the plain reports of before too
     with pytest.raises(SessionError, match="reason"):
         await me.report(post, [("x", me.my_inbox, me.identity().key_text)], reason="boring")
@@ -247,3 +247,23 @@ async def test_an_issuer_as_a_separate_identity_and_copied_to_a_colleague(net):
     assert await colleague.discover_issuers() == ["reports"]          # from the network
     assert colleague.issuer_names() == ["reports"] and colleague.issuer_for() == "reports"
     assert colleague.default_identity_name() == "colleague"           # still you
+
+
+def test_one_list_of_reasons():
+    """#659: the client's reasons come from core's one list; harassment is one (UN-RFC 0045
+    section 4); readers may report phishing and malware; flood is an issuer's word; an
+    older client's report still says what it meant."""
+    from unseenet.client.session import REPORT_REASONS, Message, REPORT_MD_TYPE
+    from unseenet.core import reports as rpt
+    assert set(REPORT_REASONS) <= set(rpt.REASONS) and "harassment" in rpt.REASONS
+    assert {"phishing", "malware"} <= set(REPORT_REASONS) and "flood" not in REPORT_REASONS
+    assert all(REPORT_REASONS[k] == rpt.REASON_LABELS[k] for k in REPORT_REASONS)
+    rpt.report_body([("<a@x>", "g@x", "harassment")])            # an issuer may publish it
+    from unseenet.client.session.reports import ReportsMixin
+    for said, means in (("harassment", "harassment"), ("Threats or harassment", "harassment"),
+                        ("threats", "harassment"), ("Spam", "spam"), ("whatever", "other")):
+        m = Message(1, "<r@x>", "inbox@x", content_type=REPORT_MD_TYPE,
+                    body=f"Group: `g@x`  \nMessage-ID: `<a@x>`  \nReason: {said}\n")
+        class S(ReportsMixin):
+            report_fields = staticmethod(__import__("unseenet.client.session.people", fromlist=["x"]).PeopleMixin.report_fields)
+        assert S().received_report(m)[3] == means, said

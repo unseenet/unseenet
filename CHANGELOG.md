@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **One list of report reasons** (#659): `core.reports.REASONS` is the one list -
+  clients, issuers and bots all use it - with `REASON_LABELS` to show them and
+  `READER_REASONS` for what a reader's report action offers (all but `flood`). New:
+  `harassment` (threats and harassment) in UN-RFC 0045 section 4; readers can report
+  `phishing` and `malware`. A report now says its reason as the word itself; reports
+  from older clients (`threats`, or the label they wrote) still say what they meant.
+  `/api/reports` gives `reason_labels`.
+
 - **Publishing a spam report is a job** (found 27 Oct: *Publish* seemed to do
   nothing): the issuer's postage, and the first time its ripening, can take minutes,
   and `POST /api/reports/publish` waited. Now it checks the report, answers `{"job"}`

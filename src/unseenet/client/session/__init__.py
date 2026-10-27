@@ -382,9 +382,10 @@ SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
 REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74), plain text, as before
 # a report written in Markdown, with files: Markdown that says it is a report (gui#70)
 REPORT_MD_TYPE = "text/markdown; charset=utf-8; variant=unseenet; report=post"
-# why a post is reported, as every client offers it; the first four are UN-RFC 0045 reasons
-REPORT_REASONS = {"spam": "Spam", "illegal": "Illegal", "threats": "Threats or harassment",
-                  "other": "Something else"}
+# why a post is reported, as every client's report action offers it - derived from the one
+# list in core (UN-RFC 0045 section 4, #659), never a second list
+from ...core.reports import READER_REASONS as _READER_REASONS, REASON_LABELS as _REASON_LABELS  # noqa: E402
+REPORT_REASONS = {k: _REASON_LABELS[k] for k in _READER_REASONS}
 
 
 def is_report_type(content_type: str | None) -> bool:

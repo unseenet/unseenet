@@ -26,7 +26,18 @@ from .article import Article, parse_date
 
 GROUP_NAME = "reports"                 # reports@<fp>, a key-bound group (UN-RFC 0029)
 MANIFEST_MAX = 4 * 1024                # its manifest article (UN-RFC 0040 section 9)
-REASONS = ("spam", "flood", "phishing", "malware", "illegal", "other")    # section 4
+# section 4: why a post or a key is reported - the one list; clients, issuers and bots
+# all use it (#659). Labels (profanity, sexual ...) are deliberately not reasons: a label
+# only describes, a report sanctions (#656).
+REASONS = ("spam", "flood", "phishing", "malware", "harassment", "illegal", "other")
+# what each is called where people choose one
+REASON_LABELS = {"spam": "Spam", "flood": "Flooding", "phishing": "Phishing - a scam or fake link",
+                 "malware": "Malware", "harassment": "Threats or harassment",
+                 "illegal": "Illegal", "other": "Something else"}
+# what a reader's report action offers: all but flood, which is an issuer's word
+READER_REASONS = ("spam", "phishing", "malware", "harassment", "illegal", "other")
+# reasons reports from older clients gave in their text, and what they mean now
+OLD_REASONS = {"threats": "harassment", "Threats or harassment": "harassment"}
 MAX_ENTRIES = 1000                     # posts and keys together, in one article
 KEY_MAX = timedelta(days=365)          # a key report's ``until``, at most after Date
 NOTE_MAX = 200                         # characters of ``note``
