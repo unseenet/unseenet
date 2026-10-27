@@ -229,6 +229,16 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}
 
+# The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
+# and the bot channels' sources are English. Data channels hold no text for people, so
+# they say none. Clients suggest the group's language to those who write there.
+LANGUAGES = {name: ["en"] for name in (
+    "unseenet", "unseenet.chat", "unseenet.test", "unseenet.help", "unseenet.help.news",
+    "unseenet.announce", "unseenet.admin",
+    "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
+    "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}
+
+
 # The project's labeller (UN-RFC 0053), named in the bot channels for their readers'
 # warnings, as the issuer above: set its key here once the label bot has one
 # (unseenet-bots#21). Until then, None names nobody. Readers can turn it off.
@@ -252,7 +262,7 @@ KINDS = {"unseenet.chat": ["chat"]}
 # What this list decides for groups that already exist, and each field's default.
 SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
             "comments": "none", "comment_days": None, "portals": [], "kinds": None,
-            "attachments": None, "report_issuers": None, "labellers": None}
+            "attachments": None, "report_issuers": None, "labellers": None, "languages": None}
 
 
 def _short(value) -> str:
@@ -272,7 +282,7 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
     data.update({k: wanted[k] for k in changes})
     for k, default in (("comments", "none"), ("comment_days", None), ("portals", []),
                        ("kinds", None), ("attachments", None), ("report_issuers", None),
-                       ("labellers", None)):
+                       ("labellers", None), ("languages", None)):
         if data.get(k, default) == default:
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
@@ -304,7 +314,8 @@ async def main() -> None:
                       "portals": PORTALS.get(name, []), "kinds": KINDS.get(name),
                       "attachments": ATTACHMENTS.get(name),
                       "report_issuers": REPORT_ISSUERS.get(name),
-                      "labellers": LABELLERS.get(name)}
+                      "labellers": LABELLERS.get(name),
+                      "languages": LANGUAGES.get(name)}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -326,7 +337,8 @@ async def main() -> None:
                             kinds=KINDS.get(name), pow_bits=_owner.POW_BITS,
                             extra={k: v for k, v in (("attachments", ATTACHMENTS.get(name)),
                                                      ("report_issuers", REPORT_ISSUERS.get(name)),
-                                                     ("labellers", LABELLERS.get(name))) if v} or None)
+                                                     ("labellers", LABELLERS.get(name)),
+                                                     ("languages", LANGUAGES.get(name))) if v} or None)
         if PORTALS.get(name):                   # make_manifest has no portals: add and re-sign
             data = json.loads(art.body)
             data["portals"] = PORTALS[name]

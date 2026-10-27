@@ -120,3 +120,11 @@ def test_your_choice_for_lines_here_wins(tmp_path):
     assert me.suggest_languages(gid) == (["da"], "group")            # a post: not your line choice
     me.choose_chat_language(gid, [])
     assert me.suggest_languages(gid, text="ok", kind="chat") == (["da"], "group")
+
+
+def test_a_group_with_several_languages_suggests_its_main_one(tmp_path):
+    me = Session(Vault.open(tmp_path / "v.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me")
+    gid = "alt.robot.cafe.chat@" + "a" * 52
+    me.group_entry(gid)["manifest"] = {"name": "alt.robot.cafe.chat", "type": "open", "languages": ["en", "da"]}
+    assert me.suggest_languages(gid) == (["en"], "group")      # not "en, da" on every post

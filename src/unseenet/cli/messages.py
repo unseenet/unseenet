@@ -108,8 +108,9 @@ async def c_post(app: App, args) -> None:
                                  references=[*parent.references, parent.message_id] if parent else None,
                                  kind=kind, content_type=ctype, files=files, origin=origin,
                                  tags=getattr(args, "tag", None),
-                                 languages=(getattr(args, "lang", None)
-                                            or s.suggest_languages(group)[0] or None))
+                                 languages=(getattr(args, "lang", None)       # else from the text (#686)
+                                            or s.suggest_languages(group, text=f"{subject}\n{body}",
+                                                                   kind=kind)[0] or None))
     except SessionError as exc:
         sys.exit(f"Not posted: {exc}")
     what = "Edited" if target is not None else "Posted"
