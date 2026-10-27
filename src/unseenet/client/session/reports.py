@@ -408,6 +408,8 @@ class ReportsMixin:
         found = self.report_fields(msg)
         if "Group" not in found or "Message-ID" not in found:
             return None
-        why = next((k for k, v in REPORT_REASONS.items() if v == found.get("Reason")), "spam")
-        return (found["Message-ID"], found["Group"], found.get("Author key", ""),
-                why if why in rpt.REASONS else "other")
+        said = (found.get("Reason") or "").strip()
+        # the word (now), a label older clients wrote, or an old word (#659)
+        why = said if said in rpt.REASONS else rpt.OLD_REASONS.get(said) or next(
+            (k for k, v in rpt.REASON_LABELS.items() if v == said), "spam" if not said else "other")
+        return (found["Message-ID"], found["Group"], found.get("Author key", ""), why)

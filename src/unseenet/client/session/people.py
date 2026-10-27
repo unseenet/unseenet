@@ -702,7 +702,7 @@ class PeopleMixin:
         lines = [f"Group: `{msg.group}`", f"Message-ID: `{msg.message_id}`",
                  f"Author key: `{msg.author_key}`"]
         if reason:
-            lines.append(f"Reason: {REPORT_REASONS[reason]}")
+            lines.append(f"Reason: {reason}")              # the word itself: any client reads it
         body = ("**Report of a post**\n\n" + "  \n".join(lines) + "\n"
                 + (f"\n### Note from the reporter\n\n{note.strip()}\n" if note.strip() else "")
                 + "\n### The post, as the reporter saw it\n\n"

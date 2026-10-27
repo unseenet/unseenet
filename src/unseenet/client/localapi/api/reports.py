@@ -46,7 +46,8 @@ class Reports:
                     "automatic": m.get("automatic") is True, "identity": name,
                     "label": s.identity_label(s.identity(name).key_text, s.display_name(name))
                     if name != s.default_identity_name() else "you"}
-        return {"issuers": s.report_issuers(), "reasons": list(rpt.REASONS), "mine": mine}
+        return {"issuers": s.report_issuers(), "reasons": list(rpt.REASONS),
+                "reason_labels": dict(rpt.REASON_LABELS), "mine": mine}
 
     async def follow_issuer(self, body: dict) -> dict:
         """``POST /api/reports/follow`` with ``key`` and ``on`` (true: follow in every
