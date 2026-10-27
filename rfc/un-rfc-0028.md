@@ -49,6 +49,33 @@ written:
     purpose: there are two ways of talking, chat and post, wherever one
     talks.
 
+**Private chat**
+:   The chat between two people, one per person, carried in their
+    inboxes (UN-RFC 0009). Its lines are end-to-end encrypted, and only
+    the two people can read them. It is the chat counterpart of a
+    private post.
+
+**Chat group**
+:   A group that takes chat lines (section 4). A chat group is open or
+    closed like any other group; being a chat group says nothing about
+    who can read it.
+
+## 2.1 Who Can Read Along
+
+Chat and post are the *form* of a message. Who can read it is decided
+by *where* it is written, and documents and clients SHOULD say so in
+these words:
+
+| Where                       | Who can read                                  |
+|-----------------------------|-----------------------------------------------|
+| private chat, private post  | only the two people (end-to-end encrypted)    |
+| closed group                | only the members (end-to-end encrypted)       |
+| open group                  | anyone (signed, but public, like Usenet)      |
+
+A client SHOULD NOT call open chat groups "private", and SHOULD NOT
+use "chats" alone for private chats where it could be read as covering
+chat groups too.
+
 # 3. The Message-Kind Header
 
 ## 3.1 Value
@@ -168,8 +195,8 @@ response, so the client can tell the user.
   The attachments of a chat line are shown with it; a client that cannot
   show a picture there SHOULD at least name the files and say how to
   open them.
-- **Private messages:** chats per person, oldest first; posts like
-  posts in a discussion group. A client MAY show both together, as long
+- **Private chats and private posts:** private chats one per person,
+  oldest first; private posts like posts in a discussion group. A client MAY show both together, as long
   as the kind of each message is visible. A chat from someone the user
   has no conversation with MUST NOT be hidden; showing it among the
   posts, marked as a chat, is enough.
@@ -204,7 +231,8 @@ as the subject.
 
 - **Open groups:** the kind is in the clear, like the rest of the
   article. It says nothing that the text does not already show.
-- **Closed groups and inboxes:** the kind is encrypted. A node cannot
+- **Closed groups and inboxes** (closed group chats, private chats and
+  private posts): the content and the kind are encrypted. A node cannot
   tell a chat line from a post by its headers.
 - **Size and timing:** chat lines are usually short and come in bursts,
   posts are longer. An observer of a closed group or an inbox may

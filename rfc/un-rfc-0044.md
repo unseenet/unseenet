@@ -124,8 +124,8 @@ The plaintext is canonical JSON (UN-RFC 0004):
 - `starter`: the version of the starter groups this identity has taken,
   so a new client does not follow again a starter group the user left.
 - `hidden`: keys whose profiles the user hides (UN-RFC 0022).
-- `closed_chats`: chats with a person the user closed, so they leave the
-  list of chats on every device (UN-RFC 0028 section 6.2). `since` is when
+- `closed_chats`: private chats with a person the user closed, so they
+  leave the list of private chats on every device (UN-RFC 0028 section 6.2). `since` is when
   it was closed. A closed chat opens again by itself as soon as there is
   a chat line from or to that person dated after `since`, so no new
   message is ever hidden; dates are rounded to 10 minutes (UN-RFC 0009),
@@ -245,9 +245,9 @@ from that inbox and open `envelope-2`. The copy lives as long as the
 recipient's inbox keeps the article (UN-RFC 0012); a client SHOULD also
 keep its own copy in the vault, as today.
 
-## 6.3 Chats
+## 6.3 Private Chats
 
-Chat lines in private conversations (UN-RFC 0028) are inbox articles
+The lines of private chats (UN-RFC 0028) are inbox articles
 too and get the same second envelope.
 
 # 7. Updating and Merging
