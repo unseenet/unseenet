@@ -182,6 +182,8 @@ first and threads as they are.
   been seen" - shown on screen, not opened. A third state besides unread
   and read, kept coarsely like `read.to` (section 4.3) and without an
   `also` list, so it never takes room from read marks.
+  For you (UN-RFC 0051 section 5.5) has its own entry, under the
+  pseudo group `for-you:`.
 - `threads`: threads the user watches or ignores, by the Message-ID of
   their first post: `{"is": "watched" | "ignored", "at": ...}`, or
   `{"removed": true, "at": ...}` when no longer either, at most 256

@@ -44,6 +44,9 @@ because they go with the identity.
 - **Threaded group**: a group shown as threads (UN-RFC 0008 section 5).
 - **Seen**: shown on the screen, without being opened; between unread
   and read (UN-RFC 0044 section 4.5).
+- **For you**: the list of replies to the user and posts that name the
+  user, from all the groups they follow, with their mention notices
+  (UN-RFC 0032).
 
 The key words MUST, MUST NOT, SHOULD and MAY are as in RFC 2119.
 
@@ -68,6 +71,14 @@ This section is the reason for the rest of the document.
    user chooses it.
 6. A client MUST offer, for any post, why it is where it is: which lines
    gave which points and what followed (section 10).
+7. Wherever the rules act - the feed, a threaded group, For you - a
+   client MUST offer **Show all**: one action that shows that view as
+   without rules, and one action back. It is a view state only: it is
+   not saved in the state, not synced to other devices, and does not
+   turn the rules off (item 4). It ends when the user leaves the view
+   or closes the client, and the client shows plainly while it is on.
+   A user can so look past their own rules for a moment without
+   changing them.
 
 # 4. The Language
 
@@ -98,10 +109,13 @@ A line `[name]` starts a scope; the rules after it apply only there:
 | (none, or `[all]`) | the feed and threaded groups |
 | `[feed]` | the feed |
 | `[groups]` | threaded groups |
+| `[foryou]` | For you (section 5.5) |
 | `[pattern]` | posts in groups whose name matches the wildmat, e.g. `[dk.*]` |
 
 A pattern matches the group's name without its `@` fingerprint, with
-`*` for any characters, in any case. Chats (UN-RFC 0028) are never
+`*` for any characters, in any case. Only `[foryou]` rules act on For
+you; rules without a scope, `[all]`, `[feed]`, `[groups]` and patterns
+never do. Chats (UN-RFC 0028) are never
 scored; a client offers a plain mute for them instead.
 
 ## 4.4 Rules
@@ -122,8 +136,8 @@ A rule is one of:
   and optionally `max M`. With `per`, the points are multiplied by the
   count; `max` caps the result at plus or minus M. A points rule needs
   `per` or `if` or both.
-- **An action**: `show`, `hide`, `fold`, `dim`, `highlight` or
-  `mark read`, then `if CONDITION`.
+- **An action**: `show`, `hide`, `fold`, `dim`, `highlight`,
+  `mark read` or `quiet`, then `if CONDITION`.
 - **The order**: `sort by KEY [ascending] [, then KEY [ascending]] ...`.
 
 ## 4.5 Counts
@@ -151,6 +165,7 @@ A plural is the same count (`contacts who reacted`, `days old`).
 | `I reacted` | you reacted to the post |
 | `thread in watched` / `ignored` | you watch or ignore the thread (UN-RFC 0044 4.5) |
 | `seen`, `read` | the post is seen, or read |
+| `for you is reply` / `mention` | in For you: it answers one of your posts, or names you (UN-RFC 0032) |
 | `new replies since seen` | it has replies dated after the seen mark |
 | `subject matches "TEXT"`, `text matches "TEXT"` | the subject or the text contains TEXT |
 | `has pictures` | it carries a picture (UN-RFC 0027) |
@@ -180,7 +195,8 @@ sign       = "+" / "-"
 per        = "per" count
 cap        = "max" 1*DIGIT
 if-cond    = "if" cond
-action     = ("show" / "hide" / "fold" / "dim" / "highlight" / "mark read") if-cond
+action     = ("show" / "hide" / "fold" / "dim" / "highlight" / "mark read"
+              / "quiet") if-cond
 order      = "sort by" key *(("," / "then") key)
 key        = ("score" / "date" / "reactions" / "replies") ["ascending"]
 cond       = and-cond *("or" and-cond)
@@ -213,7 +229,8 @@ is skipped for that post; it never makes the post or the list fail.
 The feed is the posts shown, ordered by the last `sort by` that applies
 to it; without one, newest first, as always. Ties keep the order they
 had. `fold`, `dim`, `highlight` and `mark read` are for threaded groups
-and MUST NOT be used in the `[feed]` scope (section 6).
+and MUST NOT be used in the `[feed]` scope, and `quiet` is only for
+`[foryou]` (section 6).
 
 ## 5.3 Threaded Groups
 
@@ -239,12 +256,46 @@ either as marks in the state or as rules the user can see:
 - hide this author in this group (a rule in the group's scope);
 - fold this subthread (a view state, not kept).
 
+## 5.5 For you
+
+For you is not a feed: it lists what is addressed to the user, newest
+first, and a client SHOULD say so under its heading ("replies to you
+and posts that name you"). So:
+
+- **Seen never removes an entry.** An entry is *unseen* until it has
+  been on the screen in For you or is seen in its own group (that
+  group's seen mark); *seen* entries are no longer counted and give no
+  notification, but stay listed as unread until they are *read* -
+  opened, here or in their group, since read is one state per post.
+  An entry leaves For you only when its post expires. For you's own
+  seen mark is kept like a group's, under `for-you:` (UN-RFC 0044
+  section 4.5).
+- **Only `[foryou]` rules act here** (section 4.3). A post hidden in its
+  group by the user's rules still reaches For you when it answers or
+  names them, unless a `[foryou]` rule says otherwise.
+- **The rules decide what happens to an entry.** `hide`: not listed,
+  not counted, no notification. `quiet`: listed, but not counted and no
+  notification. `show`, `highlight`, `dim` and `sort by` as in the
+  feed. `fold` and `mark read` MUST NOT be used here (section 6).
+- Without `[foryou]` rules, For you is newest first and notifies as it
+  does without this document.
+
+```
+[foryou]
+quiet if from a bot
+hide  if for you is mention and not author in contacts and older than 1 week
+highlight if author in contacts
+```
+
 # 6. Lines That Cannot Be Used
 
 A line that cannot be understood is skipped, and the client says which
 line and what was not understood, with a suggestion when a word is
 close to a known one (`line 1: 'autor' is not a condition - did you mean
-'author'?`). The other lines are used as if it were not there.
+'author'?`). The other lines are used as if it were not there. So
+is an action used where it does not belong: `fold`, `dim`, `highlight`
+or `mark read` in `[feed]`, `fold` or `mark read` in `[foryou]`, and
+`quiet` anywhere but `[foryou]`.
 
 A client MUST keep the user's text as written, the lines it cannot use
 included, when it writes the rules back: a newer client's rules, or a
@@ -319,14 +370,12 @@ score -20
   if anything? A short, commented set (friends first, seen further down)
   is the candidate.
 - **More signals**: a reaction with a given emoji, a post that names you
-  (UN-RFC 0032), posts from a group's moderators.
-- **Rules for For you** (UN-RFC 0032): whether the same rules should
-  order it.
+  outside For you (UN-RFC 0032), posts from a group's moderators.
 
 # 14. Changes to Other Documents
 
 - **UN-RFC 0044** section 4.5: `settings.feed_rules`, `seen` and
-  `threads` in the state.
+  `threads` in the state; `seen` also for For you, under `for-you:`.
 - **UN-RFC 0034** section 7: the timeline is newest first unless the
   user's own rules say otherwise.
 - **UN-RFC 0000** section 6: 0051 is added to the index.
