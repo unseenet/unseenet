@@ -115,8 +115,25 @@ A line `[name]` starts a scope; the rules after it apply only there:
 A pattern matches the group's name without its `@` fingerprint, with
 `*` for any characters, in any case. Only `[foryou]` rules act on For
 you; rules without a scope, `[all]`, `[feed]`, `[groups]` and patterns
-never do. Chats (UN-RFC 0028) are never
-scored; a client offers a plain mute for them instead.
+never do.
+
+**Private chats** (UN-RFC 0028) are never touched by rules; a client
+offers a plain mute, and closing the chat (UN-RFC 0044), instead.
+
+**Chat groups** are shown in time order, so rules never sort or weigh
+their lines. Only `hide` rules act on them, and only in a `[pattern]`
+scope that matches the group, like a classic killfile:
+
+```
+[alt.robot.cafe.chat]
+hide if author is "spammer@example"
+hide if text matches "crypto"
+```
+
+Other rules in such a scope are not used on the chat group's lines
+(section 6); they still act on threaded groups the pattern matches.
+These rules count towards the same limits as all others (section 7):
+there is no separate allowance for chat groups.
 
 ## 4.4 Rules
 
@@ -305,7 +322,9 @@ rules say a version newer than the client knows, the message says so.
 # 7. Limits
 
 - A rule set is at most 2048 bytes in UTF-8, and at most 64 rules;
-  lines past either are not used.
+  lines past either are not used. The limits are for the whole rule set,
+  every scope together, chat-group killfiles included; a client SHOULD
+  show how much of them is used.
 - Points, counts' caps and numbers are at most 10000.
 - No loops, no variables, no network access, no code.
 
