@@ -17,7 +17,7 @@ It is non-normative; the normative rules are in UN-RFC 0002 to 0006.
 
 # 1. Goals
 
-1. **Easy access.** A person should be able to join groups and chats by
+1. **Easy access.** A person should be able to join groups and private chats by
    running a single program, e.g. from a USB stick, with no installation,
    no account registration, no public IP and no port forwarding.
 2. **Decentralization.** No central server, registry or company. Anyone
@@ -172,9 +172,12 @@ groups. A reader can always hide content locally.
 | channel   | anyone        | owner and listed posters only           | no        |
 | closed    | members only  | members only                            | yes, E2E  |
 
-"Chats" are, in this first series, closed (or open) groups with short
-retention, used by clients in a conversational way. A low-latency
-delivery mechanism is reserved for UN-RFC 0008.
+"Chat" is a way of writing, not a kind of group (UN-RFC 0028): a chat
+group is open or closed like any other group, and the chat between two
+people is a private chat in their inboxes (UN-RFC 0009). Who can read
+along is set by where a message is written, never by its being a chat
+(UN-RFC 0028 section 2.1). A low-latency delivery mechanism is
+reserved for UN-RFC 0008.
 
 # 6. Relationship to Usenet
 

@@ -299,11 +299,11 @@ key without trusting the export or whoever holds it.
 - **Keys.** Secret keys belong in the vault, and an export that is
   copied, mailed or left on a stick must not let anyone post as the
   person. An export is not a backup of the identity.
-- **Private posts and chats in the clear, by default.** They are in the
+- **Private posts and private chats in the clear, by default.** They are in the
   export only if the person chooses so, and then the export MUST be
   encrypted with a passphrase they give (UN-RFC 0007). Unencrypted, an
   export of private messages would be easier to read than the vault.
-- **Other people's articles,** except that a private post or chat the
+- **Other people's articles,** except that a private post or private chat the
   person chose to include holds both sides of the conversation, as the
   person's inbox did.
 
@@ -343,7 +343,7 @@ it already sends.
 - **UN-RFC 0023** section 4.3: the origin headers are defined for every
   imported article, by gateways and by authors (section 4.1); section
   8: clients also apply section 5 of this document.
-- **UN-RFC 0007**: an export with private posts or chats is encrypted
+- **UN-RFC 0007**: an export with private posts or private chats is encrypted
   with a passphrase (section 7.2).
 - **UN-RFC 0032**: an importer sends no mention notices (section 6.2);
   an article old on arrival is not added to For you (section 5.2).
