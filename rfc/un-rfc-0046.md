@@ -354,8 +354,15 @@ first), then those containing it, then by a word of the name.
 - `GET /api/groups/<id>/report?id=<Message-ID>` lists who a post can be
   reported to (owner, moderators, the hierarchy's maintainer, the node's
   operator, and spam report issuers, UN-RFC 0045) as `{"targets": [{"i":
-  0, "who": "..."}, ...]}`; `POST` it `{"id": "...", "targets": [<index>, ...], "note":
-  "...", "anonymous": false}` answers `{"sent": <n>}`.
+  0, "who": "..."}, ...], "reasons": [{"id", "label"}, ...]}` - `spam`,
+  `illegal`, `threats`, `other`, as every client offers them; `POST` it
+  `{"id": "...", "targets": [<index>, ...], "reason": "...", "note": "...",
+  "files": [...], "anonymous": false}` answers `{"sent": <n>}`. The note is
+  Markdown (UN-RFC 0031) and `files` are as on a post (section 4.10) - a
+  screenshot, a document - sent encrypted to each receiver (UN-RFC 0027
+  section 3.3). The report arrives as Markdown with the parameter
+  `report=post` in its Content-Type, its group, Message-ID, author key and
+  reason as lines of their own.
 - `POST /api/groups/<id>/block` `{"key": "...", "reason": "..."}`: a
   hierarchy maintainer's block (UN-RFC 0018 section 5.4); answers
   `{"hierarchy": "<name>"}`.

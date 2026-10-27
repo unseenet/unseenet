@@ -65,19 +65,24 @@ class People:
         s = self._ready()
         m = self._find(s, gid, message_id)
         return {"targets": [{"i": i, "who": who} for i, (who, _, _) in
-                            enumerate(await s.report_targets(m))]}
+                            enumerate(await s.report_targets(m))],
+                "reasons": [{"id": k, "label": v} for k, v in REPORT_REASONS.items()]}
 
     async def report(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/report`` (section 4.6): report a post to the chosen
-        targets (by their ``i`` from ``GET``), with a note, optionally without your name."""
+        targets (by their ``i`` from ``GET``), with a ``reason``, a ``note`` in Markdown
+        and ``files`` (as on a post), optionally without your name."""
         s = self._ready()
         m = self._find(s, gid, str(data.get("id", "")))
         chosen = {int(i) for i in data.get("targets", [])}
         targets = [t for i, t in enumerate(await s.report_targets(m)) if i in chosen]
         if not targets:
             raise SessionError("report to whom?")
+        # a screenshot or a document, encrypted to each receiver (UN-RFC 0027 3.3)
+        files = self._files_to_post(s, s.my_inbox, data.get("files"), check=False)
         sent = await s.report(m, targets, str(data.get("note", "")).strip(),
-                              anonymous=bool(data.get("anonymous")))
+                              anonymous=bool(data.get("anonymous")), files=files,
+                              reason=str(data.get("reason", "")))
         return {"sent": sent}
 
     async def block(self, gid: str, data: dict) -> dict:

@@ -121,7 +121,7 @@ class Reports:
             if found:
                 out.append({"message": m.message_id, "subject": m.subject, "date": m.date.isoformat()
                             if m.date else None, "id": found[0], "group": found[1],
-                            "author_key": found[2] or None})
+                            "author_key": found[2] or None, "reason": found[3]})
         return {"received": out}
 
     async def hierarchy_issuers(self, body: dict) -> dict:

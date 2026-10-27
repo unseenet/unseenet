@@ -46,7 +46,7 @@ def reports_parsers(sub) -> None:
     p.add_argument("--note", default="")
     p = r.add_parser("received", help="reports others sent you; --publish N to publish one")
     p.add_argument("--publish", type=int, metavar="N", help="publish report N of the list")
-    p.add_argument("--reason", default="spam", choices=REASONS)
+    p.add_argument("--reason", choices=REASONS, help="instead of the reporter's reason")
     p.add_argument("--key", action="store_true", help="report the author's key too")
     r.add_parser("mine", help="the reports you have published")
     p = r.add_parser("withdraw", help="withdraw one of your reports")
@@ -116,13 +116,14 @@ async def c_reports(app: App, args) -> None:
                 lines = [f"{i + 1}. {s.received_report(m)[0]} in {s.received_report(m)[1]}: "
                          f"{m.subject}" for i, m in enumerate(got)]
                 emit(args, "\n".join(lines) or "No reports sent to you.",
-                     [dict(zip(("id", "group", "author_key"), s.received_report(m))) for m in got])
+                     [dict(zip(("id", "group", "author_key", "reason"), s.received_report(m))) for m in got])
                 return
             if not 1 <= args.publish <= len(got):
                 sys.exit(f"there is no report {args.publish}")
-            mid, gid, author = s.received_report(got[args.publish - 1])
-            keys = [(author, args.reason, None)] if args.key and author else []
-            published = await s.publish_report([(mid, gid, args.reason)], keys)
+            mid, gid, author, why = s.received_report(got[args.publish - 1])
+            why = args.reason or why                   # the reporter's reason, unless you say
+            keys = [(author, why, None)] if args.key and author else []
+            published = await s.publish_report([(mid, gid, why)], keys)
             emit(args, f"Published {published}", {"id": published})
         elif what == "mine":
             rows = [{"id": r.message_id, "date": r.date.isoformat(), "posts": len(r.posts),

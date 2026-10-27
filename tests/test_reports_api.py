@@ -17,7 +17,8 @@ KDF = {"ops": 1, "mem": 8192 * 1024}
 @pytest.fixture
 async def net(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0),
+                                    blobs={"max_size": 1 << 20, "encrypted": True}))   # pictures in reports
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
     made = []
@@ -110,3 +111,41 @@ async def test_reports_from_the_command_line(net, capsys):
     assert out()[0]["yours"] is True
     await cli.c_reports(i, ns(what="withdraw", msgid=rid))
     assert out()["id"] == rid
+
+
+async def test_a_report_in_markdown_with_a_picture_and_a_reason(net):
+    """gui#70: a report's note is Markdown, may carry a screenshot or a document, and says
+    why; the receiver still finds the post, and an issuer publishes it with that reason."""
+    import base64
+    import io
+
+    from unseenet.client.localapi import LocalAPI
+    from unseenet.client.session import REPORT_TYPE, is_report_type
+    PIL = pytest.importorskip("PIL.Image")
+    issuer, owner, troll, me = net("issuer"), net("owner"), net("troll"), net("me")
+    await issuer.start_reports()
+    gid = await owner.create_group("alt.snak", "open", min_pow=8)
+    troll.subscribe(gid)
+    await troll.post(gid, "Trussel", "jeg ved hvor du bor\n")
+    me.subscribe(gid)
+    me.follow_issuer(issuer.identity().key_text)
+    api = LocalAPI(session=me)
+    post = next(m for m in await me.fetch_group(gid) if m.subject == "Trussel")
+    got = await api.report_targets(gid, post.message_id)
+    assert [r["id"] for r in got["reasons"]] == ["spam", "illegal", "threats", "other"]
+    to_issuer = [t["i"] for t in got["targets"] if t["who"].startswith("Report issuer")]
+    buf = io.BytesIO()
+    PIL.new("RGB", (8, 8), "red").save(buf, "PNG")
+    sent = await api.report(gid, {"id": post.message_id, "targets": to_issuer, "reason": "threats",
+                                  "note": "Se **skærmbilledet** - politiet er kontaktet.",
+                                  "files": [{"name": "skaerm.png", "data": base64.b64encode(buf.getvalue()).decode(),
+                                             "alt": "Skærmbillede af truslen"}]})
+    assert sent == {"sent": 1}
+    await issuer.fetch_group(issuer.my_inbox)
+    [r] = [m for m in issuer.private_messages() if issuer.reported_post(m)]
+    assert is_report_type(r.content_type) and r.content_type.startswith("text/markdown")
+    assert "**skærmbilledet**" in r.body and len(r.attachments) == 1
+    assert issuer.received_report(r) == (post.message_id, gid, troll.identity().key_text, "other")
+    assert is_report_type(REPORT_TYPE + "; charset=utf-8")      # the plain reports of before too
+    with pytest.raises(SessionError, match="reason"):
+        await me.report(post, [("x", me.my_inbox, me.identity().key_text)], reason="boring")
