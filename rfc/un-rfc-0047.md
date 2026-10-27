@@ -118,7 +118,7 @@ so a team box cannot be lifted into another inbox.
 UN-RFC 0009 section 2.4 is extended: in an inbox whose current manifest
 has `readers`, a node MUST reject an ordinary article unless it has
 `Encrypted: teambox` and a body whose decoded length is at least
-`1 + 16 × 80 + 40` octets (`441 encryption`). In an inbox without
+`1 + 16 × 80 + 40` octets (`441 permission`, a reason of UN-RFC 0005 section 4). In an inbox without
 `readers` it MUST reject `teambox` the same way.
 
 This makes an outdated client fail at once instead of sealing a message

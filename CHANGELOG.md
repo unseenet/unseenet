@@ -7,6 +7,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Team inboxes** (#341, UN-RFC 0047): an inbox may list up to 16 readers - team
+  keys, each made for that inbox only - and messages to it are team boxes: a
+  content key sealed to each reader in 16 slots without key IDs, so an article
+  shows neither how many read it nor who. Nodes take team boxes in team inboxes
+  only (an outdated client fails at once). The owner adds a reader by sending a
+  new team key to their inbox (`add_team_reader`; the owner keeps none) and
+  removes one with a new manifest; the reader accepts after checking owner and
+  readers (`accept_team_invitation`) and keeps the key in the vault. Readers
+  answer on the inbox's behalf (`send_private(..., as_team=)`): the receiver sees
+  the team's name, verified against the readers, never a person. So the project
+  key can stay offline while its contact inbox is read and answered. Local API
+  `/api/teams...` and `as_team` (UN-RFC 0046 section 4.22), CLI `unseenet team
+  ...`, docs/node/operations.md.
+
 - **A local group on all your nodes** (#134): an operator with several nodes has a
   contact inbox on each, with the same Group ID. The client now reads a local group
   on every node in your vault that carries it - articles from the others numbered

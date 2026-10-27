@@ -220,13 +220,17 @@ class PrivateMixin:
                            owner_key: bytes | None = None, references: list[str] | None = None,
                            anonymous: bool = False, content_type: str | None = None,
                            kind: str = KIND_POST, remember: bool = True,
-                           extra: list[tuple[str, str]] | None = None, files=None) -> str:
+                           extra: list[tuple[str, str]] | None = None, files=None,
+                           as_team: str | None = None) -> str:
         """Send a message to an inbox. Only its owner can read it.
 
         ``kind`` is ``"post"`` (a subject, read on its own, answered with a quote)
         or ``"chat"`` (a line in a running conversation, no subject) - UN-RFC 0028.
         ``files`` are prepared files, sent as encrypted blobs whose keys travel
         inside the sealed box (UN-RFC 0027 sections 3.3, 4.3), if the inbox takes them.
+        To a team inbox it is a team box its readers open (UN-RFC 0047 section 4), from
+        its current manifest. ``as_team``: write on a team inbox's behalf, with your team
+        key for it, and answers go there (section 8).
         """
         if kind == KIND_CHAT:
             subject = ""
@@ -243,6 +247,18 @@ class PrivateMixin:
         owner_key = owner_key or await self.inbox_owner(group_id)
         sender = None if anonymous else self.identity()
         inner = extra if anonymous else self._with_inner_ripening(extra)
+        from_name, reply_to = ("" if anonymous else self.display_name()), (None if anonymous else self.my_inbox)
+        if as_team:                                   # on a team inbox's behalf (0047, 8)
+            sender = self.team_key(as_team)
+            if sender is None:
+                raise SessionError("you hold no team key for that inbox")
+            inner = list(extra or []) + [("Sender-Team", as_team)]   # never a ripening of it
+            from_name, reply_to = self.team_name(as_team), as_team
+        if self.manifest_data(group_id).get("readers"):            # a team inbox: MUST read it
+            m = await self.fetch_manifest(group_id)
+            if m is not None:
+                self.group_entry(group_id)["manifest"] = dict(m.raw)
+        readers = self._team_readers_for(group_id) or None
         outer, blobs, file_bits = [], [], 0
         files = list(files or [])
         if files:
@@ -257,15 +273,28 @@ class PrivateMixin:
                 (self.manifest_data(group_id).get("attachments") or {}).get("max_size"))
             inner = list(inner or []) + inner_files
             file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
-        two = await self.takes_sealedbox2(group_id)        # both ends can (UN-RFC 0009, 2.3)
-        copy_to = self.identity().public_key if (two and remember) else None
-        art = await self._post_with_postage(group_id, lambda bits: inbox_article(
-            group_id, owner_key, from_name="" if anonymous else self.display_name(),
-            subject=subject, body=body, sender=sender,
-            reply_inbox=None if anonymous else self.my_inbox,
-            references=references, content_type=content_type, kind=kind,
-            pow_bits=bits + file_bits, extra=inner, two_envelopes=two, copy_to=copy_to,
-            outer_extra=outer), blobs=blobs)
+        two = not readers and await self.takes_sealedbox2(group_id)   # both ends (0009, 2.3)
+        copy_to = self.identity().public_key if (two and remember and not as_team) else None
+
+        def build(bits, readers=readers):
+            return inbox_article(
+                group_id, owner_key, from_name=from_name,
+                subject=subject, body=body, sender=sender, reply_inbox=reply_to,
+                references=references, content_type=content_type, kind=kind,
+                pow_bits=bits + file_bits, extra=inner, two_envelopes=two and not readers,
+                copy_to=copy_to, outer_extra=outer, readers=readers)
+        try:
+            art = await self._post_with_postage(group_id, build, blobs=blobs)
+        except SessionError as exc:
+            if "team" not in str(exc):
+                raise
+            # it became (or stopped being) a team inbox since its manifest was read here
+            m = await self.fetch_manifest(group_id)
+            if m is None:
+                raise
+            self.group_entry(group_id)["manifest"] = dict(m.raw)
+            readers = self._team_readers_for(group_id) or None
+            art = await self._post_with_postage(group_id, lambda bits: build(bits, readers), blobs=blobs)
         msgid = art.message_id
         if not remember:
             return msgid
@@ -534,7 +563,14 @@ class PrivateMixin:
         self.save()
 
     def _open_private(self, msg: Message, art: Article, group_id: str) -> None:
-        owner = self._identity_for_fingerprint(split_group_id(group_id)[1])
+        if art.get("Encrypted", "").strip() == INBOX_SCHEME_TEAM:    # UN-RFC 0047 section 4
+            owner = self.team_key(group_id)
+            if owner is None:
+                msg.readable = False
+                msg.subject = "(a message for the team's readers)"
+                return
+        else:
+            owner = self._identity_for_fingerprint(split_group_id(group_id)[1])
         if owner is None:
             msg.readable = False
             msg.subject = "(private message for the inbox owner)"
@@ -542,7 +578,9 @@ class PrivateMixin:
         try:
             inner, sender = open_inbox_article(art, owner)
         except ArticleError as err:
-            msg.readable, msg.error, msg.subject = False, str(err), "(unreadable private message)"
+            team = art.get("Encrypted", "").strip() == INBOX_SCHEME_TEAM    # not (or no longer) yours
+            msg.readable, msg.error = False, str(err)
+            msg.subject = "(a message for the team's readers)" if team else "(unreadable private message)"
             return
         msg.subject, msg.body = inner.get("Subject", ""), inner.body
         msg.content_type = inner.get("Content-Type", "")
@@ -553,6 +591,10 @@ class PrivateMixin:
                 msg.references = inner["References"].split()
             msg.supersedes = (inner.get("Supersedes") or "").split()[:1]
         msg.reply_inbox = inner.get("Reply-Inbox")
+        if inner.get("Sender-Team") and sender is not None:        # on an inbox's behalf (0047, 8)
+            msg.team = {"group": inner["Sender-Team"].strip()}
+        if inner.get("Team-Inbox") and inner.get("Team-Key") and sender is not None:
+            msg.team_invite = {"group": inner["Team-Inbox"].strip(), "seed": inner["Team-Key"].strip()}
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
             msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
@@ -566,6 +608,7 @@ class PrivateMixin:
             msg.author_key = msg.sender_key          # show the real sender, not the one-time key
             msg.sender_ripening = (inner.get("Key-Ripening") or "").strip() or None
             msg.from_name = inner.get("From", "")
-            naming.note_certificate(self, msg.sender_key, inner.get(names.HEADER))
+            if not msg.team:                  # a team key is never a person: no names (0047, 8)
+                naming.note_certificate(self, msg.sender_key, inner.get(names.HEADER))
             if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with you (0022, 6)
                 self._keep_private_profile(msg, "me")

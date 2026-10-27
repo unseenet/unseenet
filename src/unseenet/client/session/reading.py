@@ -270,6 +270,7 @@ class ReadingMixin:
             self.emit(ev.GroupUpdated(group_id, new))        # new posts, not control articles
         if group_id == self.my_inbox:
             await self.check_private_senders()     # UN-RFC 0025, section 3.5 (if wanted)
+            await self.check_team_senders()        # UN-RFC 0047, section 8
             await self.check_notices()             # UN-RFC 0032, section 5
         if group_id == self.my_inbox:
             self._schedule_notice_posting()        # approved notices still to go (4.3)

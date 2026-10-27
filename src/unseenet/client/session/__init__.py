@@ -28,6 +28,7 @@ reads and posts. Clients use the one class; its code is split by area:
     exporting.py  your data as a file (UN-RFC 0049 section 7)
     rules.py      your own rules for your feed and groups (#615)
     reports.py    spam reports: issuers you follow, hidden posts, issuing (UN-RFC 0045)
+    teams.py      team inboxes: readers, invitations, replying on an inbox's behalf (0047)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -57,7 +58,7 @@ from ...core.backoff import Backoff
 from ...core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ...core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
 from ...core.groups import MAX_SUPERSEDES, parse_supersedes
-from ...core.groups import (INBOX_NAME, INBOX_SCHEME, INBOX_SCHEMES, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
+from ...core.groups import (INBOX_NAME, INBOX_SCHEME, INBOX_SCHEMES, INBOX_SCHEME_TEAM, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_group_id, make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id,
@@ -226,6 +227,10 @@ class Message:
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
     node: str = ""                        # the node it was read from (a local group: #134)
+    # written on a team inbox's behalf (UN-RFC 0047 section 8): {"group"}; checked with
+    # Session.team_sender. And a team key handed to you: {"group", "seed"} (section 6)
+    team: dict | None = None
+    team_invite: dict | None = field(default=None, repr=False)
     # hidden by a spam report from an issuer you follow (UN-RFC 0045 section 7.3): who,
     # why and which report - set by ``Session.visible``; clients show it in its place
     reported: dict | None = None
@@ -283,6 +288,8 @@ class Message:
             # UN-RFC 0045 section 7.3: hidden by a report - who, why, which report
             "reported": dict(self.reported) if self.reported else None,
             "node": self.node or None,                 # where it was read (#134)
+            "team": dict(self.team) if self.team else None,    # on an inbox's behalf (0047)
+            "team_invite": ({"group": self.team_invite["group"]} if self.team_invite else None),
         }
 
 
@@ -446,9 +453,10 @@ from .notify import NotifyMixin  # noqa: E402
 from .exporting import ExportMixin  # noqa: E402
 from .rules import RulesMixin  # noqa: E402
 from .reports import ReportsMixin  # noqa: E402
+from .teams import TeamsMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

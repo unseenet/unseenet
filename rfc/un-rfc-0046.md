@@ -983,6 +983,29 @@ so every front end hides the same posts for the same reasons.
   maintainer, the whole list of issuers the hierarchy's readers follow
   by default, at most 16 (UN-RFC 0045 section 7.1).
 
+## 4.22 Team Inboxes
+
+Team inboxes (UN-RFC 0047) are read with team keys kept in the vault; the
+owner key is needed only to change who reads.
+
+- `GET /api/teams`: `{"teams": [{"group", "name", "reader"}]}`, the team
+  inboxes the user reads; `reader` is false once the owner removed their
+  key (a front end offers to forget it). Each is read like any group
+  (section 4.3) and shown as a mailbox of its own, never mixed into the
+  user's inbox.
+- A private post that hands the user a team key has `team_invite`
+  (`{"group"}`); `POST /api/teams/accept` `{"id"}` checks it against the
+  inbox's owner and readers and keeps the key: `{"group"}`.
+  `POST /api/teams/forget` `{"group"}` removes a team key.
+- `POST /api/private` takes `as_team` (a team inbox): written with the
+  team key, on the inbox's behalf, answers going to that inbox. A message
+  written so has `team` in its row, `{"group", "name", "verified"}`, and
+  `who` is the team's name: a front end MUST NOT show it as a person.
+- As the owner: `GET /api/teams/readers?group=` `{"group", "readers",
+  "team_name"}`; `POST /api/teams/readers` `{"group", "add": <key>,
+  "team_name"}` makes a team key and sends it to that person's inbox,
+  `{"group", "remove": <team key>}` removes one. Both answer as `GET`.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

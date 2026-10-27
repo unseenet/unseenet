@@ -261,6 +261,10 @@ class Groups:
     def _row(s: Session, m: Message, depth: int, mine: set, patterns, keys: set) -> dict:
         if m.to_key:
             who, key = "You → " + s.label_of(m.to_key), m.to_key
+        elif m.private and m.sender_key and s.team_sender(m):    # on an inbox's behalf (0047, 8)
+            t = s.team_sender(m)
+            who = (t["name"] or "a team inbox") + ("" if t["verified"] else " (not verified)")
+            key = m.sender_key
         elif m.private and m.sender_key:
             who, key = s.identity_label(m.sender_key, m.from_name), m.sender_key
         else:
@@ -284,7 +288,8 @@ class Groups:
                 "contact": bool(key and s.contact_name(key)),
                 "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6
                 "identicon": _identicon(key),                         # UN-RFC 0022 section 8.4
-                "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m)}
+                "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m),
+                "team": s.team_sender(m)}        # {"group", "name", "verified"} or None (0047)
 
     @staticmethod
     def _pool(s: Session, gid: str) -> list[Message]:
