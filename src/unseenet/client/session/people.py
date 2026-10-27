@@ -497,7 +497,9 @@ class PeopleMixin:
     def visible(self, msgs: list["Message"]) -> list["Message"]:
         """Leave out messages from people you ignore (your own are always shown), and
         show only the newest version of an edited post (UN-RFC 0042). With
-        private_min_ripe set, private posts from unripe strangers are left out too."""
+        private_min_ripe set, private posts from unripe strangers are left out too.
+        Posts hidden by spam reports stay, marked with ``Message.reported``, so that
+        clients show them as hidden and why (UN-RFC 0045 section 7.3)."""
         msgs = [m for m in resolve_edits(msgs) if not m.private_profile]   # not posts (0022, 6)
         if self.private_min_ripe() is not None:
             msgs = [m for m in msgs if self.sender_shown(m)]
@@ -509,11 +511,11 @@ class PeopleMixin:
         if not self.data.get("show_blocked"):          # maintainers' blocks (UN-RFC 0018, 5.4)
             for gid in groups:
                 banned[gid] |= set(self.hierarchy_blocks(gid))
-        if not self.data["ignored"] and not any(banned.values()):
-            return list(msgs)
-        return [m for m in msgs if m.to_key is not None
-                or not (self.is_ignored(m.sender_key or m.author_key)
-                        or (not m.private and m.author_key in banned.get(m.group, ())))]
+        if self.data["ignored"] or any(banned.values()):
+            msgs = [m for m in msgs if m.to_key is not None
+                    or not (self.is_ignored(m.sender_key or m.author_key)
+                            or (not m.private and m.author_key in banned.get(m.group, ())))]
+        return self.mark_reported(list(msgs))       # spam reports: shown as hidden (0045, 7.3)
 
     def hierarchy_blocks(self, group_id: str) -> dict[str, tuple[str, str]]:
         """{key: (hierarchy, reason)} that maintainers block for this group."""
@@ -643,6 +645,8 @@ class PeopleMixin:
             info = {}
         if info.get("operator") and info.get("contact"):
             add(f"The operator of {info.get('name', 'the node')}", info["operator"], info["contact"])
+        for key in sorted(self.report_issuers_for(msg.group)):     # UN-RFC 0045 section 7.4
+            add(f"Report issuer {self.identity_label(key)}", key)    # its inbox; it decides
         return out
 
     async def report(self, msg: "Message", targets: list[tuple[str, str, str]], note: str = "",

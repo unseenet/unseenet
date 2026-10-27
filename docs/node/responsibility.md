@@ -37,7 +37,9 @@ node is open to anyone.
   to you through your node's contact inbox (UN-RFC 0011). Look at reports
   and act on them: drop the group, or turn on
   [`honour_blocks`](configuration.md#honour_blocks-maintainers-blocks) to
-  follow the blocks of hierarchy maintainers.
+  follow the blocks of hierarchy maintainers, or
+  [`[[follow_reports]]`](configuration.md#follow_reports-spam-reports) to
+  follow the spam reports of issuers you trust.
 - **Know the law where you live.** Hosting other people's content is
   treated differently from country to country. Unseenet's design reduces
   the risk; it does not remove your responsibility.

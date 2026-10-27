@@ -57,6 +57,7 @@ def load_node_config(path: Path | None):
                       require_peer_auth=node.get("require_peer_auth", True),
                       pull_interval=float(node.get("pull_interval", 3600)),
                       honour_blocks=bool(node.get("honour_blocks", False)),
+                      follow_reports=_follow_reports(path, data.get("follow_reports", [])),
                       profiles=str(node.get("profiles", "accept")),
                       avatars=str(node.get("avatars", "refuse")),
                       sites=str(node.get("sites", "refuse")),
@@ -65,6 +66,32 @@ def load_node_config(path: Path | None):
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
                       blobs=_blobs_config(path, data.get("blobs", {})),
                       peers=peers)
+
+
+def _follow_reports(path: Path, items) -> list[dict]:
+    """[[follow_reports]] (UN-RFC 0045 section 6): the report issuers this node follows,
+    each with ``posts`` ("hide" or "delete") and ``keys`` ("refuse", "surcharge" or
+    "ignore"). Nobody unless the operator names them."""
+    from ..core import crypto
+    from ..core.reports import NODE_KEYS, NODE_POSTS
+    out = []
+    for i, f in enumerate(items if isinstance(items, list) else []):
+        where = f"{path}: follow_reports #{i + 1}"
+        if not isinstance(f, dict):
+            sys.exit(f"{where}: a table with issuer, posts and keys")
+        try:
+            crypto.key_from_text(f.get("issuer"))
+        except (crypto.CryptoError, TypeError, ValueError):
+            sys.exit(f"{where}: issuer must be a key (ed25519:...)")
+        posts, keys = f.get("posts", "hide"), f.get("keys", "ignore")
+        if posts not in NODE_POSTS:
+            sys.exit(f"{where}: posts must be one of {', '.join(NODE_POSTS)}")
+        if keys not in NODE_KEYS:
+            sys.exit(f"{where}: keys must be one of {', '.join(NODE_KEYS)}")
+        if any(o["issuer"] == f["issuer"] for o in out):
+            sys.exit(f"{where}: {f['issuer']} is followed twice")
+        out.append({"issuer": f["issuer"], "posts": posts, "keys": keys})
+    return out
 
 
 def _blobs_config(path: Path, b: dict) -> dict | None:

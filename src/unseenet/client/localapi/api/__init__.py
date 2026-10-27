@@ -22,6 +22,8 @@ The code follows the sections of UN-RFC 0046, one file each:
     nodes.py      4.17 your nodes: by name, add, remove, the default
     recovery.py   4.18 recovery words: showing, checking, restoring (UN-RFC 0050)
     copying.py    4.19 copying to another device (UN-RFC 0050)
+    rules.py      4.20 your own rules (UN-RFC 0051)
+    reports.py    spam reports: issuers, hidden posts, issuing (UN-RFC 0045)
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -132,10 +134,12 @@ from .nodes import Nodes  # noqa: E402
 from .recovery import Recovery  # noqa: E402
 from .copying import Copying  # noqa: E402
 from .rules import Rules  # noqa: E402
+from .reports import Reports  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules):
+               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules,
+               Reports):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

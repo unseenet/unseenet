@@ -70,7 +70,7 @@ class Feeder:
             taken = 0
             for msgid in due:
                 raw = store.get(msgid)
-                if raw is None:          # expired or cancelled meanwhile
+                if raw is None or self.node.report_hidden(msgid):   # gone, or reported (0045)
                     store.dequeue(self.peer.name, msgid)
                     continue
                 code, _ = await client.command(f"CHECK {msgid}")

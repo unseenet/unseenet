@@ -48,7 +48,7 @@ class ReadingCommands:
         store = self.node.store
         if args and args[0].startswith("<"):
             raw = store.get(args[0])
-            if raw is None:
+            if raw is None or self.node.report_hidden(args[0]):    # UN-RFC 0045 section 6
                 self.send("430 no such article")
                 return None
             return 0, args[0], raw
@@ -57,6 +57,8 @@ class ReadingCommands:
             return None
         number = int(args[0]) if args and args[0].isdigit() else self.current
         found = store.by_number(self.group, number) if number else None
+        if found and self.node.report_hidden(found[0]):
+            found = None
         if not found:
             self.send("423 no such article number")
             return None
@@ -110,7 +112,7 @@ class ReadingCommands:
         store = self.node.store
         if args and args[0].startswith("<"):
             raw = store.get(args[0])
-            if raw is None:
+            if raw is None or self.node.report_hidden(args[0]):    # UN-RFC 0045 section 6
                 self.send("430 no such article")
                 return None
             return [(0, args[0], raw)]
@@ -135,7 +137,7 @@ class ReadingCommands:
         for n in nums:
             if lo <= n <= hi:
                 found = store.by_number(self.group, n)
-                if found:
+                if found and not self.node.report_hidden(found[0]):
                     out.append((n, found[0], found[1]))
         if not out:
             self.send("423 no articles in that range")

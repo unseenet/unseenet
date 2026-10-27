@@ -308,6 +308,7 @@ larger than:
 | `names@`     | 64 KiB                   | Issuers only (UN-RFC 0019)                    |
 | `attest@`    | 64 KiB                   | Issuers only; revocations are sharded (UN-RFC 0036 section 7) |
 | `site@`      | 64 KiB                   | Only where the operator carries sites (UN-RFC 0035) |
+| `reports@`   | 4 KiB                    | Policy and contact of a report issuer (UN-RFC 0045 section 3) |
 
 The numbers are measured (October 2026), with the reference
 implementation, on the largest manifests the other documents allow and

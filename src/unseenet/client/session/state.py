@@ -28,6 +28,7 @@ SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "m
             "notifications",      # whether, and how, clients tell you of what is new
             "feed_rules",         # your own rules for your feed and groups (section 4.5, #615)
             "feed_rules_off",     # ... turned off for now, kept (UN-RFC 0051 section 3)
+            "report_issuers",     # spam report issuers followed and turned off (UN-RFC 0045, 7.2)
             "clients")                # each client's own: the TUI's theme, the GUI's (UN-RFC 0044, 4.2)
 
 

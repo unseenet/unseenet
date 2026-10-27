@@ -45,7 +45,7 @@ class Forwarding:
         n = 0
         for msgid in message_ids:
             meta = self.store.get_meta(msgid)
-            if meta and wildmat(peer.groups, meta[0]):
+            if meta and wildmat(peer.groups, meta[0]) and not self.report_hidden(msgid):
                 self.store.enqueue(peer.name, msgid, time.time())
                 n += 1
         for event in self._listeners:

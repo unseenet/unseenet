@@ -95,6 +95,9 @@ class NodeConfig:
     excludes: str = ""                   # wildmat of groups not carried by choice (UN-RFC 0021)
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
+    # UN-RFC 0045 section 6: the report issuers this node follows, each
+    # {"issuer": key, "posts": "hide"|"delete", "keys": "refuse"|"surcharge"|"ignore"}
+    follow_reports: list[dict] = field(default_factory=list)
     profiles: str = "accept"             # UN-RFC 0022 section 10: carry profile@ groups
     avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
     sites: str = "refuse"                # UN-RFC 0035 6.2: sites stay, so off by default
@@ -167,6 +170,7 @@ from .kept import Kept  # noqa: E402
 from .blobs import Blobs  # noqa: E402
 from .blocks import Blocks  # noqa: E402
 from .edits import Edits  # noqa: E402
+from .reports import Reports  # noqa: E402
 from .forwarding import Forwarding  # noqa: E402
 from .connection import ConnectionBase  # noqa: E402
 from .auth_commands import AuthCommands  # noqa: E402
@@ -178,7 +182,8 @@ from .blob_commands import BlobCommands  # noqa: E402
 from .meet_commands import MeetCommands  # noqa: E402
 
 
-class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Edits, Forwarding):
+class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Reports, Edits,
+           Forwarding):
     """A node: takes articles from clients and peers, keeps them, passes them on.
     Split into parts by area (node/server/*.py, see above)."""
 

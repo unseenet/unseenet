@@ -141,6 +141,7 @@ channel group named in its root list entry (`list`), the same way:
 | `groups`    | array   | yes  | Endorsed groups (may be empty)                 |
 | `sub`       | array   | no   | Sub-hierarchies (section 5.3)                  |
 | `blocked`   | array   | no   | Blocked identities (section 5.4)               |
+| `report_issuers` | array | no | Spam report issuers its readers follow by default, at most 16 keys (UN-RFC 0045 section 7.1) |
 
 An entry in `groups`:
 

@@ -42,6 +42,7 @@ class Accepting:
                 self._hold(raw, source, from_peer)
             raise
         self.stats.accepted_one(how or ("peer" if from_peer else "client"))
+        self._reports_arrived(art)                 # UN-RFC 0045 section 6
         self._release_held(art.message_id)
         if art.control == ["manifest"]:
             self._kb_waiting.pop(art.group, None)
@@ -187,7 +188,8 @@ class Accepting:
         blobs = bl.check_article(art, None if is_manifest or manifest is None else manifest.raw)
         group_pow = manifest.min_pow if manifest is not None and not is_manifest else 0
         required = (self._required_pow(art, manifest, group_pow, source, from_peer)
-                    + bl.extra_bits(art))                       # section 4.5
+                    + bl.extra_bits(art)                        # section 4.5
+                    + self._report_surcharge(art))              # UN-RFC 0045 section 6
         if art.proven_pow() < required:
             raise ArticleError("postage", f"need {required} bits")
 
@@ -209,6 +211,7 @@ class Accepting:
                     raise ArticleError("permission", "this key has reacted to that article "
                                        "already; a change names it in Supersedes")
             self._check_blocked(art)
+            self._check_reported(art)                       # UN-RFC 0045 section 6
             carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)
             if page:
@@ -226,7 +229,8 @@ class Accepting:
                 self._notify_watchers(art)
                 log.info("accepted %s in %s; fetching its blobs", art.message_id, art.group)
                 return art
-        self._enqueue(art, source)
+        if not self.report_hidden(art.message_id):           # UN-RFC 0045: not forwarded
+            self._enqueue(art, source)
         self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
         return art

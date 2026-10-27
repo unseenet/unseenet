@@ -89,6 +89,33 @@ operator. The node reads the blocks from the lists it carries (the
 project's root list and the maintainers' lists) and says in its node
 information whether it honours them.
 
+### `[[follow_reports]]`: spam reports
+
+Anyone can publish spam reports: signed lists of posts and identities,
+each with a reason, in a group of their own (`reports@<fp>`,
+[UN-RFC 0045](../spec/un-rfc-0045.md)). Nobody has to listen. Your node
+follows **nobody** unless you name an issuer here, and for each one you
+choose what it does:
+
+```toml
+[[follow_reports]]
+issuer = "ed25519:..."   # the issuer's key
+posts  = "hide"          # "hide": kept, not served, not forwarded - or "delete"
+keys   = "surcharge"     # "refuse" new posts, "surcharge" (+6 bits postage), or "ignore"
+```
+
+The node reads the issuer's reports from its `reports@` group, which it
+carries like other key-bound groups, and applies them as they arrive -
+also to posts that come later. When the issuer withdraws a report, a
+hidden post is served again. A reported identity can still renew its own
+key-bound groups (inbox, profile, feed), and nothing an issuer reports
+ever makes posting cheaper for anyone.
+
+Readers' clients decide for themselves which issuers they follow, and
+show a post as "Hidden by ... : spam" rather than dropping it. This
+setting decides only what *your node* carries and passes on. Your node
+information lists the issuers you follow (`policy.report_issuers`).
+
 ### `new_groups`: which groups the node carries
 
 | Value | Behaviour |

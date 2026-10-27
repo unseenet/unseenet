@@ -138,6 +138,7 @@ class HierarchyList:
     groups: dict[str, str]                     # name -> endorsed Group ID
     sub: dict[str, Hierarchy]                  # full name -> governed or free sub-hierarchy
     blocked: tuple[Block, ...] = ()            # section 5.4
+    report_issuers: tuple[str, ...] = ()       # UN-RFC 0045 section 7.1: followed by default
 
 
 MAX_BLOCK_REASON = 200
@@ -218,7 +219,21 @@ def parse_hierarchy_list(text: str, hierarchy: str) -> HierarchyList:
         seen[name] = item["group"]
     groups = {n: g for n, g in seen.items() if n not in twice}       # endorsed twice: neither counts
     return HierarchyList(hierarchy, str(data.get("updated", ""))[:32], groups, sub,
-                         _blocks(data.get("blocked")))
+                         _blocks(data.get("blocked")), _issuers(data.get("report_issuers")))
+
+
+def _issuers(items) -> tuple[str, ...]:
+    """Valid keys of ``report_issuers`` (UN-RFC 0045 section 7.1), at most 16, each once."""
+    from .core.reports import MAX_HIERARCHY_ISSUERS
+    out: list[str] = []
+    for key in items if isinstance(items, list) else []:
+        try:
+            crypto.key_from_text(key)
+        except (crypto.CryptoError, TypeError, ValueError):
+            continue
+        if key not in out:
+            out.append(key)
+    return tuple(out[:MAX_HIERARCHY_ISSUERS])
 
 
 def builtin_checkgroups() -> HierarchyList:
@@ -286,6 +301,18 @@ def blocks_for(name: str, root: dict[str, Hierarchy], lists: dict[str, Hierarchy
         for b in lst.blocked:
             if b.key not in out and not _expired(b, now):
                 out[b.key] = (lst.hierarchy, b.reason)
+    return out
+
+
+def report_issuers_for(name: str, root: dict[str, Hierarchy],
+                       lists: dict[str, HierarchyList]) -> dict[str, str]:
+    """{issuer key: hierarchy} that the maintainers above a group name report for, by
+    default (UN-RFC 0045 section 7.1): every list on the way down adds to those above;
+    an issuer named higher up is reported with the highest hierarchy."""
+    out: dict[str, str] = {}
+    for lst in chain(name, root, lists):
+        for key in lst.report_issuers:
+            out.setdefault(key, lst.hierarchy)
     return out
 
 
