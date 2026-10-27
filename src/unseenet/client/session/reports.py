@@ -312,11 +312,17 @@ class ReportsMixin:
         return ctx()
 
     async def start_reports(self, policy: str = "", contact: str = "",
-                            automatic: bool = False) -> str:
-        """Start, or change, this identity's ``reports@`` channel: what it reports
+                            automatic: bool = False, issuer: str | None = None) -> str:
+        """Start, or change, an identity's ``reports@`` channel: what it reports
         (``policy``), where to object (``contact``: an inbox or a URL), and whether a
-        program makes the reports (section 8). Your inbox is made too, if you have none:
-        reports sent to you arrive there. Returns its Group ID."""
+        program makes the reports (section 8). ``issuer``: a named identity in the vault
+        (#661: one per kind, as unseenet-watchman keeps), else the one in use - acting
+        as it, its inbox made too. Returns its Group ID."""
+        if issuer is not None and issuer != self.default_identity_name():
+            if issuer not in self.data.get("identities", {}):
+                raise SessionError(f"no identity {issuer!r} in this vault")
+            with self._acting(issuer):
+                return await self.start_reports(policy, contact, automatic)
         extra = {"policy": policy.strip() or None, "contact": contact.strip() or None,
                  "automatic": True if automatic else None}
         gid = self.my_reports_group()

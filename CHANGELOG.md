@@ -7,6 +7,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **For programs that follow every group** (#669, asked for by unseenet-watchman):
+  `Session.skip_to_now(group)` begins at the newest article without fetching what is
+  there (its manifest read, so its settings are known); `fetch_group(group, skip=...)`
+  reads the overview first (`OVER`, `nntp.Client.over`) and fetches only the articles
+  the function does not skip - manifests and control articles always; and
+  `fetch_group(group, keep=False)` keeps nothing but how far it has read and returns
+  just the new messages.
+- **Start the reports or labels channel of a named identity** (#661):
+  `start_reports(..., issuer=)`, `start_labels(..., labeller=)` and
+  `publish_labels(..., labeller=)`, as `publish_report` already did - one issuer per
+  kind in one vault, the identity in use unchanged.
 - **Looking labels and reports up, and their expiry** (#670, spec only; accepted by the
   maintainer 27 Oct): UN-RFC 0053 sections 7.1-7.2 and UN-RFC 0045 section 6.1 -
   `XUN-MARKS`: a reader asks its node which signed label and report articles name the

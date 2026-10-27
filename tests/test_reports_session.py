@@ -237,3 +237,20 @@ async def test_an_issuer_beside_your_own_identity_publishes_from_your_vault(net)
     assert r.message_id == rid and r.issuer == issuer.key_text   # as the issuer
     await me.withdraw_report(rid)
     assert await me.my_reports() == []
+
+
+async def test_start_reports_of_a_named_identity(net):
+    """#661: one issuer per kind in one vault (unseenet-watchman); the one in use stays."""
+    bot = net("bot")
+    bot.new_identity("spam", "Spam")
+    bot.new_identity("phishing", "Phishing")
+    for name in ("spam", "phishing"):
+        gid = await bot.start_reports(policy=name, automatic=True, issuer=name)
+        assert gid == bot.my_reports_group(name)
+    assert bot.default_identity_name() == "bot" and not bot.is_issuer()
+    assert sorted(bot.issuer_names()) == ["phishing", "spam"]
+    assert bot.manifest_data(bot.my_reports_group("spam"))["policy"] == "spam"
+    with pytest.raises(SessionError):
+        await bot.start_reports(issuer="nobody")
+    await bot.start_labels(policy="labels", labeller="spam")
+    assert bot.is_labeller("spam") and not bot.is_labeller()

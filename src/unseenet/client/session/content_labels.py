@@ -235,8 +235,14 @@ class ContentLabelsMixin:
         return bool(self.data["groups"].get(self.my_labels_group(name), {}).get("owner"))
 
     async def start_labels(self, policy: str = "", contact: str = "", automatic: bool = False,
-                           topics: bool = False) -> str:
-        """Start, or change, this identity's ``labels@`` channel (section 3)."""
+                           topics: bool = False, labeller: str | None = None) -> str:
+        """Start, or change, an identity's ``labels@`` channel (section 3): ``labeller``
+        a named identity in the vault, else the one in use (as ``start_reports``)."""
+        if labeller is not None and labeller != self.default_identity_name():
+            if labeller not in self.data.get("identities", {}):
+                raise SessionError(f"no identity {labeller!r} in this vault")
+            with self._acting(labeller):
+                return await self.start_labels(policy, contact, automatic, topics)
         extra = {k: v for k, v in (("policy", policy.strip() or None), ("contact", contact.strip() or None),
                                    ("automatic", True if automatic else None),
                                    ("topics", True if topics else None)) if v is not None}
@@ -261,9 +267,13 @@ class ContentLabelsMixin:
         self.save()
         return gid
 
-    async def publish_labels(self, posts, note: str = "") -> str:
+    async def publish_labels(self, posts, note: str = "", labeller: str | None = None) -> str:
         """Publish labels: ``posts`` as (Message-ID, Group ID, [labels]); ``[]`` takes a
-        labeller's earlier labels of that post back (section 4). Returns its Message-ID."""
+        labeller's earlier labels of that post back (section 4). ``labeller``: a named
+        identity in the vault, else the one in use. Returns its Message-ID."""
+        if labeller is not None and labeller != self.default_identity_name():
+            with self._acting(labeller):
+                return await self.publish_labels(posts, note)
         if not self.is_labeller():
             raise SessionError("start your labels channel first (start_labels)")
         try:
