@@ -133,6 +133,9 @@ async def c_group_edit(app: App, args) -> None:
             keys = [k for k in data.get("report_issuers", []) if k not in (remove or [])]
             keys += [crypto.key_to_text(crypto.key_from_text(k)) for k in (add or []) if k not in keys]
             fields["report_issuers"] = keys or None
+        if getattr(args, "tags", None) is not None:               # UN-RFC 0052 section 5
+            from ..core import tags as tg
+            fields["tags"] = tg.normalize(args.tags.split(",")) or None
         if getattr(args, "team_name", None) is not None:          # UN-RFC 0047 section 3
             fields["team_name"] = args.team_name.strip() or None
         if args.ban or args.unban:

@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Tags** (#657, UN-RFC 0052, new): an author tags their own post with up to 8
+  words - topics, and content warnings from a fixed set shared with labels
+  (`profanity`, `sexual`, `nudity`, `violence`, `gore`, `spoiler`) - in a signed
+  `Tags` header, never read from the text (`#` stays a group reference); in a closed
+  group inside the encryption. A group's owner may give it `tags` in its manifest.
+  Nodes check the form only (`441 syntax`) and never act on tags. `core.tags`;
+  `Session.post(..., tags=)`, `Message.tags`, `GroupInfo.tags`; `tags` in the local
+  API's post and group settings; `unseenet post --tag`, `group-edit --tags`.
+
 - **One list of report reasons** (#659): `core.reports.REASONS` is the one list -
   clients, issuers and bots all use it - with `REASON_LABELS` to show them and
   `READER_REASONS` for what a reader's report action offers (all but `flood`). New:

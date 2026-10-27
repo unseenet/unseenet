@@ -85,11 +85,17 @@ class Writing:
             except origins.OriginError as exc:
                 raise SessionError(str(exc)) from exc
 
+        tags = data.get("tags") or []                       # the author's own (UN-RFC 0052)
+        if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+            raise SessionError("tags is a list of words")
+        from ....core import tags as _tg
+        tags = _tg.normalize(tags)
+
         async def send() -> str:
-            if kind == KIND_CHAT and not refs and not files and not origin:
+            if kind == KIND_CHAT and not refs and not files and not origin and not tags:
                 return await s.send_chat(gid, body)
             return await s.post(gid, subject, body, references=refs or None, kind=kind,
-                                files=files or None, origin=origin)
+                                files=files or None, origin=origin, tags=tags or None)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval

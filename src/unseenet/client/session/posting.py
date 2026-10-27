@@ -351,7 +351,8 @@ class PostingMixin:
                    content_type: str | None = None,
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
-                   from_name: str | None = None, files=None, origin: dict | None = None) -> str:
+                   from_name: str | None = None, files=None, origin: dict | None = None,
+                   tags=None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
 
         ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
@@ -361,7 +362,8 @@ class PostingMixin:
         there; its ``Date`` is still the time of posting.
         ``files`` are prepared files (``prepare_files``): checked against the group
         first, then sent as blobs with the post, which pays their extra postage
-        (UN-RFC 0027 sections 4.5, 6)."""
+        (UN-RFC 0027 sections 4.5, 6). ``tags``: the author's own, at most 8 (UN-RFC
+        0052) - normalised here; in a closed group they go inside the encryption."""
         if self.portal_warning(group_id):
             # Clients ask first (portal_warning / accept_portals); this is the safety net.
             raise SessionError("this group has a portal: its posts are also published outside "
@@ -372,6 +374,8 @@ class PostingMixin:
         if kind == KIND_POST and not subject.strip():
             raise SessionError("a post needs a subject")
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
+        from ...core import tags as tg
+        tag_header = tg.header(tg.normalize(tags or [])) if kind != "reaction" else None   # 0052
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
         if origin:
@@ -416,7 +420,7 @@ class PostingMixin:
                     group_id, epoch, keys, author, from_name=shown,
                     subject=subject, body=body, references=references, kind=kind,
                     content_type=content_type, pow_bits=bits + file_bits, extra=edit_header,
-                    inner_extra=inner_files)
+                    inner_extra=inner_files + ([tag_header] if tag_header else []))
         else:
             await naming.keep_my_names(self)              # a service's own names, once a day
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
@@ -426,7 +430,8 @@ class PostingMixin:
                 art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
                                   from_name=shown, references=references,
                                   extra=[("Content-Type", content_type), ("Message-Kind", kind)]
-                                  + ([cert] if cert else []) + edit_header)
+                                  + ([cert] if cert else []) + edit_header
+                                  + ([tag_header] if tag_header else []))
                 return art.finalize(author, bits + file_bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):

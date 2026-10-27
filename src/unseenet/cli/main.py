@@ -112,6 +112,7 @@ def client_main(argv=None) -> None:
                    help="a spam report issuer this group's readers follow by default (UN-RFC 0045 7.5)")
     s.add_argument("--remove-report-issuer", action="append", metavar="KEY")
     s.add_argument("--team-name", help="a team inbox: the name replies go out as (UN-RFC 0047), '' for none")
+    s.add_argument("--tags", help="the group's tags, comma-separated, '' for none (UN-RFC 0052 section 5)")
     _group_options(s, create=False)
     s = sub.add_parser("group-show", help="show a group's current manifest")
     s.add_argument("group", help="full group ID, name@fingerprint")
@@ -137,6 +138,8 @@ def client_main(argv=None) -> None:
     s.add_argument("--body", help="the text; without it, read from stdin")
     s.add_argument("--kind", choices=["post", "chat"], default="post",
                    help="a post with a subject, or a chat line (UN-RFC 0028)")
+    s.add_argument("--tag", action="append", metavar="TAG",
+                   help="a tag of your own, up to 8: a topic or a warning such as spoiler (UN-RFC 0052)")
     s.add_argument("--reply-to", metavar="MSGID", help="reply to (or comment on) this post")
     s.add_argument("--edit", metavar="MSGID",
                    help="a new version of your own post (UN-RFC 0042); the body replaces it")

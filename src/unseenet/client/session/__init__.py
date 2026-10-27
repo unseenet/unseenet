@@ -227,6 +227,7 @@ class Message:
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
     node: str = ""                        # the node it was read from (a local group: #134)
+    tags: tuple = ()                      # the author's own tags (UN-RFC 0052)
     # written on a team inbox's behalf (UN-RFC 0047 section 8): {"group"}; checked with
     # Session.team_sender. And a team key handed to you: {"group", "seed"} (section 6)
     team: dict | None = None
@@ -288,6 +289,7 @@ class Message:
             # UN-RFC 0045 section 7.3: hidden by a report - who, why, which report
             "reported": dict(self.reported) if self.reported else None,
             "node": self.node or None,                 # where it was read (#134)
+            "tags": list(self.tags),                   # the author's (UN-RFC 0052 section 3)
             "team": dict(self.team) if self.team else None,    # on an inbox's behalf (0047)
             "team_invite": ({"group": self.team_invite["group"]} if self.team_invite else None),
         }
@@ -306,6 +308,7 @@ class GroupInfo:
     view: str = "threads"                 # what you see: threads, chat or data
     owner_view: str = "threads"           # what the owner chose (UN-RFC 0008, 3.1)
     kinds: tuple[str, ...] = ()           # what it takes: chat lines, posts (UN-RFC 0028)
+    tags: tuple[str, ...] = ()            # the group's tags, its owner's (UN-RFC 0052, 5)
     local: bool = False                   # lives on one node only (UN-RFC 0015)
     low_latency: bool = False
     owner: bool = False                   # you own it
@@ -344,6 +347,7 @@ class GroupInfo:
             "type": self.type, "owner_key": self.owner_key, "owner": self.owner,
             "subscribed": self.subscribed, "nodes": list(self.nodes), "listed": self.listed,
             "view": self.view, "owner_view": self.owner_view, "kinds": list(self.kinds),
+            "tags": list(self.tags),                   # the group's tags (UN-RFC 0052 section 5)
             "local": self.local, "low_latency": self.low_latency,
             "read_from": list(self.read_from),       # a local group: your nodes read (#134)
             "team": dict(self.team) if self.team else None,   # {"name", "reader"} (0047)
