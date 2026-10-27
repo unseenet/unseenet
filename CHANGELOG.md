@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Origin-Proof** (#609, UN-RFC 0049 section 7.3, its encoding written down): a post
+  brought to a new key from an Unseenet export may carry the old article's header block
+  (base64, at most 8 KiB) - with this body it is the old article, so a reader checks the
+  old key's signature, the Message-ID, `Origin-Date` and `Origin-ID`, and only then shows
+  it as proven (`Message.origin_proven`, `origin.proven` in the local API). A proof that
+  does not hold is none. `origin_headers(..., proof=)`, `check_proof`,
+  `Session.post(origin={..., "proof": raw})`. Off by default: it links the two keys.
+
 - **A chat line in a group gets the suggested language** (UN-RFC 0052 5a):
   `send_chat(..., languages=)`, left out the group's suggestion - a chat line is not
   asked about, so every client and program does the same.

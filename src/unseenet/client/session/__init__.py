@@ -223,6 +223,7 @@ class Message:
     origin_date: datetime | None = None
     origin_id: str = ""
     origin_from: str = ""
+    origin_proven: str = ""               # the old key, when Origin-Proof holds (0049 7.3)
     # encrypted files (closed groups, inboxes): each file's key by blob ID (0027, 3.3);
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
@@ -285,7 +286,8 @@ class Message:
             "attachments": [dict(a) for a in self.attachments],
             # UN-RFC 0049: where it was first published, and whether it is old on arrival
             "origin": ({"network": self.origin_network, "date": _iso(self.origin_date),
-                        "id": self.origin_id or None, "from": self.origin_from or None}
+                        "id": self.origin_id or None, "from": self.origin_from or None,
+                        "proven": self.origin_proven or None}
                        if self.origin_network else None),
             "old_on_arrival": self.old_on_arrival,
             # UN-RFC 0045 section 7.3: hidden by a report - who, why, which report
