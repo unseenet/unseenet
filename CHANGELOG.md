@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Inboxes take PDFs too** (#637): send a document to someone and talk about it.
+  Every inbox - personal, team, operator, issuer - takes pictures and PDFs,
+  encrypted, up to 4 MiB each; one that took pictures only takes PDFs from the next
+  time the client makes its manifest say what it takes. Clients never show a PDF
+  inside the app (#638 asks whether a safe view can be made); they offer to save it.
+- **UN-RFC 0047 (team inboxes) accepted** by the maintainer, 27 Oct, with
+  UN-RFC 0046 section 4.22.
+
 - **Team inboxes** (#341, UN-RFC 0047): an inbox may list up to 16 readers - team
   keys, each made for that inbox only - and messages to it are team boxes: a
   content key sealed to each reader in 16 slots without key IDs, so an article

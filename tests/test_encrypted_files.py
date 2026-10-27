@@ -106,7 +106,7 @@ async def test_pictures_in_private_posts_and_chats(net, tmp_path):
     alice, bob = person("alice"), person("bob")
     await bob.ensure_inbox()
     await alice.ensure_inbox()
-    assert bob.manifest_data(bob.my_inbox)["attachments"] == bl.PICTURES   # new inboxes (#497)
+    assert bob.manifest_data(bob.my_inbox)["attachments"] == bl.PICTURES_AND_PDF   # new inboxes (#497, #637)
     files = alice.prepare_files([_picture(tmp_path)])
     post = await alice.send_private(bob.my_inbox, "Til dig", "Se\n",
                                     owner_key=bob.identity().public_key, files=files)
@@ -136,8 +136,29 @@ async def test_an_old_inbox_is_given_pictures(net):
     assert "attachments" not in bob.manifest_data(bob.my_inbox)
     bob.data["inbox_files"] = True
     assert await bob.offer_inbox_files()
-    assert (await bob.fetch_manifest(bob.my_inbox)).raw["attachments"] == bl.PICTURES
+    assert (await bob.fetch_manifest(bob.my_inbox)).raw["attachments"] == bl.PICTURES_AND_PDF
     assert not await bob.offer_inbox_files()               # once
+
+
+async def test_a_pdf_in_a_private_post_and_an_old_inbox_takes_pdfs(net, tmp_path):
+    """#637: send a document to someone and talk about it - every inbox takes PDFs, also
+    one that took pictures only before."""
+    node, person = net
+    alice, bob = person("alice"), person("bob")
+    await alice.ensure_inbox()
+    await bob.ensure_inbox()
+    data = bob.manifest_data(bob.my_inbox)
+    bob.group_entry(bob.my_inbox)["manifest"] = {**data, "attachments": bl.PICTURES}   # as before
+    assert await bob.offer_inbox_files()                   # takes PDFs from now on
+    pdf = tmp_path / "anmeldelse.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n")
+    await alice.send_private(bob.my_inbox, "Anmeldelsen", "Her er den\n",
+                             owner_key=bob.identity().public_key, files=alice.prepare_files([pdf]))
+    await bob.fetch_group(bob.my_inbox)
+    [m] = [x for x in bob.private_messages() if x.subject == "Anmeldelsen"]
+    assert [a["type"] for a in m.attachments] == ["application/pdf"]
+    team = await bob.create_group("kontakt", "inbox")             # other inboxes too
+    assert bob.manifest_data(team)["attachments"] == bl.PICTURES_AND_PDF
 
 
 async def test_a_picture_submitted_to_a_moderated_group(net, tmp_path):

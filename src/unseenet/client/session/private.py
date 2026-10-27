@@ -45,8 +45,8 @@ class PrivateMixin:
                 from ...core import blobs as bl
                 art = make_manifest(self.identity(), "inbox", "inbox", retention_days=30,
                                     min_pow=_s.DEFAULT_POW, serial=serial,
-                                    # pictures in private posts and chats (#497)
-                                    extra=({"attachments": bl.PICTURES}
+                                    # pictures and PDFs in private posts and chats (#497, #637)
+                                    extra=({"attachments": bl.PICTURES_AND_PDF}
                                            if self.data.get("inbox_files", True) else None),
                                     pow_bits=await self.required_pow(gid),
                                     lifetime=self.key_bound_lifetime())
@@ -468,27 +468,28 @@ class PrivateMixin:
         return True
 
     def inbox_files(self) -> bool:
-        """Whether your inbox takes pictures in private posts and chats (#497); on
-        unless turned off with ``set_inbox_files``."""
+        """Whether your inbox takes pictures and PDFs in private posts and chats (#497,
+        #637); on unless turned off with ``set_inbox_files``."""
         return bool(self.data.get("inbox_files", True))
 
     async def set_inbox_files(self, on: bool) -> None:
-        """Let your inbox take pictures, or not; the manifest is changed right away."""
+        """Let your inbox take pictures and PDFs, or not; the manifest is changed right away."""
         self.data["inbox_files"] = bool(on)
         self.save()
         await self.offer_inbox_files()
 
     async def offer_inbox_files(self) -> bool:
-        """Make our inbox's manifest say what ``inbox_files`` says: pictures, up to 4
-        MiB each, encrypted (UN-RFC 0027 sections 3.3, 5.1), or none. True if the
-        manifest was changed. The blobs are only carried by nodes that carry encrypted
+        """Make our inbox's manifest say what ``inbox_files`` says: pictures and PDFs, up
+        to 4 MiB each, encrypted (UN-RFC 0027 sections 3.3, 5.1), or none - an inbox that
+        took pictures only takes PDFs too from now on (#637). True if the manifest was
+        changed. The blobs are only carried by nodes that carry encrypted
         blobs, which senders are told when theirs does not."""
         from ...core import blobs as bl
         gid = self.my_inbox
         data = self.manifest_data(gid)
         if not data or not self.nodes:
             return False
-        want = bl.PICTURES if self.inbox_files() else None
+        want = bl.PICTURES_AND_PDF if self.inbox_files() else None
         if data.get("attachments") == want:
             return False
         ident = self.identity()

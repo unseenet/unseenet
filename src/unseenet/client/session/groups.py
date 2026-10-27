@@ -137,6 +137,9 @@ class GroupsMixin:
         self.mark_in_use()               # making a group is using the identity (#270)
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90
+        if gtype == "inbox" and "attachments" not in (extra or {}):
+            from ...core import blobs as bl          # an inbox takes pictures and PDFs (#637)
+            extra = {**(extra or {}), "attachments": bl.PICTURES_AND_PDF}
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
                             rules=rules, view=view, low_latency=low_latency, kinds=kinds,
