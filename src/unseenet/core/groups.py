@@ -304,6 +304,8 @@ class Manifest:
             from .reports import check_manifest_fields as check_report_fields
             check_report_fields(data)                       # UN-RFC 0045 section 3
             check_team_fields(data)                         # UN-RFC 0047 section 3
+            from .reports import check_group_issuers
+            check_group_issuers(data)                       # UN-RFC 0045 section 7.5
             if data.get("view") == "pages":                 # UN-RFC 0035 section 3
                 from .pages import check_manifest_fields
                 check_manifest_fields(data)
@@ -424,7 +426,8 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 # manifest fields of the 0.5.0 documents, set through ``extra`` and Session.update_group
 EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reactions",
                 "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
-                "readers", "team_name")                 # team inboxes (UN-RFC 0047)
+                "readers", "team_name",                 # team inboxes (UN-RFC 0047)
+                "report_issuers")                       # a group's own (UN-RFC 0045, 7.5)
 
 
 def check_team_fields(data: dict) -> None:
@@ -471,6 +474,8 @@ def check_extra_fields(data: dict) -> None:
     check_attachments_field(data)
     check_report_fields(data)
     check_team_fields(data)
+    from .reports import check_group_issuers
+    check_group_issuers(data)
     max_pins(data)
     if data.get("type") != "inbox":
         check_reactions(data)                              # UN-RFC 0048 section 4.1

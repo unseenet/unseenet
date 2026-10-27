@@ -77,6 +77,31 @@ def check_manifest_fields(data: dict) -> None:
         raise ValueError("automatic is true or false")
 
 
+def check_group_issuers(data: dict) -> None:
+    """ValueError if a group's ``report_issuers`` (section 7.5) is not up to 16 keys,
+    each once, or is set on an inbox or a ``reports@`` group."""
+    if "report_issuers" not in data:
+        return
+    if data.get("type") == "inbox" or data.get("name") == GROUP_NAME:
+        raise ValueError("an inbox or a reports@ group names no report issuers")
+    keys = data["report_issuers"]
+    if not isinstance(keys, list) or not 1 <= len(keys) <= MAX_HIERARCHY_ISSUERS:
+        raise ValueError(f"report_issuers: 1 to {MAX_HIERARCHY_ISSUERS} keys")
+    for k in keys:
+        crypto.key_from_text(k)
+    if len(set(keys)) != len(keys):
+        raise ValueError("a report issuer is listed twice")
+
+
+def group_issuers(data: dict) -> list[str]:
+    """The issuers a group's manifest names (section 7.5); [] if none or invalid."""
+    try:
+        check_group_issuers(data)
+    except (ValueError, crypto.CryptoError):
+        return []
+    return list(data.get("report_issuers", []))
+
+
 # --- reports (section 4) ------------------------------------------------------
 
 @dataclass(frozen=True)

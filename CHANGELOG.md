@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A group's owner names report issuers for its group** (#644, UN-RFC 0045 section
+  7.5): `report_issuers` in a group's manifest, up to 16; clients follow them by
+  default for that group only, next to its hierarchy's, and the reader can turn
+  them off. For `alt.*`, which nobody governs, it is the only default there is -
+  the project's bots name the project's issuer for their channels. Nodes do not
+  act on it. `report_issuers()` says where each issuer is named (`groups`).
+
 - **A node that does not answer over Tor** is a node away, not a crash: Tor's SOCKS
   timeout is tried once more and then a `ConnectionError`, as a refusal already
   was, and reading manifests asks your other nodes when the group's node cannot be
