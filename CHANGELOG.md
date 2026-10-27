@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Nodes take sealed posts in any inbox** (found 27 Oct): a sealed private post is
+  signed by a one-time key, which cannot ripen, and nodes allowed that only in groups
+  *named* `inbox@` - so posts to an operator's `operator@`, a team's `contact@` or any
+  other inbox were refused ("no Key-Ripening header"). Now by the manifest's type.
+  Nodes need this before team inboxes work (rollout rule: update the nodes first).
+
 - **Edit a group's report issuers and a team inbox's name** (27 Oct): `group-edit
   --add-report-issuer/--remove-report-issuer KEY` and `--team-name`; the local API's
   group settings take `report_issuers` and `team_name`, and a group gives both
