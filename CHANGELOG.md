@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Looking labels and reports up, and their expiry** (#670, spec only; accepted by the
+  maintainer 27 Oct): UN-RFC 0053 sections 7.1-7.2 and UN-RFC 0045 section 6.1 -
+  `XUN-MARKS`: a reader asks its node which signed label and report articles name the
+  posts and keys of a page, and fetches only those (the node can withhold, never
+  invent); `UNSEENET-MARKS <max>`; fallback to whole channels. Entries expire with their
+  posts, and a node may drop an article whose posts are all gone. Labellers and issuers
+  should keep an article within one top-level hierarchy. Implemented in 0.7.0.
+
 - **The age guide** (UN-RFC 0053 section 6.1): `core.labels.AGE_PROFILES` - under 13,
   13 to 17, an adult - suggest what to do with each warning; `Session.apply_age_profile`
   takes one as your own choices and keeps nothing of the age group;

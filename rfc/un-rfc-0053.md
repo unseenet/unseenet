@@ -159,6 +159,62 @@ change postage or ripening (UN-RFC 0025). A node checks a `labels@`
 channel and its articles as it checks any key-bound channel, and the
 `labellers` field of a manifest as `report_issuers`.
 
+## 7.1 Looking Up Labels and Reports
+
+A reader that follows many labellers and issuers need not fetch their
+whole channels. It asks its node which of their articles name the posts
+it is about to show, then fetches only those and checks them as any
+article. The node never answers with labels or reports themselves:
+only with which signed articles to read, so it can withhold what it
+does not want to give - as it always could - but never invent a label
+or a report.
+
+```
+C: XUN-MARKS
+C: channel <group-id>
+C: channel <group-id>
+C: post <message-id>
+C: post <message-id>
+C: key <key>
+C: .
+S: 297 <n> articles
+S: <article-message-id> <channel-group-id>
+S: ...
+S: .
+```
+
+- `channel` lines name the `labels@` and `reports@` channels the reader
+  follows, `post` lines the posts it shows - a page at a time, never one
+  post as it is opened - and `key` lines their authors (for reports of
+  keys, UN-RFC 0045 section 4). At most *max* lines in all, *max* at
+  least 256; the same line MUST NOT appear twice.
+- The answer lists every article in those channels that names one of
+  the posts or keys and still counts (section 7.2): its Message-ID and
+  its channel, at most 1024 lines, newest first.
+- The client fetches those it does not hold (`ARTICLE`, or
+  `XUN-MANIFESTS`-style batches where a node offers them), checks each
+  as section 4 and UN-RFC 0045 section 4 say, and keeps them: the next
+  page often needs the same articles.
+- A node lists `UNSEENET-MARKS <max>` in `CAPABILITIES`. A client talking
+  to a node without it, or about a channel the node does not carry,
+  fetches that channel whole, as before.
+- Asking tells the node nothing new: it serves the reader those posts,
+  and which channels a reader follows is as visible to its node as
+  which groups it reads.
+
+To keep articles relevant to what readers ask about, a labeller or an
+issuer SHOULD keep each article's posts within one top-level hierarchy
+(`dk.*`, `alt.*`), and SHOULD publish often rather than in large
+batches.
+
+## 7.2 Entries Expire with Their Posts
+
+A label means nothing once its post is gone. An entry naming a post
+counts while the post is carried; an article whose posts are all gone
+no longer counts, and a node MAY drop it. (A report of a key keeps its
+`until`, UN-RFC 0045 section 4.) A channel then holds at most what the
+network holds, instead of growing for ever.
+
 # 8. Rationale
 
 **Why apart from reports.** Reports sanction; labels describe. Mixing
@@ -198,6 +254,8 @@ leaks; the choices it leads to are all a client needs.
 - UN-RFC 0045: reasons sanction; what a post contains is a label
   (section 4 there).
 - UN-RFC 0051: the condition `labelled` (a separate amendment).
+- UN-RFC 0045: looking reports up and their expiry (sections 7.1, 7.2
+  here, 27 October 2026).
 
 # Copyright Notice
 
