@@ -28,7 +28,9 @@ class ContentLabels:
             mine = {"group": s.my_labels_group(), "policy": m.get("policy", ""),
                     "contact": m.get("contact", ""), "automatic": m.get("automatic") is True,
                     "topics": m.get("topics") is True}
-        return {"labellers": s.labellers(), "warnings": [
+        return {"profiles": [{"id": k, "label": lb.AGE_PROFILE_LABELS[k], "choices": v}
+                             for k, v in lb.AGE_PROFILES.items()],
+                "labellers": s.labellers(), "warnings": [
                     {"warning": w, "label": tg.WARNING_LABELS[w], "choice": c}
                     for w, c in s.warning_choices().items()],
                 "mine": mine}
@@ -50,6 +52,15 @@ class ContentLabels:
         """``POST /api/labels/warning``: show, blur or hide a warning. Answers as ``GET``."""
         s = self._ready()
         s.set_warning_choice(str(body.get("warning", "")), str(body.get("choice", "")))
+        s.emit(ev.GroupsChanged())
+        return self.labels()
+
+    def age_profile(self, body: dict) -> dict:
+        """``POST /api/labels/profile`` ``{"profile"}``: the age guide's choices for
+        who reads on this device, applied as ordinary choices; the profile is not kept
+        (UN-RFC 0053 section 6.1). Answers as ``GET``."""
+        s = self._ready()
+        s.apply_age_profile(str(body.get("profile", "")))
         s.emit(ev.GroupsChanged())
         return self.labels()
 

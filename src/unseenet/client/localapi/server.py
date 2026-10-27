@@ -307,6 +307,10 @@ async def labels_warning(request):
     return _json(_api(request).warning_choice(await _body(request)))
 
 
+async def labels_profile(request):
+    return _json(_api(request).age_profile(await _body(request)))
+
+
 async def labels_refresh(request):
     return _json(await _api(request).refresh_labels())
 
@@ -635,6 +639,7 @@ ROUTES = [
     ("GET", "/api/labels", labels), ("POST", "/api/labels/follow", labels_follow),     # 0053
     ("POST", "/api/labels/warning", labels_warning), ("POST", "/api/labels/refresh", labels_refresh),
     ("POST", "/api/labels/start", labels_start), ("POST", "/api/labels/publish", labels_publish),
+    ("POST", "/api/labels/profile", labels_profile),
     ("GET", "/api/teams", teams), ("POST", "/api/teams/accept", teams_accept),     # 0047
     ("POST", "/api/teams/forget", teams_forget),
     ("GET", "/api/teams/readers", teams_readers), ("POST", "/api/teams/readers", teams_readers),

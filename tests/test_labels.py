@@ -142,3 +142,20 @@ async def test_the_local_api(net):
     assert api.warning_choice({"warning": "spoiler", "choice": "show"})["warnings"][-1]["choice"] == "show"
     row = next(r for r in api.group(gid)["rows"] if r["message"]["id"] == post)
     assert row["message"]["labels"]["action"] == "show"
+
+
+def test_the_age_guide_keeps_only_the_choices(tmp_path):
+    """UN-RFC 0053 6.1: a profile's choices become yours; the age group is never stored."""
+    import json
+    from unseenet.client.session import Session, SessionError
+    from unseenet.core.vault import Vault
+    s = Session(Vault.open(tmp_path / "v.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("me", "Me")
+    got = s.apply_age_profile("under-13")
+    assert got["sexual"] == "hide" and got["spoiler"] == "blur"
+    s.set_warning_choice("spoiler", "show")                 # changed afterwards, as any choice
+    assert s.warning_choices()["spoiler"] == "show"
+    saved = json.dumps(s.data)
+    assert "under-13" not in saved and "13-17" not in saved and "profile" not in s.data.get("labellers", {})
+    with pytest.raises(SessionError):
+        s.apply_age_profile("12")

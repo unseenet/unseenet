@@ -51,6 +51,17 @@ class ContentLabelsMixin:
         self._label_settings()["warnings"][warning] = choice
         self.save()
 
+    def apply_age_profile(self, profile: str) -> dict[str, str]:
+        """The age guide (section 6.1): take a profile's suggested choices per warning as
+        your own. The profile itself is never stored - only the choices, which you can
+        change afterwards like any other. Returns the choices now."""
+        if profile not in lb.AGE_PROFILES:
+            raise SessionError("a profile is one of " + ", ".join(lb.AGE_PROFILES))
+        mine = self._label_settings()["warnings"]
+        mine.update(lb.AGE_PROFILES[profile])
+        self.save()
+        return self.warning_choices()
+
     # --- which labellers count (section 5) ---
     def named_labellers(self, group_id: str) -> dict[str, str]:
         """{labeller key: where named} for warnings by default: the group's hierarchy
