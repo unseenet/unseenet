@@ -7,6 +7,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Content labels** (#656, UN-RFC 0053, new): labellers - people or programs -
+  label posts others wrote, in a `labels@` channel; a label only describes, never
+  sanctions, and nodes never act on it. **Warnings** (the set shared with tags) are
+  shown, blurred (default) or hidden as the reader chose, never silently, never on
+  your own or your contacts' posts; hierarchies (`labellers` in their list) and
+  group owners (`labellers` in the manifest) may name labellers for warnings by
+  default. **Topics** count only for a labeller the reader follows for topics
+  themselves. Labels name posts only, never keys. `core.labels`, the session's
+  `ContentLabelsMixin` (`labellers`, `follow_labeller(topics=)`, `refresh_labels`,
+  `post_labels`, `warning_choices`, `start_labels`, `publish_labels`),
+  `Message.labels` on every row with an `action`; `/api/labels…` (UN-RFC 0046
+  4.23); `unseenet labels …`. A client's age guide stores only the choices, never
+  the age (section 6.1, for the clients).
+
 - **Tags** (#657, UN-RFC 0052, new): an author tags their own post with up to 8
   words - topics, and content warnings from a fixed set shared with labels
   (`profanity`, `sexual`, `nudity`, `violence`, `gore`, `spoiler`) - in a signed

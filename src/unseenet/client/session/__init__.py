@@ -228,6 +228,7 @@ class Message:
     file_keys: dict = field(default_factory=dict, repr=False)
     node: str = ""                        # the node it was read from (a local group: #134)
     tags: tuple = ()                      # the author's own tags (UN-RFC 0052)
+    labels: dict | None = None            # warnings and topics, what to do (UN-RFC 0053)
     # written on a team inbox's behalf (UN-RFC 0047 section 8): {"group"}; checked with
     # Session.team_sender. And a team key handed to you: {"group", "seed"} (section 6)
     team: dict | None = None
@@ -290,6 +291,7 @@ class Message:
             "reported": dict(self.reported) if self.reported else None,
             "node": self.node or None,                 # where it was read (#134)
             "tags": list(self.tags),                   # the author's (UN-RFC 0052 section 3)
+            "labels": self.labels,                     # warnings, topics, action (UN-RFC 0053)
             "team": dict(self.team) if self.team else None,    # on an inbox's behalf (0047)
             "team_invite": ({"group": self.team_invite["group"]} if self.team_invite else None),
         }
@@ -461,10 +463,11 @@ from .notify import NotifyMixin  # noqa: E402
 from .exporting import ExportMixin  # noqa: E402
 from .rules import RulesMixin  # noqa: E402
 from .reports import ReportsMixin  # noqa: E402
+from .content_labels import ContentLabelsMixin  # noqa: E402
 from .teams import TeamsMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

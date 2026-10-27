@@ -515,7 +515,8 @@ class PeopleMixin:
             msgs = [m for m in msgs if m.to_key is not None
                     or not (self.is_ignored(m.sender_key or m.author_key)
                             or (not m.private and m.author_key in banned.get(m.group, ())))]
-        return self.mark_reported(list(msgs))       # spam reports: shown as hidden (0045, 7.3)
+        msgs = self.mark_reported(list(msgs))       # spam reports: shown as hidden (0045, 7.3)
+        return self.mark_labelled(msgs)             # warnings: blurred or hidden as you chose (0053)
 
     def hierarchy_blocks(self, group_id: str) -> dict[str, tuple[str, str]]:
         """{key: (hierarchy, reason)} that maintainers block for this group."""
