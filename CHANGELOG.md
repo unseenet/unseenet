@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Edit a group's report issuers and a team inbox's name** (27 Oct): `group-edit
+  --add-report-issuer/--remove-report-issuer KEY` and `--team-name`; the local API's
+  group settings take `report_issuers` and `team_name`, and a group gives both
+  (UN-RFC 0046). A team inbox's name may now be set before its first reader (UN-RFC
+  0047 asked for 1-16 readers only when `readers` is there; the check asked always).
+
 - **Reports land where they are read** (UN-RFC 0045 section 7.4): a report to an
   issuer goes to the inbox its `contact` names - a team inbox, say - with that
   inbox's own owner, else to its personal inbox as before; targets that share an

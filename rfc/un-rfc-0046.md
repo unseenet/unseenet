@@ -978,6 +978,11 @@ so every front end hides the same posts for the same reasons.
 - A report someone sent the user (section 4.6) has `report` in its row,
   `{"id", "group", "author_key", "reason"}`: the post it names, so a front
   end can open it and, for an issuer, publish it.
+- `POST /api/groups/{gid}/settings` (section 4.7) also takes
+  `report_issuers`, the whole list of keys the group's readers follow by
+  default (UN-RFC 0045 section 7.5, [] for none), and for an inbox
+  `team_name` (UN-RFC 0047); `GET /api/groups/{gid}` gives both, the
+  issuers as `{"key", "label"}`.
 - `GET /api/reports/received`: `{"received": [{"message", "subject",
   "date", "id", "group", "author_key"}]}`, the reports others sent the
   user (section 4.6), to publish without the reporter (UN-RFC 0045

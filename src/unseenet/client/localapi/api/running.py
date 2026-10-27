@@ -75,6 +75,13 @@ class Running:
                 changes["reactions"] = []
             elif r != "any" and not (isinstance(r, list) and all(isinstance(e, str) for e in r)):
                 raise SessionError('reactions is "default", "none", "any" or a list of emoji')
+        if "report_issuers" in changes:         # UN-RFC 0045 section 7.5: the whole list
+            keys = changes["report_issuers"] or []
+            if not isinstance(keys, list):
+                raise SessionError("report_issuers is a list of keys")
+            changes["report_issuers"] = [_key(k) for k in keys] or None
+        if "team_name" in changes:              # UN-RFC 0047 section 3
+            changes["team_name"] = str(changes["team_name"] or "").strip() or None
         if "index" in changes and changes["index"] not in ("yes", "no"):
             raise SessionError('index is "yes" or "no"')    # a site's (UN-RFC 0035 section 3)
         if "kinds" in changes:

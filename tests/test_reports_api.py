@@ -178,3 +178,35 @@ async def test_report_targets_without_an_inbox_are_left_out(net):
     targets = await reader.report_targets(m)
     assert [t[2] for t in targets] == [owner.identity().key_text]
     assert await reader.report(m, targets, "test") == 1
+
+
+async def test_a_groups_issuers_and_team_name_are_edited(net, capsys):
+    """What Edit group needs (27 Oct): the issuers a group names, and a team inbox's name."""
+    from unseenet import cli
+    from unseenet.client.localapi import LocalAPI
+    owner, issuer = net("owner"), net("issuer")
+    api = LocalAPI(session=owner)
+    gid = await owner.create_group("alt.snak", "open", min_pow=8)
+    key = issuer.identity().key_text
+    await api.group_settings(gid, {"report_issuers": [key]})
+    assert api.group(gid)["group"]["report_issuers"] == [{"key": key, "label": owner.issuer_label(key)}]
+    await api.group_settings(gid, {"report_issuers": []})
+    assert owner.manifest_data(gid).get("report_issuers") is None
+
+    class App:
+        def __init__(self, s):
+            self.session = s
+    ns = dict(json=True, identity=None, group=gid, add_poster=None, remove_poster=None,
+              add_moderator=None, remove_moderator=None, ban=None, unban=None, reason=None,
+              add_report_issuer=[key], remove_report_issuer=None, team_name=None)
+    from argparse import Namespace
+    import unseenet.cli.groups as cg
+    base = {k: None for k in ("title", "description", "min_pow", "retention_days", "view", "kinds",
+                              "rules", "comments", "comment_days", "attachments", "types", "max_pins",
+                              "reactions", "max_pages", "home", "index")}
+    await cli.c_group_edit(App(owner), Namespace(**{**base, **ns}))
+    assert owner.manifest_data(gid)["report_issuers"] == [key]
+    inbox = await owner.create_group("kontakt", "inbox")
+    await api.group_settings(inbox, {"team_name": "Snak (ejer)"})
+    assert api.group(inbox)["group"]["team_name"] == "Snak (ejer)"
+    assert cg

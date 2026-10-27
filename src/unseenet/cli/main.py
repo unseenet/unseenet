@@ -108,6 +108,10 @@ def client_main(argv=None) -> None:
     s.add_argument("--ban", action="append", metavar="KEY", help="ban a key from posting (UN-RFC 0004 5.1)")
     s.add_argument("--unban", action="append", metavar="KEY")
     s.add_argument("--reason", help="with --ban: shown to the banned and to readers")
+    s.add_argument("--add-report-issuer", action="append", metavar="KEY",
+                   help="a spam report issuer this group's readers follow by default (UN-RFC 0045 7.5)")
+    s.add_argument("--remove-report-issuer", action="append", metavar="KEY")
+    s.add_argument("--team-name", help="a team inbox: the name replies go out as (UN-RFC 0047), '' for none")
     _group_options(s, create=False)
     s = sub.add_parser("group-show", help="show a group's current manifest")
     s.add_argument("group", help="full group ID, name@fingerprint")

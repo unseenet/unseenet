@@ -64,7 +64,8 @@ GROUP_TYPES = ("open", "moderated", "channel", "closed")
 KINDS = {"both": None, "post": [KIND_POST], "chat": [KIND_CHAT]}
 SETTINGS_FIELDS = ("title", "description", "rules", "rules_type", "view", "kinds",
                    "low_latency", "min_pow", "retention_days", "comments", "comment_days",
-                   "files", "reactions", "index")
+                   "files", "reactions", "index",
+                   "report_issuers", "team_name")     # UN-RFC 0045 7.5, UN-RFC 0047 3
 FIXED_FIELDS = ("type", "owner", "name", "local")      # never change (UN-RFC 0004, 4)
 PROGRAM_HEADERS = ("x-", "gateway-")                   # what a program may add (section 4.9)
 
