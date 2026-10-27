@@ -225,6 +225,7 @@ class Message:
     # encrypted files (closed groups, inboxes): each file's key by blob ID (0027, 3.3);
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
+    node: str = ""                        # the node it was read from (a local group: #134)
     # hidden by a spam report from an issuer you follow (UN-RFC 0045 section 7.3): who,
     # why and which report - set by ``Session.visible``; clients show it in its place
     reported: dict | None = None
@@ -281,6 +282,7 @@ class Message:
             "old_on_arrival": self.old_on_arrival,
             # UN-RFC 0045 section 7.3: hidden by a report - who, why, which report
             "reported": dict(self.reported) if self.reported else None,
+            "node": self.node or None,                 # where it was read (#134)
         }
 
 
@@ -301,6 +303,7 @@ class GroupInfo:
     low_latency: bool = False
     owner: bool = False                   # you own it
     listed: bool | None = None            # carried by your nodes; None while offline
+    read_from: list[str] = field(default_factory=list)   # a local group: your nodes read (#134)
     unread: int | None = None
     replies: int | None = None            # unread replies to you
     mentions: int | None = None           # unread posts naming you
@@ -333,6 +336,7 @@ class GroupInfo:
             "subscribed": self.subscribed, "nodes": list(self.nodes), "listed": self.listed,
             "view": self.view, "owner_view": self.owner_view, "kinds": list(self.kinds),
             "local": self.local, "low_latency": self.low_latency,
+            "read_from": list(self.read_from),       # a local group: your nodes read (#134)
             "unread": self.unread, "replies": self.replies, "mentions": self.mentions,
         }
 

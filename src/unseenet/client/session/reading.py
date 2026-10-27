@@ -119,6 +119,8 @@ class ReadingMixin:
         g.view, g.owner_view = self.view_of(group_id), data.get("view", "threads")
         g.kinds = tuple(self.group_kinds(group_id))
         g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
+        if g.local:
+            g.read_from = self.read_from(group_id)          # your nodes it is read from (#134)
         if available is not None:
             g.listed = group_id in available or is_key_bound(group_id)
         if counts:
@@ -239,6 +241,7 @@ class ReadingMixin:
             else:
                 raise first
         changed, new = False, 0
+        home = self.node_for(group_id)
         for n, raw in fetched:
             raw = strip_reader_headers(raw)
             msg = self._parse(n, raw, group_id, entry, me)
@@ -250,9 +253,14 @@ class ReadingMixin:
                 cache.pop(n, None)
                 continue
             new += n not in cache
+            msg.node = home
             cache[n] = msg
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
+        if self.manifest_data(group_id).get("local") and len(self.nodes) > 1:   # #134
+            got, more = await self._read_local_elsewhere(group_id, entry, me, reader)
+            new += got
+            changed = changed or more
         if entry.get("cancels") and self._apply_cancels(group_id):
             changed = True
         if changed:
@@ -266,6 +274,73 @@ class ReadingMixin:
         if group_id == self.my_inbox:
             self._schedule_notice_posting()        # approved notices still to go (4.3)
         return sorted(cache.values(), key=lambda m: m.number)
+
+    # --- a local group on all your nodes (#134, UN-RFC 0015) ---
+    # A local group has the same Group ID on every node that carries it but other posts on
+    # each - an operator's contact inbox on each of their nodes. Its articles from your
+    # other nodes are kept beside those of the node it is read from, numbered from an
+    # offset of their own, shown once each (by Message-ID), with the node they came from.
+    # No node is told about your others; read marks are by Message-ID, so they hold.
+    LOCAL_ABSENT_SECONDS = 3600.0     # a node without the group is asked again after this
+    NODE_OFFSET = 10 ** 12            # numbers of articles from your other nodes start here
+
+    @classmethod
+    def _node_offset(cls, address: str) -> int:
+        """Where the numbers of a local group's articles from ``address`` start."""
+        import zlib
+        return (zlib.crc32(address.encode()) % 999 + 1) * cls.NODE_OFFSET
+
+    def node_of_number(self, group_id: str, number: int) -> str | None:
+        """The node an article of a local group came from, by its number here."""
+        if number < self.NODE_OFFSET:
+            return self.node_for(group_id)
+        return next((a for a in self.nodes if self._node_offset(a) == number // self.NODE_OFFSET
+                     * self.NODE_OFFSET), None)
+
+    def read_from(self, group_id: str) -> list[str]:
+        """The nodes a group is read from: the one it is read from, and for a local group
+        your other nodes that carry it too (#134)."""
+        home = self.node_for(group_id)
+        others = sorted(getattr(self, "_node_high", {}).get(group_id, {}))
+        return [home] + [a for a in others if a != home and a in self.nodes]
+
+    async def _read_local_elsewhere(self, group_id: str, entry: dict, me, reader) -> tuple[int, bool]:
+        """Fetch a local group from your other nodes that carry it. Returns (new posts,
+        whether a control article changed the group)."""
+        import time as _time
+        absent = self.__dict__.setdefault("_local_absent", {})
+        highs = self.__dict__.setdefault("_node_high", {}).setdefault(group_id, {})
+        cache, raws = self.cache.setdefault(group_id, {}), self._raw.setdefault(group_id, {})
+        home = self.node_for(group_id)
+        known = {m.message_id for m in cache.values()}
+        new, changed = 0, False
+        for node in self.nodes:
+            if node == home or _time.monotonic() - absent.get((group_id, node), -1e18) < self.LOCAL_ABSENT_SECONDS:
+                continue
+            try:
+                fetched, high = await self._call(reader(highs.get(node, 0)), node)
+            except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                absent[(group_id, node)] = _time.monotonic()
+                highs.pop(node, None)
+                continue
+            off = self._node_offset(node)
+            for n, raw in fetched:
+                raw = strip_reader_headers(raw)
+                msg = self._parse(off + n, raw, group_id, entry, me)
+                if msg is None:
+                    changed = True
+                    continue
+                if msg.message_id in known:            # posted to each node: shown once
+                    continue
+                if self._take_reaction(group_id, off + n, msg):
+                    continue
+                msg.node = node
+                raws[off + n] = raw
+                cache[off + n] = msg
+                known.add(msg.message_id)
+                new += 1
+            highs[node] = max(high, highs.get(node, 0))
+        return new, changed
 
     # ------------------------------------------------------------------
     # offline cache (UN-RFC 0007: encrypted with the vault key)
@@ -293,6 +368,9 @@ class ReadingMixin:
                 continue
             entry = self.group_entry(gid)
             self._high[gid] = max(self._high.get(gid, 0), int(g.get("high", 0)))
+            if g.get("node_high"):                     # a local group's other nodes (#134)
+                self.__dict__.setdefault("_node_high", {})[gid] = {
+                    a: int(h) for a, h in g["node_high"].items() if a in self.nodes}
             cache = self.cache.setdefault(gid, {})
             raws = self._raw.setdefault(gid, {})
             for n_text, b64raw in g.get("articles", {}).items():
@@ -300,6 +378,7 @@ class ReadingMixin:
                 msg = self._parse(n, raw, gid, entry, me)
                 if msg is not None:
                     raws[n] = raw
+                    msg.node = self.node_of_number(gid, n) or ""
                     if not self._take_reaction(gid, n, msg):   # UN-RFC 0048
                         cache[n] = msg
                     loaded += 1
@@ -312,9 +391,15 @@ class ReadingMixin:
         the vault's key - so the client can show them before it is connected."""
         groups = {}
         for gid, raws in self._raw.items():
-            keep = sorted(raws)[-MAX_CACHED_PER_GROUP:]
+            # a local group's articles from your other nodes too (#134): the newest of each
+            mine = [n for n in sorted(raws) if n < self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
+            more = [n for n in sorted(raws) if n >= self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
+            keep = mine + more
             groups[gid] = {"node": self.node_for(gid), "high": self._high.get(gid, 0),
                            "articles": {str(n): base64.b64encode(raws[n]).decode() for n in keep}}
+            node_high = getattr(self, "_node_high", {}).get(gid)
+            if node_high:
+                groups[gid]["node_high"] = dict(node_high)
         payload = json.dumps({"v": 2, "groups": groups}).encode()
         self.vault.write_sidecar(CACHE_SIDECAR, payload)
 

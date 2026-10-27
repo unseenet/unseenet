@@ -32,6 +32,14 @@ vault on your own computer.
 Only your identity can read the messages. The node stores them encrypted,
 so not even someone who seizes the node can read them.
 
+**Several nodes.** Run several nodes and you have a local inbox on each, with
+the same group ID: create it on each node (`node-add` each, then
+`group-create ... --local` once per node, or post the same manifest to all),
+and name it in each node's `[operator]`. Add all your nodes to the operator
+vault: the client reads the inbox on every node that carries it and shows it
+as one, each message once, with the node it came to. No node learns about the
+others. Replies go to the sender, as from any inbox.
+
 ## Dropping a group
 
 To stop carrying a group on your node - whoever owns it:
