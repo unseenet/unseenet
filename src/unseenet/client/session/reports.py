@@ -148,6 +148,10 @@ class ReportsMixin:
         the other groups, over Tor as always (section 10). Returns how many issuers
         could be read."""
         read = 0
+        try:
+            await self.discover_issuers()               # an issuer copied in (UN-RFC 0050)
+        except (SessionError, OSError, ConnectionError):
+            pass
         for key in sorted(self._issuers_to_read()):
             try:
                 gid = rpt.reports_group(crypto.key_from_text(key))
@@ -245,6 +249,30 @@ class ReportsMixin:
         in this vault."""
         gid = self.my_reports_group(name)
         return bool(self.data["groups"].get(gid, {}).get("owner"))
+
+    async def discover_issuers(self) -> list[str]:
+        """Identities in this vault whose reports group exists in the network but that
+        this vault does not know it owns - an issuer copied here from another device
+        (UN-RFC 0050): it is an issuer here too from now on. Returns their names."""
+        found = []
+        for name in self.data.get("identities", {}):
+            gid = self.my_reports_group(name)
+            entry = self.data["groups"].get(gid, {})
+            if entry.get("owner") or entry.get("issuer_checked"):
+                continue
+            try:
+                m = await self.fetch_manifest(gid)
+            except (SessionError, OSError, ConnectionError, NNTPError):
+                continue
+            entry = self.group_entry(gid)
+            if m is not None and crypto.key_to_text(m.owner) == self.identity(name).key_text:
+                entry.update({"type": "channel", "owner": True, "manifest": dict(m.raw)})
+                found.append(name)
+            else:
+                entry["issuer_checked"] = True          # asked once; start_reports makes one
+        if found:
+            self.save()
+        return found
 
     def issuer_names(self) -> list[str]:
         """The identities in this vault that issue spam reports - yours, or one added

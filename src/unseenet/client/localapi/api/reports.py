@@ -85,10 +85,27 @@ class Reports:
 
     async def start_reports(self, body: dict) -> dict:
         """``POST /api/reports/start`` with ``policy``, ``contact`` and ``automatic``:
-        start or change your reports group. Returns as ``GET``."""
+        start or change your reports group. With ``"separate": {"name", "display"}``
+        the issuer is a new identity beside yours in the vault - for an organisation
+        or a hierarchy - and yours stays the one in use. Returns as ``GET``."""
         s = self._ready()
-        await s.start_reports(str(body.get("policy", "")), str(body.get("contact", "")),
-                              bool(body.get("automatic")))
+        args = (str(body.get("policy", "")), str(body.get("contact", "")), bool(body.get("automatic")))
+        sep = body.get("separate")
+        if sep:
+            name = str((sep or {}).get("name") or "reports").strip()
+            if name in s.data["identities"]:
+                raise SessionError(f"there is already an identity {name!r} in this vault")
+            s.new_identity(name, str((sep or {}).get("display") or "Spam reports").strip())
+            with s._acting(name):
+                await s.start_reports(*args)
+        else:
+            try:
+                name = s.issuer_for()
+            except SessionError:
+                name = s.default_identity_name()
+            with s._acting(name):
+                await s.start_reports(*args)
+        s.emit(ev.GroupsChanged())
         return self.reports()
 
     async def publish_report(self, body: dict) -> dict:
