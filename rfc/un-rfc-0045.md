@@ -143,6 +143,16 @@ A node MUST NOT act on reports from issuers it does not follow, MUST NOT
 present its choices to peers as properties of a post or a key, and MAY
 publish which issuers it follows in its node information (UN-RFC 0011).
 
+## 6.1 Looking Up and Expiry
+
+A reader may ask its node which report articles name the posts and keys
+it shows, with `XUN-MARKS` (UN-RFC 0053 section 7.1), instead of fetching
+whole `reports@` channels. A report of a post counts while the post is
+carried; an article whose posts are all gone and whose key reports have
+all passed their `until` no longer counts, and a node MAY drop it
+(UN-RFC 0053 section 7.2). An issuer SHOULD keep each article's posts
+within one top-level hierarchy.
+
 # 7. Readers
 
 ## 7.1 Issuers Named by a Hierarchy
