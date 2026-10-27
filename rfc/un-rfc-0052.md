@@ -2,7 +2,7 @@
 Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0052                                              October 2026
 Category: Standards Track
-Status: Draft
+Status: Accepted
 Updates: 0004, 0051
 
                      Unseenet: Tags
