@@ -22,6 +22,25 @@ class Feeds:
         return {**g.to_dict(), "label": "Timeline", "hierarchy": "", "may_post": False,
                 "feeds": len(s.feeds_followed())}
 
+    def _tagged_group(self, s: Session, gid: str) -> dict:
+        """``GET /api/groups/tag:WORD``: every post with the tag in your groups and feeds,
+        newest first, shown as a feed (UN-RFC 0052 section 7); writing goes to each post's
+        own group."""
+        tag = gid[len(TAGGED):]
+        g = GroupInfo(gid, f"Everything tagged {tag} in your groups and feeds", view="feed")
+        head = {**g.to_dict(), "label": "#" + tag, "hierarchy": "", "may_post": False, "tag": tag}
+        msgs = s.tagged(tag, limit=TIMELINE_LIMIT)
+        mine, patterns = s.my_message_ids(), s._mention_patterns()
+        keys = {s.identity(n).key_text for n in s.data["identities"]}
+        out = []
+        for m in msgs:
+            row = self._row(s, m, 0, mine, patterns, keys)
+            row.update(self._feed_row(s, m.group, m), group_label=s.group_label(m.group),
+                       address=_addr.post_address(s, m.group, m.message_id))
+            out.append(row)
+        self._add_reactions(s, out, [(m, 0) for m in msgs])
+        return {"group": head, "rows": out}
+
     def _timeline_group(self, s: Session) -> dict:
         """``GET /api/groups/timeline:``: the entries of the timeline in its order, each
         followed by its comments as its own feed has them, each row with ``reply`` and

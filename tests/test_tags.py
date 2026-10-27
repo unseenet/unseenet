@@ -74,3 +74,36 @@ async def test_post_with_tags_open_and_closed(two):
     finally:
         await me.close()
         server.close()
+
+
+async def test_everything_with_a_tag(two):
+    """UN-RFC 0052 section 7: the posts with a tag in the groups you follow - the
+    author's, the group's - newest first, as a feed; not in groups you do not follow."""
+    from unseenet.client.localapi import LocalAPI
+    from unseenet.client.session import TAGGED
+    node, tmp = two
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    try:
+        a = await me.create_group("dk.snak", "open", min_pow=8)
+        b = await me.create_group("dk.linux", "open", min_pow=8, extra={"tags": ["linux"]})
+        c = await me.create_group("dk.andet", "open", min_pow=8)
+        one = await me.post(a, "Kerne", "Om #linux\n")
+        two_ = await me.post(b, "Distro", "x\n")                      # the group's tag
+        await me.post(a, "Mad", "#opskrift\n")
+        await me.post(c, "Linux her", "#linux\n")
+        me.data["subscribed"].remove(c)                              # not followed: not shown
+        for g in (a, b):
+            await me.fetch_group(g)
+        assert {m.message_id for m in me.tagged("#Linux")} == {two_, one}   # same second: no order
+        got = LocalAPI(session=me).group(TAGGED + "linux")
+        assert got["group"]["label"] == "#linux" and got["group"]["view"] == "feed"
+        assert {r["message"]["id"] for r in got["rows"]} == {two_, one}
+        assert me.tagged("nonsense tag!") == []
+        assert me.view_of(TAGGED + "linux") == "feed"                       # as the timeline
+        assert {m.message_id for m, _ in me.threads(TAGGED + "linux")} == {two_, one}
+    finally:
+        await me.close()
+        server.close()

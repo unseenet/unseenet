@@ -55,7 +55,7 @@ from ... import naming
 from ...grouptree import group_tree
 from ...runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime
 from ...session import MAX_MENTION_NOTICES, REPORT_REASONS, GroupInfo, Message, Session, SessionError
-from ...threads import CONTACT, FOR_YOU, TIMELINE
+from ...threads import CONTACT, FOR_YOU, TAGGED, TIMELINE
 
 API_VERSION = 1
 MAX_READ = 500                  # ids per read request

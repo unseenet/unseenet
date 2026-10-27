@@ -1049,6 +1049,10 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
 - `POST /api/labels/publish` `{"posts": [{"id", "group", "labels"}],
   "note"}`: answers at once `{"job"}`; `"labels": []` takes the user's
   earlier labels of a post back.
+- `GET /api/groups/tag:WORD`: every post with the tag in the groups and
+  feeds the user follows - the author's tags, the group's, and topics of
+  labellers followed for topics - newest first, as a feed (`view` feed,
+  `label` `#word`); writing goes to each post's own group.
 - `POST /api/groups/{gid}/post` takes `tags`, the author's own (at most 8),
   and `POST /api/groups/{gid}/settings` the group's `tags` and
   `labellers` (UN-RFC 0053 section 5).

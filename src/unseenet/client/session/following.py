@@ -220,6 +220,32 @@ class FollowingMixin:
             self.save()
         return found
 
+    def tagged(self, tag: str, limit: int = 200) -> list[Message]:
+        """Every post with a tag in the groups and feeds you follow, newest first, from
+        what has been fetched (UN-RFC 0052 section 7): the author's own tags, its group's,
+        and topics from labellers you follow for topics (UN-RFC 0053). Never private posts.
+        Shown as the reader would see them (``visible``: reports, warnings marked)."""
+        from ...core import tags as tg
+        tag = (tg.normalize([tag]) or [""])[0]
+        if not tag:
+            return []
+        groups = list(dict.fromkeys([*self.data.get("subscribed", []), *self.feeds_followed()]))
+        out = []
+        for gid in groups:
+            if gid.startswith("inbox@"):
+                continue
+            gtags = self.manifest_data(gid).get("tags")
+            in_group = isinstance(gtags, list) and tag in gtags
+            for m in self.visible(list(self.cache.get(gid, {}).values())):
+                if m.private or not m.readable or m.kind == "reaction":
+                    continue
+                topics = (m.labels or {}).get("topics", []) if m.labels else []
+                if in_group or tag in m.tags or tag in topics:
+                    out.append(m)
+        epoch = datetime.min.replace(tzinfo=timezone.utc)
+        out.sort(key=lambda m: (m.date or epoch, m.message_id), reverse=True)
+        return out[:limit]
+
     def timeline(self, limit: int = 100) -> list[Message]:
         """The timeline (UN-RFC 0034 section 7): the entries - posts that start a thread
         - of every feed you follow, newest first by ``Date``, from what has been fetched.
