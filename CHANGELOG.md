@@ -7,6 +7,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **`unseenet post` tells the language from the text** when `--lang` is not given (#686),
+  as the clients do - the demo's people and other scripts get it right by themselves.
+
 - **A group with several languages suggests its main one** (the first), not all of them
   on every post (UN-RFC 0052 5a).
 
