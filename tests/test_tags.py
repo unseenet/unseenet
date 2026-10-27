@@ -102,6 +102,8 @@ async def test_everything_with_a_tag(two):
         assert got["group"]["label"] == "#linux" and got["group"]["view"] == "feed"
         assert {r["message"]["id"] for r in got["rows"]} == {two_, one}
         assert me.tagged("nonsense tag!") == []
+        assert me.view_of(TAGGED + "linux") == "feed"                       # as the timeline
+        assert {m.message_id for m, _ in me.threads(TAGGED + "linux")} == {two_, one}
     finally:
         await me.close()
         server.close()

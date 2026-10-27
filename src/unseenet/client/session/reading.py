@@ -145,6 +145,8 @@ class ReadingMixin:
             return [(m, 0) for m in self.for_you(unread_only=False)[:200]]
         if group_id == TIMELINE:                  # UN-RFC 0034 section 7
             return [(m, 0) for m in self.timeline(200)]
+        if group_id.startswith(TAGGED):           # everything with a tag (UN-RFC 0052, 7)
+            return [(m, 0) for m in self.tagged(group_id[len(TAGGED):])]
         if group_id.startswith(CONTACT):          # as everywhere: ignores, filters (0025, 3.5)
             return [(m, 0) for m in self.visible(self.conversation(group_id[len(CONTACT):],
                                                                    KIND_CHAT))]
@@ -160,8 +162,8 @@ class ReadingMixin:
         every post or note that answers nothing is an entry, newest first by ``Date``,
         each followed by its comments in order, at most two levels deep - the same
         rows in every client. The timeline is entries only."""
-        if group_id == TIMELINE:
-            return self.threads(TIMELINE)
+        if group_id == TIMELINE or group_id.startswith(TAGGED):
+            return self.threads(group_id)
         msgs = sorted(self.cache.get(group_id, {}).values(), key=lambda m: m.number)
         return [(m, min(d, FEED_DEPTH)) for m, d in feed_threaded(self.visible(msgs))]
 
@@ -170,7 +172,7 @@ class ReadingMixin:
         group, else its owner's (UN-RFC 0008 section 3.1), else threads. Private posts
         and "For you" are always threads, the timeline a feed, a contact's chat always
         starts as chat."""
-        if group_id == TIMELINE:
+        if group_id == TIMELINE or (group_id or "").startswith(TAGGED):
             return "feed"
         if not group_id or group_id == self.my_inbox or group_id == FOR_YOU:
             return "threads"
