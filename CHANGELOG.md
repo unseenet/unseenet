@@ -7,6 +7,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Publishing a spam report is a job** (found 27 Oct: *Publish* seemed to do
+  nothing): the issuer's postage, and the first time its ripening, can take minutes,
+  and `POST /api/reports/publish` waited. Now it checks the report, answers `{"job"}`
+  at once, and the job's events give the Message-ID.
+
+- **An issuer for everyone, not only the project** (27 Oct): become an issuer as a
+  separate identity beside yours (`POST /api/reports/start` with `separate`), for an
+  organisation or a hierarchy, while yours stays the one in use; share it with a
+  colleague by copying that identity to their device (UN-RFC 0050), where it is found
+  to be an issuer by itself (`discover_issuers`, also after a copy and on refresh).
+  Copying an identity into a vault that never chose a default no longer makes the
+  copied one the one in use.
+
 - **An issuer beside your own identity** (27 Oct): a vault may hold an issuer as a
   second identity - the project's in its maintainer's everyday vault - and reports
   are then published, listed and withdrawn as that issuer (`issuer_names`,

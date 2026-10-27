@@ -179,6 +179,8 @@ class CopyReceive:
             payload = cp.check_payload(self._x.open(blob))
             added = cp.merge_payload(self.session.data, payload)
             self.session.save()
+            with contextlib.suppress(Exception):     # an issuer among them (UN-RFC 0045)
+                await self.session.discover_issuers()
         except (cp.CopyError, OSError) as exc:
             with contextlib.suppress(Exception):
                 await cp.write_msg(self._writer, self._x.seal({"ok": False, "error": str(exc)}))

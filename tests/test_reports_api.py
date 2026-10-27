@@ -48,10 +48,17 @@ async def test_reports_through_the_local_api(net):
     assert mine["policy"] == "Spam" and mine["automatic"] is True
     assert iapi.settings()["report_issuer"] is True and api.settings()["report_issuer"] is False
     spam = next(m for m in await issuer.fetch_group(gid) if m.subject == "Ure")
-    rid = (await iapi.publish_report({"posts": [{"id": spam.message_id, "group": gid}],
-                                      "keys": [{"key": spammer.identity().key_text, "days": 30}]}))["id"]
+    job = (await iapi.publish_report({"posts": [{"id": spam.message_id, "group": gid}],
+                                      "keys": [{"key": spammer.identity().key_text, "days": 30}]}))["job"]
+    assert job                                                  # a job: postage takes a while
+    import asyncio
+    for _ in range(100):
+        if (await iapi.my_reports())["reports"]:
+            break
+        await asyncio.sleep(0.05)
     [r] = (await iapi.my_reports())["reports"]
-    assert r["id"] == rid and r["keys"][0]["key"] == spammer.identity().key_text
+    rid = r["id"]
+    assert r["keys"][0]["key"] == spammer.identity().key_text
     with pytest.raises(SessionError, match="days"):
         await iapi.publish_report({"keys": [{"key": spammer.identity().key_text, "days": 400}]})
 
@@ -217,3 +224,26 @@ async def test_a_groups_issuers_and_team_name_are_edited(net, capsys):
     await api.group_settings(inbox, {"team_name": "Snak (ejer)"})
     assert api.group(inbox)["group"]["team_name"] == "Snak (ejer)"
     assert cg
+
+
+async def test_an_issuer_as_a_separate_identity_and_copied_to_a_colleague(net):
+    """For everyone, not only the project (27 Oct): become an issuer as a separate
+    identity beside yours; copy it to a colleague's vault (UN-RFC 0050), where it is
+    found to be an issuer by itself and never becomes the one in use."""
+    from unseenet.client.localapi import LocalAPI
+    from unseenet.core import copying as cp
+    me, colleague = net("me"), net("colleague")
+    api = LocalAPI(session=me)
+    got = await api.start_reports({"policy": "Spam i alt.*", "separate": {"name": "reports", "display": "Alt spam"}})
+    assert got["mine"]["identity"] == "reports" and got["mine"]["label"] != "you"
+    assert me.default_identity_name() == "me" and me.issuer_names() == ["reports"]
+    with pytest.raises(SessionError, match="already"):
+        await api.start_reports({"separate": {"name": "reports"}})
+
+    colleague.data.pop("default_identity", None)        # a vault that never chose one
+    added = cp.merge_payload(colleague.data, cp.build_payload(me.data, ["reports"], False))
+    assert added == ["reports"] and colleague.default_identity_name() == "colleague"
+    assert colleague.issuer_names() == []
+    assert await colleague.discover_issuers() == ["reports"]          # from the network
+    assert colleague.issuer_names() == ["reports"] and colleague.issuer_for() == "reports"
+    assert colleague.default_identity_name() == "colleague"           # still you

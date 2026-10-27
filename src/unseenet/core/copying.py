@@ -231,8 +231,9 @@ def merge_payload(data: dict, p: dict) -> list[str]:
     """Add a copy to a vault's data (section 3.7): identities not there yet (an identity
     already there is not overwritten, whatever its name), and missing group secrets.
     A name taken by another key gets a suffix. The copied default becomes the default
-    when the vault had none. Returns the names of the identities added."""
+    only in a vault that had no identity; one that had keeps the one it used. Returns the names of the identities added."""
     check_payload(p)
+    before = list(data["identities"])            # the vault's own: one of them stays in use
     have = {e.get("seed"): n for n, e in data["identities"].items()}
     added, names = [], {}
     for name, e in p["identities"].items():
@@ -248,7 +249,9 @@ def merge_payload(data: dict, p: dict) -> list[str]:
         names[name] = new
         added.append(new)
     if not data.get("default_identity"):
-        data["default_identity"] = names[p["default"]]
+        # a vault that had identities keeps the one it used (the first): copying an
+        # identity in - a team's issuer, say - never makes you post as it
+        data["default_identity"] = before[0] if before else names[p["default"]]
     for gid, g in p.get("groups", {}).items():
         entry = data["groups"].setdefault(gid, {"type": "closed", "owner": False, "keys": {}})
         entry.setdefault("keys", {})

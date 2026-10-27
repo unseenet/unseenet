@@ -971,10 +971,15 @@ so every front end hides the same posts for the same reasons.
   anyway, on this device.
 - `POST /api/reports/start` `{"policy", "contact", "automatic"}`: start
   or change the user's `reports@` group (UN-RFC 0045 section 3), and
-  their inbox if they have none. Answers as `GET`.
+  their inbox if they have none. With `"separate": {"name", "display"}`
+  the issuer is a new identity beside the user's in the vault, and the
+  user's stays the one in use. An issuer copied into a vault from another
+  device (UN-RFC 0050) is found by itself. Answers as `GET`.
 - `POST /api/reports/publish` `{"posts", "keys", "note"}`: publish a
   report; `posts` `[{"id", "group", "reason"}]`, `keys` `[{"key",
-  "reason", "days"}]` (`days` 1-365, 365 when left out). `{"id"}`.
+  "reason", "days"}]` (`days` 1-365, 365 when left out). Answers at once
+  `{"job"}`: the issuer's postage, and the first time its ripening, can
+  take minutes; the job's events (section 5) give the report's Message-ID.
 - `GET /api/reports/mine`: `{"reports": [{"id", "date", "note", "posts",
   "keys"}]}`, newest first; `POST /api/reports/withdraw` `{"id"}`
   withdraws one.
