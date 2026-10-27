@@ -7,6 +7,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A local group on all your nodes** (#134): an operator with several nodes has a
+  contact inbox on each, with the same Group ID. The client now reads a local group
+  on every node in your vault that carries it - articles from the others numbered
+  from an offset of their own, each post once (by Message-ID), with
+  `Message.node` saying where it came - so one vault reads them all. Read marks are
+  by Message-ID and hold; a node without the group is asked again after an hour;
+  the offline cache keeps them all. `GroupInfo.read_from` (and `read_from` in the
+  local API) lists the nodes, for "Operator inbox (4 nodes)". No node learns about
+  your others. docs/node/operations.md says how to set it up.
+
 - **Reports with a reason, Markdown and files** (unseenet-gui#70): reporting a post
   takes a reason (spam, illegal, threats or harassment, something else), a note in
   Markdown and files - a screenshot, a document for the police - sent encrypted to
