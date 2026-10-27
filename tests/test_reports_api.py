@@ -45,6 +45,7 @@ async def test_reports_through_the_local_api(net):
     assert iapi.reports()["mine"] is None and "spam" in iapi.reports()["reasons"]
     mine = (await iapi.start_reports({"policy": "Spam", "automatic": True}))["mine"]
     assert mine["policy"] == "Spam" and mine["automatic"] is True
+    assert iapi.settings()["report_issuer"] is True and api.settings()["report_issuer"] is False
     spam = next(m for m in await issuer.fetch_group(gid) if m.subject == "Ure")
     rid = (await iapi.publish_report({"posts": [{"id": spam.message_id, "group": gid}],
                                       "keys": [{"key": spammer.identity().key_text, "days": 30}]}))["id"]
