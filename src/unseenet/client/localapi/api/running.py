@@ -85,6 +85,11 @@ class Running:
             if not isinstance(changes["tags"], list):
                 raise SessionError("tags is a list of words")
             changes["tags"] = _tg.normalize(changes["tags"]) or None
+        if "labellers" in changes:              # UN-RFC 0053 section 5: the whole list
+            keys = changes["labellers"] or []
+            if not isinstance(keys, list):
+                raise SessionError("labellers is a list of keys")
+            changes["labellers"] = [_key(k) for k in keys] or None
         if "team_name" in changes:              # UN-RFC 0047 section 3
             changes["team_name"] = str(changes["team_name"] or "").strip() or None
         if "index" in changes and changes["index"] not in ("yes", "no"):

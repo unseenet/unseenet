@@ -75,10 +75,10 @@ def check_manifest_fields(data: dict) -> None:
     """ValueError if ``policy``, ``contact`` or ``automatic`` are not as section 3
     says, or are set on a group that is not ``reports@``."""
     present = [k for k in MANIFEST_FIELDS if k in data]
-    if not present:
+    if not present or data.get("name") == "labels":      # a labeller's: UN-RFC 0053 section 3
         return
     if data.get("name") != GROUP_NAME:
-        raise ValueError("policy, contact and automatic are for reports@ groups (UN-RFC 0045)")
+        raise ValueError("policy, contact and automatic are for reports@ and labels@ groups")
     policy, contact = data.get("policy", ""), data.get("contact", "")
     if not isinstance(policy, str) or len(policy) > POLICY_MAX:
         raise ValueError(f"policy is text of at most {POLICY_MAX} characters")

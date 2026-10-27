@@ -223,6 +223,7 @@ from .kept import *  # noqa: E402,F401,F403
 from .following import *  # noqa: E402,F401,F403
 from .names import *  # noqa: E402,F401,F403
 from .reports import *  # noqa: E402,F401,F403
+from .content_labels import *  # noqa: E402,F401,F403
 from .teams import *  # noqa: E402,F401,F403
 from .main import *  # noqa: E402,F401,F403
 from . import node, basics, groups, messages, network, services, kept, following, names, reports, teams, main  # noqa: E402

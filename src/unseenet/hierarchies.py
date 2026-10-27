@@ -149,6 +149,7 @@ class HierarchyList:
     sub: dict[str, Hierarchy]                  # full name -> governed or free sub-hierarchy
     blocked: tuple[Block, ...] = ()            # section 5.4
     report_issuers: tuple[str, ...] = ()       # UN-RFC 0045 section 7.1: followed by default
+    labellers: tuple[str, ...] = ()            # UN-RFC 0053 section 5: for warnings, by default
 
 
 MAX_BLOCK_REASON = 200
@@ -229,7 +230,8 @@ def parse_hierarchy_list(text: str, hierarchy: str) -> HierarchyList:
         seen[name] = item["group"]
     groups = {n: g for n, g in seen.items() if n not in twice}       # endorsed twice: neither counts
     return HierarchyList(hierarchy, str(data.get("updated", ""))[:32], groups, sub,
-                         _blocks(data.get("blocked")), _issuers(data.get("report_issuers")))
+                         _blocks(data.get("blocked")), _issuers(data.get("report_issuers")),
+                         _issuers(data.get("labellers")))
 
 
 def _issuers(items) -> tuple[str, ...]:
@@ -322,6 +324,17 @@ def report_issuers_for(name: str, root: dict[str, Hierarchy],
     out: dict[str, str] = {}
     for lst in chain(name, root, lists):
         for key in lst.report_issuers:
+            out.setdefault(key, lst.hierarchy)
+    return out
+
+
+def labellers_for(name: str, root: dict[str, Hierarchy],
+                  lists: dict[str, HierarchyList]) -> dict[str, str]:
+    """{labeller key: hierarchy} whose warnings count by default in a group's hierarchy
+    (UN-RFC 0053 section 5), as ``report_issuers_for``."""
+    out: dict[str, str] = {}
+    for lst in chain(name, root, lists):
+        for key in lst.labellers:
             out.setdefault(key, lst.hierarchy)
     return out
 

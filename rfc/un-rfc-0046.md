@@ -1022,6 +1022,37 @@ owner key is needed only to change who reads.
   "team_name"}` makes a team key and sends it to that person's inbox,
   `{"group", "remove": <team key>}` removes one. Both answer as `GET`.
 
+## 4.23 Content Labels
+
+Content labels (UN-RFC 0053) describe and never sanction. Every row has
+`labels`: `null`, or `{"warnings": [{"warning", "by", "choice"}],
+"topics": [...], "action"}` - the post's warnings (the author's tags,
+the group's, labellers'; `by` names who gave each), its topics from
+labellers the user follows for topics, and what to do: `show`, `blur`
+(behind *Show anyway*) or `hide`, from the user's choices. A front end
+follows `action` and never hides or blurs silently: it says which warning
+and by whom. The user's own posts and their contacts' are always `show`.
+Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
+
+- `GET /api/labels`: `{"labellers": [{"key", "label", "yours", "topics",
+  "hierarchies", "groups", "on"}], "warnings": [{"warning", "label",
+  "choice"}], "mine"}` - the labellers that count and where each is named,
+  what the user does with each warning, and their own `labels@` channel.
+- `POST /api/labels/follow` `{"key", "label", "topics"}`: follow a
+  labeller in every group, its topics too if `topics`; `"follow": false`
+  stops following, also one a hierarchy or group names.
+- `POST /api/labels/warning` `{"warning", "choice"}`: `show`, `blur` or
+  `hide` for that warning.
+- `POST /api/labels/refresh`: read the labellers' channels now.
+- `POST /api/labels/start` `{"policy", "contact", "automatic", "topics"}`:
+  start or change the user's `labels@` channel.
+- `POST /api/labels/publish` `{"posts": [{"id", "group", "labels"}],
+  "note"}`: answers at once `{"job"}`; `"labels": []` takes the user's
+  earlier labels of a post back.
+- `POST /api/groups/{gid}/post` takes `tags`, the author's own (at most 8),
+  and `POST /api/groups/{gid}/settings` the group's `tags` and
+  `labellers` (UN-RFC 0053 section 5).
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

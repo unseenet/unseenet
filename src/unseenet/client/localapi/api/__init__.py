@@ -66,7 +66,8 @@ SETTINGS_FIELDS = ("title", "description", "rules", "rules_type", "view", "kinds
                    "low_latency", "min_pow", "retention_days", "comments", "comment_days",
                    "files", "reactions", "index",
                    "report_issuers", "team_name",     # UN-RFC 0045 7.5, UN-RFC 0047 3
-                   "tags")                            # the group's tags (UN-RFC 0052 section 5)
+                   "tags",                            # the group's tags (UN-RFC 0052 section 5)
+                   "labellers")                       # labellers named here (UN-RFC 0053, 5)
 FIXED_FIELDS = ("type", "owner", "name", "local")      # never change (UN-RFC 0004, 4)
 PROGRAM_HEADERS = ("x-", "gateway-")                   # what a program may add (section 4.9)
 
@@ -139,11 +140,12 @@ from .copying import Copying  # noqa: E402
 from .rules import Rules  # noqa: E402
 from .reports import Reports  # noqa: E402
 from .teams import Teams  # noqa: E402
+from .content_labels import ContentLabels  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
                Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules,
-               Reports, Teams):
+               Reports, Teams, ContentLabels):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

@@ -189,6 +189,7 @@ class ClientRuntime:
         try:                                   # after naming: hierarchies name issuers
             before = set(s.report_book().reports)
             await s.refresh_reports()           # UN-RFC 0045 section 7
+            await s.refresh_labels()            # UN-RFC 0053 section 5
             if set(s.report_book().reports) != before:
                 out.reports = True
                 s.emit(ev.GroupsChanged())

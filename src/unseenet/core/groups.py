@@ -185,7 +185,7 @@ def _comments(data: dict) -> tuple[str, int | None]:
 # --- key-bound groups (UN-RFC 0029) --------------------------------------
 
 KEY_BOUND_NAMES = ("inbox", "names", "profile", "avatar", "ripe", "feed", "site",  # UN-RFC 0029, 2
-                   "state", "reports")
+                   "state", "reports", "labels")                                 # labels: 0053
 STATE_NAME = "state"              # state@<fp>: the owner's state, encrypted (UN-RFC 0044)
 STATE_MAX = 22 * 1024             # the state field: 16 KiB of plaintext, encrypted, in base64
 # personal groups (UN-RFC 0029 section 2.1): channels with this view, started by choice
@@ -194,7 +194,8 @@ PERSONAL_GROUPS = {"feed": "feed", "site": "pages"}
 # octets (feed@, attest@ and site@ for when they become key-bound groups).
 KEY_BOUND_MANIFEST_MAX = {"inbox": 16 * 1024, "feed": 8 * 1024, "profile": 10 * 1024, "state": 24 * 1024,
                           "avatar": 12 * 1024, "ripe": 24 * 1024, "names": 64 * 1024, "attest": 64 * 1024,
-                          "site": 64 * 1024, "reports": 4 * 1024}     # reports@: UN-RFC 0045, 3
+                          "site": 64 * 1024, "reports": 4 * 1024,     # reports@: UN-RFC 0045, 3
+                          "labels": 4 * 1024}                         # labels@: UN-RFC 0053, 3
 MAX_LIFETIME = timedelta(days=730)       # expires at most this long after Date (section 3)
 RENEW_WHEN_LEFT = timedelta(days=545)    # renew once less than this remains (section 4)
 RENEW_WINDOW = timedelta(days=30)        # at a random moment within this (section 4)
@@ -308,6 +309,9 @@ class Manifest:
             check_group_issuers(data)                       # UN-RFC 0045 section 7.5
             from .tags import check_group_tags
             check_group_tags(data)                          # UN-RFC 0052 section 5
+            from . import labels as _lb
+            _lb.check_manifest_fields(data)                 # UN-RFC 0053 sections 3, 5
+            _lb.check_named(data)
             if data.get("view") == "pages":                 # UN-RFC 0035 section 3
                 from .pages import check_manifest_fields
                 check_manifest_fields(data)
@@ -327,6 +331,8 @@ class Manifest:
                                f"{PERSONAL_GROUPS[name]} (UN-RFC 0029 section 2.1)")
         if is_key_bound(art.group) and name == "reports" and m.type != "channel":
             raise ArticleError("syntax", "reports@ is a channel (UN-RFC 0045 section 3)")
+        if is_key_bound(art.group) and name == "labels" and m.type != "channel":
+            raise ArticleError("syntax", "labels@ is a channel (UN-RFC 0053 section 3)")
         if (m.type == "state") != (is_key_bound(art.group) and name == STATE_NAME):
             raise ArticleError("syntax", "state@ is the one group of type state (UN-RFC 0044)")
         if m.type == "state":                               # UN-RFC 0044 section 3
@@ -430,7 +436,8 @@ EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reacti
                 "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
                 "readers", "team_name",                 # team inboxes (UN-RFC 0047)
                 "report_issuers",                       # a group's own (UN-RFC 0045, 7.5)
-                "tags")                                 # the group's tags (UN-RFC 0052, 5)
+                "tags",                                 # the group's tags (UN-RFC 0052, 5)
+                "labellers", "topics")                  # UN-RFC 0053 sections 3, 5
 
 
 def check_team_fields(data: dict) -> None:
@@ -481,6 +488,9 @@ def check_extra_fields(data: dict) -> None:
     check_group_issuers(data)
     from .tags import check_group_tags
     check_group_tags(data)
+    from . import labels as _lb
+    _lb.check_manifest_fields(data)
+    _lb.check_named(data)
     max_pins(data)
     if data.get("type") != "inbox":
         check_reactions(data)                              # UN-RFC 0048 section 4.1

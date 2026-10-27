@@ -295,6 +295,30 @@ async def rules(request):
     return _json(_api(request).set_rules(await _body(request)))
 
 
+async def labels(request):                              # UN-RFC 0053
+    return _json(_api(request).labels())
+
+
+async def labels_follow(request):
+    return _json(await _api(request).follow_labeller(await _body(request)))
+
+
+async def labels_warning(request):
+    return _json(_api(request).warning_choice(await _body(request)))
+
+
+async def labels_refresh(request):
+    return _json(await _api(request).refresh_labels())
+
+
+async def labels_start(request):
+    return _json(await _api(request).start_labels(await _body(request)))
+
+
+async def labels_publish(request):
+    return _json(await _api(request).publish_labels(await _body(request)))
+
+
 async def reports(request):
     return _json(_api(request).reports())
 
@@ -608,6 +632,9 @@ ROUTES = [
     ("GET", "/api/reports/received", reports_received),
     ("POST", "/api/reports/hierarchy", reports_hierarchy),
     ("POST", "/api/groups/{gid}/show", show_reported),
+    ("GET", "/api/labels", labels), ("POST", "/api/labels/follow", labels_follow),     # 0053
+    ("POST", "/api/labels/warning", labels_warning), ("POST", "/api/labels/refresh", labels_refresh),
+    ("POST", "/api/labels/start", labels_start), ("POST", "/api/labels/publish", labels_publish),
     ("GET", "/api/teams", teams), ("POST", "/api/teams/accept", teams_accept),     # 0047
     ("POST", "/api/teams/forget", teams_forget),
     ("GET", "/api/teams/readers", teams_readers), ("POST", "/api/teams/readers", teams_readers),
