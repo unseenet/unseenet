@@ -193,6 +193,7 @@ A plural is the same count (`contacts who reacted`, `days old`).
 | `tagged WORD...` | it has at least one of the tags: the author's own or its group's (UN-RFC 0052) |
 | `tagged all WORD...` | it has every one of them |
 | `labelled WORD...` | a labeller that counts for the reader gave it at least one of the labels (UN-RFC 0053 section 5) |
+| `lang da en` | it is written in one of these languages: its `Content-Language` (UN-RFC 0052 section 5a), else a `lang-xx` topic label from a labeller the reader follows for topics; a post that says neither matches no `lang` |
 | `labelled all WORD...` | ... every one of them |
 | `group is PATTERN` | the group's name matches the wildmat |
 | `older than N UNIT`, `newer than N UNIT` | its age, UNIT minutes, hours, days or weeks |

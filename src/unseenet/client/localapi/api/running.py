@@ -85,6 +85,11 @@ class Running:
             if not isinstance(changes["tags"], list):
                 raise SessionError("tags is a list of words")
             changes["tags"] = _tg.normalize(changes["tags"]) or None
+        if "languages" in changes:              # UN-RFC 0052 section 5a
+            from ....core import tags as _tg2
+            if not isinstance(changes["languages"], list):
+                raise SessionError("languages is a list of codes such as da, en")
+            changes["languages"] = _tg2.normalize_languages(changes["languages"]) or None
         if "labellers" in changes:              # UN-RFC 0053 section 5: the whole list
             keys = changes["labellers"] or []
             if not isinstance(keys, list):

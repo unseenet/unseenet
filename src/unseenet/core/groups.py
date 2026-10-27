@@ -308,8 +308,9 @@ class Manifest:
             check_team_fields(data)                         # UN-RFC 0047 section 3
             from .reports import check_group_issuers
             check_group_issuers(data)                       # UN-RFC 0045 section 7.5
-            from .tags import check_group_tags
+            from .tags import check_group_tags, check_group_languages
             check_group_tags(data)                          # UN-RFC 0052 section 5
+            check_group_languages(data)                     # and 5a
             from . import labels as _lb
             _lb.check_manifest_fields(data)                 # UN-RFC 0053 sections 3, 5
             _lb.check_named(data)
@@ -437,7 +438,7 @@ EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reacti
                 "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
                 "readers", "team_name",                 # team inboxes (UN-RFC 0047)
                 "report_issuers",                       # a group's own (UN-RFC 0045, 7.5)
-                "tags",                                 # the group's tags (UN-RFC 0052, 5)
+                "tags", "languages",                    # the group's tags, languages (0052)
                 "labellers", "topics")                  # UN-RFC 0053 sections 3, 5
 
 
@@ -487,8 +488,9 @@ def check_extra_fields(data: dict) -> None:
     check_team_fields(data)
     from .reports import check_group_issuers
     check_group_issuers(data)
-    from .tags import check_group_tags
+    from .tags import check_group_tags, check_group_languages
     check_group_tags(data)
+    check_group_languages(data)
     from . import labels as _lb
     _lb.check_manifest_fields(data)
     _lb.check_named(data)
@@ -890,6 +892,10 @@ def _check_tags(art: Article) -> None:
     """The form of a ``Tags`` header, as of any other (UN-RFC 0052 section 6). A
     reaction has none; nothing else about tags concerns a node."""
     from . import tags as tg
+    try:
+        tg.parse_languages(art.get(tg.LANG_HEADER))         # section 5a: the form only
+    except tg.TagError as exc:
+        raise ArticleError("syntax", str(exc)) from exc
     if art.get(tg.HEADER) is None:
         return
     try:

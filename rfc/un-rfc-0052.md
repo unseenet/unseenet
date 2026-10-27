@@ -129,11 +129,59 @@ group's, and shows them apart: the author's as the author's, the group's
 as the group's. A group's tags are the owner's statement about the
 group, not the author's about the post.
 
+# 5a. The Language of a Post
+
+An article MAY say which language it is written in:
+
+```
+Content-Language: da
+Content-Language: en, da
+```
+
+as in mail and HTTP (RFC 3282): 1 to 4 primary language subtags of BCP 47
+(`da`, `en`, `de`, `fil`) - 2 or 3 lower-case letters, separated by
+commas, each once. Like tags it is the author's own statement, signed
+with the article, inside the ciphertext in a closed group and a private
+post. A node checks its form and nothing else (section 6).
+
+A group's manifest MAY say which languages are written there:
+
+| Field       | Type                | Meaning                               |
+|-------------|---------------------|---------------------------------------|
+| `languages` | list of subtags     | 1 to 4, the first the group's main one |
+
+so `dk.snak` says `["da"]` and an international group `["en"]`.
+
+**How a client chooses.** People write in more than one language, by
+group and by subject, so a client suggests and the author decides. Where
+the author writes, the client suggests, in this order, the first that
+says anything:
+
+1. the languages the author chose the last time they wrote in that group,
+   remembered in their own settings (UN-RFC 0044), never published;
+2. the group's `languages`;
+3. the author's profile (`lang`, UN-RFC 0022), only when it names one
+   language.
+
+The suggestion is shown by the compose box, as tags are, and is changed
+with one action; the client remembers what the author chose for that
+group. When nothing says anything, the article gets no header: **better
+none than a wrong one**. A client MAY recognise the language of the text
+itself, locally - nothing leaves the machine - and suggest that instead;
+it MUST NOT guess when the text is too short to tell or its recogniser
+is in doubt.
+
+Readers' rules can use it (UN-RFC 0051, `lang`). A labeller MAY fill in
+the language of posts without the header as a topic label `lang-da`
+(UN-RFC 0053), which counts only for readers who follow it for topics.
+Gateways map the other network's language tags to the header.
+
 # 6. Nodes
 
-A node checks the form of a `Tags` header it can read (section 3) and
-refuses an article with a malformed one (`441 syntax`), as it checks any
-other header. It checks a manifest's `tags` the same way.
+A node checks the form of a `Tags` header it can read (section 3), and
+of a `Content-Language` header (section 5a), and refuses an article with
+a malformed one (`441 syntax`), as it checks any other header. It checks
+a manifest's `tags` and `languages` the same way.
 
 That is all a node does with tags. It MUST NOT carry, hide, forward,
 delete or price an article differently because of its tags, and tags
@@ -193,7 +241,10 @@ would stop warning.
 
 # 11. Changes to Other Documents
 
-- UN-RFC 0004 section 4: a manifest may hold `tags` (section 5).
+- UN-RFC 0004 section 4: a manifest may hold `tags` (section 5) and
+  `languages` (section 5a).
+- UN-RFC 0044: the languages last chosen per group are kept with the
+  user's settings (section 5a, 27 October 2026).
 - UN-RFC 0051 sections 4.6 and 4.7: the condition `tagged` (a separate
   amendment).
 

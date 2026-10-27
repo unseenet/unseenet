@@ -1063,6 +1063,11 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
   feeds the user follows - the author's tags, the group's, and topics of
   labellers followed for topics - newest first, as a feed (`view` feed,
   `label` `#word`); writing goes to each post's own group.
+- `POST /api/groups/{gid}/post` takes `languages` (UN-RFC 0052 5a), what
+  the author chose, remembered for the group; the group's head has
+  `suggested_languages`: `{"codes", "from"}` - `you`, `group`, `profile`
+  or `""` (none: send no header), and settings take the group's
+  `languages`.
 - `POST /api/groups/{gid}/post` takes `tags`, the author's own (at most 8),
   and `POST /api/groups/{gid}/settings` the group's `tags` and
   `labellers` (UN-RFC 0053 section 5).

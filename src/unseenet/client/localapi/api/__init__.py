@@ -67,7 +67,8 @@ SETTINGS_FIELDS = ("title", "description", "rules", "rules_type", "view", "kinds
                    "files", "reactions", "index",
                    "report_issuers", "team_name",     # UN-RFC 0045 7.5, UN-RFC 0047 3
                    "tags",                            # the group's tags (UN-RFC 0052 section 5)
-                   "labellers")                       # labellers named here (UN-RFC 0053, 5)
+                   "labellers",                       # labellers named here (UN-RFC 0053, 5)
+                   "languages")                       # written here (UN-RFC 0052, 5a)
 FIXED_FIELDS = ("type", "owner", "name", "local")      # never change (UN-RFC 0004, 4)
 PROGRAM_HEADERS = ("x-", "gateway-")                   # what a program may add (section 4.9)
 
