@@ -159,6 +159,27 @@ class Client:
             return None
         return await read_block(self.reader)
 
+    OVERVIEW = ("Subject", "From", "Date", "Message-ID", "References", ":bytes", ":lines")
+
+    async def over(self, first: int, last: int) -> list[dict]:
+        """``OVER first-last`` (RFC 3977 8.3) in the selected group: each article's
+        number and overview fields as a dict - its headers, without fetching it."""
+        code, _ = await self.command(f"OVER {first}-{last}")
+        if code == 423:                         # no articles in that range
+            return []
+        if code != 224:
+            raise NNTPError(code, "OVER refused")
+        out = []
+        for line in (await read_block(self.reader, limit=1 << 24)).decode("utf-8", "replace").splitlines():
+            parts = line.split("\t")
+            try:
+                row = {"number": int(parts[0])}
+            except (ValueError, IndexError):
+                continue
+            row.update(zip(self.OVERVIEW, parts[1:]))
+            out.append(row)
+        return out
+
     async def group(self, group_id: str) -> tuple[int, int, int]:
         _, text = await self.command(f"GROUP {group_id}", (211,))
         count, low, high = (int(x) for x in text.split()[:3])

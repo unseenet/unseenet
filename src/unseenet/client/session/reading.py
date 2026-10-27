@@ -200,10 +200,46 @@ class ReadingMixin:
     # ------------------------------------------------------------------
     # reading
     # ------------------------------------------------------------------
-    async def fetch_group(self, group_id: str) -> list[Message]:
-        """Fetch new articles in a group; returns all cached messages, oldest first."""
-        cache = self.cache.setdefault(group_id, {})
-        raws = self._raw.setdefault(group_id, {})
+    @staticmethod
+    def _control_line(row: dict) -> bool:
+        """Whether an overview line is a manifest or other control article - what group
+        state depends on, so a reader never skips it (#669)."""
+        subject = row.get("Subject", "")
+        return subject == "(group settings)" or subject.startswith("(control:")
+
+    async def skip_to_now(self, group_id: str) -> int:
+        """Begin following a group at its newest article, without fetching what is there
+        (#669: a bot that judges only what comes): its manifest is read so its settings
+        are known; the next ``fetch_group`` reads only what comes after. Returns the
+        article number it starts after."""
+        m = await self.fetch_manifest(group_id)
+        if m is not None:
+            entry = self.group_entry(group_id)
+            entry["manifest"] = dict(m.raw)
+            entry["manifest_rescanned"] = True          # known: no need to read it all
+
+        async def run(c: Client):
+            try:
+                _, _, high = await c.group(group_id)
+            except NNTPError as exc:
+                raise SessionError("group not carried by this node") from exc
+            return high
+        high = await self._call(run, self.node_for(group_id))
+        self._high[group_id] = max(self._high.get(group_id, 0), high)
+        self.save()
+        return self._high[group_id]
+
+    async def fetch_group(self, group_id: str, skip=None, keep: bool = True) -> list[Message]:
+        """Fetch new articles in a group; returns all cached messages, oldest first.
+
+        For programs that follow many groups (#669): ``skip``, a function of an article's
+        overview headers (``Subject``, ``From``, ``Date``, ``Message-ID``, ``References``,
+        ``:bytes``, ``number``) that returns True for articles not to fetch at all - a
+        manifest or control article is always fetched, since the group's state depends
+        on it. ``keep=False`` keeps nothing in the cache or the offline cache, only how
+        far it has read, and returns just the new messages."""
+        cache = self.cache.setdefault(group_id, {}) if keep else {}
+        raws = self._raw.setdefault(group_id, {}) if keep else {}
         me = self.identity()
         entry = self.group_entry(group_id)
 
@@ -222,7 +258,16 @@ class ReadingMixin:
                     start = low
                     entry["manifest_rescanned"] = True
                 fetched = []
-                for n in range(start, high + 1):
+                numbers = range(start, high + 1)
+                if skip is not None and start <= high:    # headers first (#669)
+                    try:
+                        rows = await c.over(start, high)
+                    except NNTPError:
+                        rows = None                      # a node without OVER: every one
+                    if rows is not None:
+                        numbers = [row["number"] for row in rows
+                                   if self._control_line(row) or not skip(row)]
+                for n in numbers:
                     raw = await c.article(str(n))
                     if raw is not None:
                         fetched.append((n, raw))
@@ -249,6 +294,7 @@ class ReadingMixin:
                 raise first
         changed, new = False, 0
         home = self.node_for(group_id)
+        came: list[Message] = []                         # what came now (keep=False)
         for n, raw in fetched:
             raw = strip_reader_headers(raw)
             msg = self._parse(n, raw, group_id, entry, me)
@@ -262,6 +308,7 @@ class ReadingMixin:
             new += n not in cache
             msg.node = home
             cache[n] = msg
+            came.append(msg)
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
         if self.manifest_data(group_id).get("local") and len(self.nodes) > 1:   # #134
@@ -270,6 +317,13 @@ class ReadingMixin:
             changed = changed or more
         if entry.get("cancels") and self._apply_cancels(group_id):
             changed = True
+        if not keep:                                     # nothing kept but how far (#669)
+            if high > self._high.get(group_id, 0):
+                self._high[group_id] = high
+            self.save()
+            if came:
+                self.emit(ev.GroupUpdated(group_id, len(came)))
+            return sorted(came, key=lambda m: m.number)
         if changed:
             self.save()
         if fetched or changed:
