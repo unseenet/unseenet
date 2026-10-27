@@ -7,6 +7,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The language of a post** (#671, UN-RFC 0052 section 5a; decided 27 Oct): the author's
+  `Content-Language` (1-4 codes such as `da`, `en`), checked for form by nodes, inside
+  the encryption in closed groups. People write in several languages by group, so the
+  client suggests and the author decides: what you chose last in that group (kept in
+  your settings, never published), else the group's `languages` (a new manifest field),
+  else your profile when it names one language - else no header, better none than wrong.
+  `Session.post(..., languages=)`, `suggest_languages`, `remember_languages`;
+  `Message.languages`, `GroupInfo.languages`; rules `lang da en` (UN-RFC 0051), falling
+  back to `lang-xx` labels from labellers followed for topics; local API `languages`
+  and `suggested_languages`; `unseenet post --lang`, `group-edit --languages`.
+
 - **For you with your rules, seen, and Show all** (#629, UN-RFC 0051 5.5): only
   `[foryou]` rules act on For you - rules for the feed or groups never do; `quiet`
   (only there) lists an entry without counting it or telling you, `hide` leaves it out,

@@ -109,3 +109,55 @@ def warnings(tags) -> tuple[str, ...]:
     """The warnings among tags (section 4), in the set's order."""
     have = set(tags or ())
     return tuple(w for w in WARNINGS if w in have)
+
+
+
+# --- the language of a post (section 5a) ----------------------------------------
+LANG_HEADER = "Content-Language"
+MAX_LANGUAGES = 4
+_LANG = re.compile(r"^[a-z]{2,3}$")
+
+
+def is_language(code: str) -> bool:
+    """A primary language subtag of BCP 47: 2 or 3 lower-case letters."""
+    return isinstance(code, str) and bool(_LANG.match(code))
+
+
+def normalize_languages(codes) -> list[str]:
+    """Language codes as an author's client takes them: lower-cased, a region dropped
+    (``da-DK`` is ``da``), what is not one dropped, each once, at most 4."""
+    out: list[str] = []
+    for c in codes or []:
+        c = str(c).strip().lower().replace("_", "-").split("-")[0]
+        if is_language(c) and c not in out:
+            out.append(c)
+    return out[:MAX_LANGUAGES]
+
+
+def parse_languages(value: str | None) -> tuple[str, ...]:
+    """The codes of a ``Content-Language`` header; () for none. TagError if malformed."""
+    if value is None or not value.strip():
+        return ()
+    codes = [c.strip() for c in value.split(",")]
+    if not 1 <= len(codes) <= MAX_LANGUAGES or not all(is_language(c) for c in codes) \
+            or len(set(codes)) != len(codes):
+        raise TagError(f"Content-Language: 1 to {MAX_LANGUAGES} language codes such as da, en, each once")
+    return tuple(codes)
+
+
+def languages_of(art) -> tuple[str, ...]:
+    """The languages an article says it is in; () if none or malformed."""
+    try:
+        return parse_languages(art.get(LANG_HEADER))
+    except TagError:
+        return ()
+
+
+def check_group_languages(data: dict) -> None:
+    """ValueError if a manifest's ``languages`` are not 1 to 4 codes, each once."""
+    if "languages" not in data:
+        return
+    codes = data["languages"]
+    if not isinstance(codes, list) or not codes:
+        raise ValueError(f"languages is a list of 1 to {MAX_LANGUAGES} codes")
+    parse_languages(", ".join(str(c) for c in codes))

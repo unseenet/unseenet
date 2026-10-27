@@ -120,6 +120,8 @@ class ReadingMixin:
         g.view, g.owner_view = self.view_of(group_id), data.get("view", "threads")
         g.kinds = tuple(self.group_kinds(group_id))
         g.tags = tuple(data.get("tags") or ()) if isinstance(data.get("tags"), list) else ()   # 0052, 5
+        g.languages = tuple(_tags.normalize_languages(data.get("languages"))) \
+            if isinstance(data.get("languages"), list) else ()                              # 5a
         g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
         if g.local:
             g.read_from = self.read_from(group_id)          # your nodes it is read from (#134)
@@ -537,6 +539,7 @@ class ReadingMixin:
             msg.kind = message_kind(art)                     # UN-RFC 0028
             msg.reaction = (art.get("Reaction") or "").strip()   # UN-RFC 0048
             msg.tags = _tags.of_article(art)                  # the author's own (UN-RFC 0052)
+            msg.languages = _tags.languages_of(art)           # Content-Language (0052, 5a)
             msg.content_type = art.get("Content-Type", "")   # Markdown or plain (UN-RFC 0031)
             from ...core.origins import origin_of
             origin = origin_of(art.get, msg.date)              # UN-RFC 0049 section 4
@@ -568,6 +571,7 @@ class ReadingMixin:
         msg.subject, msg.from_name, msg.body = inner.get("Subject", ""), inner["From"], inner.body
         msg.kind = message_kind(inner)                       # inside the encryption (UN-RFC 0028)
         msg.tags = _tags.of_article(inner)                   # inside it too (UN-RFC 0052, 3)
+        msg.languages = _tags.languages_of(inner)
         msg.reaction = (inner.get("Reaction") or "").strip()     # UN-RFC 0048 section 8
         msg.content_type = inner.get("Content-Type", "")
         self._encrypted_files(msg, art, inner, msg.group)    # UN-RFC 0027, 3.3 and 4.4

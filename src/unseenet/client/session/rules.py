@@ -159,7 +159,17 @@ class RulesMixin:
                                    if m.message_id == root or root in m.references),
             tags=frozenset(msg.tags) | frozenset(t for t in (self.manifest_data(gid).get("tags") or [])
                                                  if isinstance(t, str)),        # UN-RFC 0052
-            labels=self._labeller_labels(msg))                                    # UN-RFC 0053
+            labels=self._labeller_labels(msg),                                    # UN-RFC 0053
+            languages=self._languages_for_rules(msg))                             # 0052 5a
+
+    def _languages_for_rules(self, msg: Message) -> frozenset:
+        """What a post is written in, for ``lang``: its ``Content-Language``, else
+        ``lang-xx`` topic labels from labellers you follow for topics (0052 5a)."""
+        if msg.languages:
+            return frozenset(msg.languages)
+        got = self.post_labels(msg)
+        topics = (got or {}).get("topics", []) if got else []
+        return frozenset(t[5:] for t in topics if t.startswith("lang-") and 2 <= len(t) - 5 <= 3)
 
     def _labeller_labels(self, msg: Message) -> frozenset:
         """The labels of the labellers that count for this post (warnings and topics),

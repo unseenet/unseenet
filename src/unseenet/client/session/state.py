@@ -30,6 +30,7 @@ SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "m
             "feed_rules_off",     # ... turned off for now, kept (UN-RFC 0051 section 3)
             "report_issuers",     # spam report issuers followed and turned off (UN-RFC 0045, 7.2)
             "labellers",          # labellers followed, and what to do per warning (UN-RFC 0053)
+            "languages_by_group",  # what you wrote in, per group, to suggest (UN-RFC 0052 5a)
             "clients")                # each client's own: the TUI's theme, the GUI's (UN-RFC 0044, 4.2)
 
 

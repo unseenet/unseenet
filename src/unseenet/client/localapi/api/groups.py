@@ -126,7 +126,9 @@ class Groups:
                # the spam report issuers its owner names (UN-RFC 0045 7.5), with labels
                "report_issuers": [{"key": k, "label": s.issuer_label(k)}
                                   for k in data.get("report_issuers", [])],
-               "team_name": data.get("team_name", "") if data.get("type") == "inbox" else None}
+               "team_name": data.get("team_name", "") if data.get("type") == "inbox" else None,
+               # what to suggest you write in here, and why (UN-RFC 0052 section 5a)
+               "suggested_languages": dict(zip(("codes", "from"), s.suggest_languages(gid)))}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
         return out

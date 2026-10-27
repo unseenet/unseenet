@@ -346,13 +346,42 @@ class PostingMixin:
                 and msg.author_key == self.identity().key_text
                 and len(msg.versions) + 1 <= MAX_SUPERSEDES)
 
+    # --- the language of what you write (UN-RFC 0052 section 5a) ---
+    def remember_languages(self, group_id: str, languages) -> None:
+        """What you chose to write in, in a group - offered there next time; ``[]``
+        forgets it. Kept in your settings (UN-RFC 0044), never published."""
+        from ...core import tags as tg
+        mem = self.data.setdefault("languages_by_group", {})
+        codes = tg.normalize_languages(languages)
+        if codes:
+            mem[group_id] = codes
+        else:
+            mem.pop(group_id, None)
+
+    def suggest_languages(self, group_id: str) -> tuple[list[str], str]:
+        """What to suggest you write in, in a group, and why: ``(codes, "you")`` - what
+        you chose there last; ``(codes, "group")`` - the group's ``languages``;
+        ``(codes, "profile")`` - your profile, when it names one language; else
+        ``([], "")``: no header (better none than a wrong one)."""
+        from ...core import tags as tg
+        mine = self.data.get("languages_by_group", {}).get(group_id)
+        if mine:
+            return list(mine), "you"
+        group = tg.normalize_languages(self.manifest_data(group_id).get("languages") or [])
+        if group:
+            return group, "group"
+        prof = tg.normalize_languages((self.my_profile() or {}).get("lang") or [])
+        if len(prof) == 1:
+            return prof, "profile"
+        return [], ""
+
     async def post(self, group_id: str, subject: str, body: str,
                    references: list[str] | None = None, kind: str = KIND_POST,
                    content_type: str | None = None,
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
                    from_name: str | None = None, files=None, origin: dict | None = None,
-                   tags=None) -> str:
+                   tags=None, languages=None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
 
         ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
@@ -363,7 +392,10 @@ class PostingMixin:
         ``files`` are prepared files (``prepare_files``): checked against the group
         first, then sent as blobs with the post, which pays their extra postage
         (UN-RFC 0027 sections 4.5, 6). ``tags``: the author's own, at most 8 (UN-RFC
-        0052) - normalised here; in a closed group they go inside the encryption."""
+        0052) - normalised here; in a closed group they go inside the encryption.
+        ``languages``: what it is written in (UN-RFC 0052 5a), as the author chose -
+        remembered for the group, so ``suggest_languages`` offers it next time; ``[]``
+        says none, ``None`` leaves the header out and remembers nothing."""
         if self.portal_warning(group_id):
             # Clients ask first (portal_warning / accept_portals); this is the safety net.
             raise SessionError("this group has a portal: its posts are also published outside "
@@ -378,6 +410,14 @@ class PostingMixin:
         # chips and '#word' in what was written, into the header (UN-RFC 0052 section 3)
         tag_header = tg.header(tg.normalize(list(tags or []) + tg.in_text(f"{subject}\n{body}"))) \
             if kind != "reaction" else None
+        langs = tg.normalize_languages(languages) if languages is not None and kind != "reaction" else []
+        if languages is not None and kind != "reaction":
+            self.remember_languages(group_id, langs)        # for next time here (0052, 5a)
+        if langs:
+            tag_header = [tag_header] if tag_header else []
+            tag_header.append((tg.LANG_HEADER, ", ".join(langs)))
+        else:
+            tag_header = [tag_header] if tag_header else []
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
         if origin:
@@ -422,7 +462,7 @@ class PostingMixin:
                     group_id, epoch, keys, author, from_name=shown,
                     subject=subject, body=body, references=references, kind=kind,
                     content_type=content_type, pow_bits=bits + file_bits, extra=edit_header,
-                    inner_extra=inner_files + ([tag_header] if tag_header else []))
+                    inner_extra=inner_files + tag_header)
         else:
             await naming.keep_my_names(self)              # a service's own names, once a day
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)
@@ -432,8 +472,7 @@ class PostingMixin:
                 art = new_article(group_id, "" if kind == KIND_CHAT else subject, body,
                                   from_name=shown, references=references,
                                   extra=[("Content-Type", content_type), ("Message-Kind", kind)]
-                                  + ([cert] if cert else []) + edit_header
-                                  + ([tag_header] if tag_header else []))
+                                  + ([cert] if cert else []) + edit_header + tag_header)
                 return art.finalize(author, bits + file_bits)
         gtype = self.manifest_data(group_id).get("type") or entry.get("type")
         if gtype == "moderated" and not self.moderates(group_id):

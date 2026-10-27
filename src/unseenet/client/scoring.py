@@ -121,6 +121,7 @@ What comes after if. One of these:
                              with every one
   labelled sexual nudity     a labeller you follow labelled it
                              so; labelled all ... for every one
+  lang da en                 written in one of these languages
   group is dk.*              it is in a matching group
   older than 7 days          also minutes, hours, weeks
   newer than 2 hours
@@ -187,7 +188,7 @@ WORDS = sorted({"if", "per", "max", "and", "or", "not", "author", "in", "is", "f
                 "since", "subject", "text", "matches", "has", "pictures", "group", "older",
                 "newer", "than", "show", "hide", "fold", "dim", "highlight", "mark", "sort",
                 "by", "then", "ascending", "version", *LISTS, *THREAD_LISTS, *SORT_KEYS,
-                "tagged", "labelled", "all", "blur", "quiet", "for", "you", "reply", "mention",
+                "tagged", "labelled", "all", "blur", "quiet", "for", "you", "reply", "mention", "lang",
                 "minutes", "hours", "days", "weeks", "minute", "hour", "day", "week", "time",
                 "to", "contact", "who", "followed", "reaction", "reply", "old"})
 
@@ -220,6 +221,7 @@ class Post:
     tags: frozenset = frozenset()            # the author's and the group's (UN-RFC 0052)
     labels: frozenset = frozenset()          # from labellers that count (UN-RFC 0053)
     for_you: str = ""                        # in For you: "reply" or "mention" (UN-RFC 0051 5.5)
+    languages: frozenset = frozenset()       # Content-Language, else lang-xx labels (0052 5a)
 
 
 @dataclass
@@ -468,6 +470,16 @@ class _Parser:
             if self.word("mention"):
                 return lambda p, c, s: p.for_you == "mention"
             raise _Error("for you is reply, or for you is mention")
+        if self.word("lang"):                           # UN-RFC 0052 5a, #671
+            codes = []
+            while not self.done() and self.peek()[0] == "word" and \
+                    self.peek()[1] not in ("and", "or", "not"):
+                codes.append(str(self.peek()[1]).lower())
+                self.i += 1
+            if not codes:
+                raise _Error("lang <code> ...: which languages, e.g. lang da en")
+            want = frozenset(codes)
+            return lambda p, c, s: bool(want & p.languages)
         for word, attr in (("tagged", "tags"), ("labelled", "labels")):   # #658
             if self.word(word):
                 every = self.word("all")

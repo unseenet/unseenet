@@ -90,12 +90,17 @@ class Writing:
             raise SessionError("tags is a list of words")
         from ....core import tags as _tg
         tags = _tg.normalize(list(tags) + _tg.in_text(f"{subject}\n{body}"))   # chips and #words
+        languages = data.get("languages")                   # Content-Language (0052 5a)
+        if languages is not None and (not isinstance(languages, list)
+                                      or not all(isinstance(c, str) for c in languages)):
+            raise SessionError("languages is a list of codes such as da, en")
 
         async def send() -> str:
-            if kind == KIND_CHAT and not refs and not files and not origin and not tags:
+            if kind == KIND_CHAT and not refs and not files and not origin and not tags and not languages:
                 return await s.send_chat(gid, body)
             return await s.post(gid, subject, body, references=refs or None, kind=kind,
-                                files=files or None, origin=origin, tags=tags or None)
+                                files=files or None, origin=origin, tags=tags or None,
+                                languages=languages)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval
