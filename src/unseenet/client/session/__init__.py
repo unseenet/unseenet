@@ -26,6 +26,8 @@ reads and posts. Clients use the one class; its code is split by area:
     queue.py      a posting queue: many posts paced by postage, ripening, quotas
     notify.py     what new has landed in For you, for a client to tell
     exporting.py  your data as a file (UN-RFC 0049 section 7)
+    rules.py      your own rules for your feed and groups (#615)
+    reports.py    spam reports: issuers you follow, hidden posts, issuing (UN-RFC 0045)
 
 New code goes in the file whose docstring says it belongs there; a new area gets a file
 of its own, added to ``Session`` below. This file holds what all parts share: imports,
@@ -223,6 +225,9 @@ class Message:
     # encrypted files (closed groups, inboxes): each file's key by blob ID (0027, 3.3);
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
+    # hidden by a spam report from an issuer you follow (UN-RFC 0045 section 7.3): who,
+    # why and which report - set by ``Session.visible``; clients show it in its place
+    reported: dict | None = None
 
     @property
     def old_on_arrival(self) -> bool:
@@ -274,6 +279,8 @@ class Message:
                         "id": self.origin_id or None, "from": self.origin_from or None}
                        if self.origin_network else None),
             "old_on_arrival": self.old_on_arrival,
+            # UN-RFC 0045 section 7.3: hidden by a report - who, why, which report
+            "reported": dict(self.reported) if self.reported else None,
         }
 
 
@@ -420,9 +427,10 @@ from .queue import QueueMixin, PostingQueue  # noqa: E402,F401
 from .notify import NotifyMixin  # noqa: E402
 from .exporting import ExportMixin  # noqa: E402
 from .rules import RulesMixin  # noqa: E402
+from .reports import ReportsMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

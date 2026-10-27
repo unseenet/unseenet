@@ -38,7 +38,7 @@ class PeeringCommands:
                         self.send(msgid)
             await self.writer.drain()
         for msgid, gid in store.received_since(since):
-            if msgid not in listed and wildmat(pattern, gid):
+            if msgid not in listed and wildmat(pattern, gid) and not self.node.report_hidden(msgid):
                 listed.add(msgid)
                 self.send(msgid)
         for msgid, gid in store.removals_since(since):

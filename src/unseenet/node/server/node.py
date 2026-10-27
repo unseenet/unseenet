@@ -130,6 +130,8 @@ class NodeBase:
                            "profiles": cfg.profiles, "avatars": cfg.avatars,
                            "sites": cfg.sites,
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
+        if cfg.follow_reports:                      # UN-RFC 0045 section 6: MAY publish
+            info["policy"]["report_issuers"] = [f["issuer"] for f in cfg.follow_reports]
         excludes = self.excludes()
         if excludes:
             info["policy"]["excludes"] = excludes

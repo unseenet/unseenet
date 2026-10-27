@@ -48,6 +48,7 @@ class Maintained:
     release: str | None = None         # a newer release, not offered before
     renewed: tuple[str, ...] = ()      # key-bound groups renewed
     names: bool = False                # hierarchy lists or names changed
+    reports: bool = False              # what the report issuers you follow say changed
 
 
 class ClientRuntime:
@@ -182,6 +183,14 @@ class ClientRuntime:
         try:
             if await s.refresh_naming():
                 out.names = True
+                s.emit(ev.GroupsChanged())
+        except NETWORK_ERRORS:
+            pass
+        try:                                   # after naming: hierarchies name issuers
+            before = set(s.report_book().reports)
+            await s.refresh_reports()           # UN-RFC 0045 section 7
+            if set(s.report_book().reports) != before:
+                out.reports = True
                 s.emit(ev.GroupsChanged())
         except NETWORK_ERRORS:
             pass

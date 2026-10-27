@@ -267,7 +267,7 @@ CPython, while a key at level 4 pays 18 bits.
 
 A node or a reader MAY judge keys by more than their level: the number
 of articles it has seen from the key, spam reports from issuers it
-follows (#122), duplicate detection (#123), its own block lists. Such
+follows (UN-RFC 0045), duplicate detection (#123), its own block lists. Such
 local standing:
 
 - MAY make the node stricter for articles it accepts or forwards, and

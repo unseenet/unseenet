@@ -7,6 +7,25 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Spam reports** (#122, UN-RFC 0045): any key can be an *issuer* and publish
+  signed reports - posts and keys, each with a reason - in its own channel
+  `reports@<fp>`; nobody has to follow anybody. `core/reports.py` builds and reads
+  reports and keeps a `Book` of what followed issuers say. **Nodes** follow only
+  the issuers in `[[follow_reports]]` (`posts`: hide or delete; `keys`: refuse,
+  surcharge +6 bits, or ignore), apply them to posts held and posts that come
+  later, serve a hidden post again when its report is withdrawn, and list the
+  issuers in their node information. **Clients** follow the issuers a group's
+  hierarchy names for that hierarchy (`report_issuers` in its list, at most 16,
+  lower lists add) and those the reader chooses, for every group; the reader can
+  turn any of them off. A hidden post keeps its place with `Message.reported`
+  (who, why, which report) so clients show "Hidden by ...: spam" with *Show
+  anyway*; your own posts and your contacts' are never hidden. The report action
+  offers the issuers you follow; an issuer publishes what it got without the
+  reporter. Followed issuers travel in your state (UN-RFC 0044). Everything is in
+  the local API (`/api/reports...`, `/api/groups/{gid}/show`, `reported` in every
+  message) and the CLI (`unseenet reports ...`, also `hierarchy` for maintainers).
+  Clients' screens follow in unseenet-gui#70 and unseenet-tui#11.
+
 - **A file the group's node lacks comes from your other nodes**: `fetch_blob` asks
   the node a group is read from first, then your other nodes, before saying a
   picture cannot be had - found when node1 and node2 carried files for `dk.test.*`

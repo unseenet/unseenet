@@ -1,0 +1,308 @@
+"""Session: spam reports (UN-RFC 0045) - following issuers, what they report, and
+issuing reports yourself.
+
+**Each reader decides.** A report hides nothing for a reader who does not follow its
+issuer. A client follows the issuers a group's hierarchy names, for that hierarchy's
+groups only (section 7.1), and those the reader chose, for every group (7.2); the
+reader can stop following any of them, those the hierarchy names too. A hidden post is
+never hidden silently: ``visible`` marks it (``Message.reported``) and clients show
+"Hidden by *issuer*: spam" in its place, one action from being shown (7.3). Your own
+posts and your contacts' are never hidden by reports.
+
+Belongs here: which issuers you follow and which apply to a group, reading their
+``reports@`` groups (``refresh_reports``), what they say about a post (``report_hit``),
+showing a hidden post anyway, and being an issuer: starting your ``reports@`` group,
+publishing and withdrawing reports, and turning a report you received into one.
+
+Not here: the form of reports and the book (``core/reports.py``), the issuers a
+hierarchy names (``hierarchies.py``), sending a report to someone (people.py).
+
+Part of ``Session`` (see __init__.py)."""
+
+from __future__ import annotations
+
+import re
+from . import *  # noqa: F403  - the shared names: SessionError, Message, ...
+from .. import session as _s   # names tests patch on the module, read at call time
+from ... import hierarchies as hz
+from ...core import reports as rpt
+from ...core.groups import make_manifest
+
+SHOWN_MAX = 500            # posts shown anyway, remembered on this device
+ISSUERS_TTL = 30.0         # seconds the issuers per group are kept (hierarchy lists change rarely)
+
+
+class ReportsMixin:
+    # --- which issuers you follow (section 7) ---
+    def _issuer_settings(self) -> dict:
+        """``{"follow": {key: label}, "off": [key, ...]}``: issuers you chose, and those
+        a hierarchy names that you turned off. Part of your settings (UN-RFC 0044)."""
+        s = self.data.setdefault("report_issuers", {})
+        s.setdefault("follow", {})
+        s.setdefault("off", [])
+        return s
+
+    def hierarchy_issuers(self, group_id: str) -> dict[str, str]:
+        """{issuer key: hierarchy} that the maintainers above a group name (7.1)."""
+        if group_id.startswith("inbox@") or "@" not in group_id:
+            return {}
+        try:
+            name = group_id.rpartition("@")[0]
+            return hz.report_issuers_for(name, naming.root_list(self), naming.hierarchy_lists(self))
+        except Exception:  # noqa: BLE001  lists that cannot be read name nobody
+            return {}
+
+    def _issuer_cache(self) -> dict:
+        import time
+        cache = getattr(self, "_issuers_cached", None)
+        if cache is None or time.monotonic() - cache["at"] > ISSUERS_TTL:
+            cache = self._issuers_cached = {"at": time.monotonic(), "groups": {}, "read": None}
+        return cache
+
+    def _issuers_changed(self) -> None:
+        self._issuers_cached = None
+        self._report_book = None
+
+    def report_issuers_for(self, group_id: str) -> set[str]:
+        """The issuers whose reports apply in a group: its hierarchy's, unless you
+        turned them off, and those you follow yourself."""
+        groups = self._issuer_cache()["groups"]
+        if group_id not in groups:
+            s = self._issuer_settings()
+            out = {k for k in self.hierarchy_issuers(group_id) if k not in s["off"]}
+            groups[group_id] = out | set(s["follow"])
+        return set(groups[group_id])
+
+    def report_issuers(self) -> list[dict]:
+        """Every issuer you follow or that a hierarchy of your groups names, each
+        ``{"key", "label", "yours": bool, "hierarchies": [...], "on": bool}``."""
+        s = self._issuer_settings()
+        named: dict[str, set[str]] = {}
+        for gid in self.data.get("subscribed", []):
+            for key, h in self.hierarchy_issuers(gid).items():
+                named.setdefault(key, set()).add(h)
+        out = []
+        for key in sorted(set(named) | set(s["follow"])):
+            out.append({"key": key,
+                        "label": s["follow"].get(key) or self.identity_label(key),
+                        "yours": key in s["follow"],
+                        "hierarchies": sorted(named.get(key, ())),
+                        "on": key in s["follow"] or key not in s["off"]})
+        return out
+
+    def follow_issuer(self, key: str, label: str = "") -> None:
+        """Follow an issuer's reports in every group (section 7.2); also turns one a
+        hierarchy names back on."""
+        key = key.strip()
+        try:
+            crypto.key_from_text(key)
+        except crypto.CryptoError as exc:
+            raise SessionError(f"not a key: {key}") from exc
+        s = self._issuer_settings()
+        s["follow"][key] = label.strip() or s["follow"].get(key, "")
+        if key in s["off"]:
+            s["off"].remove(key)
+        self._issuers_changed()
+        self.save()
+
+    def unfollow_issuer(self, key: str) -> None:
+        """Stop following an issuer, also one a hierarchy names (section 7.2)."""
+        s = self._issuer_settings()
+        s["follow"].pop(key, None)
+        if key not in s["off"] and any(
+                key in self.hierarchy_issuers(g) for g in self.data.get("subscribed", [])):
+            s["off"].append(key)
+        self._issuers_changed()
+        self.save()
+
+    # --- what the issuers report ---
+    def _issuers_to_read(self) -> set[str]:
+        """The issuers that apply to any group you follow, and those you follow."""
+        cache = self._issuer_cache()
+        if cache["read"] is None:
+            out = set(self._issuer_settings()["follow"])
+            for gid in self.data.get("subscribed", []):
+                out |= self.report_issuers_for(gid)
+            cache["read"] = out
+        return set(cache["read"])
+
+    async def refresh_reports(self) -> int:
+        """Read the ``reports@`` groups of the issuers that apply to your groups, with
+        the other groups, over Tor as always (section 10). Returns how many issuers
+        could be read."""
+        read = 0
+        for key in sorted(self._issuers_to_read()):
+            try:
+                gid = rpt.reports_group(crypto.key_from_text(key))
+                m = await self.fetch_manifest(gid)
+                if m is None or m.expired():
+                    continue
+                self.group_entry(gid)["manifest"] = dict(m.raw)
+                await self.fetch_group(gid)
+                read += 1
+            except (SessionError, OSError, ConnectionError, NNTPError, crypto.CryptoError) as exc:
+                log.debug("reports of %s not read: %s", key, exc)
+        self._issuers_changed()
+        return read
+
+    def report_book(self) -> rpt.Book:
+        """What the issuers that apply to you have reported, from the ``reports@``
+        groups read; withdrawn reports are gone with their articles."""
+        cached = getattr(self, "_report_book", None)
+        if cached is not None:
+            return cached
+        book = rpt.Book()
+        for key in self._issuers_to_read():
+            try:
+                gid = rpt.reports_group(crypto.key_from_text(key))
+            except crypto.CryptoError:
+                continue
+            automatic = self.manifest_data(gid).get("automatic") is True
+            for msg in self.cache.get(gid, {}).values():
+                report = self._as_report(msg)
+                if report is not None:
+                    book.add(report, automatic)
+        self._report_book = book
+        return book
+
+    def report_hit(self, msg: "Message", issuers: set[str] | None = None) -> dict | None:
+        """Why a post is hidden by a report, or None: ``{"issuer", "label", "reason",
+        "automatic", "kind" ("post" or "key"), "report"}``. Private posts, your own,
+        your contacts' and the reports themselves are never hidden (section 7.3)."""
+        if (msg.private or msg.to_key is not None or msg.group.startswith("inbox@")
+                or rpt.is_reports_group(msg.group) or not msg.author_key):
+            return None
+        if msg.author_key in self._my_keys() or msg.author_key in self.data.get("contacts", {}):
+            return None
+        if issuers is None:
+            issuers = self.report_issuers_for(msg.group)
+        if not issuers:
+            return None
+        book = self.report_book()
+        hit = book.post(msg.message_id, issuers) or book.key(msg.author_key, issuers)
+        if hit is None:
+            return None
+        return {"issuer": hit.issuer, "label": self.identity_label(hit.issuer),
+                "reason": hit.reason, "automatic": hit.automatic, "kind": hit.kind,
+                "report": hit.report}
+
+    def mark_reported(self, msgs: list["Message"]) -> list["Message"]:
+        """Set ``Message.reported`` on posts hidden by reports (not on those you chose
+        to show anyway). Clients show those as hidden, with why (section 7.3)."""
+        if not self._issuers_to_read():
+            for m in msgs:
+                m.reported = None
+            return msgs
+        shown = set(self.data.get("reports_shown", []))
+        per_group: dict[str, set[str]] = {}
+        for m in msgs:
+            if m.group not in per_group:
+                per_group[m.group] = self.report_issuers_for(m.group)
+            m.reported = None if m.message_id in shown else self.report_hit(m, per_group[m.group])
+        return msgs
+
+    def show_reported(self, message_id: str) -> None:
+        """Show a post hidden by a report anyway (section 7.3), on this device."""
+        shown = self.data.setdefault("reports_shown", [])
+        if message_id not in shown:
+            shown.append(message_id)
+            del shown[:-SHOWN_MAX]
+            self.save()
+
+    def hidden_by_reports(self, group_id: str) -> list[tuple[str, str, int]]:
+        """(issuer label, reason, posts) hidden in a group by reports."""
+        counts: dict[tuple[str, str], int] = {}
+        for m in self.mark_reported(list(self.cache.get(group_id, {}).values())):
+            if m.reported:
+                k = (m.reported["label"], m.reported["reason"])
+                counts[k] = counts.get(k, 0) + 1
+        return [(who, why, n) for (who, why), n in sorted(counts.items())]
+
+    # --- being an issuer (sections 3, 4) ---
+    def my_reports_group(self, name: str | None = None) -> str:
+        """``reports@<fingerprint>`` of this identity, started or not."""
+        return rpt.reports_group(self.identity(name).public_key)
+
+    def is_issuer(self) -> bool:
+        """Whether this identity has started its reports group in this vault."""
+        gid = self.my_reports_group()
+        return bool(self.data["groups"].get(gid, {}).get("owner"))
+
+    async def start_reports(self, policy: str = "", contact: str = "",
+                            automatic: bool = False) -> str:
+        """Start, or change, this identity's ``reports@`` channel: what it reports
+        (``policy``), where to object (``contact``: an inbox or a URL), and whether a
+        program makes the reports (section 8). Your inbox is made too, if you have none:
+        reports sent to you arrive there. Returns its Group ID."""
+        extra = {"policy": policy.strip() or None, "contact": contact.strip() or None,
+                 "automatic": True if automatic else None}
+        gid = self.my_reports_group()
+        try:
+            current = await self.fetch_manifest(gid)
+        except (SessionError, OSError, ConnectionError, NNTPError):
+            current = None
+        serial = max(int(self.manifest_data(gid).get("serial", 0)),
+                     current.serial if current else 0) + 1
+        try:
+            art = make_manifest(self.identity(), rpt.GROUP_NAME, "channel", serial=serial,
+                                title="Spam reports", min_pow=_s.DEFAULT_POW,
+                                extra=extra, pow_bits=await self.required_pow(gid),
+                                lifetime=self.key_bound_lifetime())
+        except ValueError as exc:
+            raise SessionError(str(exc)) from exc
+        await self._post_article(art)
+        entry = self.group_entry(gid)
+        entry["manifest"] = json.loads(art.body)
+        entry.update({"type": "channel", "owner": True})
+        self.save()
+        await self.ensure_inbox()           # reports sent to you arrive there (section 7.4)
+        return gid
+
+    async def publish_report(self, posts=(), keys=(), note: str = "") -> str:
+        """Publish a report in your ``reports@`` group: ``posts`` as (Message-ID, Group
+        ID, reason), ``keys`` as (key, reason, until or None for 365 days). The
+        reporter's key is never in it (section 7.4). Returns its Message-ID."""
+        if not self.is_issuer():
+            raise SessionError("start your reports group first (start_reports)")
+        try:
+            body = rpt.report_body(posts, keys, note)
+        except (ValueError, crypto.CryptoError) as exc:
+            raise SessionError(str(exc)) from exc
+        gid, me = self.my_reports_group(), self.identity()
+        art = await self._post_with_postage(gid, lambda bits: rpt.report_article(
+            me, body, from_name=self.display_name() or "Report issuer", pow_bits=bits))
+        self._report_book = None
+        return art.message_id
+
+    async def my_reports(self) -> list[rpt.Report]:
+        """The reports you have published that are still there, newest first."""
+        gid = self.my_reports_group()
+        out = [r for r in map(self._as_report, await self.fetch_group(gid)) if r is not None]
+        return sorted(out, key=lambda r: r.date, reverse=True)
+
+    @staticmethod
+    def _as_report(msg: "Message") -> rpt.Report | None:
+        """A post in a ``reports@`` group as a report; None if it is not one."""
+        if not msg.readable:
+            return None
+        try:
+            return rpt.read_report(msg.message_id, msg.group, msg.author_key, msg.date, msg.body)
+        except rpt.ReportError:
+            return None
+
+    async def withdraw_report(self, message_id: str) -> str:
+        """Withdraw one of your reports: what it said no longer counts (section 4)."""
+        mid = await self.withdraw(self.my_reports_group(), message_id)
+        self._report_book = None
+        return mid
+
+    @staticmethod
+    def received_report(msg: "Message") -> tuple[str, str, str] | None:
+        """(Message-ID, Group ID, author key) named in a report someone sent you, so an
+        issuer can publish it - without the reporter (section 7.4)."""
+        if not msg.content_type.startswith(REPORT_TYPE):
+            return None
+        found = dict(re.findall(r"^(Group|Message-ID|Author key): (\S+)$", msg.body or "", re.M))
+        if "Group" in found and "Message-ID" in found:
+            return found["Message-ID"], found["Group"], found.get("Author key", "")
+        return None

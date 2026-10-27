@@ -295,6 +295,46 @@ async def rules(request):
     return _json(_api(request).set_rules(await _body(request)))
 
 
+async def reports(request):
+    return _json(_api(request).reports())
+
+
+async def reports_follow(request):
+    return _json(await _api(request).follow_issuer(await _body(request)))
+
+
+async def reports_refresh(request):
+    return _json(await _api(request).refresh_reports())
+
+
+async def reports_start(request):
+    return _json(await _api(request).start_reports(await _body(request)))
+
+
+async def reports_publish(request):
+    return _json(await _api(request).publish_report(await _body(request)))
+
+
+async def reports_mine(request):
+    return _json(await _api(request).my_reports())
+
+
+async def reports_withdraw(request):
+    return _json(await _api(request).withdraw_report(await _body(request)))
+
+
+async def reports_received(request):
+    return _json(_api(request).received_reports())
+
+
+async def reports_hierarchy(request):
+    return _json(await _api(request).hierarchy_issuers(await _body(request)))
+
+
+async def show_reported(request):
+    return _json(_api(request).show_reported(_gid(request), await _body(request)))
+
+
 async def rules_check(request):
     return _json(_api(request).check_rules(await _body(request)))
 
@@ -543,6 +583,13 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/seen", seen),
     ("GET", "/api/groups/{gid}/report", report), ("POST", "/api/groups/{gid}/report", report),
     ("POST", "/api/groups/{gid}/block", block),
+    ("GET", "/api/reports", reports), ("POST", "/api/reports/follow", reports_follow),  # 0045
+    ("POST", "/api/reports/refresh", reports_refresh), ("POST", "/api/reports/start", reports_start),
+    ("POST", "/api/reports/publish", reports_publish), ("GET", "/api/reports/mine", reports_mine),
+    ("POST", "/api/reports/withdraw", reports_withdraw),
+    ("GET", "/api/reports/received", reports_received),
+    ("POST", "/api/reports/hierarchy", reports_hierarchy),
+    ("POST", "/api/groups/{gid}/show", show_reported),
     ("POST", "/api/groups/{gid}/settings", group_settings),
     ("POST", "/api/groups/{gid}/remove", remove_group),
     ("POST", "/api/groups/{gid}/invite", invite),

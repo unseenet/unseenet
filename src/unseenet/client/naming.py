@@ -284,6 +284,43 @@ async def block(s: "Session", group_id: str, key_text: str, reason: str,
     return h.name
 
 
+async def set_report_issuers(s: "Session", hierarchy: str, keys: list[str]) -> str:
+    """As a maintainer: name the report issuers that readers of your hierarchy follow
+    by default (UN-RFC 0045 section 7.1), at most 16, and post the list. ``keys`` is
+    the whole list: [] names none. Returns the hierarchy."""
+    import json
+    from datetime import datetime, timezone
+    from .session import SessionError
+    from ..core.reports import MAX_HIERARCHY_ISSUERS
+    keys = list(dict.fromkeys(k.strip() for k in keys if k.strip()))
+    for k in keys:
+        try:
+            crypto.key_from_text(k)
+        except crypto.CryptoError as exc:
+            raise SessionError(f"not a key: {k}") from exc
+    if len(keys) > MAX_HIERARCHY_ISSUERS:
+        raise SessionError(f"a hierarchy names at most {MAX_HIERARCHY_ISSUERS} report issuers")
+    me = s.identity().key_text
+    h = next((x for x in governing(s, hierarchy) if x.name == hierarchy), None)
+    if h is None or h.maintainer != me:
+        raise SessionError(f"you are not the maintainer of {hierarchy}.*")
+    text = _store(s)["lists"].get(h.name)
+    data = json.loads(text) if text else {"v": 1, "hierarchy": h.name, "groups": []}
+    if keys:
+        data["report_issuers"] = keys
+    else:
+        data.pop("report_issuers", None)
+    data["updated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    body = json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    hz.parse_hierarchy_list(body, h.name)          # never post a list with mistakes
+    await s.fetch_group(h.list)
+    await s.post(h.list, f"Groups of {h.name}, {data['updated']} (report issuers)", body,
+                 content_type="application/json")
+    _store(s)["lists"][h.name] = body
+    s.save()
+    return h.name
+
+
 def blocks(s: "Session", group_id: str) -> dict[str, tuple[str, str]]:
     """{key: (hierarchy, reason)} blocked by maintainers for this group (section 5.4)."""
     name = group_id.rpartition("@")[0] or group_id
