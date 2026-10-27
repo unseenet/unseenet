@@ -150,3 +150,31 @@ async def test_a_report_in_markdown_with_a_picture_and_a_reason(net):
     assert is_report_type(REPORT_TYPE + "; charset=utf-8")      # the plain reports of before too
     with pytest.raises(SessionError, match="reason"):
         await me.report(post, [("x", me.my_inbox, me.identity().key_text)], reason="boring")
+
+
+def test_a_hierarchy_names_its_contact():
+    """#647, UN-RFC 0018 section 4.1: where reports to a maintainer go."""
+    from unseenet import hierarchies as hz
+    from unseenet.core import crypto
+    m = crypto.Identity.generate()
+    base = {"name": "dk", "policy": "governed", "maintainer": m.key_text,
+            "list": f"dk.liste@{m.fingerprint}"}
+    assert hz._entry({**base, "contact": f"contact@{m.fingerprint}"}).contact == f"contact@{m.fingerprint}"
+    assert hz._entry({**base, "contact": "not a group"}).contact == ""
+    assert hz._entry(base).contact == ""
+    v, root = hz.builtin_root_list()
+    assert root["unseenet"].contact == "contact@ph5fc5hop5232qsz"
+
+
+async def test_report_targets_without_an_inbox_are_left_out(net):
+    owner, reader, nobody = net("owner"), net("reader"), net("nobody")
+    await reader.ensure_inbox()
+    await owner.ensure_inbox()
+    gid = await owner.create_group("alt.snak", "open", min_pow=8,
+                                   moderators=[nobody.identity().key_text])   # has no inbox
+    await owner.post(gid, "Hej", "x\n")
+    reader.subscribe(gid)
+    [m] = await reader.fetch_group(gid)
+    targets = await reader.report_targets(m)
+    assert [t[2] for t in targets] == [owner.identity().key_text]
+    assert await reader.report(m, targets, "test") == 1

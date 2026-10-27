@@ -637,8 +637,9 @@ class PeopleMixin:
             add(f"The group's owner ({self.identity_label(data['owner'])})", data["owner"])
         for k in data.get("moderators", []):
             add(f"Moderator {self.identity_label(k)}", k)
-        for h in naming.governing(self, msg.group):
-            add(f"Maintainer of {h.name}.* ({self.identity_label(h.maintainer)})", h.maintainer)
+        for h in naming.governing(self, msg.group):          # its contact inbox (0018, 4.1)
+            add(f"Maintainer of {h.name}.* ({self.identity_label(h.maintainer)})", h.maintainer,
+                h.contact or None)
         try:
             info = await self.node_info(self.node_for(msg.group))
         except (SessionError, OSError, ConnectionError, ValueError):
@@ -646,8 +647,17 @@ class PeopleMixin:
         if info.get("operator") and info.get("contact"):
             add(f"The operator of {info.get('name', 'the node')}", info["operator"], info["contact"])
         for key in sorted(self.report_issuers_for(msg.group)):     # UN-RFC 0045 section 7.4
-            add(f"Report issuer {self.identity_label(key)}", key)    # its inbox; it decides
-        return out
+            add(f"Report issuer {self.issuer_label(key)}", key)      # its inbox; it decides
+        return [t for t in out if await self._reachable_inbox(t[1])]
+
+    async def _reachable_inbox(self, inbox: str) -> bool:
+        """Whether an inbox exists where one of your nodes can see it: report targets
+        without one are left out rather than making the report fail."""
+        try:
+            m = await self.fetch_manifest(inbox)
+        except (SessionError, OSError, ConnectionError, NNTPError):
+            return True                     # cannot tell now: let sending say so
+        return m is not None and m.type == "inbox"
 
     async def report(self, msg: "Message", targets: list[tuple[str, str, str]], note: str = "",
                      anonymous: bool = False, files=None, reason: str = "") -> int:

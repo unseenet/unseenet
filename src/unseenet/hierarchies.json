@@ -8,7 +8,8 @@
       "maintainer": "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",
       "list": "unseenet.checkgroups@ph5fc5hop5232qsz",
       "title": "The Unseenet project",
-      "description": "The project's own groups: announcements, the node list, the root list, names, and talk about Unseenet."
+      "description": "The project's own groups: announcements, the node list, the root list, names, and talk about Unseenet.",
+      "contact": "contact@ph5fc5hop5232qsz"
     },
     {"name": "alt", "policy": "free", "title": "Anything goes", "description": "Anybody may create anything here, as on Usenet."},
     {"name": "test", "policy": "free", "title": "Testing", "description": "For trying things out. Nodes keep it only briefly."},
