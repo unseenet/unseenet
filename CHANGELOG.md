@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Your choice for chat lines and comments wins** (UN-RFC 0052 5a): `choose_chat_language`
+  and `POST /api/groups/{gid}/language/choose` - what you chose to write lines in here is
+  used for them before the text, the conversation or the group; `[]` takes it back. With
+  the group's languages before your last choice (#686), a remembered choice alone would
+  never have reached them.
+
 - **Language recognition in core** (#686, from unseenet-watchman): `core.language` -
   the small words that tell nine languages apart (Danish, Norwegian and Swedish too),
   `words`, `language`, `detect`, `guess`; Lingua afterwards when installed

@@ -358,6 +358,19 @@ class PostingMixin:
         else:
             mem.pop(group_id, None)
 
+    def choose_chat_language(self, group_id: str, languages) -> None:
+        """What you chose to write your chat lines and comments in, in a group - it wins
+        over everything the client would suggest for them there; ``[]`` takes the choice
+        back. Kept in your settings (UN-RFC 0044), never published (UN-RFC 0052 5a)."""
+        from ...core import tags as tg
+        chosen = self.data.setdefault("chat_languages", {})
+        codes = tg.normalize_languages(languages)
+        if codes:
+            chosen[group_id] = codes
+        else:
+            chosen.pop(group_id, None)
+        self.save()
+
     def suggest_languages(self, group_id: str, text: str | None = None, reply_to=None,
                           kind: str = "post") -> tuple[list[str], str]:
         """What to suggest you write in, and why (UN-RFC 0052 section 5a, #686) - only a
@@ -368,6 +381,8 @@ class PostingMixin:
           one-language profile (``"profile"``); else ``([], "")`` - better none than wrong;
         - a **comment** (``reply_to``, a Message): the language of the post it answers
           (``"answered"``) - a comment is too short to tell - else as a post;
+        - your **choice** for chat lines and comments in the group
+          (``choose_chat_language``) wins for them (``"chosen"``);
         - a **chat line** (``kind="chat"``): the conversation's language - its newest
           line's (``"conversation"``) - unless the line is long enough and sure of another
           (``"text"``); a short "ok" keeps it."""
@@ -375,6 +390,9 @@ class PostingMixin:
         from ...core import tags as tg
         ws = lg.words(text) if text else []
         said = lg.detect(ws) if ws else None
+        chosen = self.data.get("chat_languages", {}).get(group_id)
+        if chosen and (kind == "chat" or reply_to is not None):
+            return list(chosen), "chosen"                   # your choice for lines here wins
         if kind == "chat" and not reply_to:
             convo = self._conversation_language(group_id)
             if said and (len(ws) >= lg.SHORT or not convo) and said not in (convo or []):

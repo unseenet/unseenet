@@ -274,6 +274,10 @@ async def language(request):
     return _json(_api(request).language(_gid(request), await _body(request)))
 
 
+async def language_choose(request):
+    return _json(_api(request).choose_language(_gid(request), await _body(request)))
+
+
 async def mentioned(request):
     data = await _body(request)
     return _json(_api(request).mentioned(_gid(request), str(data.get("subject", "")),
@@ -628,6 +632,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/react", react),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/groups/{gid}/language", language),
+    ("POST", "/api/groups/{gid}/language/choose", language_choose),
     ("POST", "/api/contacts", contacts), ("POST", "/api/chats/close", close_chat),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),
     ("GET", "/api/rules", rules), ("POST", "/api/rules", rules),           # UN-RFC 0051

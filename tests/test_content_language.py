@@ -106,3 +106,17 @@ async def test_the_suggestion_from_the_text(tmp_path, monkeypatch, fast_ripening
     finally:
         await me.close()
         server.close()
+
+
+def test_your_choice_for_lines_here_wins(tmp_path):
+    """Your explicit choice for chat lines and comments in a group wins for them, and only
+    for them; posts still start from the text and the group."""
+    me = Session(Vault.open(tmp_path / "v.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me")
+    gid = "dk.snak@" + "a" * 52
+    me.group_entry(gid)["manifest"] = {"name": "dk.snak", "type": "open", "languages": ["da"]}
+    me.choose_chat_language(gid, ["en"])
+    assert me.suggest_languages(gid, text="ok", kind="chat") == (["en"], "chosen")
+    assert me.suggest_languages(gid) == (["da"], "group")            # a post: not your line choice
+    me.choose_chat_language(gid, [])
+    assert me.suggest_languages(gid, text="ok", kind="chat") == (["da"], "group")
