@@ -245,3 +245,20 @@ async def test_reports_to_an_issuer_land_in_its_team_inbox(net):
     row = LocalAPI(session=andreas)._row(andreas, r, 0, set(), [], set())
     assert row["report"] == {"id": post.message_id, "group": gid,
                              "author_key": spammer.identity().key_text, "reason": "spam"}
+
+
+@pytest.mark.parametrize("name", ["contact", "operator", "inbox"])
+def test_any_inbox_takes_sealed_posts_from_unripe_one_time_keys(ripening_rules, name):
+    """Found 27 Oct: a report to contact@ (a team inbox) was refused, "no Key-Ripening
+    header" - nodes knew sealed posts by the name inbox@ only, not by the type."""
+    from unseenet.core import ripening as rp
+    owner, writer, reader = (crypto.Identity.generate() for _ in range(3))
+    n = Node(Store(), NodeConfig(min_pow=BITS, forward_delay=(0, 0), min_ripe=None))
+    extra = None if name == "inbox" else {"readers": [reader.key_text]}
+    m = make_manifest(owner, name, "inbox", pow_bits=BITS + 8, extra=extra)
+    n.accept(m.to_bytes())                                 # the owner's key is not what is tested
+    n.config.min_ripe = rp.DEFAULT_MIN_RIPE                 # from here: the node's real rule
+    bits = rp.required_pow(BITS, m and 0, None, allow_unripe=True)
+    art = inbox_article(m.group, owner.public_key, from_name="x", subject="Report", body="spam\n",
+                        sender=writer, readers=[reader.public_key] if extra else None, pow_bits=bits)
+    n.accept(art.to_bytes())                               # no ripening asked of a one-time key

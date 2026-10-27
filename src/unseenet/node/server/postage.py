@@ -31,7 +31,7 @@ class Postage:
             raise ArticleError("postage", f"need {least} bits")
         group_min = rp.parse_min(manifest.raw.get("min_ripe")) if manifest is not None else 0
         minimums = [self.config.min_ripe, group_min]
-        if self._sealed_inbox(art) or None in minimums:      # "-" somewhere: no proof needed
+        if self._sealed_inbox(art, manifest) or None in minimums:   # "-" somewhere: no proof
             lv = self._ripening_level(art, source, from_peer, required=False)
             return rp.required_pow(self.config.min_pow, group_pow, lv, allow_unripe=True)
         lv = self._ripening_level(art, source, from_peer, required=True)
@@ -42,9 +42,15 @@ class Postage:
         return rp.required_pow(self.config.min_pow, group_pow, lv)
 
     @staticmethod
-    def _sealed_inbox(art: Article) -> bool:
-        return (art.get("Encrypted", "").strip() in INBOX_SCHEMES      # either form (UN-RFC 0009)
-                and art.group.split("@", 1)[0] == "inbox")
+    def _sealed_inbox(art: Article, manifest: Manifest | None = None) -> bool:
+        """A sealed article in an inbox - signed by a one-time key, which cannot ripen.
+        Any inbox: a personal ``inbox@``, an operator's or a team's (UN-RFC 0047), by
+        its manifest's type, not its name (found 27 Oct: reports to contact@ failed)."""
+        if art.get("Encrypted", "").strip() not in INBOX_SCHEMES:     # any form (UN-RFC 0009)
+            return False
+        if manifest is not None:
+            return manifest.type == "inbox"
+        return art.group.split("@", 1)[0] == "inbox"
 
     def _ripening_level(self, art: Article, source: str | None, from_peer: bool,
                         required: bool) -> int | None:
