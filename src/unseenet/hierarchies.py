@@ -32,6 +32,7 @@ class Hierarchy:
     list: str = ""
     title: str = ""
     description: str = ""
+    contact: str = ""          # an inbox where the maintainer is reached (section 4.1)
 
 
 def _entry(item: dict) -> Hierarchy:
@@ -55,8 +56,17 @@ def _entry(item: dict) -> Hierarchy:
             raise ValueError(f"{name}: governed needs a maintainer key and a list group") from exc
         if crypto.fingerprint(key) != fp:
             raise ValueError(f"{name}: the list group is not owned by the maintainer")
+    contact = item.get("contact", "")
+    try:
+        if contact:
+            split_group_id(contact)
+            if len(contact) > 128:
+                raise ValueError
+    except (ValueError, TypeError):
+        contact = ""                                   # one that is not a Group ID: none
     return Hierarchy(name, policy, maintainer if policy == "governed" else "",
-                     lst if policy == "governed" else "", title, description)
+                     lst if policy == "governed" else "", title, description,
+                     contact if policy == "governed" else "")
 
 
 def parse_root_list(text: str, *, strict: bool = False) -> tuple[str, dict[str, Hierarchy]]:
@@ -204,7 +214,7 @@ def parse_hierarchy_list(text: str, hierarchy: str) -> HierarchyList:
             h = _entry({**item, "name": components[-1]})         # the same checks as the root list
         except ValueError:
             continue
-        sub[name] = Hierarchy(name, h.policy, h.maintainer, h.list, h.title, h.description)
+        sub[name] = Hierarchy(name, h.policy, h.maintainer, h.list, h.title, h.description, h.contact)
     seen: dict[str, str] = {}
     twice: set[str] = set()
     for item in data["groups"]:

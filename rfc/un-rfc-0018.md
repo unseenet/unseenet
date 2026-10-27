@@ -91,8 +91,16 @@ An entry:
 | `list`        | Group ID   | if governed | The channel group of its hierarchy list   |
 | `title`       | string     | no   | Short title, at most 64 characters               |
 | `description` | string     | no   | At most 200 characters, shown to users           |
+| `contact`     | Group ID   | no   | An inbox where the maintainer is reached (governed only) |
 
 The fingerprint in `list` MUST be the fingerprint of `maintainer`.
+
+`contact` names an inbox (UN-RFC 0009), typically a team inbox (UN-RFC
+0047 section 10), so that the maintainer key can stay offline while
+reports and questions are read. A client that reports a post or writes to
+a hierarchy's maintainer sends to `contact` when there is one, and to the
+maintainer key's personal inbox otherwise. An entry in a hierarchy list's
+`sub` (section 5.3) MAY have `contact` the same way.
 A name MUST NOT appear twice. A root list that is not JSON, has `v` other
 than 1, or has a duplicate name is invalid as a whole; an entry that is
 otherwise malformed is ignored, and its name is treated as `reserved`.

@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A hierarchy's contact** (#647, UN-RFC 0018 section 4.1): an entry of the root
+  list (and of a list's `sub`) may name `contact`, an inbox where its maintainer is
+  reached - a team inbox, so the maintainer key stays offline. Reports to a
+  maintainer go there; `unseenet.*` names `contact@ph5fc5hop5232qsz`. Found by the
+  maintainer: reporting to "Maintainer of unseenet.*" failed, as the project key
+  has no personal inbox. Report targets with no inbox one can reach are now left
+  out instead of making the report fail.
+
 - **The project's spam report issuer** (`ed25519:mhgvcdevmx5g2r6t…`, made with
   `report_issuer.py`): named in the list of `unseenet.*` (`report_issuers` in
   checkgroups.json, UN-RFC 0045 section 7.1) and in the bot channels in `alt.*`
