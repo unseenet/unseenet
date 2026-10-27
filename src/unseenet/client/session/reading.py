@@ -546,6 +546,9 @@ class ReadingMixin:
             if origin is not None:
                 msg.origin_network, msg.origin_date = origin.network, origin.date
                 msg.origin_id, msg.origin_from = origin.id, origin.from_
+                if art.get("Origin-Proof"):                  # the old key, if it holds (7.3)
+                    from ...core.origins import check_proof
+                    msg.origin_proven = check_proof(art) or ""
             if art.get("Blobs"):                             # files it carries (UN-RFC 0027)
                 from ...core import blobs as bl
                 try:

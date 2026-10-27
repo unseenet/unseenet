@@ -322,6 +322,18 @@ the two keys for good; without it, nothing in the new articles points to
 the old key. People who change keys to get away from the old one leave
 the proof out, which is the default.
 
+`Origin-Proof` holds the old article's header block - every header as it
+was signed, up to the empty line - in base64 (RFC 4648 section 5,
+without padding), at most 8 KiB before encoding. The new article's body
+is the old one's, unchanged, so the old article is the proof's headers
+followed by the new body. A reader rebuilds it and checks, as for any
+article (UN-RFC 0002 section 4), that the old key signed it and its
+Message-ID matches; that its `Date` is the `Origin-Date`; and that its
+Message-ID is the `Origin-ID` when that is given. Only then does it show
+the post as brought from that key, *proven*. A proof that does not hold
+is shown as none, never as a weaker claim; an importer that changes the
+text - to strip a picture's metadata, say - leaves the proof out.
+
 # 8. Gateways
 
 Nothing changes in how a gateway builds an article (UN-RFC 0023 section

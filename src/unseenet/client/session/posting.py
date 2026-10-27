@@ -423,8 +423,13 @@ class PostingMixin:
         if origin:
             from ...core import origins
             try:
+                proof = origin.get("proof")                  # the old article, as signed (7.3)
+                if isinstance(proof, str):
+                    import base64
+                    proof = base64.b64decode(proof)
                 edit_header += origins.origin_headers(origin.get("network", ""), origin.get("date"),
-                                                      origin.get("id", ""), origin.get("from", ""))
+                                                      origin.get("id", ""), origin.get("from", ""),
+                                                      proof=proof)
             except origins.OriginError as exc:
                 raise SessionError(str(exc)) from exc
         files = list(files or [])

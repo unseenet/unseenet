@@ -78,11 +78,17 @@ def old_on_arrival(origin_date: datetime | None, date: datetime | None) -> bool:
     return origin_date is not None and date is not None and date - origin_date > OLD_ON_ARRIVAL
 
 
+PROOF_MAX = 8 * 1024                     # the old header block, before encoding (7.3)
+
+
 def origin_headers(network: str, date: datetime | str | None = None, id: str = "",
-                   from_: str = "", now: datetime | None = None) -> list[tuple[str, str]]:
+                   from_: str = "", now: datetime | None = None,
+                   proof: bytes | None = None) -> list[tuple[str, str]]:
     """The headers an author puts on their own import (section 4.1). ``network`` is a
     lowercase name (``facebook``, ``x``, ``mastodon``, ...); ``date`` the time it was
-    first published, written as RFC 3339 UTC, never later than now. Raises OriginError."""
+    first published, written as RFC 3339 UTC, never later than now. ``proof``: the old
+    article, as signed (section 7.3) - only its header block is carried; it links the two
+    keys for good, so it is the author's choice, off by default. Raises OriginError."""
     network = (network or "").strip().lower()
     if not NETWORK_RE.match(network):
         raise OriginError("Origin-Network is a lowercase name such as facebook or mastodon")
@@ -102,4 +108,48 @@ def origin_headers(network: str, date: datetime | str | None = None, id: str = "
             if len(value) > MAX_VALUE or "\n" in value or "\r" in value:
                 raise OriginError(f"{name} is one line of at most {MAX_VALUE} characters")
             out.append((name, value))
+    if proof is not None:
+        head = bytes(proof).partition(b"\r\n\r\n")[0]
+        if not head or len(head) > PROOF_MAX:
+            raise OriginError(f"Origin-Proof: the old article's headers, at most {PROOF_MAX} bytes")
+        import base64
+        out.append(("Origin-Proof", base64.urlsafe_b64encode(head).decode().rstrip("=")))
     return out
+
+
+def check_proof(art) -> str | None:
+    """The old key, as ``ed25519:...``, when an article's ``Origin-Proof`` holds (section
+    7.3): the old article - the proof's headers and this body - is signed by that key,
+    its Message-ID matches, its ``Date`` is the ``Origin-Date``, and its Message-ID the
+    ``Origin-ID`` when given. None otherwise: a proof that does not hold is none."""
+    import base64
+    from . import crypto
+    from .article import Article, ArticleError
+    value = (art.get("Origin-Proof") or "").strip()
+    if not value:
+        return None
+    try:
+        head = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        if len(head) > PROOF_MAX:
+            return None
+        body = art.body.replace("\n", "\r\n").encode("utf-8")
+        old = Article.from_bytes(head + b"\r\n\r\n" + body)
+        old.verify_signature()
+    except (ValueError, ArticleError, crypto.CryptoError, KeyError):
+        return None
+    when, claimed = parse_date_header(old.get("Date")), parse_origin_date(art.get("Origin-Date") or "")
+    if when is None or claimed is None or abs((when - claimed).total_seconds()) >= 1:
+        return None
+    oid = (art.get("Origin-ID") or "").strip()
+    if oid and oid != old.message_id:
+        return None
+    return crypto.key_to_text(old.author_key)
+
+
+def parse_date_header(text: str | None) -> datetime | None:
+    """An article's own ``Date`` header, or None."""
+    from .article import parse_date
+    try:
+        return parse_date(text) if text else None
+    except (ValueError, TypeError):
+        return None
