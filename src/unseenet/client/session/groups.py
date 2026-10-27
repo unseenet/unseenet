@@ -647,7 +647,15 @@ class GroupsMixin:
                 answers = await c.manifests_all([(g, None) for g in gids])
                 return {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
                         for g in gids}
-            out.update(await self._call(run, address))
+            # a node that cannot be reached: ask your others, unless one was named
+            tries = [address] + ([] if node else [n for n in self.nodes if n != address])
+            for i, at in enumerate(tries):
+                try:
+                    out.update(await self._call(run, at))
+                    break
+                except (OSError, ConnectionError, asyncio.IncompleteReadError):
+                    if i == len(tries) - 1:
+                        raise
         return out
 
     async def fetch_manifest(self, group_id: str, node: str | None = None):

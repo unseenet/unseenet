@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
-from python_socks import ProxyError
+from python_socks import ProxyError, ProxyTimeoutError
 from python_socks.async_.asyncio import Proxy
 
 
@@ -459,6 +459,12 @@ async def open_connection(address: str, socks_port: int | Socks | None):
             try:
                 sock = await proxy.connect(dest_host=host, dest_port=int(port))
                 return await asyncio.open_connection(sock=sock)
+            except ProxyTimeoutError as exc:
+                # Tor did not answer in time: no circuit to the service yet, or it
+                # is down. Once more, then a ConnectionError like any node away.
+                if pause is None:
+                    raise ConnectionError(f"Tor could not reach {host} in time") from exc
+                await asyncio.sleep(pause)
             except ProxyError as exc:
                 # A SOCKS refusal from Tor. Right after start Tor often has not
                 # fetched the service's descriptor yet; a moment later it has.

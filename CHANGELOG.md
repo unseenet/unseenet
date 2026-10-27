@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A node that does not answer over Tor** is a node away, not a crash: Tor's SOCKS
+  timeout is tried once more and then a `ConnectionError`, as a refusal already
+  was, and reading manifests asks your other nodes when the group's node cannot be
+  reached. `team_contact.py` reads and creates on the first project node that
+  answers, and says which did not. Found running it, 27 Oct.
+
 - **The project's contact inbox and spam report issuer** (tools/project/):
   `team_contact.py` makes `contact@ph5fc5hop5232qsz` a replicated team inbox owned
   by the project key, read and answered as "Unseenet (operator)" with team keys in
