@@ -210,3 +210,34 @@ async def test_team_inboxes_through_the_local_api_and_the_command_line(net, caps
     routes = {(m, p) for m, p, _ in srv.ROUTES}
     assert {("GET", "/api/teams"), ("POST", "/api/teams/accept"), ("POST", "/api/teams/forget"),
             ("GET", "/api/teams/readers"), ("POST", "/api/teams/readers")} <= routes
+
+
+async def test_reports_to_an_issuer_land_in_its_team_inbox(net):
+    """An issuer whose contact is a team inbox: reports to it land there, so the people
+    who read the team inbox see them in their everyday client (27 Oct)."""
+    project, issuer, andreas, sonia, owner, spammer = (net(n) for n in
+                                                      ("project", "issuer", "andreas", "sonia", "owner", "spammer"))
+    for p in (andreas, sonia, owner):
+        await p.ensure_inbox()
+    team = await project.create_group("contact", "inbox")
+    await project.add_team_reader(team, andreas.identity().key_text, "Unseenet (operator)")
+    await andreas.fetch_group(andreas.my_inbox)
+    await andreas.accept_team_invitation(next(m for m in andreas.private_messages() if andreas.team_invitation(m)))
+    await issuer.start_reports(contact=team)
+
+    gid = await owner.create_group("alt.snak", "open", min_pow=8)
+    spammer.subscribe(gid)
+    await spammer.fetch_group(gid)
+    await spammer.post(gid, "Ure", "køb\n")
+    sonia.subscribe(gid)
+    sonia.follow_issuer(issuer.identity().key_text, "Projektet")
+    await sonia.refresh_reports()
+    [post] = await sonia.fetch_group(gid)
+    targets = await sonia.report_targets(post)
+    [(who, inbox, key)] = [t for t in targets if t[0].startswith("Report issuer")]
+    assert inbox == team and key == project.identity().key_text          # its team inbox
+    await sonia.report(post, [(who, inbox, key)], "spam igen", reason="spam")
+
+    await andreas.fetch_group(team)
+    [r] = andreas.reports_sent_to_you()
+    assert andreas.received_report(r)[:2] == (post.message_id, gid) and r.group == team

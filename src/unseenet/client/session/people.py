@@ -617,15 +617,19 @@ class PeopleMixin:
 
     # --- reporting a post (#74): private messages to those who can act on it ---
     async def report_targets(self, msg: "Message") -> list[tuple[str, str, str]]:
-        """(who, inbox, key) of the people who can act on a post: the group's owner,
-        its moderators, the maintainers of its hierarchy and the operator of the
-        node it was read from."""
+        """(who, inbox, the inbox's owner key) of those who can act on a post: the
+        group's owner, its moderators, the maintainers of its hierarchy (at their
+        ``contact``, UN-RFC 0018 4.1), the operator of the node it was read from, and
+        the spam report issuers that apply (at their ``contact``, UN-RFC 0045 section
+        3). Two that share an inbox - a team inbox - are one target."""
         out: list[tuple[str, str, str]] = []
         data = self.manifest_data(msg.group)
         me = self.identity().key_text
 
         def add(who: str, key: str | None, inbox: str | None = None) -> None:
-            if not key or key == me or any(k == key for _, _, k in out):
+            if not key or (key == me and not inbox) or any(k == key and not inbox for _, _, k in out):
+                return
+            if inbox and any(i == inbox for _, i, _ in out):
                 return
             try:
                 inbox = inbox or personal_inbox_id(crypto.key_from_text(key))
@@ -647,8 +651,30 @@ class PeopleMixin:
         if info.get("operator") and info.get("contact"):
             add(f"The operator of {info.get('name', 'the node')}", info["operator"], info["contact"])
         for key in sorted(self.report_issuers_for(msg.group)):     # UN-RFC 0045 section 7.4
-            add(f"Report issuer {self.issuer_label(key)}", key)      # its inbox; it decides
+            inbox, owner = await self._issuer_contact(key)            # its team inbox, say
+            add(f"Report issuer {self.issuer_label(key)}", owner or key, inbox)
         return [t for t in out if await self._reachable_inbox(t[1])]
+
+    async def _issuer_contact(self, key: str) -> tuple[str | None, str | None]:
+        """(inbox, its owner key) that an issuer's ``contact`` names, when it names an
+        inbox - so reports to it land where it reads them; (None, None) otherwise."""
+        from ...core import reports as rpt
+        try:
+            gid = rpt.reports_group(crypto.key_from_text(key))
+        except crypto.CryptoError:
+            return None, None
+        contact = str(self.manifest_data(gid).get("contact", "")).strip()
+        try:
+            split_group_id(contact)
+        except ValueError:
+            return None, None
+        try:
+            m = await self.fetch_manifest(contact)
+        except (SessionError, OSError, ConnectionError, NNTPError):
+            return None, None
+        if m is None or m.type != "inbox":
+            return None, None
+        return contact, crypto.key_to_text(m.owner)
 
     async def _reachable_inbox(self, inbox: str) -> bool:
         """Whether an inbox exists where one of your nodes can see it: report targets

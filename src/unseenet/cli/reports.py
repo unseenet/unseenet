@@ -111,7 +111,9 @@ async def c_reports(app: App, args) -> None:
             emit(args, f"Published {mid}", {"id": mid})
         elif what == "received":
             await s.fetch_group(s.my_inbox)
-            got = [m for m in s.private_messages() if s.received_report(m)]
+            for gid in s.data.get("team_keys", {}):              # team inboxes you read
+                await s.fetch_group(gid)
+            got = s.reports_sent_to_you()
             if args.publish is None:
                 lines = [f"{i + 1}. {s.received_report(m)[0]} in {s.received_report(m)[1]}: "
                          f"{m.subject}" for i, m in enumerate(got)]

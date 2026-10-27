@@ -116,12 +116,13 @@ class Reports:
         and its author), for an issuer to look at and publish."""
         s = self._ready()
         out = []
-        for m in s.private_messages():
+        for m in s.reports_sent_to_you():                   # your inbox and team inboxes
             found = s.received_report(m)
             if found:
                 out.append({"message": m.message_id, "subject": m.subject, "date": m.date.isoformat()
                             if m.date else None, "id": found[0], "group": found[1],
-                            "author_key": found[2] or None, "reason": found[3]})
+                            "author_key": found[2] or None, "reason": found[3],
+                            "inbox": m.group, "from": m.sender_key})
         return {"received": out}
 
     async def hierarchy_issuers(self, body: dict) -> dict:
