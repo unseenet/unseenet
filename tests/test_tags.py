@@ -97,10 +97,10 @@ async def test_everything_with_a_tag(two):
         me.data["subscribed"].remove(c)                              # not followed: not shown
         for g in (a, b):
             await me.fetch_group(g)
-        assert [m.message_id for m in me.tagged("#Linux")] == [two_, one]
+        assert {m.message_id for m in me.tagged("#Linux")} == {two_, one}   # same second: no order
         got = LocalAPI(session=me).group(TAGGED + "linux")
         assert got["group"]["label"] == "#linux" and got["group"]["view"] == "feed"
-        assert [r["message"]["id"] for r in got["rows"]] == [two_, one]
+        assert {r["message"]["id"] for r in got["rows"]} == {two_, one}
         assert me.tagged("nonsense tag!") == []
     finally:
         await me.close()
