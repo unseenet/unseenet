@@ -55,10 +55,13 @@ async def test_suggested_remembered_and_in_rules(tmp_path, monkeypatch, fast_rip
         await me.post(dk, "Hi", "this one in English\n", languages=["en"])
         assert me.suggest_languages(dk) == (["en"], "you")           # the last choice
         await me.post(dk, "Uden", "x\n")                              # None: no header
+        await me.send_chat(dk, "en linje")                            # a chat line: suggested
         closed = await me.create_group("dk.lukket", "closed", min_pow=8)
         await me.post(closed, "Hemmeligt", "x\n", languages=["da"])
         by = {m.subject: m for m in await me.fetch_group(dk)}
         assert by["Hej"].languages == ("da",) and by["Hi"].languages == ("en",) and by["Uden"].languages == ()
+        [line] = [m for m in by.values() if m.kind == "chat"]
+        assert line.languages == ("en",)                               # what you used here last
         [c] = await me.fetch_group(closed)
         assert c.languages == ("da",)
         raw = node.store.get(c.message_id)
