@@ -60,6 +60,7 @@ async def test_reports_through_the_local_api(net):
     assert got["issuers"][0]["label"] == "Jægeren" and got["issuers"][0]["on"]
     [shown] = [m.to_dict() for m in me.visible(await me.fetch_group(gid))]
     assert shown["reported"]["reason"] == "spam" and shown["reported"]["automatic"] is True
+    assert shown["reported"]["label"] == "Jægeren"                   # the name you gave it
     api.show_reported(gid, {"id": spam.message_id})
     assert me.visible(await me.fetch_group(gid))[0].to_dict()["reported"] is None
     await api.follow_issuer({"key": issuer.identity().key_text, "on": False})

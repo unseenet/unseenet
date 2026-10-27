@@ -84,11 +84,15 @@ class ReportsMixin:
         out = []
         for key in sorted(set(named) | set(s["follow"])):
             out.append({"key": key,
-                        "label": s["follow"].get(key) or self.identity_label(key),
+                        "label": self.issuer_label(key),
                         "yours": key in s["follow"],
                         "hierarchies": sorted(named.get(key, ())),
                         "on": key in s["follow"] or key not in s["off"]})
         return out
+
+    def issuer_label(self, key: str) -> str:
+        """What you call an issuer: the name you gave it when following, else its label."""
+        return self._issuer_settings()["follow"].get(key) or self.identity_label(key)
 
     def follow_issuer(self, key: str, label: str = "") -> None:
         """Follow an issuer's reports in every group (section 7.2); also turns one a
@@ -182,7 +186,7 @@ class ReportsMixin:
         hit = book.post(msg.message_id, issuers) or book.key(msg.author_key, issuers)
         if hit is None:
             return None
-        return {"issuer": hit.issuer, "label": self.identity_label(hit.issuer),
+        return {"issuer": hit.issuer, "label": self.issuer_label(hit.issuer),
                 "reason": hit.reason, "automatic": hit.automatic, "kind": hit.kind,
                 "report": hit.report}
 
