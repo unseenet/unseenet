@@ -190,6 +190,8 @@ class Groups:
         s = self._ready()
         if gid == TIMELINE:
             return self._timeline_group(s)
+        if gid.startswith(TAGGED):                  # everything with a tag (UN-RFC 0052)
+            return self._tagged_group(s, gid)
         if (gid not in s.data["subscribed"] and gid != FOR_YOU and not gid.startswith(CONTACT)
                 and not s.cache.get(gid) and gid not in self._looking):
             # read without following (#506): fetched now, a GroupUpdated when it is here
@@ -302,7 +304,7 @@ class Groups:
     def _pool(s: Session, gid: str) -> list[Message]:
         if gid == s.my_inbox or gid.startswith(CONTACT):
             return s.private_messages()
-        if gid in (FOR_YOU, TIMELINE):
+        if gid in (FOR_YOU, TIMELINE) or gid.startswith(TAGGED):
             return [m for msgs in s.cache.values() for m in msgs.values()]
         return list(s.cache.get(gid, {}).values())
 

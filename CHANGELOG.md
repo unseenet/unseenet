@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Everything with a tag** (UN-RFC 0052 section 7): `Session.tagged(tag)` - the posts
+  with a tag in the groups and feeds you follow (the author's tags, the group's, topics
+  of labellers you follow for topics), newest first - and the pseudo-group
+  `tag:WORD` in the local API, shown as a feed (UN-RFC 0046 4.23).
+
 - **`!` for groups, `#` for tags** (decided 27 Oct): a group is referred to as
   `!dk.snak.marsvin` or `!dk.snak@abcd` (UN-RFC 0031 3.4.2, as Lemmy's
   `!community`), and `#word` in the subject or text of what you write is a tag - your
