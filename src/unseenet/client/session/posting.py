@@ -358,22 +358,61 @@ class PostingMixin:
         else:
             mem.pop(group_id, None)
 
-    def suggest_languages(self, group_id: str) -> tuple[list[str], str]:
-        """What to suggest you write in, in a group, and why: ``(codes, "you")`` - what
-        you chose there last; ``(codes, "group")`` - the group's ``languages``;
-        ``(codes, "profile")`` - your profile, when it names one language; else
-        ``([], "")``: no header (better none than a wrong one)."""
+    def suggest_languages(self, group_id: str, text: str | None = None, reply_to=None,
+                          kind: str = "post") -> tuple[list[str], str]:
+        """What to suggest you write in, and why (UN-RFC 0052 section 5a, #686) - only a
+        suggestion; you always decide:
+
+        - a **post**: the text, when it tells for sure (``"text"``); else the group's
+          ``languages`` (``"group"``); else what you chose there last (``"you"``); else a
+          one-language profile (``"profile"``); else ``([], "")`` - better none than wrong;
+        - a **comment** (``reply_to``, a Message): the language of the post it answers
+          (``"answered"``) - a comment is too short to tell - else as a post;
+        - a **chat line** (``kind="chat"``): the conversation's language - its newest
+          line's (``"conversation"``) - unless the line is long enough and sure of another
+          (``"text"``); a short "ok" keeps it."""
+        from ...core import language as lg
         from ...core import tags as tg
-        mine = self.data.get("languages_by_group", {}).get(group_id)
-        if mine:
-            return list(mine), "you"
+        ws = lg.words(text) if text else []
+        said = lg.detect(ws) if ws else None
+        if kind == "chat" and not reply_to:
+            convo = self._conversation_language(group_id)
+            if said and (len(ws) >= lg.SHORT or not convo) and said not in (convo or []):
+                return [said], "text"
+            if convo:
+                return convo, "conversation"
+        elif reply_to is not None:
+            answered = list(getattr(reply_to, "languages", ()) or ())
+            if not answered and getattr(reply_to, "readable", False):
+                g = lg.guess(getattr(reply_to, "body", "") or "")
+                answered = [g] if g else []
+            if answered:
+                return answered, "answered"
+        if said:
+            return [said], "text"
         group = tg.normalize_languages(self.manifest_data(group_id).get("languages") or [])
         if group:
             return group, "group"
+        mine = self.data.get("languages_by_group", {}).get(group_id)
+        if mine:
+            return list(mine), "you"
         prof = tg.normalize_languages((self.my_profile() or {}).get("lang") or [])
         if len(prof) == 1:
             return prof, "profile"
         return [], ""
+
+    def _conversation_language(self, group_id: str) -> list[str]:
+        """The language of a chat's newest line that says or shows one (UN-RFC 0052 5a)."""
+        from ...core import language as lg
+        msgs = sorted((m for m in self.cache.get(group_id, {}).values() if m.readable and m.kind == "chat"),
+                      key=lambda m: m.number, reverse=True)
+        for m in msgs[:20]:
+            if m.languages:
+                return list(m.languages)
+            g = lg.guess(m.body or "")
+            if g:
+                return [g]
+        return []
 
     async def post(self, group_id: str, subject: str, body: str,
                    references: list[str] | None = None, kind: str = KIND_POST,

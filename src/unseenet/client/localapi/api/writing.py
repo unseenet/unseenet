@@ -220,6 +220,20 @@ class Writing:
         s.emit(ev.GroupUpdated(gid))
         return {"ok": True, "marker": marker, "pins": self._pins(s, gid)}
 
+    def language(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/language`` ``{"text", "reply_to", "kind"}`` (UN-RFC
+        0052 5a, #686): what to suggest the author writes in, from the text as they type -
+        ``{"codes", "from"}``, from ``text``, ``answered``, ``conversation``, ``group``,
+        ``you``, ``profile`` or ``""``. Local and cheap: ask at every pause in typing."""
+        s = self._ready()
+        reply_to = None
+        if data.get("reply_to"):
+            reply_to = next((m for m in self._pool(s, gid) if m.message_id == data["reply_to"]), None)
+        kind = "chat" if data.get("kind") == "chat" else "post"
+        codes, why = s.suggest_languages(gid, text=str(data.get("text") or "")[:20000],
+                                         reply_to=reply_to, kind=kind)
+        return {"codes": codes, "from": why}
+
     def mentioned(self, gid: str, subject: str, body: str) -> dict:
         """``POST /api/groups/{gid}/mentioned`` (section 4.5): before posting, whom a
         text mentions by name and whether notices may be sent here (UN-RFC 0032) - for asking

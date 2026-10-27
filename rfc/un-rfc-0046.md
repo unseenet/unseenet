@@ -1063,6 +1063,11 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
   feeds the user follows - the author's tags, the group's, and topics of
   labellers followed for topics - newest first, as a feed (`view` feed,
   `label` `#word`); writing goes to each post's own group.
+- `POST /api/groups/{gid}/language` `{"text", "reply_to", "kind"}`: what
+  to suggest the author writes in, from the text as they type (#686) -
+  `{"codes", "from"}`, `from` being `text`, `answered` (a comment: the
+  post it answers), `conversation` (a chat line), `group`, `you`,
+  `profile` or `""`. Local and cheap: a client asks at pauses in typing.
 - `POST /api/groups/{gid}/post` takes `languages` (UN-RFC 0052 5a), what
   the author chose, remembered for the group; the group's head has
   `suggested_languages`: `{"codes", "from"}` - `you`, `group`, `profile`

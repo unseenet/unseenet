@@ -155,21 +155,32 @@ so `dk.snak` says `["da"]` and an international group `["en"]`.
 **How a client chooses.** People write in more than one language, by
 group and by subject, so a client suggests and the author decides. Where
 the author writes, the client suggests, in this order, the first that
-says anything:
+says anything (#686, 27 October 2026):
 
-1. the languages the author chose the last time they wrote in that group,
-   remembered in their own settings (UN-RFC 0044), never published;
+1. the text itself, when it tells for sure - recognised **locally**,
+   nothing leaving the machine: by its small words, which tell Danish,
+   Norwegian and Swedish apart and say "don't know" rather than guess,
+   and, where it is installed, by a larger model afterwards, taken only
+   when it is at least 80 % sure;
 2. the group's `languages`;
-3. the author's profile (`lang`, UN-RFC 0022), only when it names one
+3. the languages the author chose the last time they wrote in that group,
+   remembered in their own settings (UN-RFC 0044), never published;
+4. the author's profile (`lang`, UN-RFC 0022), only when it names one
    language.
 
-The suggestion is shown by the compose box, as tags are, and is changed
-with one action; the client remembers what the author chose for that
-group. When nothing says anything, the article gets no header: **better
-none than a wrong one**. A client MAY recognise the language of the text
-itself, locally - nothing leaves the machine - and suggest that instead;
-it MUST NOT guess when the text is too short to tell or its recogniser
-is in doubt.
+A **comment** is too short to tell, so it is suggested the language of the
+post it answers. A **chat line** keeps the conversation's language - its
+newest line's - and only a longer line that the text tells for sure is in
+another language changes it; "ok" and "haha" never do.
+
+The suggestion is shown under the text, by the tags, and is changed with
+one action. When nothing says anything, the article gets no header:
+**better none than a wrong one**.
+
+**The header is a suggestion the author sets, never evidence.** Nodes,
+moderators and labellers MUST NOT rely on it: one can say Danish and
+swear in English. A labeller decides the language of a text from the
+text, as a client's recogniser does.
 
 Readers' rules can use it (UN-RFC 0051, `lang`). A labeller MAY fill in
 the language of posts without the header as a topic label `lang-da`

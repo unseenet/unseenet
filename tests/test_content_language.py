@@ -53,7 +53,7 @@ async def test_suggested_remembered_and_in_rules(tmp_path, monkeypatch, fast_rip
         assert me.suggest_languages(dk) == (["da"], "group")         # ... and only here
         await me.post(dk, "Hej", "på dansk\n", languages=["da"])
         await me.post(dk, "Hi", "this one in English\n", languages=["en"])
-        assert me.suggest_languages(dk) == (["en"], "you")           # the last choice
+        assert me.suggest_languages(dk) == (["da"], "group")         # #686: the group's before yours
         await me.post(dk, "Uden", "x\n")                              # None: no header
         await me.send_chat(dk, "en linje")                            # a chat line: suggested
         closed = await me.create_group("dk.lukket", "closed", min_pow=8)
@@ -61,7 +61,7 @@ async def test_suggested_remembered_and_in_rules(tmp_path, monkeypatch, fast_rip
         by = {m.subject: m for m in await me.fetch_group(dk)}
         assert by["Hej"].languages == ("da",) and by["Hi"].languages == ("en",) and by["Uden"].languages == ()
         [line] = [m for m in by.values() if m.kind == "chat"]
-        assert line.languages == ("en",)                               # what you used here last
+        assert line.languages == ("da",)                               # the group's (too short to tell)
         [c] = await me.fetch_group(closed)
         assert c.languages == ("da",)
         raw = node.store.get(c.message_id)
@@ -70,6 +70,39 @@ async def test_suggested_remembered_and_in_rules(tmp_path, monkeypatch, fast_rip
         rs = sc.parse("+10 if lang da\n")
         assert sc.score(rs, me.post_facts(by["Hej"]), me.scoring_context(), "groups").score == 10
         assert sc.score(rs, me.post_facts(by["Uden"]), me.scoring_context(), "groups").score == 0
+    finally:
+        await me.close()
+        server.close()
+
+
+async def test_the_suggestion_from_the_text(tmp_path, monkeypatch, fast_ripening):
+    """#686: a post by its text when sure, else the group's, else yours; a comment the
+    answered post's; a chat line the conversation's unless a longer line says otherwise."""
+    from unseenet.client.localapi import LocalAPI
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    me = Session(Vault.open(tmp_path / "me.vault", "pw", **KDF), status=lambda *_: None)
+    me.new_identity("me", "Me"); me.add_node(addr)
+    EN = "I am a bit busy, and this is something we could pick up later if you would like"
+    DA = "Jeg har lidt travlt, og det er måske noget vi kan tage op senere hvis I vil"
+    try:
+        dk = await me.create_group("dk.snak", "open", min_pow=8, extra={"languages": ["da"]})
+        assert me.suggest_languages(dk, text=EN) == (["en"], "text")       # the text, sure
+        assert me.suggest_languages(dk, text="ok") == (["da"], "group")    # can't tell: the group's
+        post = await me.post(dk, "English", EN + "\n", languages=["en"])
+        [p] = [m for m in await me.fetch_group(dk) if m.message_id == post]
+        assert me.suggest_languages(dk, text="+1", reply_to=p) == (["en"], "answered")
+        chat = await me.create_group("dk.chat", "open", min_pow=8, view="chat")
+        await me.send_chat(chat, DA)
+        await me.fetch_group(chat)
+        assert me.suggest_languages(chat, text="haha", kind="chat") == (["da"], "conversation")
+        assert me.suggest_languages(chat, text=EN, kind="chat") == (["en"], "text")   # longer, sure
+        assert me.suggest_languages(chat, text="ok thanks", kind="chat") == (["da"], "conversation")
+        got = LocalAPI(session=me).language(dk, {"text": EN})
+        assert got == {"codes": ["en"], "from": "text"}
+        assert LocalAPI(session=me).language(dk, {"text": "+1", "reply_to": post}) == {"codes": ["en"], "from": "answered"}
     finally:
         await me.close()
         server.close()

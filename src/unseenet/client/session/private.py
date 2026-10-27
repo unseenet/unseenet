@@ -409,7 +409,7 @@ class PrivateMixin:
             return await self.send_private(personal_inbox_id(owner), "", text,
                                            owner_key=owner, kind=KIND_CHAT, files=files)
         if languages is None:
-            languages = self.suggest_languages(group_id)[0] or None
+            languages = self.suggest_languages(group_id, text=text, kind="chat")[0] or None
         return await self.post(group_id, "", text, kind=KIND_CHAT, files=files, languages=languages)
 
     def private_posts(self) -> list["Message"]:
