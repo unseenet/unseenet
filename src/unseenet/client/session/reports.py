@@ -63,30 +63,43 @@ class ReportsMixin:
         self._issuers_cached = None
         self._report_book = None
 
+    def named_issuers(self, group_id: str) -> dict[str, str]:
+        """{issuer key: where it is named}: by the group's hierarchy (``"dk"``) and by
+        the group's owner (``"group"``, section 7.5)."""
+        out = dict(self.hierarchy_issuers(group_id))
+        for k in rpt.group_issuers(self.manifest_data(group_id)):
+            out.setdefault(k, "group")
+        return out
+
     def report_issuers_for(self, group_id: str) -> set[str]:
-        """The issuers whose reports apply in a group: its hierarchy's, unless you
-        turned them off, and those you follow yourself."""
+        """The issuers whose reports apply in a group: those its hierarchy and its
+        owner name, unless you turned them off, and those you follow yourself."""
         groups = self._issuer_cache()["groups"]
         if group_id not in groups:
             s = self._issuer_settings()
-            out = {k for k in self.hierarchy_issuers(group_id) if k not in s["off"]}
+            out = {k for k in self.named_issuers(group_id) if k not in s["off"]}
             groups[group_id] = out | set(s["follow"])
         return set(groups[group_id])
 
     def report_issuers(self) -> list[dict]:
-        """Every issuer you follow or that a hierarchy of your groups names, each
-        ``{"key", "label", "yours": bool, "hierarchies": [...], "on": bool}``."""
+        """Every issuer you follow, or that a hierarchy or the owner of one of your
+        groups names, each ``{"key", "label", "yours": bool, "hierarchies": [...],
+        "groups": [Group ID, ...], "on": bool}``."""
         s = self._issuer_settings()
         named: dict[str, set[str]] = {}
+        by_group: dict[str, set[str]] = {}
         for gid in self.data.get("subscribed", []):
             for key, h in self.hierarchy_issuers(gid).items():
                 named.setdefault(key, set()).add(h)
+            for key in rpt.group_issuers(self.manifest_data(gid)):    # section 7.5
+                by_group.setdefault(key, set()).add(gid)
         out = []
-        for key in sorted(set(named) | set(s["follow"])):
+        for key in sorted(set(named) | set(by_group) | set(s["follow"])):
             out.append({"key": key,
                         "label": self.issuer_label(key),
                         "yours": key in s["follow"],
                         "hierarchies": sorted(named.get(key, ())),
+                        "groups": sorted(by_group.get(key, ())),
                         "on": key in s["follow"] or key not in s["off"]})
         return out
 
@@ -114,7 +127,7 @@ class ReportsMixin:
         s = self._issuer_settings()
         s["follow"].pop(key, None)
         if key not in s["off"] and any(
-                key in self.hierarchy_issuers(g) for g in self.data.get("subscribed", [])):
+                key in self.named_issuers(g) for g in self.data.get("subscribed", [])):
             s["off"].append(key)
         self._issuers_changed()
         self.save()

@@ -169,3 +169,46 @@ async def test_issuers_named_by_a_hierarchy_apply_there_only(tmp_path, monkeypat
     # the choice follows the identity (UN-RFC 0044)
     from unseenet.client.session.state import SETTINGS
     assert "report_issuers" in SETTINGS
+
+
+async def test_a_groups_owner_names_issuers_for_its_group(net):
+    """Section 7.5 (#644): in alt.*, which nobody governs, a group's owner names the
+    issuers its readers follow by default - for that group only, and readers can
+    turn them off."""
+    from unseenet.core import crypto
+    from unseenet.core import reports as rpt
+    from unseenet.core.groups import make_manifest
+    bot, issuer, spammer, reader = net("bot"), net("issuer"), net("spammer"), net("reader")
+    await issuer.start_reports()
+    key = issuer.identity().key_text
+    news = await bot.create_group("alt.space.nasa", "channel", min_pow=8, comments="open",
+                                  extra={"report_issuers": [key]})
+    other = await bot.create_group("alt.snak", "open", min_pow=8)
+    root = await bot.post(news, "Mars", "billede\n")
+    for g in (news, other):
+        spammer.subscribe(g)
+        await spammer.fetch_group(g)
+    await spammer.post(news, "Re: Mars", "køb ure\n", references=[root])
+    await spammer.post(other, "Ure", "køb ure\n")
+    await issuer.publish_report(keys=[(spammer.identity().key_text, "spam", None)])
+
+    for g in (news, other):
+        reader.subscribe(g)
+        await reader.fetch_group(g)
+    assert reader.named_issuers(news) == {key: "group"} and reader.named_issuers(other) == {}
+    await reader.refresh_reports()
+    hidden = {m.group: bool(m.reported) for g in (news, other)
+              for m in reader.visible(await reader.fetch_group(g)) if m.author_key == spammer.identity().key_text}
+    assert hidden == {news: True, other: False}                 # for that group only
+    [entry] = reader.report_issuers()
+    assert entry["groups"] == [news] and entry["hierarchies"] == [] and entry["on"]
+    reader.unfollow_issuer(key)                                  # the reader decides
+    assert not any(m.reported for m in reader.visible(await reader.fetch_group(news)))
+
+    owner = crypto.Identity.generate()
+    for bad, why in (([], "1 to 16"), ([key, key], "twice"), (["nonsense"], "")):
+        with pytest.raises((ValueError, crypto.CryptoError)):
+            make_manifest(owner, "alt.x", "open", pow_bits=8, extra={"report_issuers": bad})
+    with pytest.raises(ValueError, match="inbox"):
+        make_manifest(owner, "kontakt", "inbox", pow_bits=8, extra={"report_issuers": [key]})
+    assert rpt.group_issuers({"type": "open", "report_issuers": [key]}) == [key]

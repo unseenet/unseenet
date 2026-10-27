@@ -178,6 +178,28 @@ the reader follows, as a private post to the issuer's inbox. The issuer
 decides whether to publish it; the reporter's key is not in the published
 report.
 
+## 7.5 Issuers Named by a Group's Owner
+
+A group's owner MAY list issuers in the group's manifest (UN-RFC 0004
+section 4):
+
+| Field            | Type         | Meaning                                       |
+|------------------|--------------|-----------------------------------------------|
+| `report_issuers` | list of keys | Issuers its readers follow by default, at most 16 |
+
+A client follows these issuers **for that group only**, by default, in
+addition to those its hierarchy names (section 7.1). The reader can turn
+any of them off as in section 7.2; turning an issuer off turns it off
+wherever it was named for the reader. An inbox (UN-RFC 0009) and a
+`reports@` group have no `report_issuers`; a node refuses a manifest
+with more than 16, with a key listed twice, or with a key that is not
+one.
+
+This is for groups whose hierarchy names no issuers, or none that suit
+them - in `alt.*`, which nobody governs, it is the only default there
+is. Nodes do not act on it: a node follows the issuers its operator
+names (section 6), never those a group's owner names.
+
 # 8. Automatic Issuers
 
 A node or a program MAY issue reports automatically, for example from
@@ -198,6 +220,12 @@ from the same key until it is noticed. Reporting the key once stops the
 rest, and with ripening (UN-RFC 0025) a reported key is a real loss. Key
 reports expire within a year so that a mistake, or a stolen key given
 back, does not follow its owner forever.
+
+**Why a group's owner may name issuers.** Whoever owns a group already
+decides who may post and who is banned there. Naming issuers lets the owner
+lean on shared work instead of banning each throwaway key alone, and readers
+keep the last word, as for a hierarchy's defaults. Nodes are left out on
+purpose: what a node carries stays its operator's choice.
 
 **Why hierarchy defaults.** A new reader who has to find issuers before
 spam goes away will see spam. The maintainer of `dk.*` already sets the
@@ -236,6 +264,8 @@ key to the network.
   4 KiB.
 - UN-RFC 0018 section 5.1: a hierarchy's entry may hold `report_issuers`
   (section 7.1).
+- UN-RFC 0004 section 4: a group's manifest may hold `report_issuers`
+  (section 7.5).
 - UN-RFC 0025 section 6: following reports is one of the local choices
   that may raise a key's price.
 
