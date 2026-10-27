@@ -311,6 +311,8 @@ class GroupInfo:
     owner: bool = False                   # you own it
     listed: bool | None = None            # carried by your nodes; None while offline
     read_from: list[str] = field(default_factory=list)   # a local group: your nodes read (#134)
+    # a team inbox you read with a team key (UN-RFC 0047): its name, and whether you still do
+    team: dict | None = None
     unread: int | None = None
     replies: int | None = None            # unread replies to you
     mentions: int | None = None           # unread posts naming you
@@ -344,6 +346,7 @@ class GroupInfo:
             "view": self.view, "owner_view": self.owner_view, "kinds": list(self.kinds),
             "local": self.local, "low_latency": self.low_latency,
             "read_from": list(self.read_from),       # a local group: your nodes read (#134)
+            "team": dict(self.team) if self.team else None,   # {"name", "reader"} (0047)
             "unread": self.unread, "replies": self.replies, "mentions": self.mentions,
         }
 

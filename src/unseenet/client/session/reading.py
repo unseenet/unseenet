@@ -121,6 +121,9 @@ class ReadingMixin:
         g.local, g.low_latency = bool(data.get("local")), bool(data.get("low_latency"))
         if g.local:
             g.read_from = self.read_from(group_id)          # your nodes it is read from (#134)
+        if group_id in self.data.get("team_keys", {}):     # a team inbox you read (UN-RFC 0047)
+            t = next(x for x in self.team_inboxes() if x["group"] == group_id)
+            g.team = {"name": t["name"], "reader": t["reader"]}
         if available is not None:
             g.listed = group_id in available or is_key_bound(group_id)
         if counts:

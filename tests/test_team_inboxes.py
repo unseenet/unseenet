@@ -121,6 +121,8 @@ async def test_a_team_inbox_from_start_to_end(net):
     assert f"#{gid}" in inv.body and inv.to_dict()["team_invite"] == {"group": gid}
     assert await andreas.accept_team_invitation(inv) == gid
     assert andreas.team_key(gid).key_text == k1 and gid in andreas.data["subscribed"]
+    assert andreas.group_label(gid) == "Unseenet (operator) (team inbox)"
+    assert andreas.group_info(gid).to_dict()["team"] == {"name": "Unseenet (operator)", "reader": True}
     await helper.fetch_group(helper.my_inbox)
     await helper.accept_team_invitation(next(m for m in helper.private_messages() if helper.team_invitation(m)))
 
