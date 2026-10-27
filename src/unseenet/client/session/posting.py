@@ -410,7 +410,7 @@ class PostingMixin:
             return [said], "text"
         group = tg.normalize_languages(self.manifest_data(group_id).get("languages") or [])
         if group:
-            return group, "group"
+            return group[:1], "group"                   # its main one: the first (0052 5a)
         mine = self.data.get("languages_by_group", {}).get(group_id)
         if mine:
             return list(mine), "you"
