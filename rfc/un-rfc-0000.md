@@ -160,6 +160,7 @@ The protocol is designed to be extended without breaking old software:
 | 0051 | Your Own Rules for Your Feed and Your Groups  | Standards Track |
 | 0052 | Tags                                         | Standards Track |
 | 0053 | Content Labels                               | Standards Track |
+| 0054 | Councils, and a Registrar Without an Owner   | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
