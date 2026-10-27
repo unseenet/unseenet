@@ -19,6 +19,8 @@ from ....core import tags as tg
 
 class ContentLabels:
     def labels(self) -> dict:
+        """``GET /api/labels`` (UN-RFC 0046 section 4.23): the labellers that count and
+        where each is named, the choice per warning, and your own channel."""
         s = self._ready()
         mine = None
         if s.is_labeller():
@@ -32,6 +34,8 @@ class ContentLabels:
                 "mine": mine}
 
     async def follow_labeller(self, body: dict) -> dict:
+        """``POST /api/labels/follow``: follow a labeller (its topics too with
+        ``topics``), or stop with ``"follow": false``. Answers as ``GET``."""
         s = self._ready()
         key = str(body.get("key", "")).strip()
         if body.get("follow") is False:
@@ -43,15 +47,18 @@ class ContentLabels:
         return self.labels()
 
     def warning_choice(self, body: dict) -> dict:
+        """``POST /api/labels/warning``: show, blur or hide a warning. Answers as ``GET``."""
         s = self._ready()
         s.set_warning_choice(str(body.get("warning", "")), str(body.get("choice", "")))
         s.emit(ev.GroupsChanged())
         return self.labels()
 
     async def refresh_labels(self) -> dict:
+        """``POST /api/labels/refresh``: read the labellers' channels now."""
         return {"labellers": await self._ready().refresh_labels()}
 
     async def start_labels(self, body: dict) -> dict:
+        """``POST /api/labels/start``: start or change your ``labels@`` channel."""
         s = self._ready()
         await s.start_labels(str(body.get("policy", "")), str(body.get("contact", "")),
                              bool(body.get("automatic")), bool(body.get("topics")))

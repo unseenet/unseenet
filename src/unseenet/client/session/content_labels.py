@@ -44,6 +44,8 @@ class ContentLabelsMixin:
         return {w: mine[w] if mine.get(w) in CHOICES else DEFAULT_CHOICE for w in tg.WARNINGS}
 
     def set_warning_choice(self, warning: str, choice: str) -> None:
+        """Choose what to do with a warning: ``show``, ``blur`` or ``hide`` (section 6);
+        kept with your settings (UN-RFC 0044)."""
         if warning not in tg.WARNINGS or choice not in CHOICES:
             raise SessionError(f"a warning is one of {', '.join(tg.WARNINGS)}; show, blur or hide")
         self._label_settings()["warnings"][warning] = choice
@@ -93,6 +95,7 @@ class ContentLabelsMixin:
         return out
 
     def labeller_label(self, key: str) -> str:
+        """What you call a labeller: the name you gave it when following, else its label."""
         f = self._label_settings()["follow"].get(key) or {}
         return f.get("label") or self.identity_label(key)
 
@@ -147,6 +150,8 @@ class ContentLabelsMixin:
         return read
 
     def label_book(self) -> lb.Book:
+        """What the labellers that count for your groups say, from their channels read
+        (``refresh_labels``); kept until something changes."""
         cached = getattr(self, "_label_book", None)
         if cached is not None:
             return cached
@@ -211,9 +216,11 @@ class ContentLabelsMixin:
 
     # --- being a labeller (sections 3, 4) ---
     def my_labels_group(self, name: str | None = None) -> str:
+        """``labels@<fingerprint>`` of an identity (the one in use), started or not."""
         return lb.labels_group(self.identity(name).public_key)
 
     def is_labeller(self, name: str | None = None) -> bool:
+        """Whether an identity (the one in use) has started its labels channel here."""
         return bool(self.data["groups"].get(self.my_labels_group(name), {}).get("owner"))
 
     async def start_labels(self, policy: str = "", contact: str = "", automatic: bool = False,
