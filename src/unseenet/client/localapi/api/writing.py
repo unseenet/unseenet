@@ -234,6 +234,12 @@ class Writing:
                                          reply_to=reply_to, kind=kind)
         return {"codes": codes, "from": why}
 
+    def languages(self) -> dict:
+        """``GET /api/languages``: the languages to choose from - code, own name, English
+        name, and whether a text can be told to be in it (core.languages). No flags."""
+        from ....core import languages as langs
+        return {"languages": langs.as_list()}
+
     def choose_language(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/language/choose`` ``{"languages"}``: what you write
         your chat lines and comments in here, winning over suggestions; [] takes it back."""
