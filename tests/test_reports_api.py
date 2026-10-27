@@ -48,10 +48,17 @@ async def test_reports_through_the_local_api(net):
     assert mine["policy"] == "Spam" and mine["automatic"] is True
     assert iapi.settings()["report_issuer"] is True and api.settings()["report_issuer"] is False
     spam = next(m for m in await issuer.fetch_group(gid) if m.subject == "Ure")
-    rid = (await iapi.publish_report({"posts": [{"id": spam.message_id, "group": gid}],
-                                      "keys": [{"key": spammer.identity().key_text, "days": 30}]}))["id"]
+    job = (await iapi.publish_report({"posts": [{"id": spam.message_id, "group": gid}],
+                                      "keys": [{"key": spammer.identity().key_text, "days": 30}]}))["job"]
+    assert job                                                  # a job: postage takes a while
+    import asyncio
+    for _ in range(100):
+        if (await iapi.my_reports())["reports"]:
+            break
+        await asyncio.sleep(0.05)
     [r] = (await iapi.my_reports())["reports"]
-    assert r["id"] == rid and r["keys"][0]["key"] == spammer.identity().key_text
+    rid = r["id"]
+    assert r["keys"][0]["key"] == spammer.identity().key_text
     with pytest.raises(SessionError, match="days"):
         await iapi.publish_report({"keys": [{"key": spammer.identity().key_text, "days": 400}]})
 

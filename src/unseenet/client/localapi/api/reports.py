@@ -125,7 +125,19 @@ class Reports:
                              None if days == 365 else now + timedelta(days=days)))
         except (KeyError, TypeError, ValueError) as exc:
             raise SessionError(f"posts and keys: {exc}") from exc
-        return {"id": await s.publish_report(posts, keys, str(body.get("note", "")))}
+        issuer = s.issuer_for()                         # checked now, before the job
+        note = str(body.get("note", ""))
+        from ....core import reports as _r
+        try:
+            _r.report_body(posts, keys, note)           # a mistake is said at once, not later
+        except (ValueError, crypto.CryptoError) as exc:
+            raise SessionError(str(exc)) from exc
+
+        # a job: the issuer's postage (and, the first time, its ripening) can take
+        # minutes; the job's events (section 5) say when it is published
+        async def send() -> str:
+            return await s.publish_report(posts, keys, note, issuer)
+        return {"job": self._new_job(s.my_reports_group(issuer), send)}
 
     async def my_reports(self) -> dict:
         """``GET /api/reports/mine``: the reports you published, newest first."""
