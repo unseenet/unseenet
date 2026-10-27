@@ -937,7 +937,7 @@ async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
 
 
 async def test_find_group_ref(tmp_path, monkeypatch):
-    """#172: what #dk.marsvin can mean - followed groups first, unknown names nothing."""
+    """#172: what !dk.marsvin can mean - followed groups first, unknown names nothing."""
     from unseenet.core.groups import GroupRef
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
     node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))

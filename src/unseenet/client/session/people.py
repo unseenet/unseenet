@@ -273,7 +273,7 @@ class PeopleMixin:
         """Subject, one-line body and inner headers of a notice (section 3)."""
         label = self.group_label(group_id)
         try:
-            ref = "#" + (label if "@" in label else f"{label}@{split_group_id(group_id)[1][:4]}")
+            ref = "!" + (label if "@" in label else f"{label}@{split_group_id(group_id)[1][:4]}")
         except ValueError:
             ref = group_id
         title = subject if kind != KIND_CHAT and subject else "Mention"

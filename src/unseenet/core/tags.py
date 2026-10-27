@@ -21,6 +21,10 @@ WARNINGS = ("profanity", "sexual", "nudity", "violence", "gore", "spoiler")
 WARNING_LABELS = {"profanity": "Profanity", "sexual": "Sexual content", "nudity": "Nudity",
                   "violence": "Violence", "gore": "Gore", "spoiler": "Spoiler"}
 _FIRST = re.compile(r"^[^\W_]")       # a letter or a digit, any script
+# '#word' in a text (section 3): a tag the author's client takes into the header when the
+# post is written. Not inside a word, a URL fragment or an address; '# heading' (with a
+# space) is Markdown; it must have a letter, so '#170' stays an issue number.
+TAG_REF_RE = re.compile(r"(?<![\w@#!/&.+-])#([^\W_](?:[\w-]*[^\W_])?)(?![\w-])")
 
 
 class TagError(ValueError):
@@ -48,6 +52,14 @@ def normalize(words) -> list[str]:
         if is_tag(t) and t not in out:
             out.append(t)
     return out[:MAX_TAGS]
+
+
+def in_text(text: str) -> list[str]:
+    """The tags a text names with ``#word``, normalised, each once, in order - for the
+    author's client to put in the header (section 3); never read from others' posts."""
+    words = [m.group(1) for m in TAG_REF_RE.finditer(text or "")
+             if any(c.isalpha() for c in m.group(1))]
+    return normalize(words)
 
 
 def parse(value: str | None) -> tuple[str, ...]:

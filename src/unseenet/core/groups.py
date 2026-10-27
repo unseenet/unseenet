@@ -30,15 +30,16 @@ INBOX_NAME = "inbox"            # personal inbox: inbox@<fp> (UN-RFC 0009, 2.2)
 
 # --- group IDs (section 1) -------------------------------------------------
 
-# --- #group references in posts (#172) --------------------------------------
+# --- !group references in posts (#172, UN-RFC 0031 3.4.2) -----------------------
 
-# '#' and a group name, optionally '@' and the start of the owner's fingerprint:
-# #dk.snak.marsvin or #dk.snak@abcd. Not inside a word, a URL fragment or an
-# address; '# heading' (with a space) is markdown, not a reference. The name must
-# have a letter, so '#170' stays an issue number, and it must end where a name
-# can: '#dk.snak.' is dk.snak, '#dk.supernørder' is nothing (names are a-z).
+# '!' and a group name, optionally '@' and the start of the owner's fingerprint:
+# !dk.snak.marsvin or !dk.snak@abcd, as Lemmy writes !community@instance. ('#' is a
+# tag, UN-RFC 0052.) Not inside a word or an address, nor a Markdown image '![...]';
+# the name must have a letter, and it must end where a name can: '!dk.snak.' is
+# dk.snak, '!dk.supernørder' is nothing (names are a-z).
+GROUP_REF_SIGN = "!"
 GROUP_REF_RE = re.compile(
-    r"(?<![\w@#/&.+-])#(?=[a-z0-9+_.-]*[a-z])"
+    r"(?<![\w@#!/&.+-])!(?=[a-z0-9+_.-]*[a-z])"
     r"([a-z0-9][a-z0-9+_-]*(?:\.[a-z0-9][a-z0-9+_-]*)*)"
     r"(?:@([a-z2-7]{4,16}))?"
     r"(?![\w+@-]|\.\w)")
@@ -46,13 +47,13 @@ GROUP_REF_RE = re.compile(
 
 @dataclass(frozen=True)
 class GroupRef:
-    """A group named in a text: '#name', or '#name@fp' with a fingerprint prefix."""
+    """A group named in a text: '!name', or '!name@fp' with a fingerprint prefix."""
     name: str
     fp: str = ""
 
     @property
     def text(self) -> str:
-        return f"#{self.name}" + (f"@{self.fp}" if self.fp else "")
+        return f"{GROUP_REF_SIGN}{self.name}" + (f"@{self.fp}" if self.fp else "")
 
     def matches(self, group_id: str) -> bool:
         try:
@@ -63,7 +64,7 @@ class GroupRef:
 
 
 def group_refs(text: str) -> list[GroupRef]:
-    """The groups a text names with #, each once, in the order they appear (#172)."""
+    """The groups a text names with !, each once, in the order they appear (#172)."""
     out: list[GroupRef] = []
     for m in GROUP_REF_RE.finditer(text or ""):
         if len(m.group(1)) > 128:

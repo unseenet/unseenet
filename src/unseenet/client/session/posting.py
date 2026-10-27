@@ -375,7 +375,9 @@ class PostingMixin:
             raise SessionError("a post needs a subject")
         content_type = content_type or self.text_type()      # Markdown by default (UN-RFC 0031)
         from ...core import tags as tg
-        tag_header = tg.header(tg.normalize(tags or [])) if kind != "reaction" else None   # 0052
+        # chips and '#word' in what was written, into the header (UN-RFC 0052 section 3)
+        tag_header = tg.header(tg.normalize(list(tags or []) + tg.in_text(f"{subject}\n{body}"))) \
+            if kind != "reaction" else None
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
         if origin:
