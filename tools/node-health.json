@@ -1,21 +1,28 @@
 {
   "canaries": {
-    "date": "2026-10-26",
+    "date": "2026-10-27",
     "posted": [
+      "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
       "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
       "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya",
       "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq"
     ]
   },
   "key_bound": {
-    "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka": {
-      "date": "2026-10-26",
+    "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a": {
+      "date": "2026-10-27",
       "lacking": [],
       "over": false,
-      "reference": "unseenet-node4"
+      "reference": "unseenet-node1"
+    },
+    "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka": {
+      "date": "2026-10-27",
+      "lacking": [],
+      "over": false,
+      "reference": "unseenet-node2"
     },
     "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya": {
-      "date": "2026-10-26",
+      "date": "2026-10-27",
       "lacking": [
         "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
         "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
@@ -30,7 +37,7 @@
       "reference": "unseenet-node1"
     },
     "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq": {
-      "date": "2026-10-26",
+      "date": "2026-10-27",
       "lacking": [
         "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
         "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
@@ -45,10 +52,5 @@
       "reference": "unseenet-node1"
     }
   },
-  "nodes": {
-    "ze4aqpjfyteij4tqaaztyujoj7wsjgbv4cliexljckdfp5eomkshfead.onion": {
-      "first_failed": "2026-10-26",
-      "last_error": "Could not reach the node over Tor: Proxy connection timed out: 60"
-    }
-  }
+  "nodes": {}
 }
