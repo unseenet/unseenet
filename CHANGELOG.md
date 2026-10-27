@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Accepted** by the maintainer, 27 Oct: UN-RFC 0052 (Tags) and UN-RFC 0053
+  (Content Labels, labels on posts only - never on keys, which can be persons), the
+  UN-RFC 0045 amendment (`harassment`; reasons sanction, labels describe) and the
+  UN-RFC 0051 amendment (`tagged`, `labelled`, and `blur` as its own action).
+
 - **Rules with tags and labels** (#658, UN-RFC 0051 amended): `tagged WORD...` (any
   of the post's tags, the author's or its group's), `tagged all WORD...`, `labelled
   WORD...` and `labelled all WORD...` (labels from labellers that count for you, never
