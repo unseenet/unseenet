@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 
 from _owner import FP, builtin_list, open_owner_session  # noqa: E402
 
@@ -45,11 +46,21 @@ async def run(dry: bool, readers: list[str] | None) -> None:
     gid = f"{NAME}@{FP}"
     try:
         print(f"Reading {gid} over Tor ...", flush=True)
-        m = await s.fetch_manifest(gid)
+        m, node = None, None
+        for address in s.nodes:                     # the first project node that answers
+            try:
+                m = await s.fetch_manifest(gid, node=address)
+                node = address
+                break
+            except (OSError, ConnectionError, SessionError) as exc:
+                print(f"  {address[:16]}...: not reached ({exc})", flush=True)
+        if node is None:
+            sys.exit("No project node answered over Tor; nothing done. Try again in a while.")
+        s.pin_group(gid, node)                      # read and posted there from now on
         if m is None:
             print(f"{gid}: will create (replicated team inbox, '{TEAM_NAME}')")
             if not dry:
-                made = await s.create_group(NAME, "inbox", title="Contact the Unseenet project",
+                made = await s.create_group(NAME, "inbox", node=node, title="Contact the Unseenet project",
                                             description="Questions, reports and node trouble. "
                                             "Read by the project's people; answered as the team.")
                 assert made == gid
