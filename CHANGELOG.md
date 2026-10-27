@@ -7,6 +7,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **UN-RFC 0046 section 4.21, spam reports**: the local API's requests for UN-RFC
+  0045 and `reported` on every post, written into the spec (accepted 27 Oct).
+
 - **Spam reports** (#122, UN-RFC 0045): any key can be an *issuer* and publish
   signed reports - posts and keys, each with a reason - in its own channel
   `reports@<fp>`; nobody has to follow anybody. `core/reports.py` builds and reads

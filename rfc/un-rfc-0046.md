@@ -930,6 +930,49 @@ reordered, and threads whose every post is hidden left out. A client
 SHOULD NOT show a row with `hidden` true, and SHOULD show `why` when the
 user asks why a row is where it is.
 
+## 4.21 Spam Reports
+
+Spam reports (UN-RFC 0045) are followed and applied in the client core,
+so every front end hides the same posts for the same reasons.
+
+- Every post in every answer carries `reported`: null, or `{"issuer",
+  "label", "reason", "automatic", "kind", "report"}` when an issuer the
+  user follows reports the post (`kind` `"post"`) or its author's key
+  (`"key"`). The post keeps its place. A front end SHOULD show it as
+  hidden in that place, with who and why (and "automatic" when set),
+  one action from being shown, and SHOULD NOT hide it silently (UN-RFC
+  0045 section 7.3). The user's own posts and their contacts' never
+  carry it.
+- `GET /api/reports`: `{"issuers", "reasons", "mine"}` - `issuers`,
+  `[{"key", "label", "yours", "hierarchies", "on"}]`, every issuer the
+  user follows or that a hierarchy of their groups names; `reasons`, the
+  reasons a report can give; `mine`, the user as an issuer (`{"group",
+  "policy", "contact", "automatic"}`), or null before they start.
+- `POST /api/reports/follow` `{"key", "label", "on"}`: follow an issuer
+  in every group (also turning one a hierarchy names back on), or with
+  `"on": false` stop following it, also one a hierarchy names. Answers
+  as `GET`; a `groups` event follows.
+- `POST /api/reports/refresh`: read the followed issuers' reports now;
+  `{"issuers", "reports"}`.
+- `POST /api/groups/{gid}/show` `{"id"}`: show a post hidden by a report
+  anyway, on this device.
+- `POST /api/reports/start` `{"policy", "contact", "automatic"}`: start
+  or change the user's `reports@` group (UN-RFC 0045 section 3), and
+  their inbox if they have none. Answers as `GET`.
+- `POST /api/reports/publish` `{"posts", "keys", "note"}`: publish a
+  report; `posts` `[{"id", "group", "reason"}]`, `keys` `[{"key",
+  "reason", "days"}]` (`days` 1-365, 365 when left out). `{"id"}`.
+- `GET /api/reports/mine`: `{"reports": [{"id", "date", "note", "posts",
+  "keys"}]}`, newest first; `POST /api/reports/withdraw` `{"id"}`
+  withdraws one.
+- `GET /api/reports/received`: `{"received": [{"message", "subject",
+  "date", "id", "group", "author_key"}]}`, the reports others sent the
+  user (section 4.6), to publish without the reporter (UN-RFC 0045
+  section 7.4).
+- `POST /api/reports/hierarchy` `{"hierarchy", "keys"}`: as its
+  maintainer, the whole list of issuers the hierarchy's readers follow
+  by default, at most 16 (UN-RFC 0045 section 7.1).
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,
