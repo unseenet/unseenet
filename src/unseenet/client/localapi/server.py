@@ -331,6 +331,24 @@ async def reports_hierarchy(request):
     return _json(await _api(request).hierarchy_issuers(await _body(request)))
 
 
+async def teams(request):
+    return _json(_api(request).teams())
+
+
+async def teams_accept(request):
+    return _json(await _api(request).accept_team(await _body(request)))
+
+
+async def teams_forget(request):
+    return _json(_api(request).forget_team(await _body(request)))
+
+
+async def teams_readers(request):
+    if request.method == "GET":
+        return _json(await _api(request).team_readers(request.query.get("group", "")))
+    return _json(await _api(request).change_team_readers(await _body(request)))
+
+
 async def show_reported(request):
     return _json(_api(request).show_reported(_gid(request), await _body(request)))
 
@@ -590,6 +608,9 @@ ROUTES = [
     ("GET", "/api/reports/received", reports_received),
     ("POST", "/api/reports/hierarchy", reports_hierarchy),
     ("POST", "/api/groups/{gid}/show", show_reported),
+    ("GET", "/api/teams", teams), ("POST", "/api/teams/accept", teams_accept),     # 0047
+    ("POST", "/api/teams/forget", teams_forget),
+    ("GET", "/api/teams/readers", teams_readers), ("POST", "/api/teams/readers", teams_readers),
     ("POST", "/api/groups/{gid}/settings", group_settings),
     ("POST", "/api/groups/{gid}/remove", remove_group),
     ("POST", "/api/groups/{gid}/invite", invite),

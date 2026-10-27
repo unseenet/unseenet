@@ -19,8 +19,12 @@ _FP_RE = re.compile(r"^[a-z2-7]{16}$")
 ENC_SCHEME = "xchacha20poly1305"
 INBOX_SCHEME = "sealedbox"
 INBOX_SCHEME2 = "sealedbox2"      # two envelopes: the sender can read it too (UN-RFC 0009 2.3)
-INBOX_SCHEMES = (INBOX_SCHEME, INBOX_SCHEME2)
+INBOX_SCHEME_TEAM = "teambox"     # sealed to a team inbox's readers (UN-RFC 0047 section 4)
+INBOX_SCHEMES = (INBOX_SCHEME, INBOX_SCHEME2, INBOX_SCHEME_TEAM)
 ENVELOPE = 80                     # a sealed box of a 32-octet key
+TEAM_SLOTS = 16                   # UN-RFC 0047: at most 16 readers, always 16 slots
+TEAM_NAME_MAX = 64
+TEAM_BOX_MIN = 1 + TEAM_SLOTS * ENVELOPE + 40     # version, slots, nonce and tag (section 5)
 INBOX_NAME = "inbox"            # personal inbox: inbox@<fp> (UN-RFC 0009, 2.2)
 
 
@@ -299,6 +303,7 @@ class Manifest:
             check_attachments_field(data)                   # UN-RFC 0027 section 5.1
             from .reports import check_manifest_fields as check_report_fields
             check_report_fields(data)                       # UN-RFC 0045 section 3
+            check_team_fields(data)                         # UN-RFC 0047 section 3
             if data.get("view") == "pages":                 # UN-RFC 0035 section 3
                 from .pages import check_manifest_fields
                 check_manifest_fields(data)
@@ -418,7 +423,40 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 
 # manifest fields of the 0.5.0 documents, set through ``extra`` and Session.update_group
 EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reactions",
-                "policy", "contact", "automatic")       # the last three: reports@ (UN-RFC 0045)
+                "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
+                "readers", "team_name")                 # team inboxes (UN-RFC 0047)
+
+
+def check_team_fields(data: dict) -> None:
+    """ValueError if ``readers`` or ``team_name`` are not as UN-RFC 0047 section 3 says:
+    an inbox's, 1 to 16 keys, each once, never the owner; a name of at most 64."""
+    if "readers" not in data and "team_name" not in data:
+        return
+    if data.get("type") != "inbox":
+        raise ValueError("readers and team_name are for inboxes (UN-RFC 0047)")
+    readers = data.get("readers", [])
+    if not isinstance(readers, list) or not 1 <= len(readers) <= TEAM_SLOTS:
+        raise ValueError(f"readers: 1 to {TEAM_SLOTS} keys")
+    for k in readers:
+        crypto.key_from_text(k)
+    if len(set(readers)) != len(readers):
+        raise ValueError("a reader is listed twice")
+    if data.get("owner") in readers:
+        raise ValueError("the owner is not a reader: it lists a team key of its own")
+    name = data.get("team_name", "")
+    if not isinstance(name, str) or len(name) > TEAM_NAME_MAX:
+        raise ValueError(f"team_name is at most {TEAM_NAME_MAX} characters")
+
+
+def team_readers(data: dict) -> list[bytes]:
+    """The readers of a team inbox's manifest; [] for an ordinary inbox."""
+    out = []
+    for k in data.get("readers", []) if isinstance(data.get("readers"), list) else []:
+        try:
+            out.append(crypto.key_from_text(k))
+        except crypto.CryptoError:
+            continue
+    return out
 
 
 def check_extra_fields(data: dict) -> None:
@@ -432,6 +470,7 @@ def check_extra_fields(data: dict) -> None:
     from .reports import check_manifest_fields as check_report_fields
     check_attachments_field(data)
     check_report_fields(data)
+    check_team_fields(data)
     max_pins(data)
     if data.get("type") != "inbox":
         check_reactions(data)                              # UN-RFC 0048 section 4.1
@@ -618,7 +657,8 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
                   kind: str = KIND_POST, pow_bits: int = 18,
                   extra: list[tuple[str, str]] | None = None,
                   two_envelopes: bool = False, copy_to: bytes | None = None,
-                  outer_extra: list[tuple[str, str]] | None = None) -> Article:
+                  outer_extra: list[tuple[str, str]] | None = None,
+                  readers: list[bytes] | None = None) -> Article:
     """An article sealed to the inbox owner, signed by a one-time key (UN-RFC 0009, 2.3).
 
     ``kind`` is a chat or a post (UN-RFC 0028); it travels inside the sealed box, as do
@@ -627,7 +667,8 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     ``copy_to`` (the sender's own key), or for nobody when that is None - so nobody can
     tell whether the sender kept a copy (UN-RFC 0044 section 6.1). ``outer_extra``:
     headers nodes must read, i.e. ``Blobs`` (UN-RFC 0027 section 4.3); the files'
-    ``Attachment-<n>`` go in ``extra``, inside.
+    ``Attachment-<n>`` go in ``extra``, inside. ``readers``: a team inbox's readers
+    (UN-RFC 0047 section 4) - then it is a ``teambox`` only they can open, not the owner.
     """
     if crypto.fingerprint(owner_pk) != split_group_id(group_id)[1]:
         raise ValueError("owner key does not match the inbox's group ID")
@@ -646,7 +687,9 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     if sender is not None:
         msg = _sender_message(group_id, one_time.key_text, inner.canonical())
         inner.set("Sender-Signature", sender.sign_text(crypto.PURPOSE_INBOX_SENDER, msg))
-    if two_envelopes:
+    if readers:
+        box, scheme = team_box(group_id, readers, inner.to_bytes()), INBOX_SCHEME_TEAM
+    elif two_envelopes:
         import os as _os
         import nacl.bindings as nb
         key, nonce = _os.urandom(32), _os.urandom(24)
@@ -664,8 +707,42 @@ def inbox_article(group_id: str, owner_pk: bytes, *, from_name: str, subject: st
     return art.finalize(one_time, pow_bits)
 
 
+def team_box(group_id: str, readers: list[bytes], plain: bytes) -> bytes:
+    """``0x01 || 16 slots || nonce || ciphertext`` (UN-RFC 0047 section 4): a content key
+    sealed to each reader, the other slots random, all in random order, no key IDs."""
+    import os as _os
+    import random as _random
+    import nacl.bindings as nb
+    if not 1 <= len(readers) <= TEAM_SLOTS:
+        raise ValueError(f"a team inbox has 1 to {TEAM_SLOTS} readers")
+    key, nonce = _os.urandom(32), _os.urandom(24)
+    slots = [crypto.seal_to(pk, key) for pk in readers]
+    slots += [_os.urandom(ENVELOPE) for _ in range(TEAM_SLOTS - len(slots))]
+    _random.SystemRandom().shuffle(slots)
+    ct = nb.crypto_aead_xchacha20poly1305_ietf_encrypt(plain, group_id.encode(), nonce, key)
+    return b"\x01" + b"".join(slots) + nonce + ct
+
+
+def open_team_box(group_id: str, raw: bytes, reader: crypto.Identity) -> bytes:
+    """The inner article of a team box, with a reader's team key; CryptoError if this
+    key is not among its readers."""
+    import nacl.bindings as nb
+    if len(raw) < TEAM_BOX_MIN or raw[0] != 1:
+        raise crypto.CryptoError("not a team box")
+    for i in range(TEAM_SLOTS):
+        try:
+            key = crypto.open_sealed_with(reader, raw[1 + i * ENVELOPE:1 + (i + 1) * ENVELOPE])
+        except crypto.CryptoError:
+            continue
+        if len(key) == 32:
+            rest = raw[1 + TEAM_SLOTS * ENVELOPE:]
+            return nb.crypto_aead_xchacha20poly1305_ietf_decrypt(rest[24:], group_id.encode(), rest[:24], key)
+    raise crypto.CryptoError("no slot for this key")
+
+
 def open_inbox_article(art: Article, owner: crypto.Identity) -> tuple[Article, bytes | None]:
     """Decrypt an inbox article. Returns (inner article, verified sender key or None).
+    For a team box (UN-RFC 0047) ``owner`` is a reader's team key.
 
     Raises ArticleError if it cannot be opened or a claimed sender does not verify.
     """
@@ -676,6 +753,8 @@ def open_inbox_article(art: Article, owner: crypto.Identity) -> tuple[Article, b
         raw = b64decode("".join(art.body.split()))
         if scheme == INBOX_SCHEME:
             blob = crypto.open_sealed_with(owner, raw)
+        elif scheme == INBOX_SCHEME_TEAM:            # ``owner``: a reader's team key (0047)
+            blob = open_team_box(art.group, raw, owner)
         else:                           # either envelope: the owner's, or the sender's copy
             import nacl.bindings as nb
             key = None
@@ -738,8 +817,20 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
         raise ArticleError("permission", "banned from this group")
     if manifest.type == "inbox":
         # Anyone may write; nodes can only check the form (UN-RFC 0009, 2.4).
-        if art.get("Encrypted", "").strip() not in INBOX_SCHEMES:
+        scheme = art.get("Encrypted", "").strip()
+        if scheme not in INBOX_SCHEMES:
             raise ArticleError("permission", "inbox articles must be sealed to the owner")
+        team = bool(manifest.raw.get("readers"))           # UN-RFC 0047 section 5
+        if team != (scheme == INBOX_SCHEME_TEAM):
+            raise ArticleError("permission", "a team inbox takes team boxes only" if team
+                               else "a team box is for a team inbox")
+        if team:
+            try:
+                size = len(b64decode("".join(art.body.split())))
+            except ValueError:
+                size = 0
+            if size < TEAM_BOX_MIN:
+                raise ArticleError("permission", "a team box too small to be one")
         return
     if manifest.type == "closed":
         if "Encrypted" not in art:

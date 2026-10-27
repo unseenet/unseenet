@@ -23,6 +23,8 @@ class LabelsMixin:
         """The name to show for a group: without the fingerprint where UN-RFC 0018 allows.
         A personal feed or site is named after its owner - "Andreas~42e5's feed" (#423)."""
         name = group_id.split("@", 1)[0]
+        if group_id in self.data.get("team_keys", {}):     # a team inbox: its name (0047, 7)
+            return (self.team_name(group_id) or name) + " (team inbox)"
         if name in ("feed", "site"):
             owner = self.manifest_data(group_id).get("owner")
             if owner:

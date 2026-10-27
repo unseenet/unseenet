@@ -118,16 +118,24 @@ class Writing:
         reply_to = data.get("reply_to")
         if reply_to:
             msg = next((m for m in s.private_messages() if m.message_id == reply_to), None)
+            if msg is None:                                 # a message in a team inbox (0047)
+                msg = next((m for gid in s.data.get("team_keys", {})
+                            for m in s.cache.get(gid, {}).values() if m.message_id == reply_to), None)
             if msg is not None:
                 inbox = s.reply_target(msg) or inbox
                 refs = msg.references + [msg.message_id]
         group = CONTACT + key if kind == KIND_CHAT else s.my_inbox
 
+        as_team = str(data.get("as_team") or "") or None     # on a team inbox's behalf (0047)
+        if as_team and s.team_key(as_team) is None:
+            raise SessionError("you hold no team key for that inbox")
+
         async def send() -> str:
-            if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner):
+            if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner) and not as_team:
                 return await s.send_chat(CONTACT + key, body, files=files or None)
             return await s.send_private(inbox, subject, body, owner_key=owner,
-                                        references=refs or None, kind=kind, files=files or None)
+                                        references=refs or None, kind=kind, files=files or None,
+                                        as_team=as_team)
 
         async def after(msgid: str) -> None:
             s.emit(ev.GroupUpdated(group))

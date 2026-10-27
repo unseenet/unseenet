@@ -32,6 +32,19 @@ vault on your own computer.
 Only your identity can read the messages. The node stores them encrypted,
 so not even someone who seizes the node can read them.
 
+**One team inbox for all your nodes.** Better still with several nodes, or
+with several people answering: one replicated **team inbox** (UN-RFC 0047)
+that every node names in `contact`. Its owner key can stay offline; the
+people who answer read it with a team key each, in their everyday client:
+```bash
+unseenet --vault operator.vault group-create operator --type inbox       # not --local
+unseenet --vault operator.vault team add operator@<fp> <their key> --name "Example (operator)"
+unseenet team invitations          # the reader, in their own client
+unseenet team accept <message-id>
+unseenet team reply operator@<fp> <message-id> "We are looking at it"
+```
+Answers go out as the team's name, never as the person who wrote them.
+
 **Several nodes.** Run several nodes and you have a local inbox on each, with
 the same group ID: create it on each node (`node-add` each, then
 `group-create ... --local` once per node, or post the same manifest to all),
