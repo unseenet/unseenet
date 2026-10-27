@@ -116,6 +116,11 @@ What comes after if. One of these:
   subject matches "text"     the subject contains text
   text matches "text"        the post contains text
   has pictures               it has a picture
+  tagged linux politics      the author or the group tagged it
+                             with any of them; tagged all ...
+                             with every one
+  labelled sexual nudity     a labeller you follow labelled it
+                             so; labelled all ... for every one
   group is dk.*              it is in a matching group
   older than 7 days          also minutes, hours, weeks
   newer than 2 hours
@@ -136,6 +141,9 @@ Tested when all points are counted.
   hide if author in ignored  hide these
   sort by score, then date   the order; also by reactions,
                              replies; add ascending to turn it
+
+  blur if labelled spoiler    pictures and text behind
+                             Show anyway (also in the feed)
 
 In groups only - a reply never moves in its thread:
   fold if score < -20        closed, with its replies
@@ -162,7 +170,7 @@ COUNTERS = {
     "day old": "days_old",
     "hour old": "hours_old",
 }
-ACTIONS = ("show", "hide", "fold", "dim", "highlight", "mark read")
+ACTIONS = ("show", "hide", "blur", "fold", "dim", "highlight", "mark read")   # blur: #658
 THREAD_ONLY = ("fold", "dim", "highlight", "mark read")
 SORT_KEYS = ("score", "date", "reactions", "replies")
 UNITS = {"minute": 60, "hour": 3600, "day": 86400, "week": 7 * 86400}
@@ -173,6 +181,7 @@ WORDS = sorted({"if", "per", "max", "and", "or", "not", "author", "in", "is", "f
                 "since", "subject", "text", "matches", "has", "pictures", "group", "older",
                 "newer", "than", "show", "hide", "fold", "dim", "highlight", "mark", "sort",
                 "by", "then", "ascending", "version", *LISTS, *THREAD_LISTS, *SORT_KEYS,
+                "tagged", "labelled", "all", "blur",
                 "minutes", "hours", "days", "weeks", "minute", "hour", "day", "week", "time",
                 "to", "contact", "who", "followed", "reaction", "reply", "old"})
 
@@ -202,6 +211,8 @@ class Post:
     reacted_by: frozenset = frozenset()      # keys that reacted
     i_reacted: bool = False
     i_posted_in_thread: bool = False
+    tags: frozenset = frozenset()            # the author's and the group's (UN-RFC 0052)
+    labels: frozenset = frozenset()          # from labellers that count (UN-RFC 0053)
 
 
 @dataclass
@@ -444,6 +455,19 @@ class _Parser:
             return lambda p, c, s: p.read
         if self.word("has", "pictures"):
             return lambda p, c, s: p.pictures
+        for word, attr in (("tagged", "tags"), ("labelled", "labels")):   # #658
+            if self.word(word):
+                every = self.word("all")
+                wanted = []
+                while not self.done() and self.peek()[0] in ("word", "num") and \
+                        self.peek()[1] not in ("and", "or", "not"):
+                    wanted.append(str(self.peek()[1]).lower())
+                    self.i += 1
+                if not wanted:
+                    raise _Error(f"{word} <word> ...: which tags, e.g. {word} linux politics")
+                want = frozenset(wanted)
+                return (lambda a, w, e: lambda p, c, s: (w <= getattr(p, a)) if e
+                        else bool(w & getattr(p, a)))(attr, want, every)
         for fld in ("subject", "text"):
             if self.word(fld, "matches"):
                 needle = self.string()
@@ -534,7 +558,7 @@ def _rule(text: str, line: int, scope: str | None) -> Rule:
         else:
             raise _Error((f"{v!r} does not start a rule" + (_hint(v) if kind == "word" else "")
                           if v is not None else "empty") +
-                         " (a rule starts with +points, -points, show, hide, fold, dim, "
+                         " (a rule starts with +points, -points, show, hide, blur, fold, dim, "
                          "highlight, mark read or sort by)")
     if not p.done():
         raise _Error(f"{p.peek()[1]!r} after the end of the rule" + _hint(p.peek()[1] or ""))

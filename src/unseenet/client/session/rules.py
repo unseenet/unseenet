@@ -156,7 +156,18 @@ class RulesMixin:
             reacted_by=frozenset(counts.by_key) if counts else frozenset(),
             i_reacted=bool(counts and mine & set(counts.by_key)),
             i_posted_in_thread=any(m.author_key in mine for m in cache
-                                   if m.message_id == root or root in m.references))
+                                   if m.message_id == root or root in m.references),
+            tags=frozenset(msg.tags) | frozenset(self.group_info(gid).tags),     # UN-RFC 0052
+            labels=self._labeller_labels(msg))                                    # UN-RFC 0053
+
+    def _labeller_labels(self, msg: Message) -> frozenset:
+        """The labels of the labellers that count for this post (warnings and topics),
+        not the author's or the group's own tags - for ``labelled`` (#658)."""
+        got = self.post_labels(msg)
+        if not got:
+            return frozenset()
+        out = {w["warning"] for w in got["warnings"] if any(b not in ("author", "group") for b in w["by"])}
+        return frozenset(out | set(got["topics"]))
 
     # --- the feed and groups as your rules have them ---
     def scored_timeline(self, limit: int = 100) -> list[tuple[Message, sc.Result]]:

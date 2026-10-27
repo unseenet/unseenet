@@ -4,6 +4,7 @@ UN-RFC: 0051                                              October 2026
 Category: Standards Track
 Status: Draft
 Updates: 0034, 0044
+Updated by: 0052, 0053 (tagged, labelled, blur)
 
           Unseenet: Your Own Rules for Your Feed and Your Groups
 ```
@@ -153,8 +154,11 @@ A rule is one of:
   and optionally `max M`. With `per`, the points are multiplied by the
   count; `max` caps the result at plus or minus M. A points rule needs
   `per` or `if` or both.
-- **An action**: `show`, `hide`, `fold`, `dim`, `highlight`,
-  `mark read` or `quiet`, then `if CONDITION`.
+- **An action**: `show`, `hide`, `blur`, `fold`, `dim`, `highlight`,
+  `mark read` or `quiet`, then `if CONDITION`. `blur` shows the post in
+  its place with its text and pictures behind *Show anyway*, saying which
+  rule did it - the same as a content warning the reader chose to blur
+  (UN-RFC 0053 section 6). It is used in the feed and in groups alike.
 - **The order**: `sort by KEY [ascending] [, then KEY [ascending]] ...`.
 
 ## 4.5 Counts
@@ -186,6 +190,10 @@ A plural is the same count (`contacts who reacted`, `days old`).
 | `new replies since seen` | it has replies dated after the seen mark |
 | `subject matches "TEXT"`, `text matches "TEXT"` | the subject or the text contains TEXT |
 | `has pictures` | it carries a picture (UN-RFC 0027) |
+| `tagged WORD...` | it has at least one of the tags: the author's own or its group's (UN-RFC 0052) |
+| `tagged all WORD...` | it has every one of them |
+| `labelled WORD...` | a labeller that counts for the reader gave it at least one of the labels (UN-RFC 0053 section 5) |
+| `labelled all WORD...` | ... every one of them |
 | `group is PATTERN` | the group's name matches the wildmat |
 | `older than N UNIT`, `newer than N UNIT` | its age, UNIT minutes, hours, days or weeks |
 | `score OP N`, `reactions OP N`, `replies OP N`, `new replies OP N` | the comparison holds |
@@ -196,6 +204,24 @@ then `or`.
 
 `matches` looks for TEXT as part of the field, in any case. It is never
 a regular expression, so no rule can make a client work for long.
+
+The words after `tagged` and `labelled` are tags (UN-RFC 0052 section 3)
+separated by white space; they end at `and`, `or`, `not`, a parenthesis or
+the end of the line. A rule gives its points once, however many of its
+words match - that follows from `if`. To reward several words, write
+several lines:
+
+```
++10 if tagged linux
++10 if tagged debian
++5  if tagged linux and group is comp.*
+hide if labelled sexual nudity gore
+blur if tagged spoiler or labelled spoiler
+```
+
+`labelled` sees only labels from labellers that count for the reader,
+never the author's own tags (that is `tagged`); a topic counts only from
+a labeller the reader follows for topics (UN-RFC 0053 section 5).
 
 ## 4.7 Grammar
 
@@ -212,14 +238,15 @@ sign       = "+" / "-"
 per        = "per" count
 cap        = "max" 1*DIGIT
 if-cond    = "if" cond
-action     = ("show" / "hide" / "fold" / "dim" / "highlight" / "mark read"
-              / "quiet") if-cond
+action     = ("show" / "hide" / "blur" / "fold" / "dim" / "highlight"
+              / "mark read" / "quiet") if-cond
 order      = "sort by" key *(("," / "then") key)
 key        = ("score" / "date" / "reactions" / "replies") ["ascending"]
 cond       = and-cond *("or" and-cond)
 and-cond   = not-cond *("and" not-cond)
 not-cond   = "not" not-cond / atom
 atom       = "(" cond ")" / test                     ; the tests of section 4.6
+test       =/ ("tagged" / "labelled") ["all"] 1*(1*WSP tag)   ; tag: UN-RFC 0052 3
 ```
 
 Words are separated by white space; `,`, `(`, `)` and the operators need
