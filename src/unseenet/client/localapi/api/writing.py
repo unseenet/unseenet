@@ -234,6 +234,17 @@ class Writing:
                                          reply_to=reply_to, kind=kind)
         return {"codes": codes, "from": why}
 
+    def choose_language(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/language/choose`` ``{"languages"}``: what you write
+        your chat lines and comments in here, winning over suggestions; [] takes it back."""
+        s = self._ready()
+        langs = data.get("languages") or []
+        if not isinstance(langs, list):
+            raise SessionError("languages is a list of codes such as da, en")
+        s.choose_chat_language(gid, langs)
+        codes, why = s.suggest_languages(gid, kind="chat")
+        return {"codes": codes, "from": why}
+
     def mentioned(self, gid: str, subject: str, body: str) -> dict:
         """``POST /api/groups/{gid}/mentioned`` (section 4.5): before posting, whom a
         text mentions by name and whether notices may be sent here (UN-RFC 0032) - for asking

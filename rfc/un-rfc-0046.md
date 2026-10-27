@@ -1068,6 +1068,10 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
   `{"codes", "from"}`, `from` being `text`, `answered` (a comment: the
   post it answers), `conversation` (a chat line), `group`, `you`,
   `profile` or `""`. Local and cheap: a client asks at pauses in typing.
+- `POST /api/groups/{gid}/language/choose` `{"languages"}`: what the user
+  writes chat lines and comments in, in that group - winning over the
+  suggestion for them; `[]` takes it back. Answers as `language` (`from`
+  `chosen`).
 - `POST /api/groups/{gid}/post` takes `languages` (UN-RFC 0052 5a), what
   the author chose, remembered for the group; the group's head has
   `suggested_languages`: `{"codes", "from"}` - `you`, `group`, `profile`

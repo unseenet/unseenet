@@ -168,8 +168,10 @@ says anything (#686, 27 October 2026):
 4. the author's profile (`lang`, UN-RFC 0022), only when it names one
    language.
 
-A **comment** is too short to tell, so it is suggested the language of the
-post it answers. A **chat line** keeps the conversation's language - its
+What the author chose for their chat lines and comments in a group wins
+over all of this for them there, until they take it back; it is kept
+with their settings, never published. A **comment** is too short to
+tell, so it is suggested the language of the post it answers. A **chat line** keeps the conversation's language - its
 newest line's - and only a longer line that the text tells for sure is in
 another language changes it; "ok" and "haha" never do.
 
