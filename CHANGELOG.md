@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The project's contact inbox and spam report issuer** (tools/project/):
+  `team_contact.py` makes `contact@ph5fc5hop5232qsz` a replicated team inbox owned
+  by the project key, read and answered as "Unseenet (operator)" with team keys in
+  everyday clients, and prints what each node's `[operator] contact` must say;
+  `report_issuer.py` makes the project's spam report issuer - a key of its own in
+  `~/.unseenet/issuer.vault`, never the project key - and starts its reports group.
+  Both have --dry-run.
+
 - **Inboxes take PDFs too** (#637): send a document to someone and talk about it.
   Every inbox - personal, team, operator, issuer - takes pictures and PDFs,
   encrypted, up to 4 MiB each; one that took pictures only takes PDFs from the next
