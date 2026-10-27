@@ -943,6 +943,9 @@ so every front end hides the same posts for the same reasons.
   one action from being shown, and SHOULD NOT hide it silently (UN-RFC
   0045 section 7.3). The user's own posts and their contacts' never
   carry it.
+- `GET /api/settings` (section 4.8) also says `report_issuer`: whether
+  the user has started a `reports@` group, so a front end can offer
+  publishing a report without asking for more.
 - `GET /api/reports`: `{"issuers", "reasons", "mine"}` - `issuers`,
   `[{"key", "label", "yours", "hierarchies", "on"}]`, every issuer the
   user follows or that a hierarchy of their groups names; `reasons`, the

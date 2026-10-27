@@ -256,14 +256,15 @@ class Identity:
 
     def settings(self) -> dict:
         """``GET /api/settings`` (section 4.8): your settings, with a preview of your
-        signature as it will be signed."""
+        signature as it will be signed, and whether you issue spam reports (section 4.21)."""
         s = self._ready()
         return {"signature": s.signature_template(), "signature_preview": s.signature(),
                 "markdown": markup.is_markdown(s.text_type()), "notices": s.notice_settings(),
                 "private_min_ripe": s.private_min_ripe(),
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
                 "pictures": s.show_pictures(), "state_local": s.state_kept_local(),
-                "notifications": s.notification_settings()}
+                "notifications": s.notification_settings(),
+                "report_issuer": s.is_issuer()}            # UN-RFC 0045: offer publishing
 
     async def change_settings(self, data: dict) -> dict:
         """``POST /api/settings``: as ``set_settings``, and ``state_local`` - keep your
