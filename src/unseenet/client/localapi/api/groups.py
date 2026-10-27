@@ -278,7 +278,7 @@ class Groups:
         if s.is_notice(m) and m.mention_group and "@" in m.mention_group:
             name, fp = m.mention_group.rsplit("@", 1)
             notice = {"group": m.mention_group, "id": m.mention_of,
-                      "label": s.group_label(m.mention_group), "ref": f"#{name}@{fp}",
+                      "label": s.group_label(m.mention_group), "ref": f"!{name}@{fp}",
                       "followed": m.mention_group in s.data["subscribed"]}
         return {"message": d, "depth": depth, "read": s.is_read(m),
                 "mine": m.author_key in keys or bool(m.to_key),

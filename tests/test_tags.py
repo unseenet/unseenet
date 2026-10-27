@@ -60,9 +60,10 @@ async def test_post_with_tags_open_and_closed(two):
     me.new_identity("me", "Me"); me.add_node(addr)
     try:
         gid = await me.create_group("dk.politik", "open", min_pow=8, extra={"tags": ["politics"]})
-        await me.post(gid, "Valg", "x\n", tags=["#Danmark", "Valg", "spoiler"])
+        await me.post(gid, "Valg", "Om #EU og !dk.snak\n", tags=["#Danmark", "Valg", "spoiler"])
         [m] = await me.fetch_group(gid)
-        assert m.tags == ("danmark", "valg", "spoiler") and m.to_dict()["tags"] == ["danmark", "valg", "spoiler"]
+        # chips, then #words in the text; !dk.snak is a group, not a tag; the text is kept
+        assert m.tags == ("danmark", "valg", "spoiler", "eu") and m.body.startswith("Om #EU og !dk.snak")
         assert me.group_info(gid).tags == ("politics",)
         closed = await me.create_group("dk.hemmelig", "closed", min_pow=8)
         await me.post(closed, "Inde", "y\n", tags=["linux"])

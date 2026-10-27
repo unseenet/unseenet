@@ -72,11 +72,19 @@ The header is part of the signed article (UN-RFC 0002). In a closed
 group (UN-RFC 0004) and in a private post (UN-RFC 0009) it goes inside
 the ciphertext with the other inner headers, so nodes never see it.
 
-Tags are set where a post is written - in the compose box, not in the
-text. A client MUST NOT read tags from a post's text: `#word` in the text
-is a group reference (UN-RFC 0031) and nothing else. A client MAY offer,
-while the author types `#word` that names no known group, to make it a
-tag; the text the author sends is unchanged.
+Tags are set where a post is written: as chips in the compose box, or
+by writing `#word` in the subject or the text, as on Mastodon. The
+author's client puts both in the `Tags` header when the post is sent -
+lower-cased and normalised, each once, at most 8 - and leaves the text as
+the author wrote it. A `#` that follows a letter, digit, `_`, `@`, `#`,
+`!`, `/`, `&`, `.`, `+` or `-` does not start a tag; `# heading`, with a
+space, is Markdown; and a `#word` needs a letter, so `#170` stays a
+number.
+
+The header is what counts. Other clients and nodes MUST NOT read tags
+from a post's text; a client MAY show a `#word` in the text as a link to
+everything with that tag. Groups are referred to with `!` (UN-RFC 0031
+section 3.4.2).
 
 Tags belong on posts, chat lines, feed entries and comments. A manifest,
 a control article and a reaction (UN-RFC 0048) have none.
@@ -155,11 +163,12 @@ section 4 where one fits, else to none.
 
 # 9. Rationale
 
-**Why only in a header.** In the text, `#` already means a group
-reference (`#dk.snak.marsvin`, UN-RFC 0031); reading `#word` as a tag
-too would make every unknown group name a tag and every tag a broken
-link. A header keeps the text as the author wrote it, is signed with
-it, and is what Usenet's `Keywords:` was.
+**Why a header, and `#` too.** The header is what counts: it is signed
+with the post, read the same by every client, and is what Usenet's
+`Keywords:` was. `#word` in the text is how people tag everywhere else,
+so the author's client takes it into the header; nobody else reads tags
+from the text, so a quoted or misread `#` never changes what a post is
+tagged with. For that, groups moved from `#` to `!` (UN-RFC 0031).
 
 **Why so few and so plain.** Eight tags is enough to say what a post is
 about; more is keyword spam. A simple character set lets rules name tags

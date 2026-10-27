@@ -89,7 +89,7 @@ class Writing:
         if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
             raise SessionError("tags is a list of words")
         from ....core import tags as _tg
-        tags = _tg.normalize(tags)
+        tags = _tg.normalize(list(tags) + _tg.in_text(f"{subject}\n{body}"))   # chips and #words
 
         async def send() -> str:
             if kind == KIND_CHAT and not refs and not files and not origin and not tags:

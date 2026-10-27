@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **`!` for groups, `#` for tags** (decided 27 Oct): a group is referred to as
+  `!dk.snak.marsvin` or `!dk.snak@abcd` (UN-RFC 0031 3.4.2, as Lemmy's
+  `!community`), and `#word` in the subject or text of what you write is a tag - your
+  client puts it in the `Tags` header with the chips and leaves the text as you wrote
+  it (UN-RFC 0052 section 3); nobody else reads tags from text. `core.groups.GROUP_REF_RE`
+  uses `!`, `core.tags.in_text`/`TAG_REF_RE` find tags; mention notices say
+  `!group@fp`. Pre-alpha, so a clean break: old `#group` text is a tag now.
+
 - **Accepted** by the maintainer, 27 Oct: UN-RFC 0052 (Tags) and UN-RFC 0053
   (Content Labels, labels on posts only - never on keys, which can be persons), the
   UN-RFC 0045 amendment (`harassment`; reasons sanction, labels describe) and the

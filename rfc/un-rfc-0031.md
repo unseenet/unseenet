@@ -179,13 +179,18 @@ register `unseenet:` with the operating system. Clients write
 ### 3.4.2 Group References
 
 In the text of a post, a chat line, a profile's `about` or a group's
-`rules`, `#<name>` or `#<name>@<fp>` refers to a group, so that one can
-point somebody to a better place. `<name>` is a group name that contains
-a letter, at most 128 characters; `<fp>` is the first 4 to 16
-characters of the owner's fingerprint. A `#` that follows a letter,
-digit, `_`, `@`, `#`, `/`, `&`, `.`, `+` or `-` does not start one.
+`rules`, `!<name>` or `!<name>@<fp>` refers to a group, so that one can
+point somebody to a better place - as Lemmy writes `!community@instance`.
+`<name>` is a group name that contains a letter, at most 128 characters;
+`<fp>` is the first 4 to 16 characters of the owner's fingerprint. A `!`
+that follows a letter, digit, `_`, `@`, `#`, `!`, `/`, `&`, `.`, `+` or `-`
+does not start one, nor does `![`, which begins a Markdown image.
 
-- `#<name>@<fingerprint>` with the whole fingerprint means
+`#word` is a tag, not a group (UN-RFC 0052 section 3). (Before 27 October
+2026, while Unseenet was pre-alpha, `#` referred to groups; it was changed
+so that `#` means what readers expect of it everywhere else.)
+
+- `!<name>@<fingerprint>` with the whole fingerprint means
   `unseenet:<name>@<fingerprint>`.
 - A shorter `<fp>`, or none, is resolved by the reader's client among
   the groups its nodes list. It shows every match, with the warning of

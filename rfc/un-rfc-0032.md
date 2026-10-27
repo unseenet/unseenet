@@ -60,7 +60,7 @@ The body is one short line for clients that do not know this type, for
 example:
 
 ```
-Andreas mentioned you in #dk.snak@ph5f: Mit marsvin hoster
+Andreas mentioned you in !dk.snak@ph5f: Mit marsvin hoster
 ```
 
 The body MUST NOT contain the mentioned post's text. A notice is never
