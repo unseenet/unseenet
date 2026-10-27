@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **For you with your rules, seen, and Show all** (#629, UN-RFC 0051 5.5): only
+  `[foryou]` rules act on For you - rules for the feed or groups never do; `quiet`
+  (only there) lists an entry without counting it or telling you, `hide` leaves it out,
+  `for you is reply` / `mention`; `scored_for_you`, `for_you_quiet`; the counts leave out
+  what is read, seen (in For you - `for-you:`'s seen mark - or in its group), quiet or
+  hidden, and notifications skip quiet and hidden ones. **Show all**: `rules=False` on
+  For you, the timeline and threaded groups, `GET /api/groups/{gid}?all=1` (`show_all`
+  in the head) - a look, never saved. `unseenet foryou [--all] [--why] [--unread]`.
+  Fix: the rules read a group's tags from its manifest, not its info, which counted For you.
 - **For programs that follow every group** (#669, asked for by unseenet-watchman):
   `Session.skip_to_now(group)` begins at the newest article without fetching what is
   there (its manifest read, so its settings are known); `fetch_group(group, skip=...)`

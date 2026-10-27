@@ -936,6 +936,60 @@ async def test_replies_and_mentions_for_you(tmp_path, monkeypatch):
     server.close()
 
 
+async def test_for_you_rules_seen_and_show_all(tmp_path, monkeypatch):
+    """#629, UN-RFC 0051 5.5: only [foryou] rules act; quiet is listed but not counted
+    or told; hide leaves it out; Show all shows everything; seen in For you, or in its
+    group, stops the count but keeps it listed."""
+    from datetime import datetime, timezone
+    from unseenet import names as nm
+    from unseenet.client.localapi import LocalAPI
+    from unseenet.client.session import FOR_YOU
+    from unseenet.core import crypto
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+
+    def person(name):
+        p = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        p.new_identity(name, name.title()); p.add_node(addr)
+        return p
+
+    me, other, troll = person("andreas"), person("other"), person("troll")
+    reg = crypto.Identity.generate()
+    _registrar_store(me, reg, [nm.make_certificate(reg, "lorensen", me.identity().key_text, 1)])
+    gid = await other.create_group("dk.snak", "open", min_pow=8)
+    me.subscribe(gid)
+    mine = await me.post(gid, "Spørgsmål", "Nogen?\n")
+    for p in (other, troll):
+        await p.fetch_group(gid)
+    await other.post(gid, "Re: Spørgsmål", "Ja!\n", references=[mine])
+    await other.post(gid, "Hej", "Spørg @lorensen.\n")
+    await troll.post(gid, "Re: Spørgsmål", "Nej!\n", references=[mine])
+    await me.fetch_group(gid)
+    assert me.for_you_counts() == (2, 1)
+    # a rule for the feed or groups never acts on For you
+    me.set_feed_rules(f'hide if author is "{troll.identity().key_text}"\n')
+    assert len(me.for_you()) == 3
+    me.set_feed_rules(f'[foryou]\nquiet if for you is mention\n'
+                      f'hide if author is "{troll.identity().key_text}"\n')
+    listed = me.scored_for_you()
+    assert [m.subject for m, _ in listed].count("Re: Spørgsmål") == 1     # the troll's hidden
+    assert any("quiet" in r.actions for m, r in listed if m.subject == "Hej")  # listed, quiet
+    assert me.for_you_counts() == (1, 0)                                 # neither is counted
+    assert not any(m.subject == "Hej" for _, m in me._notifiable())      # nor told
+    assert len(me.for_you(rules=False)) == 3                             # Show all
+    api = LocalAPI(session=me)
+    assert len(api.group(FOR_YOU, show_all=True)["rows"]) == 3 and api.group(FOR_YOU, show_all=True)["group"]["show_all"]
+    assert len(api.group(FOR_YOU)["rows"]) == 2
+    # seen in For you: not counted, still listed
+    me.mark_seen(FOR_YOU, datetime.now(timezone.utc))
+    assert me.for_you_counts() == (0, 0) and len(me.for_you()) == 2
+    for p in (me, other, troll):
+        await p.close()
+    server.close()
+
+
 async def test_find_group_ref(tmp_path, monkeypatch):
     """#172: what !dk.marsvin can mean - followed groups first, unknown names nothing."""
     from unseenet.core.groups import GroupRef

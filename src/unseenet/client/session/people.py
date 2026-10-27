@@ -146,7 +146,39 @@ class PeopleMixin:
             return "mention"
         return None
 
-    def for_you(self, unread_only: bool = True) -> list["Message"]:
+    def for_you(self, unread_only: bool = True, rules: bool = True) -> list["Message"]:
+        """Replies to you and mentions of you in the groups you follow: newest first, or
+        as your ``[foryou]`` rules have it (UN-RFC 0051 5.5) - hidden ones left out.
+        ``rules=False``: Show all, without them."""
+        return [m for m, _ in self.scored_for_you(unread_only, rules)]
+
+    def scored_for_you(self, unread_only: bool = False, rules: bool = True) -> list[tuple["Message", "sc.Result"]]:
+        """For you with each entry's result: ``"quiet"`` in its actions means listed but
+        not counted and no notification (UN-RFC 0051 5.5). Only ``[foryou]`` rules act;
+        without them (or with ``rules=False``), newest first, nothing left out."""
+        from .. import scoring as sc
+        msgs = self._for_you_messages(unread_only)
+        rs = self.rule_set() if rules else None
+        if not rs or not any(r.scope == "foryou" for r in rs.rules):
+            return [(m, sc.Result()) for m in msgs]
+        mine, patterns = self.my_message_ids(), self._mention_patterns()
+        ctx, by_id = self.scoring_context(), {m.message_id: m for m in msgs}
+        facts = []
+        for m in msgs:
+            p = self.post_facts(m)
+            p.for_you = "mention" if (m.private or self.for_me(m, mine, patterns) == "mention") else "reply"
+            facts.append(p)
+        return [(by_id[p.id], r) for p, r in sc.for_you(rs, facts, ctx)]
+
+    def for_you_quiet(self) -> set[str]:
+        """The Message-IDs your ``[foryou]`` rules quiet or hide: not counted, not told."""
+        listed = self.scored_for_you(unread_only=True)
+        quiet = {m.message_id for m, r in listed if "quiet" in r.actions}
+        shown = {m.message_id for m, _ in listed}
+        hidden = {m.message_id for m in self._for_you_messages(True)} - shown
+        return quiet | hidden
+
+    def _for_you_messages(self, unread_only: bool) -> list["Message"]:
         """Replies to you and mentions of you in the groups you follow, newest first."""
         mine, patterns = self.my_message_ids(), self._mention_patterns()
         out = []
@@ -160,6 +192,12 @@ class PeopleMixin:
         return sorted(out, key=lambda m: m.date or datetime.min.replace(tzinfo=timezone.utc),
                       reverse=True)
 
+    def _seen_for_you(self, m: "Message") -> bool:
+        """Seen: on the screen in For you, or seen in its own group (UN-RFC 0051 5.5)."""
+        from .rules import _iso
+        to = self.seen_to(FOR_YOU)
+        return self.is_seen(m) or bool(m.date and to and _iso(m.date) <= to)
+
     def for_you_count(self, group_id: str) -> int:
         """How many posts in the group are for you - replies to you and mentions - and
         not read yet (the total of ``for_you_counts``)."""
@@ -171,12 +209,16 @@ class PeopleMixin:
         mine, patterns = self.my_message_ids(), self._mention_patterns()
         gids = ([group_id] if group_id is not None
                 else [g for g in self.data["subscribed"] if g != self.my_inbox])
+        # not counted: read, seen (in For you or in its group), quiet or hidden by your
+        # [foryou] rules (UN-RFC 0051 5.5); still listed in For you while unread
+        skip = self.for_you_quiet()
         replies = 0
-        mentions = (sum(1 for m in self.notices() if not self.is_read(m))   # UN-RFC 0032
+        mentions = (sum(1 for m in self.notices() if not self.is_read(m) and not self._seen_for_you(m)
+                        and m.message_id not in skip)   # UN-RFC 0032
                     if group_id is None else 0)
         for gid in gids:
             for m in self.visible(list(self.cache.get(gid, {}).values())):
-                if self.is_read(m):
+                if self.is_read(m) or self._seen_for_you(m) or m.message_id in skip:
                     continue
                 why = self.for_me(m, mine, patterns)
                 if why == "reply":

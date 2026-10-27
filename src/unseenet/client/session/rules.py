@@ -157,7 +157,8 @@ class RulesMixin:
             i_reacted=bool(counts and mine & set(counts.by_key)),
             i_posted_in_thread=any(m.author_key in mine for m in cache
                                    if m.message_id == root or root in m.references),
-            tags=frozenset(msg.tags) | frozenset(self.group_info(gid).tags),     # UN-RFC 0052
+            tags=frozenset(msg.tags) | frozenset(t for t in (self.manifest_data(gid).get("tags") or [])
+                                                 if isinstance(t, str)),        # UN-RFC 0052
             labels=self._labeller_labels(msg))                                    # UN-RFC 0053
 
     def _labeller_labels(self, msg: Message) -> frozenset:
@@ -170,12 +171,12 @@ class RulesMixin:
         return frozenset(out | set(got["topics"]))
 
     # --- the feed and groups as your rules have them ---
-    def scored_timeline(self, limit: int = 100) -> list[tuple[Message, sc.Result]]:
+    def scored_timeline(self, limit: int = 100, rules: bool = True) -> list[tuple[Message, sc.Result]]:
         """The timeline (UN-RFC 0034 section 7) as your rules have it: the entries shown,
         in their order, each with its score and why. Without rules, the timeline as it
         always is - newest first, nothing left out."""
         msgs = self.timeline(limit)
-        rules = self.rule_set()
+        rules = self.rule_set() if rules else None      # rules=False: Show all (0051 3)
         if not rules:
             return [(m, sc.Result()) for m in msgs]
         ctx, by_id, reactions = self.scoring_context(), {m.message_id: m for m in msgs}, {}
@@ -186,14 +187,14 @@ class RulesMixin:
             facts.append(self.post_facts(m, reactions[m.group]))
         return [(by_id[p.id], r) for p, r in sc.feed(rules, facts, ctx)]
 
-    def scored_threads(self, group_id: str) -> list[tuple[Message, int, sc.Result]]:
+    def scored_threads(self, group_id: str, rules: bool = True) -> list[tuple[Message, int, sc.Result]]:
         """A threaded group's rows ``(message, depth, result)`` as your rules have them:
         threads in the order of a ``sort by``, threads whose every post is hidden left
         out; inside a thread the rows keep their order, and each result says whether to
         fold, dim, highlight or mark read. Without rules, the rows as ``threads`` gives
         them."""
         rows = self.threads(group_id)
-        rules = self.rule_set()
+        rules = self.rule_set() if rules else None      # rules=False: Show all (0051 3)
         if not rules:
             return [(m, d, sc.Result()) for m, d in rows]
         groups: list[list[tuple[Message, int]]] = []

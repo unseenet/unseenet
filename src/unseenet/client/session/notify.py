@@ -57,8 +57,10 @@ class NotifyMixin:
                     and not getattr(m, "notices_for", None)):
                 out.append(("mention" if self.is_notice(m) else "private", m))
                 seen.add(m.message_id)
+        quiet = self.for_you_quiet()                  # [foryou] rules: quiet or hidden (0051)
         for m in self.for_you(unread_only=True):
-            if m.message_id not in seen and not m.old_on_arrival and m.author_key not in me:
+            if (m.message_id not in seen and not m.old_on_arrival and m.author_key not in me
+                    and m.message_id not in quiet):
                 why = "mention" if (m.private or self.for_me(m) == "mention") else "reply"
                 out.append((why, m))
                 seen.add(m.message_id)

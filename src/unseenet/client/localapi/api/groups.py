@@ -183,13 +183,13 @@ class Groups:
         except Exception:  # noqa: BLE001 - lists not read yet
             return False
 
-    def group(self, gid: str) -> dict:
+    def group(self, gid: str, show_all: bool = False) -> dict:
         """``GET /api/groups/{gid}`` (section 4.3): one group as a client shows it - its
         head (title, view, roles, rules, write permission) and its rows, threaded or as a chat,
         each with whether you may reply. Also the pseudo-groups of a contact and "for you"."""
         s = self._ready()
         if gid == TIMELINE:
-            return self._timeline_group(s)
+            return self._timeline_group(s, rules=not show_all)
         if gid.startswith(TAGGED):                  # everything with a tag (UN-RFC 0052)
             return self._tagged_group(s, gid)
         if (gid not in s.data["subscribed"] and gid != FOR_YOU and not gid.startswith(CONTACT)
@@ -206,9 +206,12 @@ class Groups:
             rows = s.threads(gid)
         scored = None                          # your own rules, threads only (UN-RFC 0051 5.3)
         if (head["view"] == "threads" and gid != FOR_YOU and not gid.startswith(CONTACT)
-                and gid != s.my_inbox and s.rule_set()):
+                and gid != s.my_inbox and s.rule_set() and not show_all):
             got = s.scored_threads(gid)
             rows, scored = [(m, d) for m, d, _ in got], [r for _, _, r in got]
+        if gid == FOR_YOU and s.rule_set() and any(r.scope == "foryou" for r in s.rule_set().rules):
+            got = s.scored_for_you(rules=not show_all)[:200]     # [foryou] rules (0051 5.5)
+            rows, scored = [(m, 0) for m, _ in got], [r for _, r in got]
         mine, patterns = s.my_message_ids(), s._mention_patterns()
         keys = {s.identity(n).key_text for n in s.data["identities"]}
         out = [self._row(s, m, d, mine, patterns, keys) for m, d in rows]
@@ -230,6 +233,7 @@ class Groups:
             for row, (m, d) in zip(out, rows):
                 if d == 0:
                     row["thread_mark"] = s.thread_mark(m.message_id)
+        head["show_all"] = bool(show_all)       # a look without your rules, not a setting (0051 3)
         return {"group": head, "rows": out}
 
     @staticmethod
