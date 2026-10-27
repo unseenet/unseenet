@@ -212,3 +212,28 @@ async def test_a_groups_owner_names_issuers_for_its_group(net):
     with pytest.raises(ValueError, match="inbox"):
         make_manifest(owner, "kontakt", "inbox", pow_bits=8, extra={"report_issuers": [key]})
     assert rpt.group_issuers({"type": "open", "report_issuers": [key]}) == [key]
+
+
+async def test_an_issuer_beside_your_own_identity_publishes_from_your_vault(net):
+    """The project's issuer in its maintainer's everyday vault (27 Oct): your own
+    identity stays the one in use; reports are published as the issuer."""
+    me, owner, spammer = net("me"), net("owner"), net("spammer")
+    issuer = me.new_identity("reports", "Unseenet spam reports")
+    me.act_as("reports")
+    await me.start_reports(policy="Spam")
+    me.act_as(None)
+    mine = me.identity().key_text
+    assert me.default_identity_name() == "me" and me.issuer_names() == ["reports"]
+    assert me.issuer_for() == "reports" and me.is_issuer() is False
+    gid = await owner.create_group("alt.snak", "open", min_pow=8)
+    spammer.subscribe(gid)
+    await spammer.fetch_group(gid)
+    await spammer.post(gid, "Ure", "køb\n")
+    me.subscribe(gid)
+    [post] = await me.fetch_group(gid)
+    rid = await me.publish_report(posts=[(post.message_id, gid, "spam")])
+    assert me.identity().key_text == mine                       # still you
+    [r] = await me.my_reports()
+    assert r.message_id == rid and r.issuer == issuer.key_text   # as the issuer
+    await me.withdraw_report(rid)
+    assert await me.my_reports() == []
