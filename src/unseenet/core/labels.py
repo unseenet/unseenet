@@ -31,6 +31,20 @@ MANIFEST_FIELDS = ("policy", "contact", "automatic", "topics")
 MAX_NAMED = 16                         # ``labellers`` of a hierarchy or a group (section 5)
 
 
+# The age guide's suggestions (UN-RFC 0053 section 6.1): what to do with each warning for
+# who reads on this device. A client applies one as ordinary choices; the age group
+# itself is never stored, sent or shown to anyone.
+AGE_PROFILES = {
+    "under-13": {"profanity": "hide", "sexual": "hide", "nudity": "hide", "violence": "hide",
+                 "gore": "hide", "spoiler": "blur"},
+    "13-17": {"profanity": "blur", "sexual": "hide", "nudity": "hide", "violence": "blur",
+              "gore": "hide", "spoiler": "blur"},
+    "adult": {"profanity": "blur", "sexual": "blur", "nudity": "blur", "violence": "blur",
+              "gore": "blur", "spoiler": "blur"},
+}
+AGE_PROFILE_LABELS = {"under-13": "Under 13", "13-17": "13 to 17", "adult": "An adult"}
+
+
 class LabelError(ValueError):
     """A label article, or a field, that is not as UN-RFC 0053 says."""
 

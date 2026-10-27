@@ -1044,6 +1044,10 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
 - `POST /api/labels/warning` `{"warning", "choice"}`: `show`, `blur` or
   `hide` for that warning.
 - `POST /api/labels/refresh`: read the labellers' channels now.
+- `POST /api/labels/profile` `{"profile"}`: the age guide (UN-RFC 0053
+  6.1) - `under-13`, `13-17` or `adult` - applied as the user's choices per
+  warning; the profile itself is not kept. `GET /api/labels` lists them as
+  `profiles`: `[{"id", "label", "choices"}]`.
 - `POST /api/labels/start` `{"policy", "contact", "automatic", "topics"}`:
   start or change the user's `labels@` channel.
 - `POST /api/labels/publish` `{"posts": [{"id", "group", "labels"}],

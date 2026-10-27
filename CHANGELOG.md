@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The age guide** (UN-RFC 0053 section 6.1): `core.labels.AGE_PROFILES` - under 13,
+  13 to 17, an adult - suggest what to do with each warning; `Session.apply_age_profile`
+  takes one as your own choices and keeps nothing of the age group;
+  `POST /api/labels/profile`, and `profiles` in `GET /api/labels`.
 - **Ready for the project's labeller** (decided 27 Oct: the default for warnings in
   `unseenet.*`): `create_groups.py` names `PROJECT_LABELLER` in the bot channels once it
   is set; the list of `unseenet.*` takes `labellers` as it takes `report_issuers`.
