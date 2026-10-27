@@ -365,7 +365,21 @@ def strip_reader_headers(raw: bytes) -> bytes:
 
 
 SUBMISSION_TYPE = "message/unseenet"      # UN-RFC 0009 section 3
-REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74)
+REPORT_TYPE = "text/x-unseenet-report"    # a report of a post (#74), plain text, as before
+# a report written in Markdown, with files: Markdown that says it is a report (gui#70)
+REPORT_MD_TYPE = "text/markdown; charset=utf-8; variant=unseenet; report=post"
+# why a post is reported, as every client offers it; the first four are UN-RFC 0045 reasons
+REPORT_REASONS = {"spam": "Spam", "illegal": "Illegal", "threats": "Threats or harassment",
+                  "other": "Something else"}
+
+
+def is_report_type(content_type: str | None) -> bool:
+    """A report of a post: the plain-text type of #74, or Markdown with ``report=post``."""
+    ct = (content_type or "").lower()
+    if ct.startswith(REPORT_TYPE):
+        return True
+    base, *params = [p.strip() for p in ct.split(";")]
+    return base == "text/markdown" and "report=post" in params
 MENTION_TYPE = "text/x-unseenet-mention"  # a mention notice (UN-RFC 0032)
 NOTICES_TYPE = "application/x-unseenet-notices"   # notices sent with a submission (0032, 4.3)
 MAX_MENTION_NOTICES = 5                   # per post (UN-RFC 0032, section 4.1)

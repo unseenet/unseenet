@@ -650,24 +650,34 @@ class PeopleMixin:
         return out
 
     async def report(self, msg: "Message", targets: list[tuple[str, str, str]], note: str = "",
-                     anonymous: bool = False) -> int:
-        """Send a report of a post to the chosen people. Returns how many got it."""
+                     anonymous: bool = False, files=None, reason: str = "") -> int:
+        """Send a report of a post to the chosen people. Returns how many got it.
+
+        ``note`` is Markdown (UN-RFC 0031); ``files`` are prepared files - a screenshot,
+        a document for the police - sent encrypted to each, as on a private post
+        (UN-RFC 0027 section 3.3); ``reason`` one of ``REPORT_REASONS``. The post's
+        group, Message-ID and author are lines of their own, so the receiver's client
+        can find the post and, for an issuer, publish it (UN-RFC 0045 section 7.4)."""
         if not targets:
             raise SessionError("choose at least one person to report to")
+        if reason and reason not in REPORT_REASONS:
+            raise SessionError("reason: " + ", ".join(REPORT_REASONS))
         quote = "\n".join("> " + line for line in (msg.body or "").rstrip("\n").splitlines()[:40])
-        body = (f"Report of a post\n\nGroup: {msg.group}\nMessage-ID: {msg.message_id}\n"
-                f"Author key: {msg.author_key}\n"
-                + (f"\nNote from the reporter:\n{note.strip()}\n" if note.strip() else "")
-                + f"\nThe post, as the reporter saw it:\nFrom: {msg.from_name}\n"
-                f"Subject: {msg.subject}\n\n{quote}\n")
+        lines = [f"Group: `{msg.group}`", f"Message-ID: `{msg.message_id}`",
+                 f"Author key: `{msg.author_key}`"]
+        if reason:
+            lines.append(f"Reason: {REPORT_REASONS[reason]}")
+        body = ("**Report of a post**\n\n" + "  \n".join(lines) + "\n"
+                + (f"\n### Note from the reporter\n\n{note.strip()}\n" if note.strip() else "")
+                + "\n### The post, as the reporter saw it\n\n"
+                + f"From: {msg.from_name}  \nSubject: {msg.subject}\n\n{quote}\n")
         sent, errors = 0, []
         for _, inbox, key in targets:
             try:
                 await self.send_private(inbox, f"Report: {msg.subject or '(no subject)'}", body,
                                         owner_key=crypto.key_from_text(key),
-                                        content_type=REPORT_TYPE + "; charset=utf-8",
-                                        anonymous=anonymous,
-                                        remember=False)
+                                        content_type=REPORT_MD_TYPE, anonymous=anonymous,
+                                        remember=False, files=files or None)
                 sent += 1
             except (SessionError, OSError, ConnectionError) as exc:
                 errors.append(str(exc))
@@ -676,10 +686,21 @@ class PeopleMixin:
         return sent
 
     @staticmethod
-    def reported_post(msg: "Message") -> tuple[str, str] | None:
+    def report_fields(msg: "Message") -> dict:
+        """The lines of a report you received: ``Group``, ``Message-ID``, ``Author key``
+        and ``Reason`` where given; {} when it is not a report."""
+        if not is_report_type(msg.content_type):
+            return {}
+        return dict(re.findall(r"^(Group|Message-ID|Author key|Reason): `?([^`\n]+?)`?\s*$",
+                               msg.body or "", re.M))
+
+    @classmethod
+    def reported_post(cls, msg: "Message") -> tuple[str, str] | None:
         """(group, Message-ID) named in a report you received."""
-        if not msg.content_type.startswith(REPORT_TYPE):
-            return None
+        found = cls.report_fields(msg)
+        if "Group" in found and "Message-ID" in found:
+            return found["Group"], found["Message-ID"]
+        return None
         found = dict(re.findall(r"^(Group|Message-ID): (\S+)$", msg.body or "", re.M))
         if "Group" in found and "Message-ID" in found:
             return found["Group"], found["Message-ID"]

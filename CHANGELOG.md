@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Reports with a reason, Markdown and files** (unseenet-gui#70): reporting a post
+  takes a reason (spam, illegal, threats or harassment, something else), a note in
+  Markdown and files - a screenshot, a document for the police - sent encrypted to
+  each receiver as on a private post. The report is Markdown with `report=post`;
+  plain reports from before are still found. An issuer publishing a report it got
+  keeps the reporter's reason where UN-RFC 0045 has it. UN-RFC 0046 section 4.6 says so.
+
 - **UN-RFC 0046 section 4.21, spam reports**: the local API's requests for UN-RFC
   0045 and `reported` on every post, written into the spec (accepted 27 Oct).
 

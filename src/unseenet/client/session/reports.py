@@ -296,13 +296,13 @@ class ReportsMixin:
         self._report_book = None
         return mid
 
-    @staticmethod
-    def received_report(msg: "Message") -> tuple[str, str, str] | None:
-        """(Message-ID, Group ID, author key) named in a report someone sent you, so an
-        issuer can publish it - without the reporter (section 7.4)."""
-        if not msg.content_type.startswith(REPORT_TYPE):
+    def received_report(self, msg: "Message") -> tuple[str, str, str, str] | None:
+        """(Message-ID, Group ID, author key, reason) named in a report someone sent
+        you, so an issuer can publish it - without the reporter (section 7.4). The
+        reason is one of UN-RFC 0045's; one it does not know is ``other``."""
+        found = self.report_fields(msg)
+        if "Group" not in found or "Message-ID" not in found:
             return None
-        found = dict(re.findall(r"^(Group|Message-ID|Author key): (\S+)$", msg.body or "", re.M))
-        if "Group" in found and "Message-ID" in found:
-            return found["Message-ID"], found["Group"], found.get("Author key", "")
-        return None
+        why = next((k for k, v in REPORT_REASONS.items() if v == found.get("Reason")), "spam")
+        return (found["Message-ID"], found["Group"], found.get("Author key", ""),
+                why if why in rpt.REASONS else "other")
