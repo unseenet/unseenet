@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Reporting a post is a job** (found 27 Oct): each receiver's sealed copy pays
+  postage as an unripe key, a minute or more each, and `POST /api/groups/{gid}/report`
+  waited for all of them - the report window said *Sending …* and seemed to hang.
+  Now it answers at once with `{"job", "targets"}`, and the job's events say when
+  every receiver has it (UN-RFC 0046 4.6).
+
 - **Nodes take sealed posts in any inbox** (found 27 Oct): a sealed private post is
   signed by a one-time key, which cannot ripen, and nodes allowed that only in groups
   *named* `inbox@` - so posts to an operator's `operator@`, a team's `contact@` or any

@@ -71,7 +71,8 @@ class People:
     async def report(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/report`` (section 4.6): report a post to the chosen
         targets (by their ``i`` from ``GET``), with a ``reason``, a ``note`` in Markdown
-        and ``files`` (as on a post), optionally without your name."""
+        and ``files`` (as on a post), optionally without your name. Answers at once with
+        ``{"job", "targets"}``; the job's events (section 5) say when it is sent."""
         s = self._ready()
         m = self._find(s, gid, str(data.get("id", "")))
         chosen = {int(i) for i in data.get("targets", [])}
@@ -80,10 +81,18 @@ class People:
             raise SessionError("report to whom?")
         # a screenshot or a document, encrypted to each receiver (UN-RFC 0027 3.3)
         files = self._files_to_post(s, s.my_inbox, data.get("files"), check=False)
-        sent = await s.report(m, targets, str(data.get("note", "")).strip(),
-                              anonymous=bool(data.get("anonymous")), files=files,
-                              reason=str(data.get("reason", "")))
-        return {"sent": sent}
+        note, anonymous = str(data.get("note", "")).strip(), bool(data.get("anonymous"))
+        reason = str(data.get("reason", ""))
+        if reason and reason not in REPORT_REASONS:
+            raise SessionError("reason: " + ", ".join(REPORT_REASONS))
+
+        # a job, as a private post is: each receiver's sealed copy pays postage as an
+        # unripe key (UN-RFC 0025 3.5), which takes a minute or more - the window need
+        # not wait. "sent" says how many got it.
+        async def send() -> str:
+            n = await s.report(m, targets, note, anonymous=anonymous, files=files, reason=reason)
+            return str(n)
+        return {"job": self._new_job(m.group, send), "targets": len(targets)}
 
     async def block(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/block`` (section 4.6): a hierarchy maintainer blocks a

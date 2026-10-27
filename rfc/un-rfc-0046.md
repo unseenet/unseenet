@@ -357,7 +357,10 @@ first), then those containing it, then by a word of the name.
   0, "who": "..."}, ...], "reasons": [{"id", "label"}, ...]}` - `spam`,
   `illegal`, `threats`, `other`, as every client offers them; `POST` it
   `{"id": "...", "targets": [<index>, ...], "reason": "...", "note": "...",
-  "files": [...], "anonymous": false}` answers `{"sent": <n>}`. The note is
+  "files": [...], "anonymous": false}` answers at once `{"job", "targets"}`:
+  each receiver's sealed copy pays postage as an unripe key (UN-RFC 0025
+  section 3.5), which can take minutes, so it is a job like a post
+  (section 5), and `sent` says when every receiver has it. The note is
   Markdown (UN-RFC 0031) and `files` are as on a post (section 4.10) - a
   screenshot, a document - sent encrypted to each receiver (UN-RFC 0027
   section 3.3). The report arrives as Markdown with the parameter

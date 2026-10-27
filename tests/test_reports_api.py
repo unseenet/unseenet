@@ -137,11 +137,18 @@ async def test_a_report_in_markdown_with_a_picture_and_a_reason(net):
     to_issuer = [t["i"] for t in got["targets"] if t["who"].startswith("Report issuer")]
     buf = io.BytesIO()
     PIL.new("RGB", (8, 8), "red").save(buf, "PNG")
-    sent = await api.report(gid, {"id": post.message_id, "targets": to_issuer, "reason": "threats",
+    started = await api.report(gid, {"id": post.message_id, "targets": to_issuer, "reason": "threats",
                                   "note": "Se **skærmbilledet** - politiet er kontaktet.",
                                   "files": [{"name": "skaerm.png", "data": base64.b64encode(buf.getvalue()).decode(),
                                              "alt": "Skærmbillede af truslen"}]})
-    assert sent == {"sent": 1}
+    assert started["targets"] == 1 and started["job"]
+    import asyncio
+    for _ in range(200):                                       # the job, in the background
+        if not api._job:
+            await asyncio.sleep(0.05)
+            if not api._job:
+                break
+        await asyncio.sleep(0.05)
     await issuer.fetch_group(issuer.my_inbox)
     [r] = [m for m in issuer.private_messages() if issuer.reported_post(m)]
     assert is_report_type(r.content_type) and r.content_type.startswith("text/markdown")
