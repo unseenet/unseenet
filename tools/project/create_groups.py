@@ -229,6 +229,12 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}
 
+# The project's labeller (UN-RFC 0053), named in the bot channels for their readers'
+# warnings, as the issuer above: set its key here once the label bot has one
+# (unseenet-bots#21). Until then, None names nobody. Readers can turn it off.
+PROJECT_LABELLER: str | None = None
+LABELLERS = {name: [PROJECT_LABELLER] for name in REPORT_ISSUERS} if PROJECT_LABELLER else {}
+
 
 # Portals (UN-RFC 0023 section 3.5): name -> the group's counterparts on other networks,
 # each run by the gateway key listed. The project's official gateway runs on the
@@ -246,7 +252,7 @@ KINDS = {"unseenet.chat": ["chat"]}
 # What this list decides for groups that already exist, and each field's default.
 SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
             "comments": "none", "comment_days": None, "portals": [], "kinds": None,
-            "attachments": None, "report_issuers": None}
+            "attachments": None, "report_issuers": None, "labellers": None}
 
 
 def _short(value) -> str:
@@ -265,7 +271,8 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
     for k, default in (("comments", "none"), ("comment_days", None), ("portals", []),
-                       ("kinds", None), ("attachments", None), ("report_issuers", None)):
+                       ("kinds", None), ("attachments", None), ("report_issuers", None),
+                       ("labellers", None)):
         if data.get(k, default) == default:
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
@@ -296,7 +303,8 @@ async def main() -> None:
                       "min_pow": min_pow, "comments": comments, "comment_days": comment_days,
                       "portals": PORTALS.get(name, []), "kinds": KINDS.get(name),
                       "attachments": ATTACHMENTS.get(name),
-                      "report_issuers": REPORT_ISSUERS.get(name)}
+                      "report_issuers": REPORT_ISSUERS.get(name),
+                      "labellers": LABELLERS.get(name)}
             data, notes = updated_manifest(current, gtype, wanted)
             if data is None:
                 print(f"{gid}: up to date (serial {current['serial']})")
@@ -317,7 +325,8 @@ async def main() -> None:
                             comments=comments, comment_days=comment_days,
                             kinds=KINDS.get(name), pow_bits=_owner.POW_BITS,
                             extra={k: v for k, v in (("attachments", ATTACHMENTS.get(name)),
-                                                     ("report_issuers", REPORT_ISSUERS.get(name))) if v} or None)
+                                                     ("report_issuers", REPORT_ISSUERS.get(name)),
+                                                     ("labellers", LABELLERS.get(name))) if v} or None)
         if PORTALS.get(name):                   # make_manifest has no portals: add and re-sign
             data = json.loads(art.body)
             data["portals"] = PORTALS[name]

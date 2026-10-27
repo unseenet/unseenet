@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Ready for the project's labeller** (decided 27 Oct: the default for warnings in
+  `unseenet.*`): `create_groups.py` names `PROJECT_LABELLER` in the bot channels once it
+  is set; the list of `unseenet.*` takes `labellers` as it takes `report_issuers`.
+
 - **Everything with a tag** (UN-RFC 0052 section 7): `Session.tagged(tag)` - the posts
   with a tag in the groups and feeds you follow (the author's tags, the group's, topics
   of labellers you follow for topics), newest first - and the pseudo-group
