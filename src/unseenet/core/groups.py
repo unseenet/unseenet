@@ -438,8 +438,8 @@ def check_team_fields(data: dict) -> None:
     if data.get("type") != "inbox":
         raise ValueError("readers and team_name are for inboxes (UN-RFC 0047)")
     readers = data.get("readers", [])
-    if not isinstance(readers, list) or not 1 <= len(readers) <= TEAM_SLOTS:
-        raise ValueError(f"readers: 1 to {TEAM_SLOTS} keys")
+    if "readers" in data and (not isinstance(readers, list) or not 1 <= len(readers) <= TEAM_SLOTS):
+        raise ValueError(f"readers: 1 to {TEAM_SLOTS} keys")     # a name may come first
     for k in readers:
         crypto.key_from_text(k)
     if len(set(readers)) != len(readers):

@@ -122,7 +122,11 @@ class Groups:
                "reactions": {**self._reaction_policy(s, gid),
                              "setting": self._reaction_setting(data)},
                # its unseenet: address, to copy (UN-RFC 0031 section 3.4.1, #442)
-               "address": _addr.group_address(s, gid)}
+               "address": _addr.group_address(s, gid),
+               # the spam report issuers its owner names (UN-RFC 0045 7.5), with labels
+               "report_issuers": [{"key": k, "label": s.issuer_label(k)}
+                                  for k in data.get("report_issuers", [])],
+               "team_name": data.get("team_name", "") if data.get("type") == "inbox" else None}
         if out["owner"] or s.moderates(gid):
             out["roles"] = self._roles(s, gid)
         return out

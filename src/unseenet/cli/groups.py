@@ -128,6 +128,13 @@ async def c_group_edit(app: App, args) -> None:
             if add or remove:
                 keys = [k for k in data.get(role, []) if k not in (remove or [])]
                 fields[role] = keys + [k for k in (add or []) if k not in keys]
+        add, remove = getattr(args, "add_report_issuer", None), getattr(args, "remove_report_issuer", None)
+        if add or remove:                         # UN-RFC 0045 section 7.5
+            keys = [k for k in data.get("report_issuers", []) if k not in (remove or [])]
+            keys += [crypto.key_to_text(crypto.key_from_text(k)) for k in (add or []) if k not in keys]
+            fields["report_issuers"] = keys or None
+        if getattr(args, "team_name", None) is not None:          # UN-RFC 0047 section 3
+            fields["team_name"] = args.team_name.strip() or None
         if args.ban or args.unban:
             banned = [b for b in data.get("banned", []) if isinstance(b, dict)
                       and b.get("key") not in (args.unban or []) and b.get("key") not in (args.ban or [])]
