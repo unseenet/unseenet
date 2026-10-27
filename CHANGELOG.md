@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Rules with tags and labels** (#658, UN-RFC 0051 amended): `tagged WORD...` (any
+  of the post's tags, the author's or its group's), `tagged all WORD...`, `labelled
+  WORD...` and `labelled all WORD...` (labels from labellers that count for you, never
+  the author's own tags), and the action `blur` - text and pictures behind *Show
+  anyway*, in the feed and in groups (a rule's `actions` has it).
+
 - **Content labels** (#656, UN-RFC 0053, new): labellers - people or programs -
   label posts others wrote, in a `labels@` channel; a label only describes, never
   sanctions, and nodes never act on it. **Warnings** (the set shared with tags) are
