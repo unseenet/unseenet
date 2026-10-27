@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **The project's groups say their language** (UN-RFC 0052 5a): `create_groups.py` gives
+  the project's discussion groups and the bot channels `languages: ["en"]`; data channels
+  none.
+
 - **One list of languages** (asked for by the maintainer, 27 Oct): `core.languages` - code,
   its own name (*Dansk*, *Svenska*) and its English name, the nine a text can be told in
   first; `name`, `search` ("da", "dansk" and "danish" find Danish), `GET /api/languages`.
