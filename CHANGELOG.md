@@ -7,6 +7,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Language recognition in core** (#686, from unseenet-watchman): `core.language` -
+  the small words that tell nine languages apart (Danish, Norwegian and Swedish too),
+  `words`, `language`, `detect`, `guess`; Lingua afterwards when installed
+  (`pip install "unseenet[language]"`), only when ≥ 80 % sure. A few KB without it, so
+  the browser build has it too. **The suggestion's order changes** (UN-RFC 0052 5a): the
+  text when it tells for sure, then the group's languages, then your last choice there,
+  then a one-language profile; a comment the post it answers; a chat line the
+  conversation's unless a longer line is sure of another. `suggest_languages(group,
+  text=, reply_to=, kind=)`, `POST /api/groups/{gid}/language`; `send_chat` uses it.
+  The header is the author's suggestion, never evidence: moderation and labels decide
+  from the text.
+
 - **Origin-Proof** (#609, UN-RFC 0049 section 7.3, its encoding written down): a post
   brought to a new key from an Unseenet export may carry the old article's header block
   (base64, at most 8 KiB) - with this body it is the old article, so a reader checks the
