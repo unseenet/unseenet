@@ -145,6 +145,10 @@ Tested when all points are counted.
   blur if labelled spoiler    pictures and text behind
                              Show anyway (also in the feed)
 
+In For you only, under [foryou] - nothing else acts there:
+  quiet if for you is mention  listed, but not counted and no
+                             notification; for you is reply too
+
 In groups only - a reply never moves in its thread:
   fold if score < -20        closed, with its replies
   dim if score < 0           shown faded
@@ -170,7 +174,9 @@ COUNTERS = {
     "day old": "days_old",
     "hour old": "hours_old",
 }
-ACTIONS = ("show", "hide", "blur", "fold", "dim", "highlight", "mark read")   # blur: #658
+ACTIONS = ("show", "hide", "blur", "fold", "dim", "highlight", "mark read",   # blur: #658
+           "quiet")                                   # [foryou] only: listed, not counted (#629)
+FORYOU_ACTIONS = ("show", "hide", "quiet", "highlight", "dim", "blur")   # UN-RFC 0051 5.5
 THREAD_ONLY = ("fold", "dim", "highlight", "mark read")
 SORT_KEYS = ("score", "date", "reactions", "replies")
 UNITS = {"minute": 60, "hour": 3600, "day": 86400, "week": 7 * 86400}
@@ -181,7 +187,7 @@ WORDS = sorted({"if", "per", "max", "and", "or", "not", "author", "in", "is", "f
                 "since", "subject", "text", "matches", "has", "pictures", "group", "older",
                 "newer", "than", "show", "hide", "fold", "dim", "highlight", "mark", "sort",
                 "by", "then", "ascending", "version", *LISTS, *THREAD_LISTS, *SORT_KEYS,
-                "tagged", "labelled", "all", "blur",
+                "tagged", "labelled", "all", "blur", "quiet", "for", "you", "reply", "mention",
                 "minutes", "hours", "days", "weeks", "minute", "hour", "day", "week", "time",
                 "to", "contact", "who", "followed", "reaction", "reply", "old"})
 
@@ -213,6 +219,7 @@ class Post:
     i_posted_in_thread: bool = False
     tags: frozenset = frozenset()            # the author's and the group's (UN-RFC 0052)
     labels: frozenset = frozenset()          # from labellers that count (UN-RFC 0053)
+    for_you: str = ""                        # in For you: "reply" or "mention" (UN-RFC 0051 5.5)
 
 
 @dataclass
@@ -455,6 +462,12 @@ class _Parser:
             return lambda p, c, s: p.read
         if self.word("has", "pictures"):
             return lambda p, c, s: p.pictures
+        if self.word("for", "you", "is"):               # UN-RFC 0051 5.5
+            if self.word("reply"):
+                return lambda p, c, s: p.for_you == "reply"
+            if self.word("mention"):
+                return lambda p, c, s: p.for_you == "mention"
+            raise _Error("for you is reply, or for you is mention")
         for word, attr in (("tagged", "tags"), ("labelled", "labels")):   # #658
             if self.word(word):
                 every = self.word("all")
@@ -564,6 +577,10 @@ def _rule(text: str, line: int, scope: str | None) -> Rule:
         raise _Error(f"{p.peek()[1]!r} after the end of the rule" + _hint(p.peek()[1] or ""))
     if r.action in THREAD_ONLY and scope == "feed":
         raise _Error(f"{r.action} is for threads in groups, not the feed")
+    if r.action == "quiet" and scope != "foryou":
+        raise _Error("quiet is for For you only: under [foryou]")
+    if scope == "foryou" and r.action and r.action not in FORYOU_ACTIONS:
+        raise _Error(f"{r.action} is not for For you (there: {', '.join(FORYOU_ACTIONS)})")
     return r
 
 
@@ -614,6 +631,8 @@ def parse(text: str) -> RuleSet:
 # ----------------------------------------------------------------------------------
 
 def _applies(scope: str | None, where: str, group: str) -> bool:
+    if where == "foryou" or scope == "foryou":   # only [foryou] rules act there (0051 4.3)
+        return scope == where
     if scope is None:
         return True
     if scope in ("feed", "groups"):
@@ -690,6 +709,15 @@ def feed(rules: RuleSet, posts: list[Post], ctx: Context) -> list[tuple[Post, Re
     shown = [e for e in scored if e[1].shown]
     keys = _sort_keys(rules, "feed") or [("date", False)]
     return _order(shown, keys)
+
+
+def for_you(rules: RuleSet, posts: list[Post], ctx: Context) -> list[tuple[Post, Result]]:
+    """For you as its ``[foryou]`` rules have it (UN-RFC 0051 section 5.5): hidden posts
+    left out, ``quiet`` ones kept (the result says so: not counted, no notification), in
+    the order of a ``sort by``, else newest first."""
+    scored = [(p, score(rules, p, ctx, "foryou")) for p in posts]
+    keys = _sort_keys(rules, "foryou") or [("date", False)]
+    return _order([e for e in scored if e[1].shown], keys)
 
 
 def threads(rules: RuleSet, threads: list[list[Post]], ctx: Context, group: str = ""):

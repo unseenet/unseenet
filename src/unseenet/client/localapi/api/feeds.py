@@ -41,12 +41,12 @@ class Feeds:
         self._add_reactions(s, out, [(m, 0) for m in msgs])
         return {"group": head, "rows": out}
 
-    def _timeline_group(self, s: Session) -> dict:
+    def _timeline_group(self, s: Session, rules: bool = True) -> dict:
         """``GET /api/groups/timeline:``: the entries of the timeline in its order, each
         followed by its comments as its own feed has them, each row with ``reply`` and
         ``comment`` for the entry's own feed - writing goes to that feed."""
         head = self._timeline_head(s)
-        scored = s.scored_timeline(limit=TIMELINE_LIMIT) if s.rule_set() else None   # UN-RFC 0051
+        scored = s.scored_timeline(limit=TIMELINE_LIMIT) if s.rule_set() and rules else None   # 0051
         entries = [m for m, _ in scored] if scored is not None else s.timeline(limit=TIMELINE_LIMIT)
         result = {m.message_id: r for m, r in scored} if scored is not None else {}
         under: dict[str, list] = {}
@@ -73,6 +73,7 @@ class Feeds:
                     self._score_rows([row], [result[m.message_id]])
         if self.runtime is not None:            # a feed followed but not read yet
             self.spawn(self._unknown_manifests())
+        head["show_all"] = not rules
         return {"group": head, "rows": out}
 
     @staticmethod

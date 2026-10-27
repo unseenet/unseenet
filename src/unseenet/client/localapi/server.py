@@ -153,7 +153,8 @@ async def groups(request):
 
 
 async def group(request):
-    return _json(_api(request).group(_gid(request)))
+    # ?all=1: Show all, a look without your rules - never saved (UN-RFC 0051 section 3)
+    return _json(_api(request).group(_gid(request), request.query.get("all") in ("1", "true")))
 
 
 async def read(request):

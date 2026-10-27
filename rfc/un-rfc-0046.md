@@ -1053,6 +1053,12 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
 - `POST /api/labels/publish` `{"posts": [{"id", "group", "labels"}],
   "note"}`: answers at once `{"job"}`; `"labels": []` takes the user's
   earlier labels of a post back.
+- `GET /api/groups/{gid}?all=1`: Show all (UN-RFC 0051 section 3) - the
+  view without the user's rules, for the feed, a threaded group and For
+  you; the head says `show_all`. Nothing is saved. For you's rows carry
+  their `[foryou]` results (`actions` may hold `quiet`: listed, not
+  counted, no notification), and `POST /api/groups/for-you:/seen` marks
+  it seen (UN-RFC 0051 5.5).
 - `GET /api/groups/tag:WORD`: every post with the tag in the groups and
   feeds the user follows - the author's tags, the group's, and topics of
   labellers followed for topics - newest first, as a feed (`view` feed,
