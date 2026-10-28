@@ -447,6 +447,13 @@ configured. `reason` is optional, at most 200 characters. A node MUST
 NOT follow refusal lists from keys its operator has not configured. No
 list is followed by default, and nobody can make a node follow one.
 
+A node applies refusal lists, and its own refusals, to every picture it
+carries: blobs, profile pictures (UN-RFC 0022 section 10) and group
+emoji (UN-RFC 0056 section 5), by the blob ID of the decoded image -
+also a node that carries no blobs. Its node information then says
+`"refusal_lists": true` in `policy` (UN-RFC 0011 section 4), as `blobs`
+does for a blob node (section 8).
+
 Refusal lists can only name plain blobs. Encrypted blobs look like
 random data and differ every time (section 3.3), so no list can find a
 file in a closed group or an inbox. An operator who is not willing to

@@ -104,6 +104,10 @@ class NodeConfig:
     avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
     sites: str = "refuse"                # UN-RFC 0035 6.2: sites stay, so off by default
     emoji: str = "refuse"                # UN-RFC 0056 section 5: <group>.emoji, images, off
+    # UN-RFC 0027 section 7.3: refusal lists from these keys only, in groups matching
+    # refusal_groups - for every picture carried, with or without [blobs] (#717); none by default
+    refusal_keys: list[str] = field(default_factory=list)
+    refusal_groups: str = "*"
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
     # open client connections at most (#296): a ceiling, not rationing; peers don't count

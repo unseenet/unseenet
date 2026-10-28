@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Refusal lists for every picture** (#715, #717, UN-RFC 0027 section 7.3): the node now
+  refuses a profile picture (and, since #714, a group's emoji) whose ID a refusal list or
+  `--refuse-blob` names, and tells the person in plain words. Lists are set in a new
+  `[refusals]` table in `node.toml` (`keys`, `groups`) and work also on a node that
+  carries no files; `[blobs] refusal_keys` keeps working.
+
 - **A group's own emoji** (#156, UN-RFC 0056): up to 16 small pictures with a name, in the
   data group `<name>.emoji@<fp>` (`core.group_emoji`). The owner publishes them
   (`Session.set_group_emoji`, `make_group_emoji`; `GET`/`POST /api/groups/<id>/emoji`), and

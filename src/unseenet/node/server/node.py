@@ -135,12 +135,14 @@ class NodeBase:
         excludes = self.excludes()
         if excludes:
             info["policy"]["excludes"] = excludes
+        if self.refusal_settings()[0]:              # #717: lists for every picture, files or not
+            info["policy"]["refusal_lists"] = True
         if cfg.blobs is not None:                   # UN-RFC 0027 section 8: carried, and how
             b = cfg.blobs
             info["policy"]["blobs"] = {
                 "max_size": cfg.max_blob, "retention_days": b.get("retention_days", 30),
                 "encrypted": bool(b.get("encrypted", False)),
-                "refusal_lists": bool(b.get("refusal_keys")),
+                "refusal_lists": bool(self.refusal_settings()[0]),
                 "daily_per_key": b.get("daily_per_key", bl.DAILY_PER_KEY),
                 "daily_per_group": b.get("daily_per_group", bl.DAILY_PER_GROUP)}
         for key in ("operator", "contact", "description"):
