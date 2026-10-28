@@ -134,6 +134,8 @@ class Groups:
                              "setting": self._reaction_setting(data)},
                # its unseenet: address, to copy (UN-RFC 0031 section 3.4.1, #442)
                "address": _addr.group_address(s, gid),
+               # its own emoji as last read (UN-RFC 0056); GET .../emoji reads them anew
+               "emoji": s.group_emoji(gid), "emoji_possible": s.group_emoji_possible(gid),
                # the spam report issuers its owner names (UN-RFC 0045 7.5), with labels
                "report_issuers": [{"key": k, "label": s.issuer_label(k)}
                                   for k in data.get("report_issuers", [])],

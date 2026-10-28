@@ -44,6 +44,8 @@ if [ ! -f "$CONFIG" ]; then
     # the operator says yes with UNSEENET_BLOBS=yes / UNSEENET_AVATARS=yes
     case "${UNSEENET_BLOBS:-no}" in [yY]*|1|true) BLOBS=true ;; *) BLOBS=false ;; esac
     case "${UNSEENET_AVATARS:-no}" in [yY]*|1|true|accept) AVATARS=accept ;; *) AVATARS=refuse ;; esac
+    # a group's emoji (UN-RFC 0056) are pictures too: as profile pictures unless UNSEENET_EMOJI says
+    case "${UNSEENET_EMOJI:-$AVATARS}" in [yY]*|1|true|accept) EMOJI=accept ;; *) EMOJI=refuse ;; esac
     case "${UNSEENET_SITES:-no}" in [yY]*|1|true|accept) SITES=accept ;; *) SITES=refuse ;; esac
     cat > "$CONFIG" <<EOF
 # Unseenet node in Docker. See https://unseenet.org/node/configuration/
@@ -53,6 +55,7 @@ min_pow = ${UNSEENET_MIN_POW:-18}
 retention_days = ${UNSEENET_RETENTION_DAYS:-90}
 new_groups = "${UNSEENET_NEW_GROUPS:-accept}"
 avatars = "$AVATARS"
+emoji = "$EMOJI"
 sites = "$SITES"
 
 # Pictures and small files (UN-RFC 0027): files strangers post, kept 30 days at most

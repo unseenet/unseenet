@@ -7,6 +7,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A group's own emoji** (#156, UN-RFC 0056): up to 16 small pictures with a name, in the
+  data group `<name>.emoji@<fp>` (`core.group_emoji`). The owner publishes them
+  (`Session.set_group_emoji`, `make_group_emoji`; `GET`/`POST /api/groups/<id>/emoji`), and
+  readers read them with the group. Nodes carry them only when `emoji = "accept"` in
+  `node.toml`, which is off by default; the installer and the Docker image follow the
+  answer for profile pictures, or `UNSEENET_EMOJI`. New groups can no longer be named
+  `….emoji`.
+- **A PIN on a device** (UN-RFC 0050 section 5): the vault key can be wrapped by a passkey's
+  secret, which the device's secure hardware gives only after its PIN
+  (`Vault.add_device_unlock`, `open_with_device`; `/api/device-unlock`). The passphrase
+  still opens the vault everywhere, and a new passphrase removes the devices.
+- **Help for Edit group** (`GET /api/help/group-settings`): per setting, what it does, whom
+  it affects and what changing it later does, the same in every client.
+- **Someone you follow is named at once** (#709): following a person reads their feed until
+  their name is known.
+
 - **What you follow because of a person, by person** (#706): `Session.followed_people_groups()`
   and `people_followed` in the local API's `/api/groups` group other people's feeds and
   sites by the person they belong to, sorted by name; the group tree no longer has

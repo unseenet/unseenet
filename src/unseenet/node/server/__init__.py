@@ -48,6 +48,8 @@ from ...core.groups import message_kind, parse_supersedes
 from ...core.groups import (INBOX_SCHEME, INBOX_SCHEMES, KEY_BOUND_MANIFEST_MAX, Manifest, check_permitted,
                            is_key_bound, make_group_id, parse_key_update, split_group_id)
 from ...core import blobs as bl
+from ...core import group_emoji as ge
+from ...core.encoding import b64decode
 from ...core import pages as pg
 from ...core import pins as pn
 from ...core import reactions as rx
@@ -101,6 +103,7 @@ class NodeConfig:
     profiles: str = "accept"             # UN-RFC 0022 section 10: carry profile@ groups
     avatars: str = "refuse"              # ... and avatar@ groups: images, so off by default
     sites: str = "refuse"                # UN-RFC 0035 6.2: sites stay, so off by default
+    emoji: str = "refuse"                # UN-RFC 0056 section 5: <group>.emoji, images, off
     # UN-RFC 0011: who runs this node and how to reach them
     operator: dict = field(default_factory=dict)   # key, contact, description, logging
     # open client connections at most (#296): a ceiling, not rationing; peers don't count

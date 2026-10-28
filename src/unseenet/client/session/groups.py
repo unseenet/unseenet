@@ -178,6 +178,9 @@ class GroupsMixin:
                            extra: dict | None = None) -> str:
         """``moderators``/``posters``: keys as text; ``extra``: attachments, max_pins,
         max_pages, home (see groups.EXTRA_FIELDS)."""
+        from ...core import group_emoji as _ge
+        if _ge.is_emoji_name(name):      # reserved for a group's emoji (UN-RFC 0056 3.1)
+            raise SessionError("a name ending in .emoji is kept for a group's emoji")
         owner = self.identity()
         node = node or self.node
         self.mark_in_use()               # making a group is using the identity (#270)

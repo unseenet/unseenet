@@ -177,3 +177,30 @@ def avatar(octets: bytes, *, max_octets: int = 8192, sizes=(128, 96, 64, 48, 32)
                 if len(out.getvalue()) <= max_octets:
                     return out.getvalue(), ctype, px
     raise ValueError("the picture cannot be made small enough")
+
+
+def group_emoji(octets: bytes, *, px: int = 32, max_octets: int = 1024) -> tuple[bytes, str]:
+    """A group's emoji (UN-RFC 0056 section 4.2) from any picture: the middle square,
+    turned the way it was shown, 32 by 32 pixels, one still frame, as WebP or else PNG
+    within ``max_octets`` - with no metadata, transparency kept. Returns ``(octets,
+    media type)``; ``ValueError`` if it is not a picture or cannot be made to fit."""
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(octets))
+        img.load()                                   # the first frame of an animation only
+    except Exception as exc:  # noqa: BLE001 - Pillow raises many kinds
+        raise ValueError(f"not a picture that can be read: {exc}") from exc
+    img = _turned(img).convert("RGBA")
+    side = min(img.size)
+    left, top = (img.width - side) // 2, (img.height - side) // 2
+    small = _bare(img.crop((left, top, left + side, top + side)).resize((px, px), Image.LANCZOS))
+    tries = [("WEBP", "image/webp", {"lossless": True})] + [
+        ("WEBP", "image/webp", {"quality": q}) for q in (90, 75, 60, 45, 30)] + [
+        ("PNG", "image/png", {"optimize": True})]
+    for fmt, ctype, opts in tries:
+        out = io.BytesIO()
+        small.save(out, fmt, **opts)
+        if len(out.getvalue()) <= max_octets:
+            return out.getvalue(), ctype
+    raise ValueError("the picture cannot be made small enough")

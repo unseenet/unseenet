@@ -92,7 +92,7 @@ class NodeBase:
         b = cfg.blobs
         policy = {"new_groups": cfg.new_groups, "trusted_owners": sorted(cfg.trusted_owners),
                   "excludes": cfg.excludes, "profiles": cfg.profiles, "avatars": cfg.avatars,
-                  "sites": cfg.sites,
+                  "sites": cfg.sites, "emoji": cfg.emoji,
                   "blobs": None if b is None else {"groups": b.get("groups", "*"),
                                                    "encrypted": bool(b.get("encrypted", False)),
                                                    "max_size": cfg.max_blob},
@@ -128,7 +128,7 @@ class NodeBase:
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,
                            "archive": False, "honours_blocks": cfg.honour_blocks,
                            "profiles": cfg.profiles, "avatars": cfg.avatars,
-                           "sites": cfg.sites,
+                           "sites": cfg.sites, "emoji": cfg.emoji,
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
         if cfg.follow_reports:                      # UN-RFC 0045 section 6: MAY publish
             info["policy"]["report_issuers"] = [f["issuer"] for f in cfg.follow_reports]
