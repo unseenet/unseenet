@@ -215,6 +215,11 @@ entries of every group you have in the timeline, section 4.14).
 and every group in `groups` has `in_timeline` and `timeline_possible`
 (UN-RFC 0034 section 6.2), so a front end can mark them in its list and
 offer the choice there.
+`people_followed` is what you follow because of a person (#706):
+`[{"fingerprint", "key", "label", "groups": {"feed": <Group ID>, "site": ...}}, ...]`,
+other people's personal groups (UN-RFC 0029 section 2.1) by the person they belong to,
+sorted by `label`; `hierarchies` leaves them out, so a front end shows each person once,
+with their feed and site together, rather than hierarchies called `feed` and `site`.
 `my_feed` is your personal feed (UN-RFC 0034 section 5) and `my_site`
 your personal site (UN-RFC 0035 section 7): a front end lists each at the
 top as "My feed" and "My site" once `started`, and then `hierarchies`
