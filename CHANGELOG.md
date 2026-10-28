@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Key ripening keeps within a service's own memory limit** (gateway#47): the memory
+  budget for ripening (#440) now reads this process's own cgroup and every one above it,
+  so a systemd `MemoryMax` inside a container counts, not only the container's limit. A
+  gateway or bot under `MemoryMax` no longer chooses segments too large for it and is
+  killed over and over.
+
 - **Refusal lists for every picture** (#715, #717, UN-RFC 0027 section 7.3): the node now
   refuses a profile picture (and, since #714, a group's emoji) whose ID a refusal list or
   `--refuse-blob` names, and tells the person in plain words. Lists are set in a new

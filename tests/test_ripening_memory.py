@@ -71,3 +71,29 @@ async def test_session_stops_and_says_how_far(tmp_path, monkeypatch):
     assert s.ripening_limit is None or s.ripening_limit == rp.level(0)
     assert any("This machine can ripen this key to level" in t for t in said)
     await s.close()
+
+
+def _cg(path, limit, used):
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "memory.max").write_text(f"{limit}\n")
+    (path / "memory.current").write_text(f"{used}\n")
+
+
+def test_a_service_limit_inside_a_container_counts(tmp_path):
+    """gateway#47: a systemd MemoryMax inside a container is the limit, not the
+    container's own - read from this process's cgroup up to the root."""
+    from unseenet.client.machine import _cgroup_room
+    root = tmp_path / "cg"
+    _cg(root, "max", 100 << 20)                                     # the container's root view
+    _cg(root / "system.slice", "max", 90 << 20)
+    _cg(root / "system.slice" / "gw.service", 250 << 20, 200 << 20)  # MemoryMax=250M
+    own = tmp_path / "self.cgroup"
+    own.write_text("0::/system.slice/gw.service\n")
+    assert _cgroup_room(root, own) == 50 << 20
+    _cg(root, 1 << 30, 900 << 20)                                   # a tighter one above wins
+    assert _cgroup_room(root, own) == min(50 << 20, (1 << 30) - (900 << 20))
+    own.write_text("0::/\n")                                        # only the root
+    assert _cgroup_room(root, own) == (1 << 30) - (900 << 20)
+    _cg(root, "max", 0)
+    assert _cgroup_room(root, own) is None                           # no limit anywhere
+    assert _cgroup_room(root, tmp_path / "missing") is None
