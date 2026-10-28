@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Accepted** by the maintainer, 28 Oct: the UN-RFC 0030 amendment (#730): an entry's
+  or thread's own comment deadline (`Comment-Days`, never longer than the group's),
+  closing and opening comments on one entry (`Control: comments-close` /
+  `comments-open`), and `comment_days` in open, moderated and closed groups too. Reactions
+  are not closed by either (UN-RFC 0048 4.4). Node and client support follow.
+
 - **A group's rules are now its charter** (#726, UN-RFC 0014): "rules" means only your own
   rules (UN-RFC 0051), which your client applies; what a group's owner writes about the
   group is its *charter*, which no machine enforces. Breaking for clients of the local API

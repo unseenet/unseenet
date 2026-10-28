@@ -129,6 +129,10 @@ cannot open what the owner or a moderator has closed. An open never
 lengthens the time: after the deadline of section 3.1 comments stay
 closed. In a closed group a marker's body MUST be empty, as for pins.
 
+Neither an entry's own deadline nor a close touches **reactions**
+(UN-RFC 0048): readers can still react to a closed entry. Reactions
+close only with the group's `comment_days` (UN-RFC 0048 section 4.4).
+
 ## 3.3 Groups Other Than Channels
 
 Sections 3.1 and 3.2 apply in open, moderated and closed groups too,
@@ -252,6 +256,9 @@ UN-RFC 0022 section 4 gains an optional profile field:
   or in a closed thread are rejected (section 4.2).
 - **UN-RFC 0004** section 7: the control articles `comments-close` and
   `comments-open` (section 3.2).
+- **UN-RFC 0048** section 4.4: reactions close with `comment_days` in
+  every group that sets it, not only in channels, and never because of
+  an entry's own deadline or a close (section 3.2).
 - **UN-RFC 0042** section 2: what an edit of a thread root may do to
   `Comment-Days` (section 3.1).
 - **UN-RFC 0005** section 4: the rejection reason `441 later` answers a
@@ -292,6 +299,11 @@ UN-RFC 0022 section 4 gains an optional profile field:
   or gone wrong, is the same problem in a discussion group as in a
   feed, and readers know closed threads from forums. Closing one
   thread does not silence anyone: a new thread is always possible.
+- **Why may readers still react to a closed entry?** A close is for a
+  discussion that has gone wrong. A reaction cannot start one, and
+  "I liked this" should not be lost because others quarrelled. The
+  group's `comment_days` still closes reactions on old threads, which
+  is about spam, not about the entry.
 - **Why two chains?** The author should be able to close their own
   entry, which is what other networks offer, but must not be able to
   overrule the owner or a moderator who closed it.

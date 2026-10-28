@@ -212,8 +212,9 @@ reaction shows the team, never the person.
 contains `reaction`, and of `comments` (UN-RFC 0030): a channel may take
 reactions without taking comments, so readers of an announcement
 channel can say they liked it without being able to answer it. Where a
-channel sets `comment_days`, reactions close at the same time as
-comments.
+group sets `comment_days` (UN-RFC 0030), reactions close at the same
+time as comments; an entry's own deadline or a close of its comments
+(UN-RFC 0030 section 3.2) does not close reactions.
 
 # 5. One Reaction per Key
 
