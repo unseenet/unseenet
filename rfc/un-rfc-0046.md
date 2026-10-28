@@ -165,7 +165,8 @@ a riper key still ripens what it needs.
 ## 4.2 Unlocking and Setting Up
 
 - `POST /api/unlock` `{"passphrase": "..."}`: answers the state. A wrong
-  passphrase is `400`.
+  passphrase is `400`. Instead of the passphrase, `{"device": "<id>",
+  "secret": "<b64>"}` opens the vault on a device set up below.
 - `POST /api/setup` `{"display": "...", "node": "..."}`: the first start
   of a new vault. It makes the identity and adds the node, then the
   runtime starts (UN-RFC 0025: a new key ripens in the background).
@@ -173,7 +174,22 @@ a riper key still ripens what it needs.
   for this vault file, answering `{"ok": true}`. A wrong `old` or a `new`
   shorter than 4 characters is `400`; if the file cannot be written it is
   `500` and the old passphrase still works. Copies of the vault elsewhere
-  keep the old one. Not for a service (section 3.2).
+  keep the old one. Not for a service (section 3.2). It also removes the
+  device unlocks below, which held the old key.
+- A PIN on a device (UN-RFC 0050 section 5). The vault key can be wrapped
+  for a device by a secret that the device's secure hardware releases
+  only after its PIN or its own unlock, and limits guesses for. In a
+  browser this is a passkey's WebAuthn PRF output. The wrapped key is kept
+  beside the vault (`<vault>.unlock`), is never copied with it and opens
+  nothing without the device. The passphrase keeps working everywhere.
+  - `GET /api/device-unlock`: `{"possible", "devices": [{"id", "label",
+    "created"}]}`. This also works while locked, so a page knows which
+    passkey to ask for. `possible` is false for a service.
+  - `POST /api/device-unlock` `{"passphrase", "id", "secret", "label"}`:
+    `id` is the credential's ID and `secret` is b64 of at least 32
+    octets. It needs the vault's passphrase, so an unlocked, unattended
+    client cannot let another device in. A device is at most 8.
+  - `POST /api/device-unlock/remove` `{"id"}` or `{"all": true}`.
 
 ## 4.3 Groups
 

@@ -140,7 +140,18 @@ async def emoji(request):
 
 async def unlock(request):
     data = await _body(request)
-    return _json(await _api(request).unlock(str(data.get("passphrase", ""))))
+    return _json(await _api(request).unlock(str(data.get("passphrase", "")),
+                                            str(data.get("device", "")), str(data.get("secret", ""))))
+
+
+async def device_unlock(request):
+    if request.method == "GET":
+        return _json(_api(request).device_unlocks())
+    return _json(await _api(request).add_device_unlock(await _body(request)))
+
+
+async def device_unlock_remove(request):
+    return _json(_api(request).remove_device_unlock(await _body(request)))
 
 
 async def setup(request):
@@ -625,6 +636,8 @@ ROUTES = [
     ("GET", "/api/state", state), ("GET", "/api/about", about),
     ("GET", "/api/emoji", emoji),
     ("POST", "/api/unlock", unlock), ("POST", "/api/setup", setup),
+    ("GET", "/api/device-unlock", device_unlock), ("POST", "/api/device-unlock", device_unlock),
+    ("POST", "/api/device-unlock/remove", device_unlock_remove),  # UN-RFC 0050 section 5
     ("GET", "/api/groups", groups), ("POST", "/api/groups", create),
     ("GET", "/api/groups/{gid}", group),
     ("POST", "/api/groups/{gid}/read", read), ("POST", "/api/groups/{gid}/view", view),

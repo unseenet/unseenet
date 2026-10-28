@@ -122,7 +122,7 @@ __all__ = [n for n in dir() if not n.startswith('__') or n == '__version__']
 
 from .base import ApiBase  # noqa: E402
 from .events import Events  # noqa: E402
-from .setup import Setup  # noqa: E402
+from .setup import DeviceUnlock, Setup  # noqa: E402
 from .state import State  # noqa: E402
 from .groups import Groups  # noqa: E402
 from .writing import Writing  # noqa: E402
@@ -144,7 +144,7 @@ from .teams import Teams  # noqa: E402
 from .content_labels import ContentLabels  # noqa: E402
 
 
-class LocalAPI(ApiBase, Events, Setup, State, Groups, Writing, People, Running, Identity, Articles,
+class LocalAPI(ApiBase, Events, Setup, DeviceUnlock, State, Groups, Writing, People, Running, Identity, Articles,
                Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules,
                Reports, Teams, ContentLabels):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or

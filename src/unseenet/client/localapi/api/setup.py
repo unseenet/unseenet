@@ -27,9 +27,10 @@ class Setup:
         s = self.session
         return s is not None and (not s.has_identity() or not s.node)
 
-    async def unlock(self, passphrase: str) -> dict:
+    async def unlock(self, passphrase: str, device: str = "", secret: str = "") -> dict:
         """``POST /api/unlock`` (section 4.2): open the vault with its passphrase (made if
-        it does not exist yet) and start the runtime. A service has no vault to unlock."""
+        it does not exist yet) - or with a device's secret (``device``, ``secret`` in b64,
+        UN-RFC 0050 section 5) - and start the runtime. A service has no vault to unlock."""
         if self.service:
             raise SessionError("a service has no vault to unlock")
         if self.session is None:
@@ -37,7 +38,13 @@ class Setup:
             kdf = {"ops": 1, "mem": 8192 * 1024} if fast else {}
             self._say("Unlocking vault ...")
             try:
-                vault = await asyncio.to_thread(Vault.open, self.vault_path, passphrase, **kdf)
+                if device:
+                    if not self.vault_path.exists():
+                        raise VaultError("there is no vault yet: choose a passphrase")
+                    vault = await asyncio.to_thread(Vault.open_with_device, self.vault_path,
+                                                    device, _b64(secret))
+                else:
+                    vault = await asyncio.to_thread(Vault.open, self.vault_path, passphrase, **kdf)
             except VaultError as exc:
                 self._say("Locked")
                 raise SessionError(str(exc) or "wrong passphrase") from exc
@@ -106,3 +113,55 @@ class Setup:
         if self.needs_setup():
             raise Locked("set up first")
         return s
+
+
+def _b64(text: str) -> bytes:
+    import base64
+    import binascii
+    try:
+        return base64.b64decode(str(text), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise SessionError("secret is b64") from exc
+
+
+class DeviceUnlock:
+    def device_unlocks(self) -> dict:
+        """``GET /api/device-unlock`` (section 4.2, UN-RFC 0050 section 5): the devices that
+        can open this vault without its passphrase - ``id`` (a passkey's credential ID),
+        ``label``, ``created``; never what they hold. Also when locked, so the page knows
+        which passkey to ask for. ``possible``: false for a service."""
+        from ....core.vault import device_unlocks_of
+        if self.service or self.vault_path is None:
+            return {"possible": False, "devices": []}
+        return {"possible": True, "devices": device_unlocks_of(self.vault_path)}
+
+    async def add_device_unlock(self, data: dict) -> dict:
+        """``POST /api/device-unlock`` ``{"passphrase", "id", "secret", "label"}``: let this
+        device open the vault with ``secret`` (b64, 32 octets or more), which its secure
+        hardware releases only after its PIN or unlock - a passkey's PRF output. Needs the
+        vault's passphrase. The passphrase still opens the vault, everywhere."""
+        s = self._unlocked()                      # set up or not: it is the vault's
+        if self.service:
+            raise SessionError("a service has no vault passphrase")
+        if not s.vault.path.exists():
+            s.vault.save()                        # a new vault: on disk first, to open later
+        try:
+            await asyncio.to_thread(s.vault.add_device_unlock, str(data.get("passphrase", "")),
+                                    str(data.get("id", "")), _b64(data.get("secret", "")),
+                                    str(data.get("label", "")))
+        except VaultError as exc:
+            raise SessionError("The passphrase is not right." if "wrong passphrase" in str(exc)
+                               else str(exc)) from exc
+        return self.device_unlocks()
+
+    def remove_device_unlock(self, data: dict) -> dict:
+        """``POST /api/device-unlock/remove`` ``{"id"}``, or ``{"all": true}``: that device,
+        or every one, no longer opens the vault without its passphrase."""
+        s = self._unlocked()
+        if data.get("all") is True:
+            s.vault.remove_device_unlock()
+        elif data.get("id"):
+            s.vault.remove_device_unlock(str(data["id"]))
+        else:
+            raise SessionError('give "id", or "all": true')
+        return self.device_unlocks()
