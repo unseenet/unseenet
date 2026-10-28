@@ -245,46 +245,17 @@ class ReadingMixin:
         me = self.identity()
         entry = self.group_entry(group_id)
 
-        def reader(since: int):
-            async def run(c: Client):
-                try:
-                    _, low, high = await c.group(group_id)
-                except NNTPError as exc:
-                    if "removed by its owner" in exc.text:
-                        raise SessionError("removed by its owner") from exc
-                    raise SessionError("group not carried by this node") from exc
-                start = max(low, since + 1)
-                if not entry.get("manifest") and not entry.get("manifest_rescanned"):
-                    # Joined before manifests were kept (or never seen it): read the group
-                    # once from the start so title, rules, view and postage are known.
-                    start = low
-                    entry["manifest_rescanned"] = True
-                fetched = []
-                numbers = range(start, high + 1)
-                if skip is not None and start <= high:    # headers first (#669)
-                    try:
-                        rows = await c.over(start, high)
-                    except NNTPError:
-                        rows = None                      # a node without OVER: every one
-                    if rows is not None:
-                        numbers = [row["number"] for row in rows
-                                   if self._control_line(row) or not skip(row)]
-                for n in numbers:
-                    raw = await c.article(str(n))
-                    if raw is not None:
-                        fetched.append((n, raw))
-                return fetched, high
-            return run
-
+        window = keep and group_id not in self._high and not cache   # first read (#721)
         home = self.node_for(group_id)
         try:
-            fetched, high = await self._call(reader(self._high.get(group_id, 0)), home)
+            fetched, high, low = await self._read_range(group_id, entry, self._high.get(group_id, 0),
+                                                        home, skip, window)
         except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError) as first:
             if "removed by its owner" in str(first):
                 raise
             for other in (n for n in self.nodes if n != home):   # another node may carry it
                 try:
-                    fetched, high = await self._call(reader(0), other)
+                    fetched, high, low = await self._read_range(group_id, entry, 0, other, skip, window)
                 except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
                     continue
                 self.say(f"{short_group_id(group_id)} is now read from {other}")
@@ -294,6 +265,9 @@ class ReadingMixin:
                 break
             else:
                 raise first
+        else:
+            if keep and not window:                      # older ones of a large group (#721)
+                fetched = await self._read_older(group_id, entry, home, low) + fetched
         changed, new = False, 0
         home = self.node_for(group_id)
         came: list[Message] = []                         # what came now (keep=False)
@@ -314,7 +288,9 @@ class ReadingMixin:
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
         if self.manifest_data(group_id).get("local") and len(self.nodes) > 1:   # #134
-            got, more = await self._read_local_elsewhere(group_id, entry, me, reader)
+            got, more = await self._read_local_elsewhere(
+                group_id, entry, me,
+                lambda since, node: self._read_range(group_id, entry, since, node, skip, False))
             new += got
             changed = changed or more
         if entry.get("cancels") and self._apply_cancels(group_id):
@@ -345,6 +321,116 @@ class ReadingMixin:
     # other nodes are kept beside those of the node it is read from, numbered from an
     # offset of their own, shown once each (by Message-ID), with the node they came from.
     # No node is told about your others; read marks are by Message-ID, so they hold.
+    # Reading a group is planned in one call to the node and its articles fetched in turns
+    # of FETCH_BATCH, each its own call: the node is free between them, so opening a group,
+    # its emoji or a picture never waits minutes behind a large group being read (#721).
+    FETCH_BATCH = 50
+    NEW_GROUP_WINDOW = 300     # a group first read with more: its newest, older ones later
+    OLDER_BATCH = 200          # older articles read with each later refresh
+
+    async def _read_range(self, group_id: str, entry: dict, since: int, node: str,
+                          skip=None, window: bool = False) -> tuple[list, int, int]:
+        """Read a group's articles after ``since`` from ``node``: ``(fetched, high, low)``,
+        ``fetched`` as ``[(number, raw)]``. With ``window`` (a first read) only the newest
+        NEW_GROUP_WINDOW articles and every control article, the rest marked to be read
+        later by ``_read_older``. If the node stops answering part-way, what came is kept
+        and ``high`` says how far it got."""
+        async def plan(c: Client):
+            try:
+                _, low, high = await c.group(group_id)
+            except NNTPError as exc:
+                if "removed by its owner" in exc.text:
+                    raise SessionError("removed by its owner") from exc
+                raise SessionError("group not carried by this node") from exc
+            start = max(low, since + 1)
+            if not entry.get("manifest") and not entry.get("manifest_rescanned"):
+                # Joined before manifests were kept (or never seen it): read the group's
+                # control articles from the start so title, rules, view and postage are known.
+                start = low
+                entry["manifest_rescanned"] = True
+            wide = window and high - start + 1 > self.NEW_GROUP_WINDOW
+            rows = None
+            if start <= high and (skip is not None or wide):        # headers first (#669)
+                try:
+                    rows = await c.over(start, high)
+                except NNTPError:
+                    rows = None                      # a node without OVER: every one
+            if rows is None:
+                return list(range(start, high + 1)), low, high, None
+            top = high - self.NEW_GROUP_WINDOW if wide else start - 1
+            numbers = [row["number"] for row in rows if self._control_line(row)
+                       or (row["number"] > top and not (skip is not None and skip(row)))]
+            return numbers, low, high, (top + 1 if wide else None)
+
+        numbers, low, high, below = await self._call(plan, node)
+        if below is not None and below > low:
+            entry["older"] = {"node": node, "below": below}
+        fetched, stopped = await self._fetch_numbers(group_id, numbers, node)
+        if stopped is not None:
+            high = stopped - 1
+        return fetched, high, low
+
+    async def _fetch_numbers(self, group_id: str, numbers: list[int],
+                             node: str) -> tuple[list, int | None]:
+        """Fetch articles by number in turns of FETCH_BATCH. Returns ``(fetched, stopped)``,
+        ``stopped`` the first number not fetched when the node stopped answering after
+        something came (None when all came); a failure before anything came is raised."""
+        fetched: list = []
+        for i in range(0, len(numbers), self.FETCH_BATCH):
+            chunk = numbers[i:i + self.FETCH_BATCH]
+
+            async def run(c: Client, chunk=chunk):
+                try:
+                    await c.group(group_id)          # another call may have chosen another
+                except NNTPError as exc:
+                    raise SessionError("group not carried by this node") from exc
+                got = []
+                for n in chunk:
+                    raw = await c.article(str(n))
+                    if raw is not None:
+                        got.append((n, raw))
+                return got
+            try:
+                fetched += await self._call(run, node)
+            except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+                if not fetched:
+                    raise
+                return fetched, chunk[0]
+        return fetched, None
+
+    async def _read_older(self, group_id: str, entry: dict, node: str, low: int) -> list:
+        """The next OLDER_BATCH older articles of a large group first read from its newest
+        (#721), from the node it was read from; nothing once they are all here."""
+        older = entry.get("older")
+        if not older or older.get("node") != node:
+            entry.pop("older", None)
+            return []
+        below = int(older["below"])
+        start = max(low, below - self.OLDER_BATCH)
+        if start >= below:
+            entry.pop("older", None)
+            return []
+        async def plan(c: Client):
+            await c.group(group_id)
+            rows = await c.over(start, below - 1)
+            # every control article came with the first read: read again it could put an
+            # older manifest over a newer one
+            return [row["number"] for row in rows if not self._control_line(row)]
+        try:
+            numbers = await self._call(plan, node)
+            fetched, stopped = await self._fetch_numbers(group_id, numbers, node)
+        except NNTPError:
+            entry.pop("older", None)                 # no headers: leave them (never set then)
+            return []
+        except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
+            return []                                # next time
+        reached = stopped if stopped is not None else start
+        if reached <= low:
+            entry.pop("older", None)
+        else:
+            older["below"] = reached
+        return fetched
+
     LOCAL_ABSENT_SECONDS = 3600.0     # a node without the group is asked again after this
     NODE_OFFSET = 10 ** 12            # numbers of articles from your other nodes start here
 
@@ -382,7 +468,7 @@ class ReadingMixin:
             if node == home or _time.monotonic() - absent.get((group_id, node), -1e18) < self.LOCAL_ABSENT_SECONDS:
                 continue
             try:
-                fetched, high = await self._call(reader(highs.get(node, 0)), node)
+                fetched, high, _ = await reader(highs.get(node, 0), node)
             except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):
                 absent[(group_id, node)] = _time.monotonic()
                 highs.pop(node, None)
