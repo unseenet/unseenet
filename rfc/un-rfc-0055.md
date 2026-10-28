@@ -256,6 +256,23 @@ The rules by which replicas add and remove nodes, and the founding of
 the council, are left to a revision of UN-RFC 0020 (unseenet #56). Until
 then the list is kept as UN-RFC 0010 section 6 says.
 
+The root list of hierarchies (UN-RFC 0018) goes the same way, and
+section 4 explains why it matters less than it seems: the root list does
+not decide whether a hierarchy exists or is carried - anybody may create
+groups under any name, and nodes carry what their patterns match. It
+only records who may speak *for* a hierarchy (its maintainer: blocks,
+default spam-report issuers). The direction for that revision
+(informative):
+
+- a free top-level hierarchy is claimed like a name (UN-RFC 0054
+  section 8: commit, reveal, a ripened key), first claim wins, and is
+  renewed or lapses;
+- a hierarchy equal to a domain name or a country-code TLD goes only to
+  whoever proves it in DNS, as names do (unseenet #590): `dk.*` to whoever
+  answers for `.dk`, `torproject.*` to whoever answers for torproject.org;
+- a hierarchy without a maintainer is free, like `alt.*`: no blocks
+  across it, only each group owner's rules.
+
 # 9. Changes to Other Documents
 
 - **UN-RFC 0001** section 2 (scale) and section 4: a node carries the
