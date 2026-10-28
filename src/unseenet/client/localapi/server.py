@@ -164,8 +164,14 @@ async def groups(request):
 
 
 async def group(request):
-    # ?all=1: Show all, a look without your rules - never saved (UN-RFC 0051 section 3)
-    return _json(_api(request).group(_gid(request), request.query.get("all") in ("1", "true")))
+    # ?all=1: Show all, a look without your rules - never saved (UN-RFC 0051 section 3);
+    # ?limit=N: the newest N threads, entries or chat lines (#724)
+    try:
+        limit = max(1, int(request.query["limit"])) if "limit" in request.query else None
+    except ValueError:
+        raise web.HTTPBadRequest(text="limit is a number") from None
+    return _json(_api(request).group(_gid(request), request.query.get("all") in ("1", "true"),
+                                     limit=limit))
 
 
 async def read(request):

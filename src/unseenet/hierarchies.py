@@ -9,6 +9,7 @@ client shows for a group (section 8) builds on it.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 from dataclasses import dataclass
@@ -110,8 +111,32 @@ def parse_root_list(text: str, *, strict: bool = False) -> tuple[str, dict[str, 
 
 def builtin_root_list() -> tuple[str, dict[str, Hierarchy]]:
     """The project's root list as shipped with this version."""
-    return parse_root_list(resources.files("unseenet").joinpath("hierarchies.json").read_text(),
-                           strict=True)
+    return cached_root_list(_shipped("hierarchies.json"), strict=True)
+
+
+@functools.lru_cache(maxsize=4)
+def _shipped(name: str) -> str:
+    """A file shipped with this version - read once, it does not change while running."""
+    return resources.files("unseenet").joinpath(name).read_text()
+
+
+@functools.lru_cache(maxsize=16)
+def _parsed_root_list(text: str, strict: bool) -> tuple[str, dict[str, Hierarchy]]:
+    """``parse_root_list``, once per text: a client asks for each post it shows (#724)."""
+    return parse_root_list(text, strict=strict)
+
+
+def cached_root_list(text: str, *, strict: bool = False) -> tuple[str, dict[str, Hierarchy]]:
+    """``parse_root_list`` of a text parsed before, without parsing it again; the dict is
+    the caller's own (Hierarchy itself is frozen)."""
+    updated, out = _parsed_root_list(text, strict)
+    return updated, dict(out)
+
+
+@functools.lru_cache(maxsize=64)
+def cached_hierarchy_list(text: str, hierarchy: str) -> "HierarchyList":
+    """``parse_hierarchy_list``, once per text (#724); the result is frozen."""
+    return parse_hierarchy_list(text, hierarchy)
 
 
 # --- hierarchy lists (section 5) ----------------------------------------------------
@@ -250,8 +275,7 @@ def _issuers(items) -> tuple[str, ...]:
 
 def builtin_checkgroups() -> HierarchyList:
     """The project's list for unseenet.* as shipped with this version."""
-    return parse_hierarchy_list(resources.files("unseenet").joinpath("checkgroups.json").read_text(),
-                                "unseenet")
+    return cached_hierarchy_list(_shipped("checkgroups.json"), "unseenet")
 
 
 # --- what a group name means (section 8.1) -------------------------------------------

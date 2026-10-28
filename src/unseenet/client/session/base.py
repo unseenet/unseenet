@@ -165,7 +165,10 @@ class BaseMixin:
         """An identity's key pair (``crypto.Identity``), by name; by default the one in
         use (``default_identity_name``)."""
         entry = self.data["identities"][name or self.default_identity_name()]
-        return crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
+        made = self.__dict__.setdefault("_identities_made", {})   # asked for every post shown (#724)
+        if entry["seed"] not in made:
+            made[entry["seed"]] = crypto.Identity.from_seed(bytes.fromhex(entry["seed"]))
+        return made[entry["seed"]]
 
     def my_fingerprints(self) -> tuple[str, ...]:
         """The fingerprints of all your identities (owner:me in a group search, #13)."""
