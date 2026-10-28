@@ -247,6 +247,13 @@ class GroupsMixin:
                               + (f": {reason}" if reason else ""), "blocked")
         if entry.get("owner") or data.get("owner") == me or me in data.get("moderators", []):
             return Permission(True)
+        gw = data.get("gateway")
+        if gtype == "moderated" and isinstance(gw, dict) and gw.get("direction") == "import":
+            # gatewayed one way (UN-RFC 0023 section 9): nothing written here reaches the
+            # other network, so clients do not offer to post
+            network = str(gw.get("network") or "another network")
+            return Permission(False, f"Read only: brought in from {network}, nothing goes back",
+                              "gateway_import")
         if gtype == "closed":
             return (Permission(True) if entry.get("keys") else
                     Permission(False, "You are not a member of this closed group", "not_member"))

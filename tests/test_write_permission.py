@@ -103,3 +103,19 @@ async def test_closed_group_needs_membership(net):
 
 def test_permission_is_falsy_when_not_allowed():
     assert not Permission(False, "nej", "x") and Permission(True)
+
+
+def test_a_group_gatewayed_one_way_is_read_only(tmp_path):
+    """UN-RFC 0023 section 9: for "direction": "import" a client does not offer to post -
+    nothing written there reaches the other network. Both ways: as any moderated group."""
+    s = Session(Vault.open(tmp_path / "me.vault", "pw", ops=1, mem=8192 * 1024),
+                status=lambda *_: None)
+    s.new_identity("me", "Me")
+    gid = "test.usenet.comp.misc@abcdefghijklmnop"
+    gw = {"network": "usenet", "source": "comp.misc", "direction": "import"}
+    s.group_entry(gid)["manifest"] = {"type": "moderated", "owner": "ed25519:x",
+                                      "moderators": ["ed25519:gw"], "gateway": gw}
+    p = s.write_permission(gid)
+    assert not p.allowed and p.code == "gateway_import" and "usenet" in p.reason
+    gw["direction"] = "both"
+    assert s.write_permission(gid).allowed
