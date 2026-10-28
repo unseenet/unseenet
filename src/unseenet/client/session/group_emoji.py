@@ -82,6 +82,9 @@ class GroupEmojiMixin:
                                                        pow_bits=bits))
         except ge.EmojiError as exc:
             raise SessionError(str(exc)) from exc
+        except SessionError as exc:
+            from .profiles import refused_picture
+            raise refused_picture(exc) from exc
         return self.group_emoji(group_id)
 
     @staticmethod

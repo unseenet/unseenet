@@ -104,7 +104,11 @@ class Manifests:
             if own == "profile" and "profile" in m.raw:
                 profiles.check_profile(m.raw["profile"])
             if own == "avatar" and "avatar" in m.raw:
-                profiles.check_picture(m.raw["avatar"])
+                raw = profiles.check_picture(m.raw["avatar"])
+                # refusal lists cover a picture as they cover an attachment (0022 10, #715)
+                if self.store.blob_refused(bl.blob_id(raw)):
+                    raise ArticleError("permission", "this picture is refused by the node "
+                                                     "(a refusal list, UN-RFC 0027 7.3)")
         except profiles.ProfileError as exc:
             raise ArticleError("syntax", str(exc)) from exc
 
@@ -134,7 +138,8 @@ class Manifests:
             raise ArticleError("syntax", str(exc)) from exc
         for pic in m.raw["emoji"].values():           # refusal lists cover each picture (5)
             if self.store.blob_refused(bl.blob_id(b64decode(pic["data"]))):
-                raise ArticleError("permission", "a picture in this set is refused")
+                raise ArticleError("permission", "a picture in this set is refused by the node "
+                                                 "(a refusal list, UN-RFC 0027 7.3)")
 
     def _allow_new_group(self, m: Manifest) -> bool:
         if self.config.new_groups == "accept":

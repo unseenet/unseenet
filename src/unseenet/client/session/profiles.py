@@ -17,6 +17,15 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import session as _s   # names tests patch on the module, read at call time
 
 
+def refused_picture(exc: SessionError) -> SessionError:
+    """A node's refusal of a picture on its refusal lists (#715), in words for the person;
+    any other error as it is."""
+    if "refused by the node" in str(exc):
+        return SessionError("Your node refuses this picture: it is on a refusal list "
+                            "(UN-RFC 0027 section 7.3). Choose another.")
+    return exc
+
+
 class ProfilesMixin:
     # ------------------------------------------------------------------
     # profiles and pictures (UN-RFC 0022)
@@ -138,10 +147,13 @@ class ProfilesMixin:
             except prof.ProfileError as exc:
                 raise SessionError(str(exc)) from exc
         self.__dict__.get("_picture_cache", {}).pop(ident.key_text, None)
-        return await self._publish_key_bound(
-            prof.avatar_id(ident.public_key),
-            lambda serial, bits: prof.avatar_manifest(ident, picture, serial=serial,
-                                                      pow_bits=bits))
+        try:
+            return await self._publish_key_bound(
+                prof.avatar_id(ident.public_key),
+                lambda serial, bits: prof.avatar_manifest(ident, picture, serial=serial,
+                                                          pow_bits=bits))
+        except SessionError as exc:
+            raise refused_picture(exc) from exc
 
     async def publish_picture_file(self, path, alt: str = "") -> dict:
         """Publish a picture from a file as this identity's profile picture: the middle
