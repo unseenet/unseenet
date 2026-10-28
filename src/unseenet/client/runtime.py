@@ -33,6 +33,7 @@ from .session import GroupInfo, Session, SessionError
 log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
+FIRST_ANSWER = 12.0           # seconds a node gets to list its groups before the rest go on (#704)
 RIPEN_TO = 3                  # ripen keys up to this level while running (UN-RFC 0025, 7):
                               # 3 ends the surcharge; 4 needs GBs of memory (#440)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
@@ -67,6 +68,7 @@ class ClientRuntime:
         self.watch_retry = watch_retry                # None: a random, growing wait (#297)
         self.inbox_ready = False
         self.available: dict[str, GroupInfo] = {}     # what your nodes listed last time
+        self._watched: set[asyncio.Task] = set()     # slow nodes' answers awaited (#704)
         self._lock = asyncio.Lock()                   # one refresh at a time
         self._offered: str | None = None
         self._tasks: set[asyncio.Task] = set()
@@ -96,9 +98,13 @@ class ClientRuntime:
         async with self._lock:
             s = self.session
             try:
-                available = {g.group_id: g for g in await s.list_groups()}
+                available = {g.group_id: g for g in await s.list_groups(budget=FIRST_ANSWER)}
             except NETWORK_ERRORS as exc:
                 return self._emit_refreshed(error=str(exc) or type(exc).__name__)
+            for late in s.late_answers():          # a slow node (#704): again when it answers
+                if late not in self._watched:
+                    self._watched.add(late)
+                    late.add_done_callback(self._late_answer)
             self.available = available
             await self.sync_state()        # your state first, then your groups (UN-RFC 0044, 7.3)
             inbox = None if self.inbox_ready else asyncio.ensure_future(self._set_up_inbox())
@@ -128,9 +134,17 @@ class ClientRuntime:
             log.info("sent copies not fetched now (%s)", exc)
         return result
 
+    def _late_answer(self, task: asyncio.Task) -> None:
+        """A slow node answered (#704): list and fetch again, now with its groups."""
+        self._watched.discard(task)
+        if not task.cancelled() and task.exception() is None:
+            asyncio.ensure_future(self.refresh())
+
     async def _fetch(self, group_ids) -> set[str]:
         done = set()
         for gid in list(group_ids):
+            if self.session.is_slow(self.session.node_for(gid)):
+                continue                          # read when its node answers (#704)
             try:
                 await self.session.fetch_group(gid)
             except NETWORK_ERRORS:
@@ -145,7 +159,7 @@ class ClientRuntime:
             await s.ensure_inbox()
             self.inbox_ready = True
             s.emit(ev.InboxReady(s.my_inbox))
-            return {g.group_id: g for g in await s.list_groups()}
+            return {g.group_id: g for g in await s.list_groups(budget=FIRST_ANSWER)}
         except NETWORK_ERRORS as exc:
             s.say(f"Could not set up your inbox: {exc}")
             return None
@@ -154,7 +168,8 @@ class ClientRuntime:
         s = self.session
         c = s.for_you_counts()
         result = ev.Refreshed(available=available, subscribed=len(s.data["subscribed"]),
-                              unreachable=tuple(s.unreachable), replies=c.replies,
+                              unreachable=tuple(s.unreachable), slow=tuple(s.slow),
+                              replies=c.replies,
                               mentions=c.mentions, error=error)
         s.emit(result)
         return result

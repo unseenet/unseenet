@@ -106,10 +106,13 @@ class Refreshed(Event):
     replies: int = 0                 # unread replies to you, in all groups
     mentions: int = 0                # unread posts naming you
     error: str | None = None
+    # nodes asked but not answered yet (#704): shown as "not answering yet"; their groups
+    # come when they answer, with another Refreshed
+    slow: tuple[str, ...] = ()
     name = "refreshed"
 
     def to_dict(self) -> dict:
-        return {**super().to_dict(), "unreachable": list(self.unreachable)}
+        return {**super().to_dict(), "unreachable": list(self.unreachable), "slow": list(self.slow)}
 
 
 @dataclass(frozen=True)

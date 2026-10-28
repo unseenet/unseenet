@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **One slow node no longer holds up the others** (#704): the client runtime gives each node
+  12 s to list its groups; what the others have is shown at once, the slow one is said to be
+  "not answering yet" (`Session.slow`, `Refreshed.slow`), its answer is awaited in the
+  background, and when it comes everything is listed and fetched again. Meanwhile nothing
+  else waits on it: a call to a node that has not answered yet fails at once.
+
 - **How long ago, in the same words everywhere**: `unseenet.client.timefmt.ago()` - *now*,
   *5 min*, *2 h*, *Yesterday 14:20*, *3 days*, then the date - for every client's feeds
   (unseenet-tui#34, as the GUI says it).
