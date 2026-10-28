@@ -96,3 +96,36 @@ async def test_a_small_group_is_read_whole(tmp_path, monkeypatch):
     for s in (owner, reader):
         await s.close()
     server.close()
+
+
+async def test_a_group_answered_newest_first_in_part(tmp_path, monkeypatch):
+    """#724: ``limit`` gives the newest threads with their replies, and ``more``."""
+    from unseenet.client.localapi import LocalAPI
+    server, owner, reader, gid = await _net(tmp_path, monkeypatch, 6)
+    monkeypatch.setattr(Session, "NEW_GROUP_WINDOW", 100)
+    first = next(m for m in await owner.fetch_group(gid) if m.subject == "Indlæg 4")
+    await owner.post(gid, "Re: Indlæg 4", "svar\n", references=[first.message_id])
+    reader.subscribe(gid)
+    await reader.fetch_group(gid)
+    api = LocalAPI(session=reader)
+
+    whole = api.group(gid)
+    assert whole["group"]["more"] is False and len(whole["rows"]) == 7
+    part = api.group(gid, limit=2)
+    assert part["group"]["more"] is True
+    assert [(r["message"]["subject"], r["depth"]) for r in part["rows"]] == \
+        [(r["message"]["subject"], r["depth"]) for r in whole["rows"]][:3]   # 2 threads, 3 rows
+    assert any(r["depth"] == 1 for r in part["rows"])          # the reply came with its thread
+    assert api.group(gid, limit=10)["group"]["more"] is False
+    for s in (owner, reader):
+        await s.close()
+    server.close()
+
+
+def test_a_chat_answered_in_part_keeps_its_newest_lines():
+    from unseenet.client.localapi.api.groups import _page
+    rows = [(n, 0) for n in range(5)]                  # a chat: oldest first
+    assert _page(rows, 2, chat=True) == ([3, 4], True)
+    assert _page(rows, 9, chat=True) == ([0, 1, 2, 3, 4], False)
+    threads = [("a", 0), ("a1", 1), ("b", 0), ("c", 0), ("c1", 1)]
+    assert _page(threads, 2, chat=False) == ([0, 1, 2], True)

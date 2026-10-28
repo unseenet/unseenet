@@ -227,7 +227,7 @@ def root_list(s: "Session") -> dict[str, hz.Hierarchy]:
     text = _store(s).get("root")
     if text:
         try:
-            return hz.parse_root_list(text)[1]
+            return hz.cached_root_list(text)[1]
         except ValueError:
             pass
     return hz.builtin_root_list()[1]
@@ -331,7 +331,7 @@ def hierarchy_lists(s: "Session") -> dict[str, hz.HierarchyList]:
     lists = {"unseenet": hz.builtin_checkgroups()}
     for name, text in _store(s)["lists"].items():
         try:
-            lists[name] = hz.parse_hierarchy_list(text, name)
+            lists[name] = hz.cached_hierarchy_list(text, name)
         except ValueError:
             continue
     return lists

@@ -253,7 +253,11 @@ leaves it out; before, it offers to start it (sections 4.14, 4.15).
 
 `rows` are in the order to show them (`Session.threads()`): threads
 newest first for a group read as threads, every line in order for one
-read as a chat. `for_me` is `"reply"`, `"mention"` or null. `who` is how
+read as a chat. `?limit=N` asks for the newest N threads (or feed entries),
+each with all its replies, or the newest N lines of a chat; the group's
+`more` is true when older ones were left out, and a front end asks again
+with a larger `limit` to show them. Without `limit` every row comes, as
+before; a front end showing large groups SHOULD ask with one. `for_me` is `"reply"`, `"mention"` or null. `who` is how
 the runtime names the author (a contact's name, a verified name, UN-RFC
 0019), so that every front end names people alike. `tree` is the text
 rendered for showing (UN-RFC 0031): Markdown or plain by the post's
