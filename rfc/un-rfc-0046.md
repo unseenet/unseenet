@@ -413,6 +413,11 @@ not (you do not own or moderate the group).
   `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4,
   `index`: `"yes"` or `"no"` for a site, UN-RFC 0035 section 3):
   a new manifest (UN-RFC 0004, 0014, 0030). Any other field is `400`.
+- `GET /api/help/group-settings`: `{"intro", "settings": [{"key", "label",
+  "what", "affects", "later"}]}` - per setting, in English, what it does, whom it
+  affects (readers, writers, nodes) and what changing it later does, for a help
+  panel beside a client's Edit group; `key` is the field above. The same text in
+  every client; it needs no unlocked vault.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
 - `POST /api/groups/<id>/invite` `{"key": "..."}` and
