@@ -62,20 +62,50 @@ def free_memory() -> int | None:
     return None
 
 
-def _cgroup_room() -> int | None:
-    """A container's memory limit less what it uses (cgroup v2, else v1)."""
-    for limit_f, used_f in (("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current"),
-                            ("/sys/fs/cgroup/memory/memory.limit_in_bytes",
-                             "/sys/fs/cgroup/memory/memory.usage_in_bytes")):
-        try:
-            limit = Path(limit_f).read_text().strip()
-            used = int(Path(used_f).read_text().strip())
-        except (OSError, ValueError):
-            continue
-        if limit == "max" or int(limit) >= 1 << 60:
-            return None
-        return max(0, int(limit) - used)
-    return None
+def _cgroup_room(root: Path = Path("/sys/fs/cgroup"),
+                 own: Path = Path("/proc/self/cgroup")) -> int | None:
+    """The room left under this process's tightest memory limit: the limit less what is
+    used, for its own cgroup and every one above it - a systemd service's ``MemoryMax``
+    inside a container counts as well as the container's (gateway#47). cgroup v2, else
+    v1. None without a limit."""
+    rooms = []
+    rel = None
+    try:
+        for line in own.read_text().splitlines():
+            if line.startswith("0::"):                 # cgroup v2: one unified path
+                rel = line[3:].strip()
+    except OSError:
+        pass
+    if rel is not None:
+        here = root / rel.lstrip("/")
+        while True:
+            room = _room(here / "memory.max", here / "memory.current")
+            if room is not None:
+                rooms.append(room)
+            if here == root or root not in here.parents:
+                break
+            here = here.parent
+    if not rooms:                                      # v1, or v2 seen from the root only
+        for limit_f, used_f in ((root / "memory.max", root / "memory.current"),
+                                (root / "memory" / "memory.limit_in_bytes",
+                                 root / "memory" / "memory.usage_in_bytes")):
+            room = _room(limit_f, used_f)
+            if room is not None:
+                rooms.append(room)
+                break
+    return min(rooms) if rooms else None
+
+
+def _room(limit_f: Path, used_f: Path) -> int | None:
+    """``limit - used`` from a cgroup's files; None when unlimited or unreadable."""
+    try:
+        limit = limit_f.read_text().strip()
+        used = int(used_f.read_text().strip())
+    except (OSError, ValueError):
+        return None
+    if limit == "max" or not limit.isdigit() or int(limit) >= 1 << 60:
+        return None
+    return max(0, int(limit) - used)
 
 
 def ripening_budget() -> int:
