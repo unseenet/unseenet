@@ -51,6 +51,7 @@ groups = "*"
 | `honour_blocks` | `false` | Refuse posts by identities that a hierarchy's maintainer has blocked (see [below](#honour_blocks-maintainers-blocks)). |
 | `profiles` | `"accept"` | Carry identities' public profiles (`profile@...`), see [below](#profiles-and-pictures). `"refuse"` to leave them out. |
 | `avatars` | `"refuse"` | Carry identities' pictures (`avatar@...`). Off until you turn it on. |
+| `emoji` | `"refuse"` | Carry groups' own emoji (`<group>.emoji@...`, [UN-RFC 0056](../spec/un-rfc-0056.md)): small pictures. Off until you turn it on; the installer follows your answer for pictures. |
 | `sites` | `"refuse"` | Carry sites: channels shown as pages, kept until their owner changes them ([UN-RFC 0035](../spec/un-rfc-0035.md)). Off until you turn it on. |
 | `require_peer_auth` | `true` | Only configured peers that authenticate can push posts to this node. Clients can always post. Set `false` only for testing. |
 
@@ -68,6 +69,13 @@ and `avatar@<fp>`. They hold one signed manifest each and no posts.
 - **Pictures** are images (at most 8 KiB, 128 × 128 pixels). No node
   should carry images it has not chosen to, so `avatars` is `"refuse"`
   until you set it to `"accept"`.
+- **Group emoji** are up to 16 pictures of 32 × 32 pixels (at most 1 KiB
+  each) that a group's owner gives the group, in a data group of their
+  own, `<group>.emoji@<fp>`. As for pictures, `emoji` is `"refuse"` until
+  you set it to `"accept"`; refusing them never refuses the group.
+
+[Refusal lists](#refusals-refusal-lists-for-every-picture) and
+`--refuse-blob` cover pictures and group emoji as they cover files.
 
 Both expire two years after their owner's client last renewed them, and
 the node then removes them by itself
@@ -179,8 +187,6 @@ encrypted = false           # also files of closed groups and private posts
 groups = "*"                # which groups, a wildmat
 daily_per_key = 33554432    # 32 MiB per author key per day
 daily_per_group = 268435456 # 256 MiB per group per day
-# refusal_keys = ["ed25519:..."]   # follow refusal lists by these keys
-# refusal_groups = "*"
 ```
 
 A file goes when no post on the node references it any more (expired,
@@ -193,13 +199,32 @@ blob1:... --reason "..."` deletes it, and the node never takes, fetches
 or serves it again; the post that references it stays, and readers see
 that the file is not available. A running node follows at once.
 
-**Refusal lists.** With `refusal_keys`, the node also refuses the files
-named in refusal lists (`application/x-unseenet-blob-refusals`) posted by
-those keys in groups matching `refusal_groups`. Nobody can make your node
-follow a list; none is followed by default.
+**Refusal lists** are set in [`[refusals]`](#refusals-refusal-lists-for-every-picture).
 
 The monitor shows how many files the node keeps, how much they take,
 today's uploads and how many are refused.
+
+## `[refusals]`: refusal lists for every picture
+
+Refusal lists ([UN-RFC 0027](../spec/un-rfc-0027.md) section 7.3) name
+pictures and files by their ID, so a node can refuse what someone it trusts
+has found. They cover everything your node carries that is a picture or a
+file: files in posts, profile pictures and groups' emoji - also when the
+node carries no files (`[blobs]` off).
+
+```toml
+[refusals]
+keys = ["ed25519:..."]     # follow refusal lists by these keys only
+groups = "*"               # ... posted in groups matching this wildmat
+```
+
+A list is a post with `Content-Type: application/x-unseenet-blob-refusals`
+and the body `{"v":1,"blobs":["blob1:..."],"reason":"..."}`, signed by one of
+`keys`. Nobody can make your node follow a list; none is followed by
+default. Your node information says whether you follow any. Lists cannot
+name files of closed groups and private posts: those are encrypted.
+
+`refusal_keys` and `refusal_groups` under `[blobs]` still work, as before.
 
 ## `[operator]`
 

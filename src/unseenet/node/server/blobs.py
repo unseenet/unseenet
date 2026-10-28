@@ -58,12 +58,21 @@ class Blobs:
             self.store.forget_blob(bid)
         return len(gone)
 
+    def refusal_settings(self) -> tuple[list[str], str]:
+        """The keys whose refusal lists this node follows, and the groups they may come
+        from (UN-RFC 0027 section 7.3): ``[refusals]``, which covers every picture the node
+        carries - files, profile pictures, group emoji - whether or not it carries files
+        (#717); also the older ``[blobs] refusal_keys``. None by default."""
+        b = self.config.blobs or {}
+        keys = list(dict.fromkeys([*self.config.refusal_keys, *(b.get("refusal_keys") or [])]))
+        groups = self.config.refusal_groups if self.config.refusal_keys else b.get("refusal_groups", "*")
+        return keys, groups
+
     def _refusal_list(self, art: Article) -> None:
         """Section 7.3: a refusal list, followed only from keys the operator configured."""
-        b = self.config.blobs or {}
-        keys = b.get("refusal_keys") or []
+        keys, groups = self.refusal_settings()
         if (not keys or art["Author-Key"] not in keys or "Encrypted" in art
-                or not wildmat(b.get("refusal_groups", "*"), art.group)
+                or not wildmat(groups, art.group)
                 or not (art.get("Content-Type") or "").startswith("application/x-unseenet-blob-refusals")):
             return
         try:
@@ -74,7 +83,7 @@ class Blobs:
             return
         for bid in listed:
             self.store.refuse_blob(bid, reason, art["Author-Key"])
-        if listed:
+        if listed and self.config.blobs is not None:      # files carried: delete those listed
             self.sweep_blobs(retention=False)
 
     def _wait_for_blobs(self, art: Article, blobs, source: str | None, from_peer: bool) -> bool:

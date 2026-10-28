@@ -1,7 +1,7 @@
 """`unseenet-node`: running a node from the command line (UN-RFC 0005).
 
 Belongs here: reading ``node.toml`` into a ``NodeConfig`` (every section and its
-checks: ``[node]``, ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]``), the node
+checks: ``[node]``, ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]``, ``[refusals]``), the node
 key sealed in the data directory (UN-RFC 0016), starting the node with Tor, its peers,
 pulling, blob fetching and expiry (``run_node``), and the ``unseenet-node`` options
 that do one thing and exit (``--show-key``, ``--sign``, ``--drop-group``,
@@ -28,7 +28,7 @@ def _min_ripe(path, value):
 
 def load_node_config(path: Path | None):
     """Read ``node.toml`` into a ``NodeConfig``, checking every section - ``[node]``,
-    ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]`` - so a mistake stops the node at
+    ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]``, ``[refusals]`` - so a mistake stops the node at
     start with a clear message. No file: the defaults."""
     from ..node.server import NodeConfig, PeerConfig
 
@@ -66,6 +66,7 @@ def load_node_config(path: Path | None):
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
                       blobs=_blobs_config(path, data.get("blobs", {})),
+                      **_refusals_config(path, data.get("refusals", {})),
                       peers=peers)
 
 
@@ -93,6 +94,23 @@ def _follow_reports(path: Path, items) -> list[dict]:
             sys.exit(f"{where}: {f['issuer']} is followed twice")
         out.append({"issuer": f["issuer"], "posts": posts, "keys": keys})
     return out
+
+
+def _refusals_config(path: Path, r: dict) -> dict:
+    """[refusals] (UN-RFC 0027 section 7.3, #717): the keys whose refusal lists this node
+    follows (``keys``) and the groups they may come from (``groups``, a wildmat) - for
+    every picture it carries, files or not. None by default."""
+    if not isinstance(r, dict):
+        sys.exit(f"{path}: [refusals] is a table")
+    keys = r.get("keys", [])
+    if not isinstance(keys, list):
+        sys.exit(f"{path}: [refusals] keys is a list of keys")
+    for k in keys:
+        try:
+            crypto.key_from_text(str(k))
+        except crypto.CryptoError:
+            sys.exit(f"{path}: [refusals] keys: bad key {k!r}")
+    return {"refusal_keys": [str(k) for k in keys], "refusal_groups": str(r.get("groups", "*"))}
 
 
 def _blobs_config(path: Path, b: dict) -> dict | None:
