@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0031                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0002, 0004, 0022, 0028, 0035
+Updates: 0002, 0004, 0022, 0028, 0034, 0035
 
              Unseenet: Formatting - Markdown and Emoji
 ```
@@ -72,6 +72,37 @@ with an optional language that clients MAY use for highlighting),
 block quotes, ordered and unordered lists (nested at most 4 deep),
 thematic breaks, links and images (sections 3.4 and 3.5), tables
 (section 3.6), and emoji.
+
+### 3.2.1 Read More
+
+Where a long post is cut for "… more" - in a feed, a timeline or any
+other preview - the author can choose the place, with a **read-more
+line**: a line that holds only `...` or `…`, with at most three spaces
+before it and any spaces after it. Like WordPress' `<!--more-->`, but in
+a form that falls back nicely: a reader that does not know this rule,
+or a newsreader over NNTP, shows a line with three dots.
+
+- **Which line.** Only the first read-more line counts. Lines inside
+  code blocks (fenced or indented) and block quotes are not read-more
+  lines. It applies to posts, Markdown or plain text, including private
+  posts and the about texts and rules where those are shown cut; not to
+  chat lines, which are never cut this way.
+- **Where it cuts.** A client cuts at the read-more line instead of
+  its normal place when the line comes within its normal cut, and also
+  when it comes later but within **twice** the normal cut: the author
+  may make the shown part somewhat longer than usual. Further down it is
+  ignored and the normal cut applies, so one post cannot fill a feed or
+  a thread list. The normal cut is the client's own (a number of lines,
+  or a height); "twice" is measured the same way.
+- **Shown cut**, the part before the read-more line is shown, and
+  "… more" (or the client's word for it) even when that part is short.
+- **Opened**, the whole text is shown and the read-more line itself is
+  not.
+- **Only a display hint.** The article is unchanged and the full text
+  is always there; nodes do nothing with it, and quoting, searching
+  and editing see the line as it is. A client that renders text for
+  others to draw (UN-RFC 0046) gives the place as a block of its own,
+  so they need not find it again.
 
 ## 3.3 Chat Lines
 
@@ -284,6 +315,9 @@ separate matters and need documents of their own.
   `text/markdown; charset=utf-8; variant=unseenet`.
 - UN-RFC 0028 section 6.2: what posts and chat lines may use of
   Markdown is section 3 of this document.
+- UN-RFC 0034 section 4.1 and UN-RFC 0046: an entry cut with "… more"
+  is cut at its read-more line (section 3.2.1); the rendered text marks
+  the place with a block `{"t": "more"}`.
 - UN-RFC 0022 section 4.1 and UN-RFC 0014 section 2.1 let a profile's
   `about` and a group's `rules` be Markdown with the post subset of
   section 3.2, without images.
