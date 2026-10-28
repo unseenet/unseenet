@@ -148,7 +148,8 @@ def client_main(argv=None) -> None:
                    help="a tag of your own, up to 8: a topic or a warning such as spoiler (UN-RFC 0052)")
     s.add_argument("--reply-to", metavar="MSGID", help="reply to (or comment on) this post")
     s.add_argument("--edit", metavar="MSGID",
-                   help="a new version of your own post (UN-RFC 0042); the body replaces it")
+                   help="a new version of your own post (UN-RFC 0042); the body replaces it, "
+                        "and --tag/--lang, if given, its tags and language (else they are kept)")
     s.add_argument("--format", choices=["markdown", "plain"],
                    help="the text's format (default: your setting, Markdown unless changed)")
     s.add_argument("--attach", action="append", metavar="FILE",

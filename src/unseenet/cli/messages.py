@@ -90,7 +90,10 @@ async def c_post(app: App, args) -> None:
                 sys.exit("You can only edit your own posts (and not past their number of versions).")
             if files:
                 sys.exit("An edit keeps the files of the post it replaces; --attach is for new posts.")
-            msgid = await s.edit(target, args.subject or target.subject, body, ctype)
+            # --tag/--lang replace the post's own; left out, they are kept (#733)
+            msgid = await s.edit(target, args.subject or target.subject, body, ctype,
+                                 tags=getattr(args, "tag", None),
+                                 languages=getattr(args, "lang", None))
         else:
             perm = s.write_permission(group, reply_to=parent, kind=kind)
             if not perm:

@@ -162,8 +162,9 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         status, body = await r.post(f"/api/groups/{_gid(g)}/post", {"kind": "post", "body": "x"})
         assert status == 400 and "subject" in body["error"]
         status, job = await r.post(f"/api/groups/{_gid(g)}/post",
-                                   {"kind": "post", "subject": "Svar", "body": "Hej selv",
-                                    "references": [row["message"]["id"]]})
+                                   {"kind": "post", "subject": "Svar", "body": "Hej selv #hilsen",
+                                    "references": [row["message"]["id"]],
+                                    "tags": ["spoiler"], "languages": ["da"]})
         assert status == 200
         done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
                             and e["state"] in ("reached", "failed"))
@@ -171,6 +172,7 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         reply = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
         assert reply["depth"] == 1 and reply["may_edit"] and reply["may_withdraw"] and reply["mine"]
+        assert reply["edit_tags"] == ["spoiler"]                  # not the #word (#733)
         assert not [x for x in view["rows"] if x["message"]["subject"] == "Hej"][0]["mine"]
 
         # edit it, then withdraw it
@@ -182,6 +184,23 @@ async def test_a_person_sets_up_follows_and_posts(tmp_path):
         _, view = await r.get(f"/api/groups/{_gid(g)}")
         newest = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
         assert newest["message"]["text"].startswith("Hej selv!")
+        # its warning and language are kept though not sent again; the #word went (#733)
+        assert newest["message"]["tags"] == ["spoiler"] and newest["message"]["languages"] == ["da"]
+        status, job = await r.post(f"/api/groups/{_gid(g)}/edit",
+                                   {"id": newest["message"]["id"], "body": "Hi yourself!",
+                                    "tags": ["sexual"], "languages": ["en"]})
+        done = await _until(ws, lambda e: e["event"] == "job" and e["job"] == job["job"]
+                            and e["state"] in ("reached", "failed"))
+        assert done["state"] == "reached", done.get("error")
+        for _ in range(50):                    # the group is fetched again after the job
+            _, view = await r.get(f"/api/groups/{_gid(g)}")
+            newest = [x for x in view["rows"] if x["message"]["subject"] == "Svar"][0]
+            if newest["message"]["text"].startswith("Hi yourself"):
+                break
+            await asyncio.sleep(0.05)
+        assert newest["message"]["tags"] == ["sexual"] and newest["message"]["languages"] == ["en"]
+        assert (await r.post(f"/api/groups/{_gid(g)}/edit",
+                             {"id": newest["message"]["id"], "body": "x", "tags": "spoiler"}))[0] == 400
         status, _ = await r.post(f"/api/groups/{_gid(g)}/withdraw", {"id": newest["message"]["id"]})
         assert status == 200
 

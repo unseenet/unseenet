@@ -308,25 +308,55 @@ class PostingMixin:
         return art.message_id
 
     async def edit(self, msg: Message, subject: str, body: str,
-                   content_type: str | None = None, files=None) -> str:
+                   content_type: str | None = None, files=None,
+                   tags=None, languages=None) -> str:
         """Post a new version of your own post or chat line (UN-RFC 0042 section 4.3):
         same group, kind and place in its thread, naming every earlier version.
 
         ``files``: prepared files for the new version; ``None`` keeps the files of
-        the earlier version (fetched and sent again with it, #496), ``[]`` none."""
+        the earlier version (fetched and sent again with it, #496), ``[]`` none.
+        ``tags`` (warnings included) and ``languages`` (UN-RFC 0052): the new version's;
+        ``None`` keeps the earlier version's (#733) - its tags apart from the ``#words``
+        in its text, so a ``#word`` taken out of the text goes with it, while ``#words``
+        in the new text are added as for any post. ``[]`` sends none."""
         if msg.private:
             raise SessionError("private posts cannot be edited")
         if msg.author_key != self.identity().key_text:
             raise SessionError("you can only edit your own posts")
-        versions = [msg.message_id] + [v for v in msg.versions if v != msg.message_id]
+        versions = self._versions_to_name(msg)
         if len(versions) > MAX_SUPERSEDES:
             raise SessionError(f"a post can be edited at most {MAX_SUPERSEDES} times")
         original = self.find_message(msg.group, msg.message_id) or msg   # its own References
         if files is None:
             files = await self._files_of(msg)
+        if tags is None:
+            tags = self.tags_to_keep(msg)
+        if languages is None:
+            languages = list(getattr(msg, "languages", ()) or ()) or None
         return await self.post(msg.group, subject, body, references=original.references or None,
                                kind=msg.kind, content_type=content_type or msg.content_type or None,
-                               supersedes=versions, files=files or None)
+                               supersedes=versions, files=files or None,
+                               tags=tags, languages=languages)
+
+    @staticmethod
+    def _versions_to_name(msg: Message) -> list[str]:
+        """Every earlier version a new version of ``msg`` names (UN-RFC 0042 section 2):
+        ``msg`` itself, newest first, the first version last. ``msg`` may be the shown copy
+        (its ``versions``) or the article as stored (its own ``Supersedes``) - the local
+        API finds the latter, and naming only ``msg`` then split the post in two (#733)."""
+        out = [msg.message_id]
+        for v in list(msg.versions or ()) + list(msg.supersedes or ()):
+            if v not in out:
+                out.append(v)
+        return out
+
+    def tags_to_keep(self, msg: Message) -> list[str]:
+        """The tags a new version of ``msg`` starts with (UN-RFC 0042, 0052; #733): its own
+        tags and warnings apart from the ``#words`` written in its subject and text, which
+        come back from the new text if they are still there. What an edit box fills in."""
+        from ...core import tags as tg
+        written = set(tg.in_text(f"{msg.subject or ''}\n{msg.body or ''}"))
+        return [t for t in (getattr(msg, "tags", ()) or ()) if t not in written]
 
     async def _files_of(self, msg: Message) -> list:
         """The files a post carries, as prepared files to send again with a new version."""
@@ -344,7 +374,7 @@ class PostingMixin:
         public, readable, and not past the number of versions an edit may name."""
         return (not msg.private and msg.readable and bool(msg.author_key)
                 and msg.author_key == self.identity().key_text
-                and len(msg.versions) + 1 <= MAX_SUPERSEDES)
+                and len(self._versions_to_name(msg)) <= MAX_SUPERSEDES)
 
     # --- the language of what you write (UN-RFC 0052 section 5a) ---
     def remember_languages(self, group_id: str, languages) -> None:

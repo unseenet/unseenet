@@ -173,6 +173,19 @@ def test_two_edits_at_once_the_later_wins():
     assert shown.message_id == "<b>" and "<a>" in shown.versions
 
 
+def test_a_chain_in_the_same_second_shows_the_newest():
+    """UN-RFC 0042 5.2: the current version is the one no other names, whatever the
+    Dates and Message-IDs say (#733)."""
+    v1 = msg(1, "<v1>", "a")
+    v2 = msg(2, "<zz>", "b", sup=["<v1>"], minutes=1)
+    v3 = msg(3, "<aa>", "c", sup=["<zz>", "<v1>"], minutes=1)       # same Date, lower ID
+    v3b = msg(3, "<zzz>", "c", sup=["<aa>", "<zz>", "<v1>"], minutes=1)
+    [shown] = resolve_edits([v1, v2, v3, v3b])
+    assert shown.message_id == "<zzz>"
+    [shown] = resolve_edits([v1, v3, v2])
+    assert shown.message_id == "<aa>"
+
+
 @pytest.fixture
 async def net(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 10)
@@ -234,6 +247,66 @@ async def test_session_edit_a_chat_line(net):
     await me.edit(line, "", "hej allesammen, hvordan går det\n")
     [line] = me.visible(await me.fetch_group(gid))
     assert line.kind == "chat" and "går" in line.body and line.edited
+
+
+async def test_an_edit_keeps_tags_warnings_and_language(net):
+    """#733: fixing a typo must not drop the post's tags, warnings or language."""
+    me = net("me")
+    gid = await me.create_group("dk.snak", "open", min_pow=10)
+    await me.post(gid, "Filmaften", "Slutningen er vild #film\n",
+                  tags=["spoiler", "biograf"], languages=["da"])
+    [v1] = me.visible(await me.fetch_group(gid))
+    assert set(v1.tags) == {"spoiler", "biograf", "film"} and v1.languages == ("da",)
+    assert sorted(me.tags_to_keep(v1)) == ["biograf", "spoiler"]     # not the #word
+
+    await me.edit(v1, "Filmaften", "Slutningen er helt vild #film\n")
+    [v2] = me.visible(await me.fetch_group(gid))
+    assert set(v2.tags) == {"spoiler", "biograf", "film"}            # all kept
+    assert v2.languages == ("da",)
+
+    await me.edit(v2, "Filmaften", "Slutningen er helt vild\n")       # the #word taken out
+    [v3] = me.visible(await me.fetch_group(gid))
+    assert set(v3.tags) == {"spoiler", "biograf"} and v3.languages == ("da",)
+
+
+async def test_an_edit_changes_tags_warnings_and_language(net):
+    me = net("me")
+    gid = await me.create_group("dk.snak", "open", min_pow=10)
+    await me.post(gid, "Film", "Tekst\n", tags=["spoiler"], languages=["da"])
+    [v1] = me.visible(await me.fetch_group(gid))
+    await me.edit(v1, "Film", "Text\n", tags=["sexual", "film"], languages=["en"])
+    [v2] = me.visible(await me.fetch_group(gid))
+    assert set(v2.tags) == {"sexual", "film"} and v2.languages == ("en",)
+    await me.edit(v2, "Film", "Text\n", tags=[], languages=[])         # none at all
+    [v3] = me.visible(await me.fetch_group(gid))
+    assert v3.tags == () and v3.languages == ()
+
+
+async def test_a_chat_line_edit_keeps_its_language(net):
+    me = net("me")
+    gid = await me.create_group("dk.snak", "open", min_pow=10, view="chat")
+    await me.post(gid, "", "hej allesammen\n", kind="chat", languages=["da"], tags=["spoiler"])
+    [line] = me.visible(await me.fetch_group(gid))
+    await me.edit(line, "", "hej alle sammen\n")
+    [line] = me.visible(await me.fetch_group(gid))
+    assert line.languages == ("da",) and line.tags == ("spoiler",)
+
+
+async def test_editing_the_stored_article_names_every_version(net):
+    """#733: the local API finds the article as stored, not the shown copy - an edit of
+    an edit must still name the first version, or the post shows twice."""
+    me = net("me")
+    gid = await me.create_group("dk.snak", "open", min_pow=10)
+    await me.post(gid, "Hej", "Et\n")
+    [v1] = me.visible(await me.fetch_group(gid))
+    await me.edit(v1, "Hej", "To\n")
+    [v2] = me.visible(await me.fetch_group(gid))
+    raw = me.find_message(gid, v2.message_id)                 # its own Supersedes, no versions
+    assert raw.supersedes == [v1.message_id] and not raw.versions
+    await me.edit(raw, "Hej", "Tre\n")
+    shown = me.visible(await me.fetch_group(gid))
+    assert [m.body.split("\n")[0] for m in shown] == ["Tre"]
+    assert set(shown[0].versions) == {v1.message_id, v2.message_id}
 
 
 @pytest.fixture(autouse=True)

@@ -131,8 +131,13 @@ def resolve_edits(msgs: list[Message]) -> list[Message]:
         return list(msgs)
     canonical: dict[str, Message] = {}             # any replaced Message-ID -> shown edit
     for first, edits in posts.items():
-        winner = max(edits, key=lambda e: (e.date or datetime.min.replace(tzinfo=timezone.utc),
-                                           [-ord(c) for c in e.message_id]))
+        # the current version is one no other valid version names (5.2); of several,
+        # the latest Date, on a tie the lower Message-ID - two quick edits in the
+        # same second must not bring back the older one (#733)
+        named = {v for e in edits for v in e.supersedes}
+        current = [e for e in edits if e.message_id not in named] or edits
+        winner = max(current, key=lambda e: (e.date or datetime.min.replace(tzinfo=timezone.utc),
+                                             [-ord(c) for c in e.message_id]))
         ids = {first} | {v for e in edits for v in e.supersedes} | {e.message_id for e in edits}
         ids.discard(winner.message_id)
         present = [by_id[i] for i in ids if i in by_id] + [winner]

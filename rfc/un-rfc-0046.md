@@ -368,7 +368,11 @@ first), then those containing it, then by a word of the name.
 
 - `POST /api/groups/<id>/edit` `{"id": "<Message-ID>", "subject": "...", "body": "..."}`:
   a new version of your own post or chat line (UN-RFC 0042); answers
-  `{"job": "<id>"}`.
+  `{"job": "<id>"}`. It takes `tags` and `languages` as `post` does
+  (UN-RFC 0052); left out, the earlier version's are kept - its tags and
+  warnings apart from the `#words` in its text, which come from the new
+  text. A message you may edit carries `edit_tags`, the tags an edit box
+  starts with.
 - `POST /api/groups/<id>/withdraw` `{"id": "<Message-ID>"}`: your own
   post, or one in a group you own or moderate (UN-RFC 0004 section 7).
 - `POST /api/groups/<id>/react` `{"id": "<Message-ID>", "emoji": "👍"}`:

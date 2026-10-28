@@ -163,9 +163,19 @@ class Writing:
         if not body.strip():
             raise SessionError("nothing to send")
         subject = str(data.get("subject", m.subject)).strip()
+        # the new version's tags (warnings too) and languages (UN-RFC 0052); left out,
+        # the earlier version's are kept (#733)
+        tags = data.get("tags")
+        if tags is not None and (not isinstance(tags, list)
+                                 or not all(isinstance(t, str) for t in tags)):
+            raise SessionError("tags is a list of words")
+        languages = data.get("languages")
+        if languages is not None and (not isinstance(languages, list)
+                                      or not all(isinstance(c, str) for c in languages)):
+            raise SessionError("languages is a list of codes such as da, en")
 
         async def send() -> str:
-            return await s.edit(m, subject, body)
+            return await s.edit(m, subject, body, tags=tags, languages=languages)
 
         async def after(msgid: str) -> None:
             await s.fetch_group(m.group)
