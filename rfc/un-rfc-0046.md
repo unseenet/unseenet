@@ -239,6 +239,11 @@ rendered for showing (UN-RFC 0031): Markdown or plain by the post's
 `Content-Type`, as nodes `{"t": "p" | "text" | "strong" | ..., "c": [...],
 "v": "..."}` in which HTML is always text. A front end MUST draw the tree,
 or the plain text, and MUST NOT put a post's text into a page as HTML.
+A post with a read-more line (UN-RFC 0031 section 3.2.1) has the block
+`{"t": "more"}` in its place, at the top level of the tree: a front end
+that cuts the post shows what comes before it, and draws nothing for it
+when the post is shown whole. A front end that does not know the block
+draws nothing for it.
 `bot` is true when the author's profile says it posts automatically
 (UN-RFC 0030 section 6): show a mark. `identicon` is the author's identicon
 (section 4.11). `groups` are the `#group` references in it; `notice` is set for a mention
