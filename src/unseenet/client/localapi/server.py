@@ -307,6 +307,10 @@ async def ignore(request):
     return _json(_api(request).ignored())
 
 
+async def group_settings_help(request):
+    return _json(_api(request).group_settings_help())
+
+
 async def rules(request):
     if request.method == "GET":
         return _json(_api(request).rules())
@@ -647,6 +651,7 @@ ROUTES = [
     ("POST", "/api/contacts", contacts), ("POST", "/api/chats/close", close_chat),
     ("GET", "/api/ignore", ignore), ("POST", "/api/ignore", ignore),
     ("GET", "/api/rules", rules), ("POST", "/api/rules", rules),           # UN-RFC 0051
+    ("GET", "/api/help/group-settings", group_settings_help),        # unseenet-gui#178
     ("POST", "/api/rules/check", rules_check), ("POST", "/api/threads", threads_mark),
     ("POST", "/api/groups/{gid}/seen", seen),
     ("GET", "/api/groups/{gid}/report", report), ("POST", "/api/groups/{gid}/report", report),

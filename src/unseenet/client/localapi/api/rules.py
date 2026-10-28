@@ -20,6 +20,14 @@ def _problems(rs) -> list[dict]:
 
 
 class Rules:
+    def group_settings_help(self) -> dict:
+        """``GET /api/help/group-settings`` (unseenet-gui#178): per setting of Edit group,
+        what it does, whom it affects and what changing it later does - ``{"intro",
+        "settings": [{"key", "label", "what", "affects", "later"}]}``, the same text in
+        every client. Needs no unlocked vault."""
+        from ...settings_help import group_settings_help
+        return group_settings_help()
+
     def rules(self) -> dict:
         """``GET /api/rules``: your rules as you wrote them, whether they are on, how many
         are used and the lines that are not, each with why - and ``suggestion``, the text
