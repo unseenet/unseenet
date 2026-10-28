@@ -15,12 +15,20 @@ import tempfile
 import threading
 from pathlib import Path
 
+import base64
+import time
+
+import nacl.encoding
 import nacl.exceptions
+import nacl.hash
 import nacl.pwhash
 import nacl.secret
 
 MAGIC = b"UNSVAULT1"
 SIDECAR_MAGIC = b"UNSSIDE1"
+UNLOCK_NAME = "unlock"                    # <vault>.unlock: device unlocks (UN-RFC 0050 section 5)
+UNLOCK_PERSON = b"UNSEENET-DEVUNL1"       # BLAKE2b personalisation, 16 octets
+MAX_DEVICE_UNLOCKS = 8
 OPSLIMIT = nacl.pwhash.argon2id.OPSLIMIT_MODERATE
 MEMLIMIT = nacl.pwhash.argon2id.MEMLIMIT_MODERATE
 
@@ -197,6 +205,35 @@ def _unpack(blob: bytes) -> tuple[int, int, bytes, bytes]:
     return ops, mem_kib * 1024, blob[17:33], blob[33:]
 
 
+def _device_key(secret: bytes) -> bytes:
+    """The key that wraps the vault key for one device: from the secret the device's
+    secure hardware releases only after its PIN or unlock - a passkey's WebAuthn PRF
+    output, say (UN-RFC 0050 section 5). The secret is random, so no slow KDF."""
+    if not isinstance(secret, bytes) or len(secret) < 32:
+        raise VaultError("the device's secret is too short")
+    return nacl.hash.blake2b(secret, digest_size=nacl.secret.SecretBox.KEY_SIZE,
+                             person=UNLOCK_PERSON, encoder=nacl.encoding.RawEncoder)
+
+
+def _read_unlocks(path: Path) -> list[dict]:
+    try:
+        data = json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return []
+    items = data.get("devices") if isinstance(data, dict) and data.get("v") == 1 else None
+    return [d for d in (items or []) if isinstance(d, dict) and isinstance(d.get("id"), str)
+            and isinstance(d.get("box"), str)]
+
+
+def device_unlocks_of(path: Path) -> list[dict]:
+    """The devices that can open the vault at ``path`` without its passphrase - ``id``,
+    ``label`` and ``created`` only, never the wrapped key - read without opening it, so
+    a locked client knows which passkey to ask for."""
+    p = Path(path)
+    return [{"id": d["id"], "label": d.get("label", ""), "created": d.get("created", 0)}
+            for d in _read_unlocks(p.with_name(f"{p.name}.{UNLOCK_NAME}"))]
+
+
 def _open_box(key: bytes, box: bytes) -> bytes:
     try:
         return nacl.secret.SecretBox(key).decrypt(box)
@@ -260,6 +297,70 @@ class Vault:
             _unlock(lock_key)
             raise
 
+    @classmethod
+    def open_with_device(cls, path: Path, device: str, secret: bytes) -> "Vault":
+        """Open the vault with a device's secret instead of its passphrase (UN-RFC 0050
+        section 5): the vault key, wrapped for that device by ``add_device_unlock``.
+        The passphrase still opens it, everywhere."""
+        path = Path(path)
+        lock_key = _lock(path)
+        try:
+            entry = next((d for d in _read_unlocks(path.with_name(f"{path.name}.{UNLOCK_NAME}"))
+                          if d["id"] == device), None)
+            if entry is None:
+                raise VaultError("this device cannot open the vault: use the passphrase")
+            try:
+                key = nacl.secret.SecretBox(_device_key(secret)).decrypt(base64.b64decode(entry["box"]))
+            except (nacl.exceptions.CryptoError, ValueError) as exc:
+                raise VaultError("the device did not open the vault: use the passphrase") from exc
+            ops, mem, salt, box = _unpack(path.read_bytes())
+            return cls(path, key, salt, ops, mem, json.loads(_open_box(key, box)), lock_key)
+        except BaseException:
+            _unlock(lock_key)
+            raise
+
+    # --- device unlocks (UN-RFC 0050 section 5) ----------------------------------
+    def unlock_path(self) -> Path:
+        return self.sidecar_path(UNLOCK_NAME)
+
+    def device_unlocks(self) -> list[dict]:
+        """The devices that can open this vault without its passphrase."""
+        return device_unlocks_of(self.path)
+
+    def add_device_unlock(self, passphrase: str, device: str, secret: bytes, label: str = "") -> None:
+        """Let a device open this vault with ``secret``, which its secure hardware gives
+        only after its PIN or unlock. ``passphrase`` must be the vault's, so an unlocked,
+        unattended program cannot let another device in. Kept in ``<vault>.unlock``,
+        beside the vault and never copied with it: without the device it opens nothing."""
+        if not self.check_passphrase(passphrase):
+            raise VaultError("wrong passphrase")
+        device = str(device).strip()
+        if not device or len(device) > 512:
+            raise VaultError("a device is named by its credential ID")
+        box = nacl.secret.SecretBox(_device_key(secret)).encrypt(self._key)
+        items = [d for d in _read_unlocks(self.unlock_path()) if d["id"] != device]
+        if len(items) >= MAX_DEVICE_UNLOCKS:
+            raise VaultError(f"at most {MAX_DEVICE_UNLOCKS} devices: remove one first")
+        items.append({"id": device, "label": str(label)[:64], "created": int(time.time()),
+                      "box": base64.b64encode(bytes(box)).decode()})
+        with self._lock:
+            self._atomic_write(self.unlock_path(), json.dumps({"v": 1, "devices": items}).encode())
+
+    def remove_device_unlock(self, device: str | None = None) -> int:
+        """Stop a device (or, with None, every device) opening this vault without its
+        passphrase. Returns how many were removed."""
+        items = _read_unlocks(self.unlock_path())
+        keep = [] if device is None else [d for d in items if d["id"] != device]
+        with self._lock:
+            if keep:
+                self._atomic_write(self.unlock_path(), json.dumps({"v": 1, "devices": keep}).encode())
+            else:
+                try:
+                    os.unlink(self.unlock_path())
+                except FileNotFoundError:
+                    pass
+        return len(items) - len(keep)
+
     def save(self) -> None:
         with self._lock:
             payload = json.dumps(self.data).encode()
@@ -277,7 +378,8 @@ class Vault:
         ``old`` must be the current passphrase, so an unlocked, unattended
         program is not enough to change it. A fresh salt is used. Only this
         file changes: copies of the vault elsewhere (other devices, sticks,
-        backups) still open with the old passphrase.
+        backups) still open with the old passphrase. Device unlocks are removed,
+        since they wrap the old key.
         """
         if not self.check_passphrase(old):
             raise VaultError("wrong passphrase")
@@ -303,6 +405,8 @@ class Vault:
         for name, payload in side.items():
             if payload is not None:
                 self.write_sidecar(name, payload)
+        # The devices held the old key: they must be set up again (UN-RFC 0050 section 5)
+        self.remove_device_unlock()
 
     # --- sidecar files: other data encrypted with the same key -----------------
     def sidecar_path(self, name: str) -> Path:
