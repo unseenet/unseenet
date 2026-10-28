@@ -100,11 +100,12 @@ class ReadingMixin:
         (UN-RFC 0040 section 3). ``counts`` fills in unread posts, replies and
         mentions; leave it off when the client counts in its own time.
         """
-        return [self.group_info(gid, available, counts=counts)
+        quiet = self.for_you_quiet() if counts else None      # once, not per group (#728)
+        return [self.group_info(gid, available, counts=counts, quiet=quiet)
                 for gid in self.data["subscribed"]]
 
     def group_info(self, group_id: str, available: dict[str, GroupInfo] | None = None, *,
-                   counts: bool = True) -> GroupInfo:
+                   counts: bool = True, quiet: set[str] | None = None) -> GroupInfo:
         """One group as every client shows it, followed or not (a group being
         browsed, say): type, title, view, what it takes, and with ``counts`` the
         unread posts, replies and mentions. ``available`` as for
@@ -131,7 +132,7 @@ class ReadingMixin:
         if available is not None:
             g.listed = group_id in available or is_key_bound(group_id)
         if counts:
-            c = self.for_you_counts(group_id)
+            c = self.for_you_counts(group_id, quiet=quiet)
             g.unread, g.replies, g.mentions = self.unread_count(group_id), c.replies, c.mentions
         return g
 
@@ -508,8 +509,12 @@ class ReadingMixin:
         if not payload:
             return 0
         data = json.loads(payload)
-        if data.get("v") not in (1, 2):
+        if data.get("v") not in (1, 2, 3):
             return 0
+        # version 3 holds only articles that passed every check when they were fetched, and
+        # the cache is encrypted and authenticated with the vault's key: they are not
+        # checked again, which made opening a vault with large groups take long (#728)
+        checked = data["v"] >= 3
         me = self.identity()
         loaded = 0
         for gid, g in data.get("groups", {}).items():
@@ -525,7 +530,7 @@ class ReadingMixin:
             raws = self._raw.setdefault(gid, {})
             for n_text, b64raw in g.get("articles", {}).items():
                 n, raw = int(n_text), base64.b64decode(b64raw)
-                msg = self._parse(n, raw, gid, entry, me)
+                msg = self._parse(n, raw, gid, entry, me, checked=checked)
                 if msg is not None:
                     raws[n] = raw
                     msg.node = self.node_of_number(gid, n) or ""
@@ -541,22 +546,31 @@ class ReadingMixin:
         the vault's key - so the client can show them before it is connected."""
         groups = {}
         for gid, raws in self._raw.items():
+            # only articles that passed the checks: they are not checked again (#728)
+            cached = self.cache.get(gid, {})
+            good = [n for n in sorted(raws)
+                    if not (n in cached and cached[n].message_id.startswith("<invalid-"))]
             # a local group's articles from your other nodes too (#134): the newest of each
-            mine = [n for n in sorted(raws) if n < self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
-            more = [n for n in sorted(raws) if n >= self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
+            mine = [n for n in good if n < self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
+            more = [n for n in good if n >= self.NODE_OFFSET][-MAX_CACHED_PER_GROUP:]
             keep = mine + more
             groups[gid] = {"node": self.node_for(gid), "high": self._high.get(gid, 0),
                            "articles": {str(n): base64.b64encode(raws[n]).decode() for n in keep}}
             node_high = getattr(self, "_node_high", {}).get(gid)
             if node_high:
                 groups[gid]["node_high"] = dict(node_high)
-        payload = json.dumps({"v": 2, "groups": groups}).encode()
+        payload = json.dumps({"v": 3, "groups": groups}).encode()
         self.vault.write_sidecar(CACHE_SIDECAR, payload)
 
-    def _parse(self, n: int, raw: bytes, group_id: str, entry: dict, me) -> Message | None:
+    def _parse(self, n: int, raw: bytes, group_id: str, entry: dict, me,
+               checked: bool = False) -> Message | None:
+        """An article as a Message, or None when it changed the group instead (a
+        manifest, a key). ``checked``: it passed ``validate_structure`` before - read
+        from the vault's own offline cache (#728)."""
         try:
             art = Article.from_bytes(raw)
-            validate_structure(art, raw_size=len(raw))
+            if not checked:
+                validate_structure(art, raw_size=len(raw))
         except ArticleError as err:
             return Message(n, f"<invalid-{n}>", group_id, subject="(invalid article)",
                            readable=False, error=str(err))

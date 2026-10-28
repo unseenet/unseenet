@@ -172,6 +172,9 @@ class PeopleMixin:
 
     def for_you_quiet(self) -> set[str]:
         """The Message-IDs your ``[foryou]`` rules quiet or hide: not counted, not told."""
+        rs = self.rule_set()
+        if not rs or not any(r.scope == "foryou" for r in rs.rules):
+            return set()          # none quiet or hide anything: no need to go through it all (#728)
         listed = self.scored_for_you(unread_only=True)
         quiet = {m.message_id for m, r in listed if "quiet" in r.actions}
         shown = {m.message_id for m, _ in listed}
@@ -203,15 +206,17 @@ class PeopleMixin:
         not read yet (the total of ``for_you_counts``)."""
         return self.for_you_counts(group_id).total
 
-    def for_you_counts(self, group_id: str | None = None) -> "ForYouCount":
+    def for_you_counts(self, group_id: str | None = None, quiet: set[str] | None = None) -> "ForYouCount":
         """Unread replies to you and unread mentions of you, counted apart (#170):
-        in one group, or in all the groups you follow when group_id is None."""
+        in one group, or in all the groups you follow when group_id is None. ``quiet``:
+        ``for_you_quiet()`` when the caller already has it - it looks at every group, so
+        counting group by group asks for it once (#728)."""
         mine, patterns = self.my_message_ids(), self._mention_patterns()
         gids = ([group_id] if group_id is not None
                 else [g for g in self.data["subscribed"] if g != self.my_inbox])
         # not counted: read, seen (in For you or in its group), quiet or hidden by your
         # [foryou] rules (UN-RFC 0051 5.5); still listed in For you while unread
-        skip = self.for_you_quiet()
+        skip = self.for_you_quiet() if quiet is None else quiet
         replies = 0
         mentions = (sum(1 for m in self.notices() if not self.is_read(m) and not self._seen_for_you(m)
                         and m.message_id not in skip)   # UN-RFC 0032

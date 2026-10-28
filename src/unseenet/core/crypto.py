@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 from dataclasses import dataclass
 
@@ -76,8 +77,9 @@ class Identity:
     def public_key(self) -> bytes:
         return bytes(self.signing_key.verify_key)
 
-    @property
+    @functools.cached_property
     def key_text(self) -> str:
+        # kept: asked for every post shown (spam reports, your own posts) (#728)
         return key_to_text(self.public_key)
 
     @property
