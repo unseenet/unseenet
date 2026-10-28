@@ -60,7 +60,11 @@ An edit MUST:
 6. not name itself, and name no Message-ID twice.
 
 The edit MAY change the subject and the body, and anything else the
-author may set.
+author may set, such as its tags, warnings and language (UN-RFC 0052).
+A new version stands alone: what it does not carry, it does not have.
+So an author's client SHOULD start the new version with the earlier
+version's tags, warnings and language, and change them only when the
+author does - otherwise fixing a typo would silently drop a warning.
 
 An edit is permitted, carries postage and is accepted like any article
 in its group (UN-RFC 0004 section 5, UN-RFC 0006): in a moderated group
