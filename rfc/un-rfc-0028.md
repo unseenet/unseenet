@@ -180,7 +180,7 @@ response, so the client can tell the user.
 - Wherever a client lets a user write privately to someone, it SHOULD
   offer both: a chat with them and a post to them.
 - A chat line MAY carry attachments (UN-RFC 0027) as a post does, under
-  the same rules of the group. Where a group takes files, a client that
+  the same settings of the group. Where a group takes files, a client that
   lets users attach files to a post SHOULD let them attach files to a
   chat line too.
 
@@ -201,7 +201,7 @@ response, so the client can tell the user.
   has no conversation with MUST NOT be hidden; showing it among the
   posts, marked as a chat, is enough.
 - In a closed group, articles of a kind the group does not take SHOULD
-  be hidden, or marked, as the group's rules are not being followed.
+  be hidden, or marked, as the group's settings are not being followed.
 
 The user's own choice of view per group (UN-RFC 0008) still applies:
 it changes how a group is shown, never what kind a message is.

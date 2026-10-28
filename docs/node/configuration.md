@@ -133,7 +133,8 @@ information lists the issuers you follow (`policy.report_issuers`).
 | `manual` | No new groups are accepted. (A tool to add groups by hand is not written yet.) |
 
 This only affects **new** groups. Groups the node already carries keep
-working, and posts in them are checked against the group's own rules.
+working, and posts in them are checked against the group's own posting settings
+(who may post, postage, bans) - never against its charter, which no machine enforces.
 
 ### `excludes`: groups you leave out
 

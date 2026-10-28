@@ -39,7 +39,10 @@ because they go with the identity.
 # 2. Terms
 
 - **Rules**, a **rule set**: the text a user writes, in the language of
-  section 4.
+  section 4. Only these are called rules. What a group's owner writes
+  about the group is its **charter** (UN-RFC 0014): it is shown to
+  readers, applied by no machine, and is not a rule set; clients SHOULD
+  keep the two names apart (#726).
 - **Score**: a whole number a rule set gives a post; 0 without rules.
 - **Feed**: the timeline of UN-RFC 0034 section 7.
 - **Threaded group**: a group shown as threads (UN-RFC 0008 section 5).

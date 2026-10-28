@@ -24,7 +24,7 @@ class Running:
     # --- groups you run (section 4.7) -------------------------------------------
     async def create_group(self, data: dict) -> dict:
         """``POST /api/groups`` (section 4.7): create a group you own - name, type,
-        title, description, kinds, view, rules and the channel settings. Answers its Group ID."""
+        title, description, kinds, view, charter and the channel settings. Answers its Group ID."""
         s = self._ready()
         gtype = str(data.get("type", "open"))
         if gtype not in GROUP_TYPES:
@@ -49,6 +49,7 @@ class Running:
         gid = await s.create_group(
             name, gtype, title=str(data.get("title", "")).strip(),
             description=str(data.get("description", "")).strip(),
+            charter=str(data.get("charter", "")), charter_type=data.get("charter_type"),
             view=view, comments=comments if gtype == "channel" else None,
             low_latency=bool(data.get("fast")) and view == "chat", kinds=KINDS[kinds],
             extra={"attachments": att} if att else None)
@@ -58,7 +59,7 @@ class Running:
 
     async def group_settings(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/settings`` (section 4.7): owner - change a group's
-        settings (title, description, rules, view, kinds and the others in ``SETTINGS_FIELDS``).
+        settings (title, description, charter, view, kinds and the others in ``SETTINGS_FIELDS``).
         A new manifest; type, owner and locality never change."""
         s = self._ready()
         unknown = set(data) - set(SETTINGS_FIELDS)

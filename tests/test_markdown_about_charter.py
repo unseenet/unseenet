@@ -1,4 +1,4 @@
-"""Markdown in a profile's about and a group's rules (#211, UN-RFC 0022 4.1, 0014 2.1)."""
+"""Markdown in a profile's about and a group's charter (#211, UN-RFC 0022 4.1, 0014 2.1)."""
 
 import json
 
@@ -71,13 +71,34 @@ def test_profile_rejects_a_silly_type():
         prof.check_profile({"v": 1, "about": "x", "about_type": 3})
 
 
-def test_manifest_rules_type():
+def test_manifest_charter_type():
     owner = crypto.Identity.generate()
-    art = make_manifest(owner, "dk.snak", "open", rules="# Rules\n\n- be kind",
-                        rules_type=markup.MARKDOWN_TYPE, pow_bits=0)
+    art = make_manifest(owner, "dk.snak", "open", charter="# Rules\n\n- be kind",
+                        charter_type=markup.MARKDOWN_TYPE, pow_bits=0)
     m = Manifest.from_article(art)
-    assert m.rules_type == markup.MARKDOWN_TYPE
-    art = make_manifest(owner, "dk.snak", "open", rules_type=markup.MARKDOWN_TYPE, pow_bits=0)
-    assert "rules_type" not in json.loads(art.body)     # no rules, no type
-    assert Manifest.from_article(make_manifest(owner, "dk.snak", "open", rules="x",
-                                               pow_bits=0)).rules_type is None
+    assert m.charter_type == markup.MARKDOWN_TYPE
+    art = make_manifest(owner, "dk.snak", "open", charter_type=markup.MARKDOWN_TYPE, pow_bits=0)
+    assert "charter_type" not in json.loads(art.body)     # no charter, no type
+    assert Manifest.from_article(make_manifest(owner, "dk.snak", "open", charter="x",
+                                               pow_bits=0)).charter_type is None
+
+
+
+def test_charter_under_its_earlier_name():
+    """UN-RFC 0014 section 2.2: a manifest signed when the fields were called ``rules`` and
+    ``rules_type`` still has its charter; a republished one is written with the new names."""
+    from unseenet.core.groups import canonical_json, charter_fields, manifest_article, with_charter
+    owner = crypto.Identity.generate()
+    art = make_manifest(owner, "dk.snak", "open", pow_bits=0)
+    old = {**json.loads(art.body), "rules": "# Regler\n\n- vær søde",
+           "rules_type": markup.MARKDOWN_TYPE}
+    assert charter_fields(old) == ("# Regler\n\n- vær søde", markup.MARKDOWN_TYPE)
+    assert with_charter(old)["charter_type"] == markup.MARKDOWN_TYPE
+    assert "rules" not in with_charter(old) and "rules_type" not in with_charter(old)
+    assert charter_fields({"charter": "new", "rules": "old"}) == ("new", None)   # new name wins
+    art.body = canonical_json(old)        # as signed before the change (not re-signed here)
+    m = Manifest.from_article(art)
+    assert m.charter.startswith("# Regler") and m.charter_type == markup.MARKDOWN_TYPE
+    again = json.loads(manifest_article(owner, m.group_id, dict(old, serial=2), pow_bits=0).body)
+    assert again["charter"].startswith("# Regler") and again["charter_type"] == markup.MARKDOWN_TYPE
+    assert "rules" not in again and "rules_type" not in again

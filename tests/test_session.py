@@ -118,7 +118,7 @@ def test_signatures(tmp_path):
         pass
 
 
-async def test_group_rules_and_updates(tmp_path, monkeypatch):
+async def test_group_charter_and_updates(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 10)
     node = Node(Store(), NodeConfig(min_pow=8, forward_delay=(0, 0)))
     server = await node.serve("127.0.0.1", 0)
@@ -131,33 +131,33 @@ async def test_group_rules_and_updates(tmp_path, monkeypatch):
         return s
 
     owner, reader = session("owner"), session("reader")
-    gid = await owner.create_group("dk.snak", "open", title="Snak", rules="Vær søde ved hinanden.",
+    gid = await owner.create_group("dk.snak", "open", title="Snak", charter="Vær søde ved hinanden.",
                                    min_pow=10)
     reader.subscribe(gid)
     await reader.fetch_group(gid)
-    assert reader.manifest_data(gid)["rules"] == "Vær søde ved hinanden."
-    assert reader.rules_unseen(gid)
-    reader.mark_rules_seen(gid)
-    assert not reader.rules_unseen(gid)
+    assert reader.manifest_data(gid)["charter"] == "Vær søde ved hinanden."
+    assert reader.charter_unseen(gid)
+    reader.mark_charter_seen(gid)
+    assert not reader.charter_unseen(gid)
 
-    # only the owner can change it; a change raises the serial and shows the rules again
+    # only the owner can change it; a change raises the serial and shows the charter again
     with pytest.raises(sess.SessionError):
-        await reader.update_group(gid, rules="hacked")
-    new = await owner.update_group(gid, rules="Vær søde. Ingen reklamer.", view="chat")
+        await reader.update_group(gid, charter="hacked")
+    new = await owner.update_group(gid, charter="Vær søde. Ingen reklamer.", view="chat")
     assert new["serial"] == 2 and new["type"] == "open" and new["title"] == "Snak"
     await reader.fetch_group(gid)
-    assert reader.manifest_data(gid)["rules"] == "Vær søde. Ingen reklamer."
-    assert reader.manifest_data(gid)["view"] == "chat" and reader.rules_unseen(gid)
+    assert reader.manifest_data(gid)["charter"] == "Vær søde. Ingen reklamer."
+    assert reader.manifest_data(gid)["view"] == "chat" and reader.charter_unseen(gid)
     with pytest.raises(sess.SessionError):
         await owner.update_group(gid, type="closed")      # type can never change
 
-    # Markdown rules (UN-RFC 0014 2.1); emptied rules take their type with them
+    # a Markdown charter (UN-RFC 0014 2.1); an emptied charter takes its type with it
     md = "text/markdown; charset=utf-8; variant=unseenet"
-    new = await owner.update_group(gid, rules="# Regler\n\n- vær søde", rules_type=md)
+    new = await owner.update_group(gid, charter="# Regler\n\n- vær søde", charter_type=md)
     await reader.fetch_group(gid)
-    assert reader.manifest_data(gid)["rules_type"] == md
-    new = await owner.update_group(gid, rules="")
-    assert "rules" not in new and "rules_type" not in new
+    assert reader.manifest_data(gid)["charter_type"] == md
+    new = await owner.update_group(gid, charter="")
+    assert "charter" not in new and "charter_type" not in new
 
     # postage follows the group: a cheap chat group, a node with its own minimum
     chat = await owner.create_group("chat.venner", "open", view="chat", low_latency=True, min_pow=9)
@@ -197,9 +197,9 @@ async def test_post_without_cached_manifest_meets_group_postage(tmp_path, monkey
     server.close()
 
 
-async def test_old_vault_learns_manifest_and_rules(tmp_path, monkeypatch):
+async def test_old_vault_learns_manifest_and_charter(tmp_path, monkeypatch):
     """A vault from before manifests were cached rereads the group once and so
-    learns its rules; the owner can then edit them."""
+    learns its charter; the owner can then edit it."""
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
     node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
     server = await node.serve("127.0.0.1", 0)
@@ -207,7 +207,7 @@ async def test_old_vault_learns_manifest_and_rules(tmp_path, monkeypatch):
     s = Session(Vault.open(tmp_path / "o.vault", "pw", **KDF), status=lambda *_: None)
     s.new_identity("owner", "Owner")
     s.add_node(addr)
-    gid = await s.create_group("rules", "open", min_pow=8)
+    gid = await s.create_group("charter", "open", min_pow=8)
     await s.post(gid, "Hej", "Første\n")
     await s.fetch_group(gid)
     entry = s.data["groups"][gid]
@@ -215,8 +215,18 @@ async def test_old_vault_learns_manifest_and_rules(tmp_path, monkeypatch):
     assert not s.manifest_data(gid)
     await s.fetch_group(gid)
     assert s.manifest_data(gid).get("serial")
-    await s.update_group(gid, rules="Vær søde ved hinanden")
-    assert s.manifest_data(gid)["rules"] == "Vær søde ved hinanden"
+    await s.update_group(gid, charter="Vær søde ved hinanden")
+    assert s.manifest_data(gid)["charter"] == "Vær søde ved hinanden"
+    # a manifest signed when the field was called rules (UN-RFC 0014 2.2), and a vault
+    # that kept what was seen as rules_seen (#726)
+    entry["manifest"] = {**{k: v for k, v in entry["manifest"].items() if k != "charter"},
+                         "rules": "Gamle ord"}
+    s.data["rules_seen"] = {gid: int(entry["manifest"]["serial"])}
+    assert s.manifest_data(gid)["charter"] == "Gamle ord" and "rules" not in s.manifest_data(gid)
+    assert not s.charter_unseen(gid) and "rules_seen" not in s.data
+    await s.update_group(gid, title="Snak")                  # republished: the new name
+    assert s.data["groups"][gid]["manifest"]["charter"] == "Gamle ord"
+    assert "rules" not in s.data["groups"][gid]["manifest"] and s.charter_unseen(gid)
     await s.close()
     server.close()
 

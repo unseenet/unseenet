@@ -143,7 +143,7 @@ layout; they SHOULD keep what each point is for.
 - Writing a comment SHOULD default to a chat line (no subject), and the
   client SHOULD NOT ask for a subject; a reader who wants to write a
   post in answer can choose to.
-- Write controls follow the group's rules (UN-RFC 0030 section 5): a
+- Write controls follow the group's settings (UN-RFC 0030 section 5): a
   reader who may not start an entry is not offered one, and comments on
   an entry whose `comment_days` has passed are shown as closed.
 

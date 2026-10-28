@@ -121,7 +121,7 @@ SECTIONS: tuple[Section, ...] = (
         "Instead of accounts and a moderation company, every post costs your computer a few "
         "seconds of work. You hardly notice it; someone trying to send thousands of spam posts "
         "does.",
-        "Each group has an owner who sets its rules and can ban people from it, and hierarchies "
+        "Each group has an owner who writes its charter and can ban people from it, and hierarchies "
         "such as dk.* have maintainers who can stop illegal content such as threats. But nobody "
         "rules the whole network.",
     )),

@@ -85,7 +85,7 @@ or a newsreader over NNTP, shows a line with three dots.
 - **Which line.** Only the first read-more line counts. Lines inside
   code blocks (fenced or indented) and block quotes are not read-more
   lines. It applies to posts, Markdown or plain text, including private
-  posts and the about texts and rules where those are shown cut; not to
+  posts and the about texts and charters where those are shown cut; not to
   chat lines, which are never cut this way.
 - **Where it cuts.** A client cuts at the read-more line instead of
   its normal place when the line comes within its normal cut, and also
@@ -210,7 +210,7 @@ register `unseenet:` with the operating system. Clients write
 ### 3.4.2 Group References
 
 In the text of a post, a chat line, a profile's `about` or a group's
-`rules`, `!<name>` or `!<name>@<fp>` refers to a group, so that one can
+`charter`, `!<name>` or `!<name>@<fp>` refers to a group, so that one can
 point somebody to a better place - as Lemmy writes `!community@instance`.
 `<name>` is a group name that contains a letter, at most 128 characters;
 `<fp>` is the first 4 to 16 characters of the owner's fingerprint. A `!`
@@ -319,9 +319,9 @@ reactions to a post UN-RFC 0048.
   is cut at its read-more line (section 3.2.1); the rendered text marks
   the place with a block `{"t": "more"}`.
 - UN-RFC 0022 section 4.1 and UN-RFC 0014 section 2.1 let a profile's
-  `about` and a group's `rules` be Markdown with the post subset of
+  `about` and a group's `charter` be Markdown with the post subset of
   section 3.2, without images.
-- Profiles' `about`, groups' `rules` and pages (UN-RFC 0035) may hold
+- Profiles' `about`, groups' `charter` and pages (UN-RFC 0035) may hold
   tables as posts do (section 3.6).
 - UN-RFC 0004 section 6.4 (invitations), UN-RFC 0022 section 7 (link
   proofs) and UN-RFC 0035 section 8 (links to pages) use the addresses

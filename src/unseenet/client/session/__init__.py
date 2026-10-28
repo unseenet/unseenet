@@ -58,7 +58,7 @@ from ...core.backoff import Backoff
 from ...core.article import Article, ArticleError, new_article, parse_date, validate_structure
 from ...core.groups import GroupRef, group_refs  # noqa: F401  (#172, for clients)
 from ...core.groups import MAX_SUPERSEDES, parse_supersedes
-from ...core.groups import (INBOX_NAME, INBOX_SCHEME, INBOX_SCHEMES, INBOX_SCHEME_TEAM, KIND_CHAT, KIND_POST, MAX_RULES, VIEWS, decrypt_article,
+from ...core.groups import (INBOX_NAME, INBOX_SCHEME, INBOX_SCHEMES, INBOX_SCHEME_TEAM, KIND_CHAT, KIND_POST, MAX_CHARTER, VIEWS, decrypt_article, with_charter,
                            encrypted_article, encryption_epoch, inbox_article, make_key_update,
                            make_group_id, make_manifest, manifest_article, message_kind, open_envelope,
                            open_inbox_article, personal_inbox_id, short_group_id, split_group_id,

@@ -345,7 +345,7 @@ class ReadingMixin:
             start = max(low, since + 1)
             if not entry.get("manifest") and not entry.get("manifest_rescanned"):
                 # Joined before manifests were kept (or never seen it): read the group's
-                # control articles from the start so title, rules, view and postage are known.
+                # control articles from the start so title, charter, view and postage are known.
                 start = low
                 entry["manifest_rescanned"] = True
             wide = window and high - start + 1 > self.NEW_GROUP_WINDOW

@@ -216,7 +216,7 @@ async def test_a_groups_issuers_and_team_name_are_edited(net, capsys):
     from argparse import Namespace
     import unseenet.cli.groups as cg
     base = {k: None for k in ("title", "description", "min_pow", "retention_days", "view", "kinds",
-                              "rules", "comments", "comment_days", "attachments", "types", "max_pins",
+                              "charter", "comments", "comment_days", "attachments", "types", "max_pins",
                               "reactions", "max_pages", "home", "index")}
     await cli.c_group_edit(App(owner), Namespace(**{**base, **ns}))
     assert owner.manifest_data(gid)["report_issuers"] == [key]

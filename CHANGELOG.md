@@ -7,6 +7,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **A group's rules are now its charter** (#726, UN-RFC 0014): "rules" means only your own
+  rules (UN-RFC 0051), which your client applies; what a group's owner writes about the
+  group is its *charter*, which no machine enforces. Breaking for clients of the local API
+  and the CLI: the manifest fields are `charter`/`charter_type`, the API fields `charter`,
+  `charter_type`, `charter_tree` (and `charter` when creating a group), the CLI option
+  `--charter FILE`, and `Session.create_group(charter=…)`, `charter_unseen()`,
+  `mark_charter_seen()`. Manifests signed with the old names are still read; republishing
+  one writes the new names, and `tools/project/create_groups.py` moves the project's
+  groups over the next time it runs. Nodes are not affected.
+
 - **Key ripening keeps within a service's own memory limit** (gateway#47): the memory
   budget for ripening (#440) now reads this process's own cgroup and every one above it,
   so a systemd `MemoryMax` inside a container counts, not only the container's limit. A
