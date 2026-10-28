@@ -34,6 +34,9 @@ class BaseMixin:
         self._retry_at: dict[str, float] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
+        # nodes asked but not answered yet, past the first answer's budget (#704): their
+        # answer is still awaited, in the background, and the rest carry on without them
+        self.slow: dict[str, asyncio.Task] = {}
         self.cache: dict[str, dict[int, Message]] = {}
         self.reaction_msgs: dict[str, dict[int, Message]] = {}   # beside cache (UN-RFC 0048)
         self._acting_as: str | None = None   # act_as(): an identity for this run only

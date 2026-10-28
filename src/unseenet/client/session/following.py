@@ -112,8 +112,24 @@ class FollowingMixin:
         if name and not person.get("name"):
             person["name"] = name
         result = await self._update_person(fp, person, key)
+        if result["key"] and not self.seen_name(result["key"]):
+            await self._learn_name(result["key"], result["new"])
         self.save()
         return result
+
+    async def _learn_name(self, key: str, groups: list[str]) -> None:
+        """Read the groups just followed for someone whose name we have not seen, so
+        they are shown by name at once rather than as ``?~fp`` until the next
+        refresh (#709). The name is the ``From`` of their posts - a profile carries
+        none (UN-RFC 0022 section 3) - and ``seen_name`` keeps it. The feed first;
+        quiet on failure, as the refresh reads them anyway."""
+        for gid in sorted(groups, key=lambda g: not g.startswith("feed@")):
+            try:
+                await self.fetch_group(gid)
+            except (SessionError, OSError, ConnectionError, NNTPError, asyncio.TimeoutError):
+                continue
+            if self.seen_name(key):
+                return
 
     async def _update_person(self, fp: str, person: dict, key: str | None) -> dict:
         feeds, key = await self._feeds_of(fp, key or person.get("key"))

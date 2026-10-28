@@ -7,6 +7,26 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **What you follow because of a person, by person** (#706): `Session.followed_people_groups()`
+  and `people_followed` in the local API's `/api/groups` group other people's feeds and
+  sites by the person they belong to, sorted by name; the group tree no longer has
+  hierarchies called `feed` and `site`.
+
+- **One slow node no longer holds up the others** (#704): the client runtime gives each node
+  12 s to list its groups; what the others have is shown at once, the slow one is said to be
+  "not answering yet" (`Session.slow`, `Refreshed.slow`), its answer is awaited in the
+  background, and when it comes everything is listed and fetched again. Meanwhile nothing
+  else waits on it: a call to a node that has not answered yet fails at once.
+
+- **How long ago, in the same words everywhere**: `unseenet.client.timefmt.ago()` - *now*,
+  *5 min*, *2 h*, *Yesterday 14:20*, *3 days*, then the date - for every client's feeds
+  (unseenet-tui#34, as the GUI says it).
+
+- **What comes into the timeline is your choice per group** (#697, UN-RFC 0034 6.2): feeds by
+  default, a group of threads when you put it in (each new thread once), chats never; kept
+  in your state (UN-RFC 0044 `timeline`); `unseenet timeline groups | add | remove | default`,
+  and `POST /api/groups/<id>/timeline` in the local API.
+
 - **`unseenet post` tells the language from the text** when `--lang` is not given (#686),
   as the clients do - the demo's people and other scripts get it right by themselves.
 

@@ -215,6 +215,11 @@ entries of every group you have in the timeline, section 4.14).
 and every group in `groups` has `in_timeline` and `timeline_possible`
 (UN-RFC 0034 section 6.2), so a front end can mark them in its list and
 offer the choice there.
+`people_followed` is what you follow because of a person (#706):
+`[{"fingerprint", "key", "label", "groups": {"feed": <Group ID>, "site": ...}}, ...]`,
+other people's personal groups (UN-RFC 0029 section 2.1) by the person they belong to,
+sorted by `label`; `hierarchies` leaves them out, so a front end shows each person once,
+with their feed and site together, rather than hierarchies called `feed` and `site`.
 `my_feed` is your personal feed (UN-RFC 0034 section 5) and `my_site`
 your personal site (UN-RFC 0035 section 7): a front end lists each at the
 top as "My feed" and "My site" once `started`, and then `hierarchies`
@@ -239,6 +244,11 @@ rendered for showing (UN-RFC 0031): Markdown or plain by the post's
 `Content-Type`, as nodes `{"t": "p" | "text" | "strong" | ..., "c": [...],
 "v": "..."}` in which HTML is always text. A front end MUST draw the tree,
 or the plain text, and MUST NOT put a post's text into a page as HTML.
+A post with a read-more line (UN-RFC 0031 section 3.2.1) has the block
+`{"t": "more"}` in its place, at the top level of the tree: a front end
+that cuts the post shows what comes before it, and draws nothing for it
+when the post is shown whole. A front end that does not know the block
+draws nothing for it.
 `bot` is true when the author's profile says it posts automatically
 (UN-RFC 0030 section 6): show a mark. `identicon` is the author's identicon
 (section 4.11). `groups` are the `#group` references in it; `notice` is set for a mention
@@ -403,6 +413,11 @@ not (you do not own or moderate the group).
   `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4,
   `index`: `"yes"` or `"no"` for a site, UN-RFC 0035 section 3):
   a new manifest (UN-RFC 0004, 0014, 0030). Any other field is `400`.
+- `GET /api/help/group-settings`: `{"intro", "settings": [{"key", "label",
+  "what", "affects", "later"}]}` - per setting, in English, what it does, whom it
+  affects (readers, writers, nodes) and what changing it later does, for a help
+  panel beside a client's Edit group; `key` is the field above. The same text in
+  every client; it needs no unlocked vault.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
 - `POST /api/groups/<id>/invite` `{"key": "..."}` and

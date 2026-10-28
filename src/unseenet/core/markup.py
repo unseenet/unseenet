@@ -132,8 +132,46 @@ def plain(text: str) -> list[dict]:
 
 
 def body(text: str, content_type: str | None, kind: str = "post") -> list[dict]:
-    """A message's text as a tree, by its Content-Type."""
-    return parse(text, kind) if is_markdown(content_type) else plain(text)
+    """A message's text as a tree, by its Content-Type. A post with a read-more line
+    (section 3.2.1) has ``{"t": "more"}`` in its place, between the two parts."""
+    def tree(part: str) -> list[dict]:
+        return parse(part, kind) if is_markdown(content_type) else plain(part)
+    cut = read_more(text, kind)
+    if cut is None:
+        return tree(text)
+    before, after = cut
+    return [*tree(before), {"t": "more"}, *(tree(after) if after.strip() else [])]
+
+
+# a read-more line: only "..." or "…", at most three spaces before (section 3.2.1)
+_READ_MORE = re.compile(r"^ {0,3}(?:\.\.\.|…)[ \t]*$")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def read_more(text: str, kind: str = "post") -> tuple[str, str] | None:
+    """The text before and after its first read-more line (UN-RFC 0031 section 3.2.1),
+    the line itself left out; None when there is none, or for a chat line. Lines in
+    code blocks (fenced or indented) and in block quotes do not count."""
+    if kind == KIND_CHAT or not text:
+        return None
+    lines = text.split("\n")
+    fence = None                       # the fence a code block was opened with
+    quote = False                      # in a block quote, until a blank line
+    for i, line in enumerate(lines):
+        f = _FENCE.match(line)
+        if fence is not None:          # in a fenced code block, until its closing fence
+            if f and f.group(1)[0] == fence[0] and len(f.group(1)) >= len(fence):
+                fence = None
+            continue
+        if f:
+            fence = f.group(1)
+        elif not line.strip():
+            quote = False
+        elif line.lstrip().startswith(">"):
+            quote = True
+        elif _READ_MORE.match(line) and not quote:   # 4 spaces in: indented code, no match
+            return "\n".join(lines[:i]).rstrip("\n"), "\n".join(lines[i + 1:]).lstrip("\n")
+    return None
 
 
 # a page's links without a scheme lead within its site (UN-RFC 0035 section 8)

@@ -400,6 +400,10 @@ class NodesMixin:
         address = node or self.node
         if not address:
             raise SessionError("no node configured")
+        late = self.slow.get(address)
+        if late is not None and not late.done():     # asked, not answered yet (#704): no
+            raise SessionError(                      # one else waits behind it
+                f"{self.node_label(address)} is not answering yet")
         async with self._locks.setdefault(address, asyncio.Lock()):
             for attempt in (1, 2):
                 if address not in self._clients:

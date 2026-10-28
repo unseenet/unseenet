@@ -33,6 +33,9 @@ class Groups:
         c = s.for_you_counts()
         mine = {k: (s.personal_group(k), s.has_personal_group(k)) for k in ("feed", "site")}
         on_top = {gid for gid, started in mine.values() if started}
+        # other people's feeds and sites, by person (#706), not as hierarchies feed / site
+        by_person = s.followed_people_groups([g["id"] for g in groups])
+        on_top |= {gid for p in by_person for gid in p["groups"].values()}
         tops: dict[str, list[dict]] = {}
         for g in sorted(groups, key=lambda g: g["label"]):
             if g["id"] in on_top:
@@ -44,6 +47,7 @@ class Groups:
                      "names": s.held_names(k)}
                     for k, name in s.contacts()]
         return {"groups": groups, "people": people, "contacts": contacts,
+                "people_followed": by_person,
                 "hierarchies": [{"name": h, "tree": self._tree(h, gs)}
                                 for h, gs in sorted(tops.items())],
                 "inbox": {"id": s.my_inbox if ready else None,

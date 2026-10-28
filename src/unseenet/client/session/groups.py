@@ -61,12 +61,39 @@ class GroupsMixin:
         keys of closed groups, the node it is read on, and what the client remembers."""
         return self.data["groups"].setdefault(group_id, {"type": None, "owner": False, "keys": {}})
 
-    async def list_groups(self, pattern: str = "*", node: str | None = None) -> list[GroupInfo]:
-        """Groups on one node, or on all your nodes (merged; unreachable ones skipped)."""
+    async def list_groups(self, pattern: str = "*", node: str | None = None,
+                          budget: float | None = None) -> list[GroupInfo]:
+        """Groups on one node, or on all your nodes (merged; unreachable ones skipped).
+
+        ``budget``: seconds to wait for each node's first answer (#704). A node slower
+        than that does not hold up the others: what the rest list comes back at once,
+        the slow one is in ``slow`` - its answer still awaited in the background (a
+        task the caller can wait on, ``late_answers``) - and its groups come with the
+        next listing. Without a budget every node is waited for, as before."""
         targets = [node] if node else self.nodes
-        results = await asyncio.gather(
-            *(self._call(lambda c: c.multiline(f"LIST NEWSGROUPS {pattern}", 215), n)
-              for n in targets), return_exceptions=True)
+        def ask(n):                             # a node still slow: wait on its first answer
+            late = self.slow.get(n)
+            if late is not None and not late.done():
+                return late
+            return asyncio.ensure_future(self._call(
+                lambda c: c.multiline(f"LIST NEWSGROUPS {pattern}", 215), n))
+        tasks = [ask(n) for n in targets]
+        if budget is not None and tasks:
+            await asyncio.wait(tasks, timeout=budget)
+        else:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        results: list = []
+        for n, t in zip(targets, tasks):
+            if not t.done():                    # still asking: carry on without it (#704)
+                if n not in self.slow:
+                    self.slow[n] = t
+                    t.add_done_callback(lambda _t, n=n: self._answered_late(n, _t))
+                    self.say(f"{self.node_label(n)} is not answering yet - the others are shown")
+                results.append(asyncio.TimeoutError(f"{n} is not answering yet"))
+            elif self.slow.get(n) is t:         # the slow one's first answer, come now:
+                results.append(asyncio.TimeoutError(f"{n} answered late"))   # listed next time
+            else:
+                results.append(t.exception() or t.result())
         failed = [r for r in results if isinstance(r, BaseException)]
         for r in failed:
             if not isinstance(r, (OSError, ConnectionError, SessionError, NNTPError,
@@ -74,7 +101,8 @@ class GroupsMixin:
                 raise r
         if failed and len(failed) == len(results):
             raise failed[0]
-        self.unreachable = [n for n, r in zip(targets, results) if isinstance(r, BaseException)]
+        self.unreachable = [n for n, r in zip(targets, results)
+                            if isinstance(r, BaseException) and n not in self.slow]
         out: dict[str, GroupInfo] = {}
         subscribed = set(self.data["subscribed"])
         for address, lines in zip(targets, results):
@@ -100,6 +128,24 @@ class GroupsMixin:
                 g.nodes.remove(home)
                 g.nodes.insert(0, home)
         return list(out.values())
+
+    def _answered_late(self, node: str, task: asyncio.Task) -> None:
+        """A slow node's answer came (or its failure): no longer slow (#704). Its
+        groups come with the next listing; NodeState tells the clients."""
+        if self.slow.get(node) is task:
+            del self.slow[node]
+        failed = task.cancelled() or task.exception() is not None
+        if failed and node not in self.unreachable:
+            self.unreachable.append(node)
+        self.emit(ev.NodeState(node, not failed, None if not failed else "did not answer"))
+
+    def late_answers(self) -> list[asyncio.Task]:
+        """The listings still awaited from slow nodes (#704), to act when they come."""
+        return list(self.slow.values())
+
+    def is_slow(self, node: str | None) -> bool:
+        """Whether a node was asked and has not answered yet (#704)."""
+        return node in self.slow
 
     async def find_group_ref(self, ref: "GroupRef") -> list[GroupInfo]:
         """The groups a #reference (#172) can mean: from your nodes, plus groups you

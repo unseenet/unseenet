@@ -51,6 +51,31 @@ class PersonalMixin:
                 self.group_entry(gid)["manifest"] = dict(m.raw)
         return out
 
+    def followed_people_groups(self, group_ids=None) -> list[dict]:
+        """What you follow because of a person (#706): other people's personal groups
+        (``feed@<fp>``, ``site@<fp>``) among those you follow, by the person they belong
+        to - ``[{"fingerprint", "key", "label", "groups": {kind: Group ID}}]``, sorted by
+        the person's label - so clients show a person's feed and site together, by name,
+        rather than as hierarchies called ``feed`` and ``site``. Your own are left out
+        (clients show them at the top)."""
+        mine = {make_group_id(kind, i.public_key) for kind in PERSONAL_KINDS
+                for i in (crypto.Identity.from_seed(bytes.fromhex(e["seed"]))
+                          for e in self.data["identities"].values())}
+        people: dict[str, dict] = {}
+        known = {fp: p for fp, p in self.data.get("following", {}).get("people", {}).items()}
+        for gid in (self.data["subscribed"] if group_ids is None else group_ids):
+            name, _, fp = gid.partition("@")
+            if name not in PERSONAL_KINDS or not fp or gid in mine:
+                continue
+            owner = self.manifest_data(gid).get("owner") or (known.get(fp) or {}).get("key")
+            p = people.setdefault(fp, {"fingerprint": fp, "key": owner, "groups": {}})
+            p["key"] = p["key"] or owner
+            p["groups"][name] = gid
+        for fp, p in people.items():
+            p["label"] = (self.label_of(p["key"]) if p["key"]
+                          else (known.get(fp) or {}).get("name") or fp)
+        return sorted(people.values(), key=lambda p: (p["label"].lower(), p["fingerprint"]))
+
     def has_personal_group(self, kind: str) -> bool:
         """Whether this identity has started its personal feed or site in this vault:
         followed and owned here - what clients show as "Your feed" or "Your site"."""
