@@ -52,9 +52,12 @@ section 3.1):
 | `comments`     | string  | no   | `none` (the default) or `open`                  |
 | `comment_days` | integer | no   | Days after a thread root's `Date` during which comments are accepted; absent means no limit |
 
-A node MUST reject a manifest of a group that is not a channel if it
-carries either field, and a channel manifest whose `comments` has any
-other value, or whose `comment_days` is not a positive integer.
+`comments` belongs to channels only: a node MUST reject a manifest of
+a group that is not a channel if it carries `comments`, and a channel
+manifest whose `comments` has any other value. `comment_days` may also
+be set in open, moderated and closed groups (section 3.3); a node MUST
+reject it in an inbox or local group (UN-RFC 0009), and wherever it is
+not a positive integer.
 
 The owner MAY change both fields in any later manifest. A change
 applies to articles that arrive after it, as for every other posting
@@ -62,8 +65,8 @@ rule; comments already accepted stay.
 
 ## 3.1 An Entry's Own Deadline
 
-A starter MAY give one thread root a shorter time for comments than the
-group's, when writing it, with the article header:
+Whoever starts a thread MAY give its root a shorter time for comments
+than the group's, when writing it, with the article header:
 
 ```
 Comment-Days: <n>
@@ -79,6 +82,9 @@ signature (UN-RFC 0002), so nobody can change it later.
   later than the group's.
 - A node ignores `Comment-Days` on an article that is not a thread
   root, and in a channel whose `comments` is `none`.
+- In a closed group `Comment-Days` is an outer header, outside the
+  encryption (UN-RFC 0004 section 6), so that nodes can read it. It tells a node
+  nothing about the content.
 - The deadline that applies to a thread is the **shorter** of the
   root's `Comment-Days` and the `comment_days` of the current
   manifest, both counted from the root's `Date`. An owner who later
@@ -121,7 +127,21 @@ Comments on the target are **closed** when either current marker is a
 close. So the author can close their own entry and open it again, but
 cannot open what the owner or a moderator has closed. An open never
 lengthens the time: after the deadline of section 3.1 comments stay
-closed.
+closed. In a closed group a marker's body MUST be empty, as for pins.
+
+## 3.3 Groups Other Than Channels
+
+Sections 3.1 and 3.2 apply in open, moderated and closed groups too,
+where a **comment** is any reply in a thread: an article whose
+`References` names the thread root first. There the author of a
+thread can give it a deadline when starting it, the owner can set
+`comment_days` for every thread, and the author, the owner and
+moderators can close and open a thread, as in a channel. Inboxes and
+local groups (UN-RFC 0009) have none of this.
+
+Closing a thread in a discussion group stops replies in that thread
+only. Anyone who may post in the group can still start a new thread,
+for instance to go on with the discussion.
 
 # 4. Node Rules
 
@@ -157,6 +177,16 @@ NOT answer as for a permanent rejection, which would lose the comment.
 A node MAY keep such comments aside for a short time, at most one hour,
 and accept them as soon as the root arrives.
 
+## 4.2 Replies in Other Groups
+
+In an open, moderated or closed group, a node MUST reject a reply
+whose `Date` is past the thread's deadline (section 3.1), or whose
+thread is closed (section 3.2), when it holds the thread root. A node
+that does not hold the root, for instance because it has expired,
+applies neither, and the group's other rules decide as before
+(UN-RFC 0004 section 5). In a moderated group the check is made when
+the reply arrives, before it goes to approval.
+
 # 5. Clients
 
 - A client SHOULD offer "comment" (reply) on thread roots and comments
@@ -168,15 +198,17 @@ and accept them as soon as the root arrives.
 - A client SHOULD tell the user when comments on a thread have closed,
   because of a deadline or a close (section 3), rather than letting the
   post fail, and SHOULD show a close's note.
-- When a starter writes an entry in a channel open for comments, a
-  client SHOULD let them choose how long it takes comments, from none
-  up to the group's `comment_days`, with the group's as the default,
-  and MUST NOT offer longer. It writes `Comment-Days` only when the
-  choice differs from the group's.
+- When a user starts a thread or writes an entry where replies are
+  possible, a client SHOULD let them choose how long it takes
+  comments, from none up to the group's `comment_days`, with the
+  group's as the default, and MUST NOT offer longer. It writes
+  `Comment-Days` only when the choice differs from the group's.
 - A client SHOULD offer "Close comments" and "Open comments" on an
-  entry to its author, the owner and moderators, and SHOULD show on
-  an entry when its comments close, once that is less than a day
-  away.
+  entry or thread to its author, the owner and moderators, and SHOULD
+  show when its comments close, once that is less than a day away. In
+  the threads view a client MAY say "replies" instead of "comments".
+- When creating any group but an inbox, a client SHOULD let the owner
+  set `comment_days`, and later change it.
 - When creating a channel, a client SHOULD ask whether readers may
   comment, and leave `comments` absent if not.
 
@@ -215,6 +247,9 @@ UN-RFC 0022 section 4 gains an optional profile field:
   and `comment_days` (section 3). Section 5: the channel rule is
   replaced by section 4 of this document.
 - **UN-RFC 0022** section 4: the profile field `bot` (section 6).
+- **UN-RFC 0004** section 3.1: `comment_days` in open, moderated and
+  closed groups too (section 3.3); section 5: replies past a deadline
+  or in a closed thread are rejected (section 4.2).
 - **UN-RFC 0004** section 7: the control articles `comments-close` and
   `comments-open` (section 3.2).
 - **UN-RFC 0042** section 2: what an edit of a thread root may do to
@@ -253,6 +288,10 @@ UN-RFC 0022 section 4 gains an optional profile field:
   many entries over the years; a list in the manifest would grow
   without end and be sent with every change. A marker per entry
   expires with the entry, as pins do.
+- **Why in discussion groups too?** A thread that has run its course,
+  or gone wrong, is the same problem in a discussion group as in a
+  feed, and readers know closed threads from forums. Closing one
+  thread does not silence anyone: a new thread is always possible.
 - **Why two chains?** The author should be able to close their own
   entry, which is what other networks offer, but must not be able to
   overrule the owner or a moderator who closed it.
