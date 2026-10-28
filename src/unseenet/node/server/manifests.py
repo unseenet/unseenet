@@ -51,7 +51,8 @@ class Manifests:
             if m.type != current.type or m.owner != current.owner or m.local != current.local:
                 raise ArticleError("permission", "manifest may not change type, owner or locality")
         elif (not self.store.known_group(art.group) and not self._is_profile_group(art.group)
-              and self._group_name(art.group) != "state" and not self._allow_new_group(m)):
+              and self._group_name(art.group) != "state" and not self._emoji_of_carried(art.group)
+              and not self._allow_new_group(m)):
             # profile and avatar groups are accepted whatever new_groups says (UN-RFC 0022, 10)
             # an expired key-bound group is not new: its renewal is accepted (UN-RFC 0029)
             raise ArticleError("group", "node does not accept this new group")
@@ -65,6 +66,7 @@ class Manifests:
         if m.view == "pages" and self.config.sites != "accept":     # UN-RFC 0035 section 6.2
             raise ArticleError("group", "this node carries no sites")
         self._check_profile_content(m)
+        self._check_emoji_manifest(m, current)
         self._check_ripe_manifest(m, current)
         self.store.add(art, raw)
         if m.supersedes(current):
@@ -105,6 +107,34 @@ class Manifests:
                 profiles.check_picture(m.raw["avatar"])
         except profiles.ProfileError as exc:
             raise ArticleError("syntax", str(exc)) from exc
+
+    def _emoji_of_carried(self, group_id: str) -> bool:
+        """The emoji group of a group this node carries, taken whatever new_groups says
+        when the operator carries emoji (UN-RFC 0056 section 5)."""
+        main = ge.main_group_of(group_id) if ge.is_emoji_name(self._group_name(group_id)) else None
+        return (main is not None and self.config.emoji == "accept"
+                and self.store.manifest(main) is not None)
+
+    def _check_emoji_manifest(self, m: Manifest, current: Manifest | None) -> None:
+        """UN-RFC 0056: ``emoji`` only in an emoji group, valid and not refused; a new
+        group named ``<name>.emoji`` only as an emoji group, and only when the operator
+        carries them. A group that already had such a name keeps working (3.1)."""
+        named = ge.is_emoji_name(m.name)
+        if "emoji" in m.raw and not named:
+            raise ArticleError("syntax", "emoji belongs in a <name>.emoji group (UN-RFC 0056)")
+        if not named or (current is not None and "emoji" not in current.raw and "emoji" not in m.raw):
+            return                                   # not one, or an old group of that name
+        if self.config.emoji != "accept":
+            raise ArticleError("group", "this node does not carry group emoji")
+        if m.view != "data" or m.type != "channel" or "emoji" not in m.raw:
+            raise ArticleError("syntax", "an emoji group is a data channel with emoji (UN-RFC 0056 3.2)")
+        try:
+            ge.check_set(m.raw["emoji"])
+        except ge.EmojiError as exc:
+            raise ArticleError("syntax", str(exc)) from exc
+        for pic in m.raw["emoji"].values():           # refusal lists cover each picture (5)
+            if self.store.blob_refused(bl.blob_id(b64decode(pic["data"]))):
+                raise ArticleError("permission", "a picture in this set is refused")
 
     def _allow_new_group(self, m: Manifest) -> bool:
         if self.config.new_groups == "accept":

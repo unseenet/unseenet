@@ -440,6 +440,12 @@ async def create(request):
     return _json(await _api(request).create_group(await _body(request)))
 
 
+async def group_emoji(request):
+    if request.method == "GET":
+        return _json(await _api(request).group_emoji(_gid(request)))
+    return _json(await _api(request).change_group_emoji(_gid(request), await _body(request)))
+
+
 async def group_settings(request):
     return _json(await _api(request).group_settings(_gid(request), await _body(request)))
 
@@ -684,6 +690,7 @@ ROUTES = [
     ("POST", "/api/teams/forget", teams_forget),
     ("GET", "/api/teams/readers", teams_readers), ("POST", "/api/teams/readers", teams_readers),
     ("POST", "/api/groups/{gid}/settings", group_settings),
+    ("GET", "/api/groups/{gid}/emoji", group_emoji), ("POST", "/api/groups/{gid}/emoji", group_emoji),
     ("POST", "/api/groups/{gid}/remove", remove_group),
     ("POST", "/api/groups/{gid}/invite", invite),
     ("POST", "/api/groups/{gid}/members/remove", remove_member),

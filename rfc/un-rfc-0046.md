@@ -434,6 +434,21 @@ not (you do not own or moderate the group).
   affects (readers, writers, nodes) and what changing it later does, for a help
   panel beside a client's Edit group; `key` is the field above. The same text in
   every client; it needs no unlocked vault.
+- A group's own emoji (UN-RFC 0056): `GET /api/groups/<id>` has `emoji`
+  (`{name: picture}`, as last read) and `emoji_possible`.
+  `GET /api/groups/<id>/emoji` reads them anew from the node, without
+  following the emoji group, and answers `{"emoji", "possible", "max",
+  "warning"}`. The owner uses `POST /api/groups/<id>/emoji` with one of:
+  - `{"preview": {"data", "alt"}}`: the picture as it would be published,
+    with nothing published;
+  - `{"add": {"name", "data", "alt"}}`: `data` is b64 of any picture, made
+    32 by 32, at most 1 KiB and without metadata here;
+  - `{"alt": {"name", "alt"}}`, `{"rename": {"from", "to"}}` or
+    `{"remove": "<name>"}`.
+
+  Each change publishes the whole set and answers as `GET`. A standard
+  name, a 17th emoji or a group that cannot have them is `400`. Clients
+  show `warning` before the first emoji is published.
 - `POST /api/groups/<id>/remove` `{"confirm": "remove", "reason": "..."}`:
   removes the group from the whole network (UN-RFC 0013). Final.
 - `POST /api/groups/<id>/invite` `{"key": "..."}` and

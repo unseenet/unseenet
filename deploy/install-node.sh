@@ -72,6 +72,8 @@ encrypted = false'
   echo
   echo "Profile pictures: small pictures (at most 8 KB) people choose for themselves."
   if yes_no "${UNSEENET_AVATARS:-}" "Carry profile pictures?"; then AVATARS=accept; else AVATARS=refuse; fi
+  # a group's emoji (UN-RFC 0056): small pictures too - as profile pictures unless UNSEENET_EMOJI says
+  case "${UNSEENET_EMOJI:-$AVATARS}" in [yY]*|1|true|accept) EMOJI=accept ;; *) EMOJI=refuse ;; esac
   echo
   echo "Sites: small sets of pages (a person's homepage, a project's guide, a wiki)"
   echo "that stay until their owner changes them, at most 100 pages each."
@@ -83,6 +85,7 @@ min_pow = 18
 retention_days = 90
 new_groups = "accept"
 avatars = "$AVATARS"
+emoji = "$EMOJI"
 sites = "$SITES"
 $BLOBS_TOML
 

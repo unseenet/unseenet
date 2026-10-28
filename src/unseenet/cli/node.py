@@ -61,6 +61,7 @@ def load_node_config(path: Path | None):
                       profiles=str(node.get("profiles", "accept")),
                       avatars=str(node.get("avatars", "refuse")),
                       sites=str(node.get("sites", "refuse")),
+                      emoji=str(node.get("emoji", "refuse")),
                       excludes=str(node.get("excludes", "")),
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
