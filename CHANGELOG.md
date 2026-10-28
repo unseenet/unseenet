@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **What you follow because of a person, by person** (#706): `Session.followed_people_groups()`
+  and `people_followed` in the local API's `/api/groups` group other people's feeds and
+  sites by the person they belong to, sorted by name; the group tree no longer has
+  hierarchies called `feed` and `site`.
+
 - **One slow node no longer holds up the others** (#704): the client runtime gives each node
   12 s to list its groups; what the others have is shown at once, the slow one is said to be
   "not answering yet" (`Session.slow`, `Refreshed.slow`), its answer is awaited in the
