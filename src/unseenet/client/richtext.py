@@ -71,6 +71,8 @@ def blocks(tree: list[dict], prefix: str = "", tight: bool = False) -> Text:
     out = Text()
     first = True
     for b in tree:
+        if b.get("t") == "more":           # read more (UN-RFC 0031 3.2.1): shown whole, no line
+            continue
         if not first:
             out.append("\n" if tight else "\n" + (prefix.rstrip() + "\n" if prefix else "\n"))
         first = False

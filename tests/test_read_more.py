@@ -29,3 +29,9 @@ def test_the_tree_marks_the_place():
     assert [b["t"] for b in markup.body("Kun indledning\n...", None)] == ["p", "more"]
     assert "more" not in [b["t"] for b in markup.body("Hej\n...\nmere", md, kind="chat")]
     assert "more" not in [b["t"] for b in markup.body("Ingen", md)]
+
+
+def test_shown_whole_in_a_terminal_without_the_line():
+    from unseenet.client import richtext
+    text = str(richtext.blocks(markup.body("Kort\n\n...\n\nResten", None)))
+    assert text == "Kort\n\nResten"
