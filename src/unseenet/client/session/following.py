@@ -21,6 +21,8 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import session as _s   # names tests patch on the module, read at call time
 
 _FP_RE = re.compile(r"^[a-z2-7]{16}$")
+TIMELINE_TYPES = ("open", "moderated", "channel", "closed")   # groups of people (0034, 6.2)
+TIMELINE_VIEWS = ("feed", "threads")                         # not chat, data or sites
 
 
 class FollowingMixin:
@@ -202,6 +204,49 @@ class FollowingMixin:
         ones it does not know."""
         return [g for g in self.data["subscribed"] if self.manifest_data(g).get("view") == "feed"]
 
+    # --- what goes into the timeline (UN-RFC 0034 section 6.2) ---------------------
+    def timeline_possible(self, group_id: str) -> bool:
+        """Whether a group can be in the timeline at all: a group of people (open,
+        moderated, channel, closed) whose owner shows it as a feed or as threads, as far
+        as this client knows its manifest. Chat, data, inboxes and states never are."""
+        m = self.manifest_data(group_id)
+        if not m or m.get("type") not in TIMELINE_TYPES:
+            return False
+        return (m.get("view") or "threads") in TIMELINE_VIEWS
+
+    def timeline_default(self, group_id: str) -> bool:
+        """In the timeline unless you chose otherwise: a feed yes, threads no."""
+        return self.timeline_possible(group_id) and self.manifest_data(group_id).get("view") == "feed"
+
+    def in_timeline(self, group_id: str) -> bool:
+        """Whether a group you follow comes into your timeline: your own choice for it
+        if you made one, else its default (``timeline_default``). The view you read the
+        group in does not change this."""
+        if group_id not in self.data["subscribed"] or not self.timeline_possible(group_id):
+            return False
+        choice = self.data.get("timeline_choice", {}).get(group_id)
+        return choice if isinstance(choice, bool) else self.timeline_default(group_id)
+
+    def set_in_timeline(self, group_id: str, on: bool | None) -> bool:
+        """Put a group you follow into the timeline or take it out (``None``: back to
+        its default). Only a choice that differs from the default is kept, in the state
+        (UN-RFC 0044 ``timeline``). Returns whether it is in the timeline now."""
+        if group_id not in self.data["subscribed"]:
+            raise SessionError("follow the group first")
+        if on and not self.timeline_possible(group_id):
+            raise SessionError("chat groups and inboxes cannot be in the timeline")
+        choices = self.data.setdefault("timeline_choice", {})
+        if on is None or on == self.timeline_default(group_id):
+            choices.pop(group_id, None)
+        else:
+            choices[group_id] = bool(on)
+        self.save()
+        return self.in_timeline(group_id)
+
+    def timeline_groups(self) -> list[str]:
+        """The groups whose entries make up your timeline."""
+        return [g for g in self.data["subscribed"] if self.in_timeline(g)]
+
     async def fetch_unknown_manifests(self) -> int:
         """Fetch the manifest of every group you follow that this client has none of,
         so a feed is known to be one before the timeline is built. Returns how many."""
@@ -248,10 +293,12 @@ class FollowingMixin:
 
     def timeline(self, limit: int = 100) -> list[Message]:
         """The timeline (UN-RFC 0034 section 7): the entries - posts that start a thread
-        - of every feed you follow, newest first by ``Date``, from what has been fetched.
-        Nothing reorders it, and nothing from a feed you do not follow is in it."""
+        - of every group you have in it (``timeline_groups``: feeds unless you took them
+        out, threads you put in), newest first by ``Date``, from what has been fetched.
+        Comments and replies stay under their entry. Nothing reorders it, and nothing
+        from a group outside it is in it."""
         rows = []
-        for gid in self.feeds_followed():
+        for gid in self.timeline_groups():
             for msg, depth in self.feed_rows(gid):
                 if depth == 0 and not msg.private and msg.page is None and msg.readable:
                     rows.append(msg)

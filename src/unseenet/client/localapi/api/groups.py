@@ -49,8 +49,8 @@ class Groups:
                 "inbox": {"id": s.my_inbox if ready else None,
                           "unread": s.unread_private_posts() if ready else 0},
                 "for_you": {"id": FOR_YOU, "replies": c.replies, "mentions": c.mentions},
-                # the timeline, when you follow a feed (UN-RFC 0034 section 7)
-                "timeline": {"id": TIMELINE, "feeds": len(s.feeds_followed())},
+                # the timeline, when a group you follow is in it (UN-RFC 0034 section 7)
+                "timeline": {"id": TIMELINE, "feeds": len(s.timeline_groups())},
                 # your own feed, or the way to start it, at the top (#495)
                 **{f"my_{k}": {"id": gid, "started": started,
                                "unread": s.unread_count(gid) if started else 0}
@@ -61,7 +61,9 @@ class Groups:
     def _group(s: Session, g: GroupInfo, also: set | frozenset = frozenset()) -> dict:
         """A GroupInfo dict with ``shown``: the name as people should see it, the
         fingerprint left out only where the hierarchy lists it (UN-RFC 0018)."""
-        return {**g.to_dict(), "shown": s.group_label(g.group_id, also)}
+        return {**g.to_dict(), "shown": s.group_label(g.group_id, also),
+                # whether its entries come into your timeline (UN-RFC 0034 section 6.2)
+                "in_timeline": s.in_timeline(g.group_id)}
 
     @staticmethod
     def _name_requests(s: Session) -> int:
@@ -109,6 +111,10 @@ class Groups:
                "rules_tree": markup.manifest_text(data.get("rules", ""), data.get("rules_type"))
                if data.get("rules") else [],
                "portals": [{"network": n, "source": src} for n, src in s.group_portals(gid)],
+               # in your timeline or not, whether it can be, and what it is by default
+               # (UN-RFC 0034 section 6.2) - the view you read it in changes none of this
+               "timeline": {"on": s.in_timeline(gid), "possible": s.timeline_possible(gid),
+                            "default": s.timeline_default(gid)},
                "portal_warning": s.portal_warning(gid),
                # may you write here, and if not, why - before you write (#181, #320)
                "write": {"post": _perm(s.write_permission(gid, kind=KIND_POST)),
@@ -343,6 +349,17 @@ class Groups:
             raise SessionError("only a site is shown as its pages")
         self._ready().set_view(gid, view)
         return {"ok": True}
+
+    def set_in_timeline(self, gid: str, on) -> dict:
+        """``POST /api/groups/{gid}/timeline`` (section 4.3): put a group you follow into
+        your timeline (``true``), take it out (``false``) or back to its default
+        (``null``) - UN-RFC 0034 section 6.2."""
+        if on not in (True, False, None):
+            raise SessionError("on is true, false or null")
+        s = self._ready()
+        now = s.set_in_timeline(gid, on)
+        s.emit(ev.GroupsChanged())
+        return {"ok": True, "on": now}
 
     def subscribe(self, gid: str, on: bool) -> dict:
         """``POST /api/subscribe`` (section 4.3): follow a group (and fetch it) or stop."""

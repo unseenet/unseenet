@@ -210,8 +210,10 @@ part of names as a folder.
 Besides real group IDs, three pseudo IDs work
 wherever a group ID does: `contact:<key>` (the chat with one person),
 `for-you:` (replies and mentions from all groups) and `timeline:` (the
-entries of every feed you follow, section 4.14).
-`timeline` is `{"id": "timeline:", "feeds": <how many feeds you follow>}`.
+entries of every group you have in the timeline, section 4.14).
+`timeline` is `{"id": "timeline:", "feeds": <how many groups are in it>}`,
+and every group in `groups` has `in_timeline` (UN-RFC 0034 section 6.2),
+so a front end can mark them in its list.
 `my_feed` is your personal feed (UN-RFC 0034 section 5) and `my_site`
 your personal site (UN-RFC 0035 section 7): a front end lists each at the
 top as "My feed" and "My site" once `started`, and then `hierarchies`
@@ -240,7 +242,9 @@ or the plain text, and MUST NOT put a post's text into a page as HTML.
 (UN-RFC 0030 section 6): show a mark. `identicon` is the author's identicon
 (section 4.11). `groups` are the `#group` references in it; `notice` is set for a mention
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
-`may_post`, and for a real group `rules`, `rules_type`, `rules_tree`, `portals`,
+`may_post`, and for a real group `timeline` - `{"on", "possible",
+"default"}`: whether it is in your timeline, whether it can be, and what
+it is without your choice (UN-RFC 0034 section 6.2) - `rules`, `rules_type`, `rules_tree`, `portals`,
 `portal_warning`, `write`, `files` and `node_files` (section 4.10), and for its owner or a moderator `roles` (section 4.7):
 `{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
 closed group's owner, `members`; `maintainer` is true when you maintain a
@@ -274,6 +278,11 @@ rows themselves.
   "pages" | null}`: null goes back to the owner's choice (UN-RFC 0008
   section 3.1, UN-RFC 0034 section 3.1); `pages` only for a site (section
   4.15).
+- `POST /api/groups/<id>/timeline` `{"on": true | false | null}`: put a
+  group you follow into your timeline, take it out, or null for its
+  default (UN-RFC 0034 section 6.2). Answers `{"ok": true, "on": <now>}`;
+  a group that cannot be in it (chat, inbox) is refused. The view you read
+  a group in is a separate setting.
 - `POST /api/subscribe` `{"id": "<group ID>", "on": true}`.
 - `GET /api/browse?pattern=<wildmat>`: `{"groups": [<GroupInfo dict>, ...]}`,
   what the node lists.
@@ -685,11 +694,13 @@ with `"kind": "chat"` and the entry, or the comment answered, last in
 `references`.
 
 `GET /api/groups/timeline:` is the timeline (UN-RFC 0034 section 7): the
-entries of every feed you follow, newest first by `Date` and in no other
-order, each followed by its comments as its feed has them. Each row has
+entries of every group in it (UN-RFC 0034 section 6.2: the feeds you
+follow unless you took one out, and groups of threads you put in), newest
+first by `Date` and in no other order, each followed by its comments as
+its group has them. Each row has
 `group_label`, the feed it is from, `address`, `reply` and `comment` for
 that feed; writing from the timeline writes to the entry's own feed. The
-head has `feeds`, how many feeds you follow. The runtime asks for the
+head has `feeds`, how many groups are in the timeline. The runtime asks for the
 manifests of followed groups it does not know yet, so that a feed is
 known to be one; what changes comes as `groups_changed`.
 

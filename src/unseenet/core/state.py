@@ -1,7 +1,7 @@
 """An identity's state in the network (UN-RFC 0044): what it is, sealed and merged.
 
 The state - groups followed, people followed, contacts, ignored keys, hidden
-profiles, closed chats, settings, read marks - lives encrypted in the manifest of the
+profiles, closed chats, your timeline choices, settings, read marks - lives encrypted in the manifest of the
 identity's key-bound group ``state@<fp>``. This module is the protocol only:
 the key (section 4.1), sealing to a fixed size (section 5) and opening, and
 merging two states so that two clients never undo each other (section 7.2).
@@ -24,7 +24,7 @@ MAX_ALSO = 64                               # section 4.3: read marks after "to"
 MAX_THREADS = 256                           # section 4.5: watched and ignored threads
 MAX_RULES = 2048                            # section 4.5: settings.feed_rules, in bytes (#615)
 MAPS = ("subscribed", "unsubscribed", "following", "unfollowed", "contacts", "ignored", "hidden",
-        "closed_chats")
+        "closed_chats", "timeline")
 
 
 class StateError(ValueError):
@@ -134,9 +134,9 @@ def merge(a: dict, b: dict) -> dict:
                        default=(None, off), key=lambda e: _at(e[0]))
             winner = best if best[0] is not None and (gone[0] is None or _at(best[0]) >= _at(gone[0])) else gone
             out[winner[1]][k] = winner[0]
-    for name in ("contacts", "ignored", "hidden", "closed_chats"):
-        for k in set(a[name]) | set(b[name]):
-            out[name][k] = max((s[name][k] for s in (a, b) if k in s[name]), key=_at)
+    for name in ("contacts", "ignored", "hidden", "closed_chats", "timeline"):
+        for k in set(a.get(name, {})) | set(b.get(name, {})):
+            out[name][k] = max((s[name][k] for s in (a, b) if k in s.get(name, {})), key=_at)
     out["starter"] = max(int(a.get("starter") or 0), int(b.get("starter") or 0))
     if _at(a["settings"]) == _at(b["settings"]):     # as old as each other (two first syncs): both
         out["settings"] = {**a["settings"], **b["settings"]}

@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0034                                              October 2026
 Category: Standards Track
 Status: Draft
-Updates: 0000, 0008, 0029
+Updates: 0000, 0008, 0029, 0044
 
                   Unseenet: Feeds and Following
 ```
@@ -63,12 +63,13 @@ document shows a feed as threads, and loses nothing but the layout.
     (section 5).
 
 **Following**
-:   A reader's choice to read a feed in their timeline. It is kept by
-    the reader's client and nowhere else (section 6).
+:   Subscribing to a group, whatever it is shown as. It is kept by the
+    reader's client and nowhere else (section 6).
 
 **Timeline**
-:   The entries of all feeds a reader follows, merged by the reader's
-    client (section 7).
+:   The entries of the groups a reader has in the timeline - by default
+    the feeds they follow - merged by the reader's client (sections 6.2
+    and 7).
 
 # 3. The Feed View
 
@@ -234,11 +235,12 @@ reading the client does anyway.
   feeds the same way and at the same times as their other groups, so
   that following does not stand out.
 - Following is subscribing: there is no separate mechanism. Every
-  group a user subscribes to that is shown as a feed is followed,
-  personal or not - a channel such as `dk.marsvin` where a few post and
-  everybody comments, news, a bot - and its entries come into the
-  timeline (section 7). "Follow" is only the word a client uses for
-  subscribing to a feed or to a person (section 6.1).
+  group a user subscribes to is followed, personal or not - a channel
+  such as `dk.marsvin` where a few post and everybody comments, news, a
+  bot, a discussion group. Whether its entries also come into the
+  timeline is a separate choice per group, with a default (section
+  6.2). Clients SHOULD use one word for subscribing everywhere, such as
+  "Follow" and "Leave", whatever the group is shown as.
 
 ## 6.1 Following a Person
 
@@ -270,10 +272,42 @@ anybody being told.
 - **Unfollowing** an identity unsubscribes from the feeds that were
   followed only because of it.
 
+## 6.2 What Comes into the Timeline
+
+Each group a user follows is either in the timeline or not. The reader
+decides; the owner only gives the default.
+
+- **Default.** A group whose owner shows it as a feed (`"view":
+  "feed"`) is in the timeline; a group shown as threads, or with no
+  `view`, is not.
+- **The reader's choice.** A client SHOULD let the reader put a followed
+  group shown as threads into the timeline, and take a feed out, for
+  example with a "Show in timeline" switch on the group. The choice is
+  kept in the user's state (UN-RFC 0044 `timeline`), only where it
+  differs from the default, and is dropped when the user leaves the
+  group.
+- **Not every group can be.** Groups shown as chat, `data` groups,
+  inboxes, contacts' chats and states are never in the timeline, and a
+  client MUST NOT offer it for them: a chat line is not an entry. Sites
+  (UN-RFC 0035) are not either; their pages are not entries.
+- **The view is not the choice.** A reader who switches how they read
+  a group (section 3.1) does not change whether it is in the timeline,
+  and the other way round. The default follows the owner's `view`, not
+  the reader's.
+- **Entries only.** From every group in the timeline, only entries come
+  in - thread roots - with their comments, or replies, under them as in
+  section 4.2. A discussion group in the timeline therefore brings each
+  new thread once, not every answer. A feed and a group of threads are
+  the same tree, so this is one rule for both.
+
+A client SHOULD make clear in the list of groups which ones are in the
+timeline, without a second kind of button: following is one action
+everywhere, and the timeline is a setting on what is followed.
+
 # 7. The Timeline
 
 A client SHOULD offer a timeline: one feed view (section 4) built from
-the entries of every feed the user follows.
+the entries of every group the user has in it (section 6.2).
 
 - Entries are ordered by `Date`, newest first. Each entry shows which
   feed it is from.
@@ -288,8 +322,8 @@ the entries of every feed the user follows.
   turn them off. Without them the timeline is newest first.
 - Comments in the timeline are shown as in section 4.2. Writing a
   comment from the timeline writes it to the entry's own feed.
-- Entries from feeds the reader does not follow MUST NOT be added to
-  the timeline, except where the reader is mentioned (UN-RFC 0032), and
+- Entries from groups that are not in the reader's timeline (section
+  6.2) MUST NOT be added to it, except where the reader is mentioned (UN-RFC 0032), and
   then marked as a mention.
 
 # 8. Who Follows
@@ -342,6 +376,8 @@ This document does not define such a mapping.
 - **UN-RFC 0029** section 2: the table of key-bound groups gains
   `feed@<fp>`, a personal group (UN-RFC 0029 section 2.1), this
   document section 5.1.
+- **UN-RFC 0044** section 4.2: the state gains `timeline`, the reader's
+  choices of section 6.2, merged per group by the newer `at`.
 - **UN-RFC 0000** section 6: 0034 is added to the index.
 
 # 11. Rationale
@@ -362,6 +398,13 @@ This document does not define such a mapping.
 - **Why a key-bound personal feed?** So that a person's feed can be
   found from their key or name with no directory, and disappears when
   the key is no longer used (UN-RFC 0029).
+- **Why a choice per group, not following twice?** "Subscribe" and
+  "follow" as two actions on the same group would make readers learn
+  what each does, and the network has no use for the difference. A
+  switch with a sensible default keeps one action and lets a reader who
+  wants it bring a quiet discussion group into the timeline, or keep a
+  busy bot out of it. Chat is left out because a running conversation
+  in the timeline would bury everything else.
 - **Why no follower counts?** Section 8.
 - **Why no ranking?** A timeline ordered by what others do rewards
   whatever gets the most reactions, and needs data about readers that

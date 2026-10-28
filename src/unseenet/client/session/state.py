@@ -81,6 +81,10 @@ class StateMixin:
             "ignored": {k: {"label": v.get("label", "")} for k, v in d["ignored"].items()},
             "hidden": {k: True for k in d.get("hidden_profiles", [])},
             "closed_chats": {k: {"since": v} for k, v in d.get("closed_chats", {}).items()},
+            # your choices for the timeline, only where they differ from the default and
+            # only for groups you follow (UN-RFC 0034 section 6.2)
+            "timeline": {g: {"on": v} for g, v in d.get("timeline_choice", {}).items()
+                         if isinstance(v, bool) and g in d["subscribed"]},
             "starter": 1 if starter is True else int(starter or 0),
             "settings": settings,
             "read": self._read_marks(),
@@ -139,7 +143,7 @@ class StateMixin:
                 k = key.split(":", 1)[1]
                 if k not in snap[section]:
                     s[off][k] = seen[key][1]
-        for section in ("contacts", "ignored", "hidden", "closed_chats", "threads"):
+        for section in ("contacts", "ignored", "hidden", "closed_chats", "timeline", "threads"):
             for k, v in snap[section].items():
                 at = stamp(f"{section}:{k}", v)
                 s[section][k] = {**(v if isinstance(v, dict) else {}), "at": at}
@@ -184,6 +188,12 @@ class StateMixin:
                 closed.pop(k, None)
             elif v.get("since"):
                 closed[k] = v["since"]
+        choices = d.setdefault("timeline_choice", {})      # in or out of the timeline (0034 6.2)
+        for k, v in s.get("timeline", {}).items():
+            if v.get("removed"):
+                choices.pop(k, None)
+            elif isinstance(v.get("on"), bool):
+                choices[k] = v["on"]
         marks = d.setdefault("threads", {})                 # watched and ignored (4.5)
         for k, v in s.get("threads", {}).items():
             if v.get("removed"):
@@ -230,7 +240,7 @@ class StateMixin:
         for k, at in s["unfollowed"].items():
             seen[f"unfollowed:{k}"] = [v("gone"), at]
         for section, field in (("contacts", "name"), ("ignored", "label"), ("hidden", None),
-                               ("closed_chats", "since"), ("threads", "is")):
+                               ("closed_chats", "since"), ("timeline", "on"), ("threads", "is")):
             for k, e in s.get(section, {}).items():
                 value = "removed" if e.get("removed") else ({field: e.get(field, "")} if field else True)
                 seen[f"{section}:{k}"] = [v(value), e.get("at", "")]

@@ -167,6 +167,11 @@ async def view(request):
     return _json(_api(request).set_view(_gid(request), data.get("view")))
 
 
+async def timeline_choice(request):
+    data = await _body(request)
+    return _json(_api(request).set_in_timeline(_gid(request), data.get("on")))
+
+
 async def subscribe(request):
     data = await _body(request)
     return _json(_api(request).subscribe(str(data.get("id", "")), bool(data.get("on", True))))
@@ -619,6 +624,7 @@ ROUTES = [
     ("GET", "/api/groups", groups), ("POST", "/api/groups", create),
     ("GET", "/api/groups/{gid}", group),
     ("POST", "/api/groups/{gid}/read", read), ("POST", "/api/groups/{gid}/view", view),
+    ("POST", "/api/groups/{gid}/timeline", timeline_choice),
     ("POST", "/api/subscribe", subscribe), ("GET", "/api/browse", browse),
     ("POST", "/api/refresh", refresh), ("POST", "/api/ripening", ripening),
     ("GET", "/api/known-nodes", known_nodes),
