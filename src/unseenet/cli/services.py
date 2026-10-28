@@ -133,6 +133,15 @@ def _ripen_public(args) -> None:
         while lock is not None and not lock.acquire():
             print("  another program on this machine is ripening a key; waiting", flush=True)
             time.sleep(30)
+        if lock is not None:                      # free memory as it is now we hold it (#677)
+            length = rp.fitting_segment_length(chain.t, len(chain.segments),
+                                               machine.ripening_budget())
+            if not length:
+                lock.release()
+                print("  not enough memory free now; try again later (UNSEENET_RIPENING_MEMORY)")
+                break
+        print(f"  ripening a segment of {length:,} iterations (about "
+              f"{rp.memory_for(length) >> 20} MiB)", flush=True)
         try:
             entry["segments"].append(rp.prove_segment(pk, chain.end, length).to_dict())
         finally:

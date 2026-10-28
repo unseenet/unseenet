@@ -1,10 +1,12 @@
 """What this machine can give key ripening: memory, and one ripening at a time (#440).
 
-Proving a segment of a key's ripening takes memory in proportion to its length
-(``core.ripening.memory_for``), so a client asks how much the machine has free -
-inside a container, the container's own limit counts - and keeps the segments
-within it. Large segments take a lock, so two programs on one machine (a client and
-a bot, several bots) do not ripen at once and exhaust the memory together.
+With chiavdf's low-memory prover (1.2.1, #444) a segment takes about the same
+memory whatever its length. Without it - an older chiavdf, a browser build - memory
+grows with the length (``core.ripening.memory_for``), so a client asks how much the
+machine has free - inside a container, the container's own limit counts - and keeps
+the segments within it. Large segments take one lock for the whole machine
+(``lock_path``, #677), so two programs (a client and a bot, several bots, under
+different users) do not ripen at once and exhaust the memory together.
 """
 
 from __future__ import annotations
@@ -121,17 +123,61 @@ def ripening_budget() -> int:
     return int((free if free is not None else UNKNOWN) * SHARE)
 
 
+LOCK_NAME = "unseenet-ripening.lock"
+SHARED_LOCK_DIRS = ("/run/lock", "/dev/shm")   # not made private by systemd's PrivateTmp
+
+
+def lock_path() -> Path:
+    """Where the ripening lock lives: one file for every user and service on this
+    machine (#677) - ``UNSEENET_RIPENING_LOCK`` if set, else the first writable of
+    ``/run/lock`` and ``/dev/shm`` on Linux. Elsewhere (Windows, macOS, phones), or
+    where neither can be written, a file of this user's in the temporary directory."""
+    env = os.environ.get("UNSEENET_RIPENING_LOCK")
+    if env:
+        return Path(env)
+    if sys.platform.startswith("linux"):
+        for d in SHARED_LOCK_DIRS:
+            if os.path.isdir(d) and os.access(d, os.W_OK | os.X_OK):
+                return Path(d) / LOCK_NAME
+    return _user_lock_path()
+
+
+def _user_lock_path() -> Path:
+    return Path(tempfile.gettempdir()) / f"unseenet-ripening-{_user()}.lock"
+
+
 class RipeningLock:
-    """One large ripening at a time on this machine: an exclusive lock on a file in
-    the temporary directory, shared by every Unseenet program of this user."""
+    """One large ripening at a time on this machine: an exclusive lock on one file
+    shared by every Unseenet program of every user (``lock_path``, #677)."""
 
     def __init__(self, path: Path | None = None):
-        self.path = path or Path(tempfile.gettempdir()) / f"unseenet-ripening-{_user()}.lock"
+        self.path = path or lock_path()
         self._f = None
+
+    def _open(self):
+        """Open the lock file without O_CREAT when it is there, so a file another user
+        made can be locked too in a sticky directory (Linux' protected_regular); made
+        world-readable when we create it. flock needs no write access."""
+        if sys.platform == "win32":
+            return open(self.path, "a+")
+        try:
+            fd = os.open(self.path, os.O_RDONLY)
+        except FileNotFoundError:
+            try:
+                fd = os.open(self.path, os.O_RDONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:                    # made by another meanwhile
+                fd = os.open(self.path, os.O_RDONLY)
+        return os.fdopen(fd, "r")
 
     def acquire(self) -> bool:
         """Take the lock if it is free; False if another program holds it."""
-        self._f = open(self.path, "a+")
+        try:
+            self._f = self._open()
+        except OSError:
+            if self.path == _user_lock_path():
+                raise
+            self.path = _user_lock_path()             # the shared file can't be opened here
+            self._f = self._open()
         try:
             if sys.platform == "win32":
                 import msvcrt

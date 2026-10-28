@@ -7,6 +7,19 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Key ripening in constant memory** (#444): segments are proved with chiavdf's new
+  `prove_low_memory` (chiavdf 1.2.1, now the minimum), which gives the same proof as
+  before in about 20 MiB whatever the segment's length, at about twice the time. Every
+  machine can now ripen a key to level 4; memory no longer limits the level. Nothing
+  changes for nodes or other clients: the proofs are byte for byte the same. Clients
+  still ripen to level 3 by default (level 4 takes weeks of one core).
+- **One ripening lock for the whole machine** (#677): the lock for large segments is
+  one file for every user and service (`/run/lock` or `/dev/shm`, which systemd's
+  `PrivateTmp` leaves shared; `UNSEENET_RIPENING_LOCK` to choose), not one per user in
+  `/tmp`, and free memory is read again once the lock is held. Two services on the
+  project's help-bot VM each ripened at once and ran it out of memory. Where chiavdf has
+  the low-memory prover the lock is rarely needed at all. A segment's start is logged.
+
 - **Accepted** by the maintainer, 28 Oct: the UN-RFC 0030 amendment (#730): an entry's
   or thread's own comment deadline (`Comment-Days`, never longer than the group's),
   closing and opening comments on one entry (`Control: comments-close` /
