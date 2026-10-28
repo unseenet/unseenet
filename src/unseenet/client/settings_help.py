@@ -1,5 +1,5 @@
 """Help for Edit group (unseenet-gui#178): per setting, what it does, whom it affects and
-what changes later - the same text in every client, as the rules' HELP is.
+what changes later - the same text in every client, as the HELP for your own rules is.
 
 Belongs here: the words only. Not here: the settings themselves (localapi.api.running,
 ``group_settings``) or the manifest fields they become (core.groups, the UN-RFCs named).
@@ -56,10 +56,12 @@ GROUP_SETTINGS_HELP: tuple[dict, ...] = (
              "written (UN-RFC 0008).",
      "affects": "Everyone here: quicker, but it tells more about when people write.",
      "later": "Change it any time."},
-    {"key": "rules", "label": "Rules",
-     "what": "What the group is for and how to behave, shown to people before they post.",
-     "affects": "Writers: shown, not enforced by nodes. Moderators act on them.",
-     "later": "Change them any time."},
+    {"key": "charter", "label": "Charter",
+     "what": "What the group is for and what it asks of those who write here, shown to "
+             "people before they post (UN-RFC 0014).",
+     "affects": "Writers: shown, never enforced by machines - moderators act on it. Each "
+                "reader's own rules decide what they see.",
+     "later": "Change it any time."},
     {"key": "report_issuers", "label": "Spam reports here",
      "what": "Spam report issuers readers follow here by default, so spam is hidden from "
              "the start (UN-RFC 0045).",

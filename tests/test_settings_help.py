@@ -12,7 +12,7 @@ def test_every_help_names_a_setting_and_says_all_three():
         assert s["key"] in SETTINGS_FIELDS, s["key"]
         assert all(s[k].strip() for k in ("label", "what", "affects", "later")), s["key"]
     # the main settings of Edit group all have help
-    assert {"title", "view", "kinds", "files", "reactions", "rules", "min_pow",
+    assert {"title", "view", "kinds", "files", "reactions", "charter", "min_pow",
             "report_issuers", "tags", "languages", "team_name", "index"} <= set(keys)
 
 

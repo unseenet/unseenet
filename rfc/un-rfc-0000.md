@@ -121,7 +121,7 @@ The protocol is designed to be extended without breaking old software:
 | 0011 | Node Information and Operator Contact         | Standards Track |
 | 0012 | Retention, Archive Nodes and History          | Standards Track |
 | 0013 | Removing Groups                               | Standards Track |
-| 0014 | Group Rules (Charters)                        | Standards Track |
+| 0014 | Group Charters                                | Standards Track |
 | 0015 | Transferring Group Ownership                  | Standards Track |
 | 0016 | Peer Authentication with Node Keys            | Standards Track |
 | 0017 | Catching Up by Pull, and Group State          | Standards Track |

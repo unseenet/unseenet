@@ -275,7 +275,8 @@ draws nothing for it.
 notice (UN-RFC 0032): `{"group", "id", "label", "ref", "followed"}`. The group adds
 `may_post`, and for a real group `timeline` - `{"on", "possible",
 "default"}`: whether it is in your timeline, whether it can be, and what
-it is without your choice (UN-RFC 0034 section 6.2) - `rules`, `rules_type`, `rules_tree`, `portals`,
+it is without your choice (UN-RFC 0034 section 6.2) - `charter`, `charter_type`, `charter_tree`
+(the group's charter, UN-RFC 0014; not your own rules, section 4.20), `portals`,
 `portal_warning`, `write`, `files` and `node_files` (section 4.10), and for its owner or a moderator `roles` (section 4.7):
 `{"moderators", "posters", "banned", "moderates", "maintainer"}` and, for a
 closed group's owner, `members`; `maintainer` is true when you maintain a
@@ -419,7 +420,7 @@ not (you do not own or moderate the group).
   "channel" | "closed", "title": "...", "description": "...", "view":
   "threads" | "chat" | "feed" | "pages", "kinds": "both" | "post" | "chat",
   "fast": false, "comments": "open" | "none", "files": "none" | "pictures" |
-  "pictures+pdf"}` creates a group you own;
+  "pictures+pdf", "charter": "...", "charter_type": "..."}` creates a group you own;
   answers `{"id": "<group ID>"}`. `files` is what files it takes (UN-RFC
   0027 section 5.1): none (the default), pictures, or pictures and PDFs,
   up to 4 MiB each. `pages` makes a site and needs `"type": "channel"`
@@ -427,7 +428,7 @@ not (you do not own or moderate the group).
   channel shown as `feed` takes comments unless it says `none`; `fast` is
   for chat groups only.
 - `POST /api/groups/<id>/settings` with the manifest fields to change
-  (`title`, `description`, `rules`, `rules_type`, `view`, `kinds` as for
+  (`title`, `description`, `charter`, `charter_type`, `view`, `kinds` as for
   creating, `min_pow`, `low_latency`, `retention_days`, `comments`,
   `comment_days`, `files` as for creating, `reactions`: `"default"`,
   `"none"`, `"any"` or a list of up to 12 emoji, UN-RFC 0048 section 4,

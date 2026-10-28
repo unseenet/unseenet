@@ -170,14 +170,15 @@ class GroupsMixin:
 
     async def create_group(self, name: str, gtype: str, title: str = "", description: str = "",
                            min_pow: int = _s.DEFAULT_POW, local: bool = False,
-                           retention_days: int | None = None, rules: str = "",
+                           retention_days: int | None = None, charter: str = "",
                            view: str | None = None, low_latency: bool = False,
                            kinds: list[str] | None = None, node: str | None = None,
                            comments: str | None = None, comment_days: int | None = None,
-                           rules_type: str | None = None, moderators=(), posters=(),
+                           charter_type: str | None = None, moderators=(), posters=(),
                            extra: dict | None = None) -> str:
-        """``moderators``/``posters``: keys as text; ``extra``: attachments, max_pins,
-        max_pages, home (see groups.EXTRA_FIELDS)."""
+        """``charter``: the group's charter, what it is for and asks of those who write
+        (UN-RFC 0014), with ``charter_type`` for Markdown; ``moderators``/``posters``: keys
+        as text; ``extra``: attachments, max_pins, max_pages, home (see groups.EXTRA_FIELDS)."""
         from ...core import group_emoji as _ge
         if _ge.is_emoji_name(name):      # reserved for a group's emoji (UN-RFC 0056 3.1)
             raise SessionError("a name ending in .emoji is kept for a group's emoji")
@@ -191,8 +192,8 @@ class GroupsMixin:
             extra = {**(extra or {}), "attachments": bl.PICTURES_AND_PDF}
         art = make_manifest(owner, name, gtype, title=title, description=description,
                             min_pow=min_pow, local=local, retention_days=retention_days,
-                            rules=rules, view=view, low_latency=low_latency, kinds=kinds,
-                            rules_type=rules_type, moderators=list(moderators),
+                            charter=charter, view=view, low_latency=low_latency, kinds=kinds,
+                            charter_type=charter_type, moderators=list(moderators),
                             posters=list(posters) if gtype == "channel" else (),
                             comments=comments if gtype == "channel" else None,
                             comment_days=comment_days if gtype == "channel" else None,
@@ -423,8 +424,9 @@ class GroupsMixin:
         return group_id in DATA_GROUPS or self.manifest_data(group_id).get("view") == "data"
 
     def manifest_data(self, group_id: str) -> dict:
-        """The newest manifest seen for a group ({} if none yet)."""
-        return dict(self.data["groups"].get(group_id, {}).get("manifest", {}))
+        """The newest manifest seen for a group ({} if none yet), with its charter under
+        the current names also when it was signed with the earlier ones (UN-RFC 0014 2.2)."""
+        return with_charter(self.data["groups"].get(group_id, {}).get("manifest", {}))
 
     # --- portals (UN-RFC 0023 section 3.5) ---
     def group_portals(self, group_id: str) -> list[tuple[str, str]]:
@@ -464,7 +466,7 @@ class GroupsMixin:
     async def update_group(self, group_id: str, **changes) -> dict:
         """Publish a new manifest with a higher serial (owner only).
 
-        Allowed changes: title, description, rules, rules_type (UN-RFC 0014 2.1), view,
+        Allowed changes: title, description, charter, charter_type (UN-RFC 0014 2.1), view,
         kinds, low_latency, min_pow, retention_days. Type, owner and locality can never change (UN-RFC 0004, 4).
         """
         entry = self.data["groups"].get(group_id, {})
@@ -473,7 +475,7 @@ class GroupsMixin:
         data = self.manifest_data(group_id)
         if not data:
             raise SessionError("the group's manifest has not been fetched yet")
-        allowed = {"title", "description", "rules", "rules_type", "view", "low_latency", "min_pow",
+        allowed = {"title", "description", "charter", "charter_type", "view", "low_latency", "min_pow",
                    "retention_days", "banned", "moderators", "posters", "kinds",
                    "comments", "comment_days", *EXTRA_FIELDS}
         if ("comments" in changes or "comment_days" in changes) and data.get("type") != "channel":
@@ -495,18 +497,18 @@ class GroupsMixin:
                 else:
                     data[key] = value
                 continue
-            if value in (None, "", False, []) and key in ("title", "description", "rules",
-                                                         "rules_type",
+            if value in (None, "", False, []) and key in ("title", "description", "charter",
+                                                         "charter_type",
                                                          "low_latency", "banned", "moderators",
                                                          "posters", "kinds", "comments",
                                                          "comment_days", *EXTRA_FIELDS):
                 data.pop(key, None)
             else:
                 data[key] = value
-        if len(data.get("rules", "")) > MAX_RULES:
-            raise SessionError(f"rules are limited to {MAX_RULES} characters")
-        if not data.get("rules"):
-            data.pop("rules_type", None)          # no text, no type
+        if len(data.get("charter", "")) > MAX_CHARTER:
+            raise SessionError(f"a charter is limited to {MAX_CHARTER} characters")
+        if not data.get("charter"):
+            data.pop("charter_type", None)        # no text, no type
         if data.get("view", "threads") not in VIEWS:
             raise SessionError("view must be one of " + ", ".join(VIEWS))
         try:
@@ -552,17 +554,26 @@ class GroupsMixin:
                    if isinstance(b, dict) and b.get("key") != key_text]
         await self.update_group(group_id, banned=current)
 
-    def rules_unseen(self, group_id: str) -> bool:
-        """True if the group has rules the reader has not seen in this version."""
-        data = self.manifest_data(group_id)
-        if not data.get("rules"):
-            return False
-        return self.data.setdefault("rules_seen", {}).get(group_id, 0) < int(data.get("serial", 1))
+    def _charter_seen(self) -> dict:
+        """Group ID -> the manifest serial whose charter the user last saw (kept in the
+        vault; a vault from before #726 kept it as ``rules_seen``)."""
+        seen = self.data.setdefault("charter_seen", {})
+        for gid, serial in self.data.pop("rules_seen", {}).items():
+            seen.setdefault(gid, serial)
+        return seen
 
-    def mark_rules_seen(self, group_id: str) -> None:
-        """Note that the user has seen the group's rules in their current version, so the
-        client stops showing them until the owner changes them."""
-        self.data.setdefault("rules_seen", {})[group_id] = int(self.manifest_data(group_id).get("serial", 1))
+    def charter_unseen(self, group_id: str) -> bool:
+        """True if the group has a charter the reader has not seen in this version, so the
+        client shows it before they read or write there (UN-RFC 0014 section 3)."""
+        data = self.manifest_data(group_id)
+        if not data.get("charter"):
+            return False
+        return self._charter_seen().get(group_id, 0) < int(data.get("serial", 1))
+
+    def mark_charter_seen(self, group_id: str) -> None:
+        """Note that the user has seen the group's charter in its current version, so the
+        client stops showing it until the owner changes it."""
+        self._charter_seen()[group_id] = int(self.manifest_data(group_id).get("serial", 1))
         self.save()
 
     async def remove_group(self, group_id: str, reason: str = "") -> None:

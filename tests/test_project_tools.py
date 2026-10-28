@@ -132,17 +132,17 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert v.data["groups"][nodes]["manifest"]["serial"] == 3
     assert v.data["groups"][talk]["manifest"]["serial"] == 1
 
-    # a group made before the list had rules gets them; posters and the rest are kept
+    # a group made before the list had a charter gets one; posters and the rest are kept
     kept = [crypto.Identity.generate().key_text]
 
-    def without_rules(d):
-        for k in ("title", "description", "rules"):
+    def without_charter(d):
+        for k in ("title", "description", "charter"):
             d.pop(k, None)
         d["min_pow"], d["posters"] = 0, kept
-    await as_published_before(talk, without_rules)
+    await as_published_before(talk, without_charter)
     await run("create_groups")
     new = Vault.open(setup["vault"], "pw").data["groups"][talk]["manifest"]
-    assert new["serial"] == 3 and new["rules"].startswith("The place to talk")
+    assert new["serial"] == 3 and new["charter"].startswith("The place to talk")
     assert new["min_pow"] == 20 and new["posters"] == kept and "view" not in new
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
@@ -153,7 +153,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     test = f"unseenet.test@{setup['project'].fingerprint}"
     del v.data["groups"][test]["manifest"]                    # never kept by the vault
     stale = dict(v.data["groups"][talk]["manifest"], serial=1)
-    stale.pop("rules")
+    stale.pop("charter")
     v.data["groups"][talk]["manifest"] = stale
     v.save()                                                   # an out-of-date vault
     await run("create_groups")
@@ -221,3 +221,20 @@ async def test_claim_inbox_demands_postage(setup):
     code, text = await c.post(cheap.to_bytes())
     await c.quit()
     assert code != 240 and "12" in text
+
+
+def test_create_groups_moves_a_charter_to_its_name():
+    """A project group whose manifest still says ``rules`` (UN-RFC 0014 section 2.2) gets a
+    new manifest with ``charter``, even when nothing else differs (#726)."""
+    sys.path.insert(0, str(Path(__file__).parent.parent / "tools" / "project"))
+    try:
+        cg = importlib.import_module("create_groups")
+    finally:
+        sys.path.pop(0)
+    current = {"name": "unseenet", "type": "open", "serial": 4, "title": "T",
+               "description": "D", "rules": "Be kind", "min_pow": 20}
+    wanted = dict(cg.SETTINGS, title="T", description="D", charter="Be kind", min_pow=20)
+    data, notes = cg.updated_manifest(current, "open", wanted)
+    assert data["charter"] == "Be kind" and "rules" not in data and data["serial"] == 5
+    assert notes == ["    rules -> charter (the field's current name)"]
+    assert cg.updated_manifest(data, "open", wanted) == (None, [])

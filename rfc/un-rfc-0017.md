@@ -200,7 +200,7 @@ needs a peer that accepts pushes from it (UN-RFC 0016).
   Nodes MAY limit `NEWNEWS` and `ARTICLE` per connection (UN-RFC 0005
   section 6).
 - **Authority.** Pulled articles are checked exactly like pushed ones:
-  signatures, postage, group rules and dates. Pulling from a malicious
+  signatures, postage, posting rules (UN-RFC 0004 section 5) and dates. Pulling from a malicious
   node can deliver nothing that pushing could not.
 - **Removals.** Listing `rmgroup` articles lets a node that missed a
   removal while it was down learn about it and delete the group.

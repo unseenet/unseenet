@@ -40,7 +40,7 @@ async def setup(tmp_path, monkeypatch):
 def _args(**kw):
     base = dict(identity=None, json=True, local=False, moderator=None, poster=None, title=None,
                 description=None, min_pow=BITS, retention_days=None, view=None, kinds=None,
-                rules=None, comments=None, comment_days=None, attachments=None, types=None,
+                charter=None, comments=None, comment_days=None, attachments=None, types=None,
                 max_pins=None, max_pages=None, home=None)
     return Namespace(**(base | kw))
 

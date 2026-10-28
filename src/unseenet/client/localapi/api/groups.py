@@ -112,9 +112,11 @@ class Groups:
             raise NotFound("no such group")
         data = s.manifest_data(gid)
         out = {**self._group(s, s.group_info(gid)), "may_post": s.may_post(gid),
-               "rules": data.get("rules", ""), "rules_type": data.get("rules_type"),
-               "rules_tree": markup.manifest_text(data.get("rules", ""), data.get("rules_type"))
-               if data.get("rules") else [],
+               # the group's charter (UN-RFC 0014), not your own rules (/api/rules)
+               "charter": data.get("charter", ""), "charter_type": data.get("charter_type"),
+               "charter_tree": markup.manifest_text(data.get("charter", ""),
+                                                    data.get("charter_type"))
+               if data.get("charter") else [],
                "portals": [{"network": n, "source": src} for n, src in s.group_portals(gid)],
                # in your timeline or not, whether it can be, and what it is by default
                # (UN-RFC 0034 section 6.2) - the view you read it in changes none of this
@@ -200,7 +202,7 @@ class Groups:
 
     def group(self, gid: str, show_all: bool = False, limit: int | None = None) -> dict:
         """``GET /api/groups/{gid}`` (section 4.3): one group as a client shows it - its
-        head (title, view, roles, rules, write permission) and its rows, threaded or as a chat,
+        head (title, view, roles, charter, write permission) and its rows, threaded or as a chat,
         each with whether you may reply. Also the pseudo-groups of a contact and "for you"."""
         s = self._ready()
         if gid == TIMELINE:

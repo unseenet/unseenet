@@ -189,11 +189,11 @@ def page_body(text: str, content_type: str | None, resolve) -> list[dict]:
         _RELATIVE.reset(token)
 
 
-MAX_TYPE = 128                        # a text type field (about_type, rules_type)
+MAX_TYPE = 128                        # a text type field (about_type, charter_type)
 
 
 def manifest_text(text: str, text_type: str | None) -> list[dict]:
-    """A profile's ``about`` or a group's ``rules`` as a tree (UN-RFC 0022 4.1, 0014 2.1).
+    """A profile's ``about`` or a group's ``charter`` as a tree (UN-RFC 0022 4.1, 0014 2.1).
 
     Markdown has the post subset without images: a manifest cannot reference
     blobs, so an image is shown as its alt text, as one that cannot be had.
@@ -204,7 +204,7 @@ def manifest_text(text: str, text_type: str | None) -> list[dict]:
 
 
 def text_type_for(markdown: bool, text: str) -> str | None:
-    """The type field to store with ``about`` or ``rules``: only Markdown is written,
+    """The type field to store with ``about`` or ``charter``: only Markdown is written,
     since plain text is the default (and an empty text needs no type)."""
     return MARKDOWN_TYPE if markdown and (text or "").strip() else None
 

@@ -4,10 +4,11 @@
     python tools/project/create_groups.py [--dry-run]
 
 This is the list of every group the project owns, with its type, its posters,
-its view and its rules, so that anyone can see how the project is set up and
+its view and its charter, so that anyone can see how the project is set up and
 do the same for their own. Missing groups are created. A group that exists
 (the owner vault knows it) gets a new manifest, with the next serial, if its
-view, title, description, rules, min_pow, kinds or portals differ from this list; everything
+view, title, description, charter, min_pow, kinds or portals differ from this list (or its
+charter still has the earlier field name `rules`, UN-RFC 0014 section 2.2); everything
 else in its manifest, such as its posters or `claims`, is kept. Groups that
 match are left alone, so running the script again changes nothing.
 
@@ -43,7 +44,7 @@ import sys
 import _owner
 from _owner import FP, fetch_manifests, open_owner_session, post_everywhere
 
-from unseenet.core.groups import make_manifest, manifest_article
+from unseenet.core.groups import make_manifest, manifest_article, with_charter
 
 TALK = """The place to talk about Unseenet itself: the protocol (the UN-RFCs), the
 node and client software, ideas, bugs and questions. Danish is fine too.
@@ -124,11 +125,11 @@ and where to get it. Its posts are written by a program from the release notes a
 be wrong; the official word is in unseenet.announce. Comment to ask about a release -
 stay on it; the bot answers, and so may people. New threads are the bot's."""
 
-BOT_RULES = """Posts here are made by a bot from {source}, credited in each post.
+BOT_CHARTER = """Posts here are made by a bot from {source}, credited in each post.
 Comment on a post to talk about it; new threads are the bot's. Be kind, stay
 on the topic of the post, and no advertising."""
 
-# name, type, view, title, description, rules, poster (a key in the vault, or a
+# name, type, view, title, description, charter, poster (a key in the vault, or a
 # public key "ed25519:..." for keys kept elsewhere), min_pow.
 # The poster is only used when a group is created; later changes to posters
 # are made by the scripts that own them (setup_registrar.py).
@@ -175,27 +176,27 @@ GROUPS = (
      "Requests for hierarchies, decisions, and complaints about names.", ADMIN, None, 22),
     ("alt.news.wikipedia", "channel", "feed", "News from Wikipedia's In the news",
      "One post per story in Wikipedia's \"In the news\", by a bot. Comment on any story.",
-     BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
+     BOT_CHARTER.format(source="Wikipedia (CC BY-SA 4.0)"),
      "ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza", 20),
     ("alt.history.onthisday", "channel", "feed", "On this day in history",
      "Each day's anniversaries from Wikipedia's \"On this day\", by a bot.",
-     BOT_RULES.format(source="Wikipedia (CC BY-SA 4.0)"),
+     BOT_CHARTER.format(source="Wikipedia (CC BY-SA 4.0)"),
      "ed25519:ame5agdrby6zyjqusfnpyicxg4nygfai3lqwewz2ctkkjuid3hxa", 20),
     ("alt.news.globalvoices", "channel", "feed", "Global Voices: citizen media from around the world",
      "Whole stories from Global Voices, by a bot. Comment on any story.",
-     BOT_RULES.format(source="Global Voices (CC BY 3.0)"),
+     BOT_CHARTER.format(source="Global Voices (CC BY 3.0)"),
      "ed25519:ojyu2pv2v3aye2tw4xbel3ha5loujwxqjao5wnoe55dw7zc4fw7q", 20),
     ("alt.news.theconversation", "channel", "feed", "The Conversation: news analysis by researchers",
      "The opening of articles from The Conversation, with a link to the rest, by a bot.",
-     BOT_RULES.format(source="The Conversation (CC BY-ND 4.0)"),
+     BOT_CHARTER.format(source="The Conversation (CC BY-ND 4.0)"),
      "ed25519:7ky3decxcamoqttl2fqysiie24ptdxt4mld5yrxdb2ftbheukydq", 20),
     ("alt.privacy.eff", "channel", "feed", "EFF Deeplinks: digital rights, privacy, free speech",
      "Posts from the Electronic Frontier Foundation's Deeplinks blog, by a bot.",
-     BOT_RULES.format(source="EFF Deeplinks (CC BY 4.0)"),
+     BOT_CHARTER.format(source="EFF Deeplinks (CC BY 4.0)"),
      "ed25519:uangztkgxp6ql2nxj6fy34d2bjspykt5taxfi7i4urrcm2o4kvca", 20),
     ("alt.space.nasa", "channel", "feed", "NASA Image of the Day",
      "NASA's Image of the Day: the caption and a link to the picture, by a bot.",
-     BOT_RULES.format(source="NASA (not copyrighted)"),
+     BOT_CHARTER.format(source="NASA (not copyrighted)"),
      "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq", 20),
 )
 
@@ -260,7 +261,7 @@ KINDS = {"unseenet.chat": ["chat"]}
 
 
 # What this list decides for groups that already exist, and each field's default.
-SETTINGS = {"view": "threads", "title": "", "description": "", "rules": "", "min_pow": 0,
+SETTINGS = {"view": "threads", "title": "", "description": "", "charter": "", "min_pow": 0,
             "comments": "none", "comment_days": None, "portals": [], "kinds": None,
             "attachments": None, "report_issuers": None, "labellers": None, "languages": None}
 
@@ -275,8 +276,10 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
     if current.get("type") != gtype:
         sys.exit(f"{current.get('name')} is a {current.get('type')} group, not {gtype}; "
                  "a group's type cannot change (UN-RFC 0004 section 2)")
+    legacy = any(k in current for k in ("rules", "rules_type"))     # UN-RFC 0014 2.2
+    current = with_charter(current)
     changes = [k for k, default in SETTINGS.items() if current.get(k, default) != wanted[k]]
-    if not changes:
+    if not changes and not legacy:
         return None, []
     data = dict(current)
     data.update({k: wanted[k] for k in changes})
@@ -287,6 +290,8 @@ def updated_manifest(current: dict, gtype: str, wanted: dict) -> tuple[dict | No
             data.pop(k, None)                   # defaults are left out of manifests
     data["serial"] = int(current["serial"]) + 1
     notes = [f"    {k}: {_short(current.get(k, '-'))!r} -> {_short(wanted[k])!r}" for k in changes]
+    if legacy:
+        notes.append("    rules -> charter (the field's current name)")
     return data, notes
 
 
@@ -298,7 +303,7 @@ async def main() -> None:
     owned = [f"{g[0]}@{owner.fingerprint}" for g in GROUPS
              if s.data["groups"].get(f"{g[0]}@{owner.fingerprint}", {}).get("owner")]
     network = await fetch_manifests(owned) if owned else {}
-    for name, gtype, view, title, desc, rules, poster, min_pow in GROUPS:
+    for name, gtype, view, title, desc, charter, poster, min_pow in GROUPS:
         gid = f"{name}@{owner.fingerprint}"
         entry = s.data["groups"].get(gid, {})
         if entry.get("owner"):
@@ -309,7 +314,7 @@ async def main() -> None:
                          "is a node reachable?")
             current = max(known, key=lambda m: int(m.get("serial", 0)))
             comments, comment_days = COMMENTS.get(name, ("none", None))
-            wanted = {"view": view, "title": title, "description": desc, "rules": rules,
+            wanted = {"view": view, "title": title, "description": desc, "charter": charter,
                       "min_pow": min_pow, "comments": comments, "comment_days": comment_days,
                       "portals": PORTALS.get(name, []), "kinds": KINDS.get(name),
                       "attachments": ATTACHMENTS.get(name),
@@ -330,7 +335,7 @@ async def main() -> None:
         posters = ([poster] if poster.startswith("ed25519:") else [s.data[poster]["key"]]) \
             if poster else []
         comments, comment_days = COMMENTS.get(name, (None, None))
-        art = make_manifest(owner, name, gtype, title=title, description=desc, rules=rules,
+        art = make_manifest(owner, name, gtype, title=title, description=desc, charter=charter,
                             posters=posters, min_pow=min_pow, retention_days=90,
                             view=None if view == "threads" else view,
                             comments=comments, comment_days=comment_days,

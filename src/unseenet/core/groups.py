@@ -255,8 +255,8 @@ class Manifest:
     description: str = ""
     local: bool = False
     submissions: str | None = None
-    rules: str = ""                      # UN-RFC 0014
-    rules_type: str | None = None        # UN-RFC 0014 2.1: Markdown or plain
+    charter: str = ""                    # UN-RFC 0014
+    charter_type: str | None = None      # UN-RFC 0014 2.1: Markdown or plain
     view: str = "threads"                # UN-RFC 0008
     low_latency: bool = False            # UN-RFC 0008
     kinds: tuple[str, ...] = MESSAGE_KINDS   # UN-RFC 0028, 4.1
@@ -286,9 +286,8 @@ class Manifest:
                 retention_days=int(data.get("retention_days", 90)),
                 title=data.get("title", ""), description=data.get("description", ""),
                 local=data.get("local") is True, submissions=data.get("submissions"),
-                rules=str(data.get("rules", "")), view=data.get("view", "threads"),
-                rules_type=(data["rules_type"] if isinstance(data.get("rules_type"), str)
-                            else None),
+                charter=str(charter_fields(data)[0]), view=data.get("view", "threads"),
+                charter_type=charter_fields(data)[1],
                 low_latency=data.get("low_latency") is True,
                 # an inbox takes both kinds, whatever it says (UN-RFC 0028, 4.1)
                 kinds=MESSAGE_KINDS if data.get("type") == "inbox" else _kinds(data),
@@ -383,10 +382,10 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
                   title: str = "", description: str = "", moderators=(), posters=(),
                   min_pow: int = 0, retention_days: int = 90, sealed: str | None = None,
                   local: bool = False, submissions: str | None = None,
-                  rules: str = "", view: str | None = None, low_latency: bool = False,
+                  charter: str = "", view: str | None = None, low_latency: bool = False,
                   kinds: list[str] | None = None, comments: str | None = None,
                   comment_days: int | None = None, pow_bits: int = 18,
-                  rules_type: str | None = None, lifetime: timedelta | None = None,
+                  charter_type: str | None = None, lifetime: timedelta | None = None,
                   extra: dict | None = None) -> Article:
     """``extra``: further manifest fields - ``attachments`` (UN-RFC 0027), ``max_pins``
     (0033), ``max_pages``, ``home`` and ``index`` (0035), ``reactions`` (0048) - checked
@@ -410,10 +409,10 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
         data["local"] = True
     if submissions:
         data["submissions"] = submissions
-    if rules:
-        data["rules"] = rules
-        if rules_type:
-            data["rules_type"] = rules_type
+    if charter:
+        data["charter"] = charter
+        if charter_type:
+            data["charter_type"] = charter_type
     if view:
         data["view"] = view
     if low_latency:
@@ -503,7 +502,35 @@ def check_extra_fields(data: dict) -> None:
         raise ValueError("max_pages, home and index are for sites (view pages)")
 
 
-MAX_RULES = 8192
+MAX_CHARTER = 8192
+# UN-RFC 0014 section 2.2: the fields' earlier names, read from manifests signed before
+# the change (only the owner can sign a new one); never written. Remove before 1.0.
+_OLD_CHARTER = ("rules", "rules_type")
+
+
+def charter_fields(data: dict) -> tuple[str, str | None]:
+    """A manifest's charter and its type (UN-RFC 0014): ``charter``/``charter_type``, or
+    in a manifest signed before they had those names, ``rules``/``rules_type``."""
+    if "charter" in data:
+        text, ctype = data.get("charter", ""), data.get("charter_type")
+    else:
+        text, ctype = data.get(_OLD_CHARTER[0], ""), data.get(_OLD_CHARTER[1])
+    return (text if isinstance(text, str) else str(text),
+            ctype if isinstance(ctype, str) else None)
+
+
+def with_charter(data: dict) -> dict:
+    """A copy of manifest ``data`` with the charter under its current names, also when
+    it was signed with the earlier ones (UN-RFC 0014 section 2.2)."""
+    out = dict(data)
+    if "charter" not in out and _OLD_CHARTER[0] in out:
+        text, ctype = charter_fields(out)
+        out["charter"] = text
+        if ctype:
+            out["charter_type"] = ctype
+    for old in _OLD_CHARTER:
+        out.pop(old, None)
+    return out
 VIEWS = ("threads", "chat", "data", "feed", "pages")   # UN-RFC 0008 3.1, 0034 3.1, 0035 3
 
 
@@ -514,11 +541,15 @@ def manifest_article(owner: crypto.Identity, group_id: str, data: dict, pow_bits
     A key-bound group's manifest gets a fresh ``expires``, ``lifetime`` from now -
     by default the longest UN-RFC 0029 allows - so every new manifest of such a
     group is also its renewal."""
-    if len(data.get("rules", "")) > MAX_RULES:
-        raise ValueError(f"rules are limited to {MAX_RULES} characters")
-    if "rules_type" in data and (not isinstance(data["rules_type"], str)
-                                 or len(data["rules_type"]) > 128):
-        raise ValueError("rules_type is a Content-Type of at most 128 characters")
+    if any(old in data for old in _OLD_CHARTER):     # republished: the current names (0014 2.2)
+        upgraded = with_charter(data)
+        data.clear()
+        data.update(upgraded)
+    if len(data.get("charter", "")) > MAX_CHARTER:
+        raise ValueError(f"a charter is limited to {MAX_CHARTER} characters")
+    if "charter_type" in data and (not isinstance(data["charter_type"], str)
+                                   or len(data["charter_type"]) > 128):
+        raise ValueError("charter_type is a Content-Type of at most 128 characters")
     if data.get("view", "threads") not in VIEWS:
         raise ValueError("view must be one of " + ", ".join(VIEWS))
     _kinds(data)                                           # UN-RFC 0028, 4.1

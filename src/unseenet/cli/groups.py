@@ -81,11 +81,11 @@ def _group_fields(args) -> tuple[dict, dict]:
             fields[key] = value
     if getattr(args, "kinds", None):
         fields["kinds"] = [k.strip() for k in args.kinds.split(",") if k.strip()]
-    if getattr(args, "rules", None):
-        text = sys.stdin.read() if args.rules == "-" else Path(args.rules).read_text()
-        fields["rules"] = text
-        fields["rules_type"] = ("text/markdown; charset=utf-8; variant=unseenet"
-                                if args.rules.endswith(".md") else None)
+    if getattr(args, "charter", None):                       # UN-RFC 0014
+        text = sys.stdin.read() if args.charter == "-" else Path(args.charter).read_text()
+        fields["charter"] = text
+        fields["charter_type"] = ("text/markdown; charset=utf-8; variant=unseenet"
+                                  if args.charter.endswith(".md") else None)
     if getattr(args, "attachments", None) is not None:
         extra["attachments"] = None if args.attachments == 0 else (
             {"max_size": args.attachments} | ({"types": args.types.split(",")} if args.types else {}))
@@ -170,7 +170,7 @@ async def c_group_create(app: App, args) -> None:
             args.name, args.type, title=fields.get("title", ""),
             description=fields.get("description", ""), min_pow=fields.get("min_pow", 20),
             local=getattr(args, "local", False), retention_days=fields.get("retention_days"),
-            rules=fields.get("rules", ""), rules_type=fields.get("rules_type"),
+            charter=fields.get("charter", ""), charter_type=fields.get("charter_type"),
             view=fields.get("view"), kinds=fields.get("kinds"),
             comments=fields.get("comments") if args.type == "channel" else None,
             comment_days=fields.get("comment_days") if args.type == "channel" else None,
@@ -207,7 +207,9 @@ def _group_options(s, *, create: bool) -> None:
     s.add_argument("--view", choices=["threads", "chat", "feed", "pages"],
                    help="how the group is shown (pages: channels only)")
     s.add_argument("--kinds", help="chat, post or chat,post (UN-RFC 0028)")
-    s.add_argument("--rules", metavar="FILE", help="the group's rules from a file (.md: Markdown), - for stdin")
+    s.add_argument("--charter", metavar="FILE",
+                   help="the group's charter - what it is for and asks of those who write "
+                        "(UN-RFC 0014) - from a file (.md: Markdown), - for stdin")
     s.add_argument("--comments", choices=["none", "open"],
                    help="channels: whether readers may comment on posts (UN-RFC 0030)")
     s.add_argument("--comment-days", type=int,
