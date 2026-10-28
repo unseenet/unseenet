@@ -138,11 +138,34 @@ async def c_following(app: App, args) -> None:
 
 
 async def c_timeline(app: App, args) -> None:
-    """``unseenet timeline [--limit N]``: the entries of every feed you follow, newest
-    first, as written (UN-RFC 0034 section 7)."""
+    """``unseenet timeline [--limit N]``: the entries of every group in your timeline,
+    newest first, as written (UN-RFC 0034 section 7). ``timeline groups`` lists which
+    groups are in it; ``timeline add|remove|default GROUP`` chooses (section 6.2)."""
+    from ..client.session import SessionError
     s = _session(app, args)
+    what = getattr(args, "what", None) or "show"
     await s.fetch_unknown_manifests()          # a feed followed but not read yet
-    for gid in s.feeds_followed():
+    if what == "groups":
+        rows = [{"group": g, "label": s.group_label(g), "in": s.in_timeline(g),
+                 "default": s.timeline_default(g)}
+                for g in s.data["subscribed"] if s.timeline_possible(g)]
+        lines = [f"{'in ' if r['in'] else 'out'}  {r['label']}"
+                 + ("" if r["in"] == r["default"] else "  (your choice)") for r in rows]
+        emit(args, "\n".join(lines) or "You follow no group that can be in the timeline.",
+             {"groups": rows})
+        return
+    if what in ("add", "remove", "default"):
+        if not getattr(args, "group", None):
+            sys.exit(f"Which group? unseenet timeline {what} GROUP")
+        gid = _group_of(args.group)
+        try:
+            on = s.set_in_timeline(gid, {"add": True, "remove": False, "default": None}[what])
+        except SessionError as exc:
+            sys.exit(str(exc))
+        emit(args, f"{s.group_label(gid)} is {'in' if on else 'not in'} your timeline.",
+             {"group": gid, "in": on})
+        return
+    for gid in s.timeline_groups():
         try:
             await s.fetch_group(gid)
         except Exception as exc:  # noqa: BLE001 - one feed that cannot be read is skipped

@@ -230,8 +230,12 @@ def client_main(argv=None) -> None:
     s.add_argument("target")
     s = sub.add_parser("following", help="the people and feeds you follow")
     s.add_argument("--refresh", action="store_true", help="read their profiles again first")
-    s = sub.add_parser("timeline", help="the entries of the feeds you follow - newest first, "
-                       "or as your own rules have them")
+    s = sub.add_parser("timeline", help="the entries of the groups in your timeline - newest "
+                       "first, or as your own rules have them; or choose what is in it")
+    s.add_argument("what", nargs="?", default="show", choices=["show", "groups", "add", "remove", "default"],
+                   help="groups: which are in it; add, remove, default GROUP: put a group you "
+                        "follow in, take it out, or back to its default (UN-RFC 0034 6.2)")
+    s.add_argument("group", nargs="?", help="add, remove, default: the group")
     s.add_argument("--limit", type=int, default=50)
     s.add_argument("--why", action="store_true", help="with your rules: why each entry is where it is")
     s = sub.add_parser("rules", help="your own rules for your feed and groups (UN-RFC 0051)")
