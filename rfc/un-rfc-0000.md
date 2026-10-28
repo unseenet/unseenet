@@ -162,6 +162,7 @@ The protocol is designed to be extended without breaking old software:
 | 0053 | Content Labels                               | Standards Track |
 | 0054 | Councils, and a Registrar Without an Owner   | Standards Track |
 | 0055 | What a Node Carries                          | Standards Track |
+| 0056 | A Group's Own Emoji                          | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

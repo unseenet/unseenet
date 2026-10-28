@@ -306,8 +306,8 @@ names are only ever added.
 
 ## 5.3 Not in This Document
 
-Pictures used as emoji (group-owned emoji) and reactions to a post are
-separate matters and need documents of their own.
+Pictures used as emoji are UN-RFC 0056 (a group's own emoji), and
+reactions to a post UN-RFC 0048.
 
 # 6. Changes to Other Documents
 
