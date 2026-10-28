@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 REFRESH_SECONDS = 60          # a fallback: push brings new posts at once
 FIRST_ANSWER = 12.0           # seconds a node gets to list its groups before the rest go on (#704)
 RIPEN_TO = 3                  # ripen keys up to this level while running (UN-RFC 0025, 7):
-                              # 3 ends the surcharge; 4 needs GBs of memory (#440)
+                              # 3 ends the surcharge; 4 takes weeks of a core (#444)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
 RIPEN_RECHECK = 3600.0        # a node that says "-" is asked again this often (#314)
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,

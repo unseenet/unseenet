@@ -152,27 +152,47 @@ def parse_min(value) -> int | None:
 
 
 # --- segments (section 3.2) ---
-# proving a segment takes memory in proportion to its length: chiavdf's Wesolowski
-# prover keeps intermediate forms, about 0.7 octets an iteration (#440)
+# chiavdf's ``prove_low_memory`` (1.2.1, #444) proves a segment in nearly constant
+# memory, at about twice the time. Its older ``prove`` keeps intermediate forms for
+# the Wesolowski proof, about 0.7 octets an iteration (#440): still the model where
+# only that one exists - an older chiavdf, or a browser build without it.
 MEMORY_PER_ITERATION = 0.75
 MEMORY_BASE = 64 << 20
 MIN_SEGMENT = 1 << 20
 
 
-def memory_for(length: int) -> int:
-    """About how many octets proving a segment of ``length`` iterations takes."""
-    return int(MEMORY_BASE + MEMORY_PER_ITERATION * length)
+def low_memory() -> bool:
+    """True when this machine's chiavdf proves in constant memory (#444)."""
+    try:
+        return hasattr(_vdf(), "prove_low_memory")
+    except RipeningUnavailable:
+        return False
 
 
-def fitting_segment_length(t: int, segments: int, budget: int | None) -> int:
+def memory_for(length: int, low: bool | None = None) -> int:
+    """About how many octets proving a segment of ``length`` iterations takes:
+    ``MEMORY_BASE`` with the low-memory prover (``low`` None: whichever this machine
+    has), else growing with the length."""
+    if low is None:
+        low = low_memory()
+    return MEMORY_BASE if low else int(MEMORY_BASE + MEMORY_PER_ITERATION * length)
+
+
+def fitting_segment_length(t: int, segments: int, budget: int | None,
+                           low: bool | None = None) -> int:
     """The next segment's length on a machine with ``budget`` octets for ripening
     (section 3.2): the usual length when it fits, else the longest power of two that
     does - as long as the next level can still be reached within the 64 segments.
     0 when it cannot: at the top, or as far as this machine can go. ``segments`` is
-    how many the chain has; ``budget`` None means no limit."""
+    how many the chain has; ``budget`` None means no limit. With the low-memory
+    prover (``low``, see ``memory_for``) every length fits that fits at all."""
+    if low is None:
+        low = low_memory()
     length = next_segment_length(t)
-    if not length or budget is None or memory_for(length) <= budget:
+    if not length or budget is None or memory_for(length, low) <= budget:
         return length
+    if low:
+        return 0                     # not even the constant part fits
     cap = 1 << max(0, int((budget - MEMORY_BASE) / MEMORY_PER_ITERATION)).bit_length() - 1 \
         if budget > MEMORY_BASE else 0
     if cap < MIN_SEGMENT:
@@ -183,10 +203,13 @@ def fitting_segment_length(t: int, segments: int, budget: int | None) -> int:
     return min(cap, length)
 
 
-def reachable_level(t: int, segments: int, budget: int | None) -> int | None:
+def reachable_level(t: int, segments: int, budget: int | None,
+                    low: bool | None = None) -> int | None:
     """The highest level a chain can reach on this machine, going on from here."""
+    if low is None:
+        low = low_memory()
     while True:
-        length = fitting_segment_length(t, segments, budget)
+        length = fitting_segment_length(t, segments, budget, low)
         if not length or segments >= MAX_SEGMENTS:
             return level(t)
         t, segments = t + length, segments + 1
@@ -301,8 +324,13 @@ def prove_segment(public_key: bytes, start: bytes, t: int,
     With ``run_file`` (a path that exists), the computation runs only while that
     file exists: delete it to stop within a fraction of a second, e.g. when the
     client closes. A stopped segment returns None and is started again later
-    from ``start`` (section 3.2). Without it, the call cannot be interrupted."""
-    result = _vdf().prove(seed(public_key), start, DISC_BITS, t, str(run_file or ""))
+    from ``start`` (section 3.2). Without it, the call cannot be interrupted.
+
+    Uses chiavdf's low-memory prover where it has one (#444): the same bytes as
+    ``prove``, in constant memory, at about twice the time."""
+    vdf = _vdf()
+    prove = getattr(vdf, "prove_low_memory", None) or vdf.prove
+    result = prove(seed(public_key), start, DISC_BITS, t, str(run_file or ""))
     if not result:
         return None
     return Segment(t, bytes(result[:FORM_SIZE]), bytes(result[FORM_SIZE:]))

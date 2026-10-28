@@ -155,13 +155,18 @@ class RipeningMixin:
         from .. import machine
         name = name or self.default_identity_name()
         chain = self.ripening(name)
-        budget = machine.ripening_budget()
-        length = rp.fitting_segment_length(chain.t, len(chain.segments), budget)
-        if not length:
-            if rp.next_segment_length(chain.t):           # not the top: this machine's limit
+
+        def fitting() -> int:
+            length = rp.fitting_segment_length(chain.t, len(chain.segments),
+                                               machine.ripening_budget())
+            if not length and rp.next_segment_length(chain.t):   # not the top: this machine's limit
                 self.ripening_limit = rp.level(chain.t)
                 self.say(f"This machine can ripen this key to level {rp.level(chain.t)}: "
                          f"more needs more memory than it has free (#440).")
+            return length
+
+        length = fitting()
+        if not length:
             return False
         lock = None
         if rp.memory_for(length) > machine.LOCK_ABOVE:   # a large segment: one at a time
@@ -174,6 +179,12 @@ class RipeningMixin:
                     self.say("Another program on this machine is ripening a key; waiting.")
                     waited = True
                 await asyncio.sleep(15)
+            length = fitting()                    # free memory as it is now we hold it (#677)
+            if not length:
+                lock.release()
+                return False
+        _s.log.info("ripening %s: a segment of %d iterations from t=%d (about %d MiB)",
+                    name, length, chain.t, rp.memory_for(length) >> 20)
         pk = self.identity(name).public_key
         try:
             seg = await self._prove_segment(pk, chain.end, length, run_file)
