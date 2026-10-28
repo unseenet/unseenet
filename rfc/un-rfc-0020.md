@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: -
 Updates: 0010, 0018
 
           Unseenet: Keeping Lists from Inside the Network

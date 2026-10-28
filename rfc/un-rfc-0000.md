@@ -51,18 +51,58 @@ reused. Files live in the `rfc/` directory of the main repository as
 | Status     | Meaning                                                           |
 |------------|-------------------------------------------------------------------|
 | Draft      | Open for discussion. Can change without notice.                   |
-| Proposed   | Believed complete; awaiting two independent implementations.      |
-| Standard   | Interoperably implemented by at least two independent codebases.  |
+| Proposed   | Implemented in a release, from 1.0; not edited in substance.      |
+| Standard   | Also implemented independently, interoperating (section 3.3.2).   |
 | Active     | For Process documents that are continuously maintained.           |
 | Obsoleted  | Replaced. The header names the replacing UN-RFC.                  |
 
-All protocol documents in this first series are **Draft**.
+All protocol documents of this first series are **Draft** while
+Unseenet is pre-alpha (before 1.0), also after their pull requests are
+merged. A Draft may be changed in place, through section 4.
+
+### 3.3.1 Accepting is not a status
+
+When the maintainer **accepts** a pull request - a new UN-RFC, an
+amendment or a correction - that *change* is agreed and may be merged.
+It says nothing about the document as a whole: it does not make the
+document Proposed, and it never changes its `Status:` line. The pull
+request, its issue and the CHANGELOG record what was accepted and when.
+"Accepted" is not a status, and a header MUST NOT say it.
+
+### 3.3.2 At 1.0
+
+When Unseenet 1.0 is released, every protocol document that 1.0
+implements becomes **Proposed**, and from then on it is not edited in
+substance: an error is fixed by an erratum at the end of the document,
+and a change is a new UN-RFC that `Updates:` or `Obsoletes:` it
+(section 4), as RFCs have always been. A document 1.0 does not
+implement stays Draft and may still change. A Proposed document becomes
+**Standard** when an independent implementation - not the project's
+own code - interoperates with the reference implementation.
 
 ## 3.4 Header Block
 
 Every UN-RFC begins with a header block containing number, author(s),
 date, category and status. If the document updates or obsoletes others,
 the header MUST say so with `Updates:` and/or `Obsoletes:` lines.
+
+A Standards Track document also says what is built, in an
+`Implemented:` line right after `Status:`:
+
+| `Implemented:`                               | Meaning                                   |
+|----------------------------------------------|-------------------------------------------|
+| `-`                                          | Not built yet                             |
+| `unseenet 0.5.0`                             | Built in that release of the core         |
+| `unseenet 0.4.0, unseenet-gateway 0.1.0`     | Built across these releases               |
+| `unseenet main (unreleased)`                 | Built in the core's main, not yet released |
+| `...; partly - books (#280)`                 | Only partly built: what is missing, where |
+
+The pull request that builds something - or the part still missing -
+updates the line in the same go; releasing the core turns "main (unreleased)" into its
+version (`tools/check_rfc_headers.py --release X.Y.Z`). The status says
+how settled a document is; this line says how much of it runs.
+`tools/check_rfc_headers.py` checks every header on every pull request
+that touches `rfc/`, and refuses a status this section does not name.
 
 # 4. Changing the Protocol
 
@@ -71,9 +111,11 @@ the header MUST say so with `Updates:` and/or `Obsoletes:` lines.
 3. Discussion happens on the pull request. Substantive objections MUST be
    answered in the document (in a "Rationale" or "Considerations" section),
    not only in comments.
-4. A Draft becomes Proposed when the maintainers merge it.
-5. A Proposed document becomes Standard when two independent
-   implementations interoperate.
+4. The maintainer accepts the change, or asks for more, and it is merged.
+   The document stays Draft (section 3.3.1).
+5. At 1.0 the implemented documents become Proposed, and a Proposed
+   document becomes Standard when an independent implementation
+   interoperates with the reference implementation (section 3.3.2).
 
 Every Draft MUST say what it costs every node and every client at the
 design targets of UN-RFC 0001 section 1.2 - storage, traffic, round

@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0009                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.2.0
 Updates: 0002, 0004, 0005
 
                Unseenet: Inbox Groups and Local Groups

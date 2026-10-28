@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0022                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0004, 0008, 0011, 0031
 
                     Unseenet: Profiles for Identities

@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0015                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0003, 0004, 0013
 
               Unseenet: Transferring Group Ownership

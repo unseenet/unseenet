@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0043                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0, unseenet-entrance 0.1.0
 Updates: 0000, 0007
 
              Unseenet: Web Entrances and Clients on the Open Web

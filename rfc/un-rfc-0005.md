@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0005                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.1.0
 
      ONNTP: Unseenet Transport and Peering over Onion Services
 ```

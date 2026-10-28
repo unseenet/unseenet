@@ -22,8 +22,13 @@ jobs:
           fi
           case "$VERSION" in
             *a*|*b*|*rc*) ;;   # alphas, betas, candidates: the notes are under [Unreleased]
-            *) grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; } ;;
+            *) grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $VERSION" >&2; exit 1; }
+               # UN-RFC 0000 3.4: what this release implements is named in the UN-RFCs
+               if grep -l "^Implemented:.*unseenet main (unreleased)" rfc/un-rfc-*.md; then
+                 echo "These UN-RFCs still say 'unseenet main (unreleased)': run tools/check_rfc_headers.py --release $VERSION" >&2; exit 1
+               fi ;;
           esac
+      - run: python tools/check_rfc_headers.py
       - run: pip install -e ".[dev]" build twine
       - run: pytest -q
       - run: python -m build && twine check dist/*

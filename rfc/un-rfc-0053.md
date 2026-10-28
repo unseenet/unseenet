@@ -2,7 +2,8 @@
 Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0053                                              October 2026
 Category: Standards Track
-Status: Accepted
+Status: Draft
+Implemented: unseenet main (unreleased); partly - asking the node per page of posts (#676)
 Updates: 0018, 0029, 0045, 0051
 
                  Unseenet: Content Labels

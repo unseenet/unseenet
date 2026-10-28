@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0023                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.3.0, unseenet-gateway 0.1.0
 Updates: 0018
 
                     Gateways to Other Networks

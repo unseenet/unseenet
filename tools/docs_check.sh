@@ -5,6 +5,7 @@
 #   pip install mkdocs-material "mkdocstrings[python]" && tools/docs_check.sh [serve]
 set -euo pipefail
 cd "$(dirname "$0")/.."
+python3 tools/check_rfc_headers.py      # Status and Implemented lines (UN-RFC 0000 3.3, 3.4)
 rm -rf docs/spec && mkdir -p docs/spec
 cp rfc/un-rfc-*.md rfc/LICENSE.md docs/spec/
 cp rfc/README.md docs/spec/index.md

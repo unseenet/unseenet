@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0032                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0009, 0019
 
                    Unseenet: Mention Notices
