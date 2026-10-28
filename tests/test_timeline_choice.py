@@ -36,6 +36,8 @@ async def test_what_comes_into_the_timeline(tmp_path, monkeypatch):
     assert side["timeline"]["feeds"] == 1
     assert {g["id"]: g["in_timeline"] for g in side["groups"] if g["id"] in (feed, talk, chat)} \
         == {feed: True, talk: False, chat: False}
+    assert {g["id"]: g["timeline_possible"] for g in side["groups"] if g["id"] in (feed, talk, chat)} \
+        == {feed: True, talk: True, chat: False}
 
     # reading a group as a feed does not put it in the timeline
     theirs.set_view(talk, "feed")

@@ -212,8 +212,9 @@ wherever a group ID does: `contact:<key>` (the chat with one person),
 `for-you:` (replies and mentions from all groups) and `timeline:` (the
 entries of every group you have in the timeline, section 4.14).
 `timeline` is `{"id": "timeline:", "feeds": <how many groups are in it>}`,
-and every group in `groups` has `in_timeline` (UN-RFC 0034 section 6.2),
-so a front end can mark them in its list.
+and every group in `groups` has `in_timeline` and `timeline_possible`
+(UN-RFC 0034 section 6.2), so a front end can mark them in its list and
+offer the choice there.
 `my_feed` is your personal feed (UN-RFC 0034 section 5) and `my_site`
 your personal site (UN-RFC 0035 section 7): a front end lists each at the
 top as "My feed" and "My site" once `started`, and then `hierarchies`

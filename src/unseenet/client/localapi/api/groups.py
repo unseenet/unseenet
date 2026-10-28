@@ -63,7 +63,8 @@ class Groups:
         fingerprint left out only where the hierarchy lists it (UN-RFC 0018)."""
         return {**g.to_dict(), "shown": s.group_label(g.group_id, also),
                 # whether its entries come into your timeline (UN-RFC 0034 section 6.2)
-                "in_timeline": s.in_timeline(g.group_id)}
+                "in_timeline": s.in_timeline(g.group_id),
+                "timeline_possible": s.timeline_possible(g.group_id)}
 
     @staticmethod
     def _name_requests(s: Session) -> int:
