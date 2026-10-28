@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **How long ago, in the same words everywhere**: `unseenet.client.timefmt.ago()` - *now*,
+  *5 min*, *2 h*, *Yesterday 14:20*, *3 days*, then the date - for every client's feeds
+  (unseenet-tui#34, as the GUI says it).
+
+- **What comes into the timeline is your choice per group** (#697, UN-RFC 0034 6.2): feeds by
+  default, a group of threads when you put it in (each new thread once), chats never; kept
+  in your state (UN-RFC 0044 `timeline`); `unseenet timeline groups | add | remove | default`,
+  and `POST /api/groups/<id>/timeline` in the local API.
+
 - **`unseenet post` tells the language from the text** when `--lang` is not given (#686),
   as the clients do - the demo's people and other scripts get it right by themselves.
 
