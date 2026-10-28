@@ -1,6 +1,6 @@
 ```
 Unseenet Working Group                                     A. Lorensen
-UN-RFC: 0055                                              October 2026
+UN-RFC: 0056                                              October 2026
 Category: Standards Track
 Status: Draft
 Updates: 0004, 0008, 0011, 0013, 0031, 0046
@@ -299,7 +299,7 @@ No new purposes. The set is signed as part of the emoji group's manifest
 - UN-RFC 0031 section 5.3: group-owned emoji are this document.
 - UN-RFC 0046: the local API gives a group's emoji with the group, and
   lets the owner set them (section 4.7).
-- UN-RFC 0000 section 6: 0055 is added to the index.
+- UN-RFC 0000 section 6: 0056 is added to the index.
 
 # 11. Open Issues
 
