@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0016                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.2.0
 Updates: 0003, 0005, 0011
 
           Unseenet: Peer Authentication with Node Keys

@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0029                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0009, 0017, 0019, 0022
 
             Unseenet: Key-bound Groups, Lifetime and Renewal

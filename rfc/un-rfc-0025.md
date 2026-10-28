@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0025                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0002, 0004, 0005, 0006, 0029, 0040
 
                  Unseenet: Key Ripening and Standing

@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0056                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet main (unreleased)
 Updates: 0004, 0008, 0011, 0013, 0031, 0046
 
                     Unseenet: A Group's Own Emoji

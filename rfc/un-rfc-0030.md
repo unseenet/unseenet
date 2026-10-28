@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0030                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0; partly - an entry's own comment deadline and closing one entry (#732)
 Updates: 0004, 0022, 0042
 
                  Unseenet: Comments in Channels

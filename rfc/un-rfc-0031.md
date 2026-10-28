@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0031                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0
 Updates: 0002, 0004, 0022, 0028, 0034, 0035
 
              Unseenet: Formatting - Markdown and Emoji

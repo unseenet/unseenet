@@ -369,6 +369,9 @@ one node at a time.
 1. Move the entries under `## [Unreleased]` in `CHANGELOG.md` to a new
    `## [X.Y.Z] - YYYY-MM-DD` section, and add the compare link at the bottom.
 2. Set `__version__ = "X.Y.Z"` in `src/unseenet/__init__.py`.
+   Run `tools/check_rfc_headers.py --release X.Y.Z`: the UN-RFCs whose
+   `Implemented:` line says `unseenet main (unreleased)` now name X.Y.Z
+   (UN-RFC 0000 section 3.4).
 3. Commit, then tag and push:
    ```bash
    git tag -a vX.Y.Z -m "Unseenet X.Y.Z" && git push origin vX.Y.Z

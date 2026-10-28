@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0040                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.4.0; partly - partial nodes (#252)
 Updates: 0000, 0005, 0010, 0011, 0017, 0021, 0029
 
                   Unseenet: Key-bound Groups at Scale

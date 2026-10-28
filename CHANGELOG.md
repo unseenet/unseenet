@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **UN-RFC status means what UN-RFC 0000 says** (#738): five documents (0047, 0052-0055)
+  said `Status: Accepted`, which is not a status. The maintainer's acceptance agrees to a
+  *change* - a new UN-RFC, an amendment, a correction - never to a status; every protocol
+  document of the first series stays Draft until 1.0 (UN-RFC 0000 3.3.1). Each Standards
+  Track document now says what is built in an `Implemented:` line (3.4), and at 1.0 the
+  implemented ones become Proposed and are changed only by new UN-RFCs (3.3.2).
+  `tools/check_rfc_headers.py` checks every header on pull requests that touch `rfc/`
+  (in the docs check) and in the tests, and a release fails while an `Implemented:` line
+  still says `unseenet main (unreleased)` (`--release X.Y.Z` names the version).
 - **Key ripening in constant memory** (#444): segments are proved with chiavdf's new
   `prove_low_memory` (chiavdf 1.2.1, now the minimum), which gives the same proof as
   before in about 20 MiB whatever the segment's length, at about twice the time. Every

@@ -3,6 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0017                                              October 2026
 Category: Standards Track
 Status: Draft
+Implemented: unseenet 0.2.0
 Updates: 0005, 0012, 0027
 
            Unseenet: Catching Up by Pull, and Group State

@@ -77,8 +77,8 @@ The protocol is defined in the **UN-RFC** series, in [`rfc/`](rfc/) and on
 [unseenet.org/spec](https://unseenet.org/spec/). The documents are the
 authority; this code is one implementation. To change the protocol or build
 something compatible, start with [UN-RFC 0000](rfc/un-rfc-0000.md) and
-[0001](rfc/un-rfc-0001.md). Most are drafts; those marked *Accepted* are
-agreed, but anything may still change while Unseenet is pre-alpha.
+[0001](rfc/un-rfc-0001.md). All are drafts while Unseenet is pre-alpha, and each
+says in its header what is already built (`Implemented:`).
 
 | Area | UN-RFCs |
 |---|---|

@@ -2,7 +2,8 @@
 Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0055                                              October 2026
 Category: Standards Track
-Status: Accepted
+Status: Draft
+Implemented: -
 Updates: 0001, 0005, 0010, 0011, 0021
 
                Unseenet: What a Node Carries
