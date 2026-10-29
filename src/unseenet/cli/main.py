@@ -25,7 +25,7 @@ from .teams import *  # noqa: F403
 
 
 COMMANDS = {
-    "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase,
+    "ripening": c_ripening, "id-new": c_id_new, "id-import": c_id_import, "whoami": c_whoami, "passphrase": c_passphrase,
     "id-words": c_id_words, "id-restore": c_id_restore, "copy-to": c_copy_to, "copy-from": c_copy_from, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
@@ -281,6 +281,11 @@ def client_main(argv=None) -> None:
                    help="auto: Tails' Tor on Tails, else our own; own: always our own; "
                         "HOST:PORT: the SOCKS port of a running Tor, e.g. 127.0.0.1:9050")
 
+    s = sub.add_parser("ripening", help="your key's ripening: its level, the level it is ripened "
+                                        "to here and the time left (UN-RFC 0025)")
+    s.add_argument("--to", type=int, choices=(3, 4),
+                   help="ripen to this level on this device: 3 (the default) or 4, which takes "
+                        "weeks of one core and then costs a quarter of the postage")
     s = sub.add_parser("ripen", help="ripen a key so it can post, e.g. a gateway's or a bot's "
                                      "(UN-RFC 0025)")
     s.add_argument("--to", type=int, default=0, choices=range(5),

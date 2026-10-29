@@ -204,10 +204,19 @@ async def refresh(request):
 
 async def ripening(request):
     data = await _body(request)
-    paused = data.get("paused")
-    if not isinstance(paused, bool):
-        raise web.HTTPBadRequest(text='expected {"paused": true or false}')
-    return _json(await _api(request).set_ripening_paused(paused))
+    paused, to = data.get("paused"), data.get("to")
+    if paused is None and to is None:
+        raise web.HTTPBadRequest(text='expected {"paused": true or false} or {"to": 3 or 4}')
+    if paused is not None and not isinstance(paused, bool):
+        raise web.HTTPBadRequest(text='"paused" is true or false')
+    if to is not None and (isinstance(to, bool) or to not in (3, 4)):
+        raise web.HTTPBadRequest(text='"to" is 3 or 4')
+    out = None
+    if to is not None:
+        out = await _api(request).set_ripening_to(to)
+    if paused is not None:
+        out = await _api(request).set_ripening_paused(paused)
+    return _json(out)
 
 
 async def known_nodes(request):

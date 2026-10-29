@@ -109,9 +109,9 @@ so that a restart loses little and the chain stays short: 2^24
 iterations until level 0, then the largest power of two that is at most
 half the *t* so far, at most 2^32, and never past the threshold of the
 next level (section 4). This reaches level 4 in 48 segments, and a
-client that stops loses at most the segment it was computing: about 2
-minutes before level 0, and at the top about 7 hours on a fast desktop
-or 12 on an ARM server. A client keeps the start form of its current
+client that stops loses at most the segment it was computing: about 3
+minutes before level 0, and at the top about 11 hours on a fast desktop
+or 18 on an ARM server (with the low-memory prover, section 4). A client keeps the start form of its current
 segment in the vault (UN-RFC 0007) and starts that segment again after a
 restart.
 
@@ -198,18 +198,26 @@ nothing.
 | Level | Iterations *t* at least | Fast desktop¹ | ARM server² | Surcharge *s* |
 |-------|-------------------------|---------------|-------------|---------------|
 | -     | below 2^26              | -             | -           | not accepted³ |
-| 0     | 2^26                    | ~7 minutes    | ~11 minutes | +6 bits       |
-| 1     | 2^29                    | ~55 minutes   | ~1.5 hours  | +4 bits       |
-| 2     | 2^32                    | ~7 hours      | ~12 hours   | +2 bits       |
-| 3     | 2^35                    | ~2.5 days     | ~4 days     | 0             |
-| 4     | 2^37                    | ~10 days      | ~15 days    | -2 bits       |
+| 0     | 2^26                    | ~10 minutes   | ~17 minutes | +6 bits       |
+| 1     | 2^29                    | ~1.5 hours    | ~2 hours    | +4 bits       |
+| 2     | 2^32                    | ~11 hours     | ~18 hours   | +2 bits       |
+| 3     | 2^35                    | ~4 days       | ~6 days     | 0             |
+| 4     | 2^37                    | ~15 days      | ~24 days    | -2 bits       |
 
-¹ Measured: about 165,000 iterations per second with `chiavdf.prove` on
-one core of an AMD Ryzen 9 5950X (section 4.1).
+The times are those of one core, counted only while the program runs,
+with the low-memory prover the reference implementation uses (chiavdf
+1.2.1 `prove_low_memory`): the same proofs in nearly constant memory, at
+about two thirds of the speed of `chiavdf.prove`.
 
-² Measured: about 103,000 iterations per second on one Ampere
-Neoverse-N1 core (Oracle Cloud Always Free), which is close to what an
-older laptop is expected to manage. Laptops, phones and Raspberry Pis
+¹ Measured: about 107,000 iterations per second with
+`prove_low_memory` on one core of an AMD Ryzen 9 5950X (section 4.1);
+`chiavdf.prove` reaches about 165,000, but needs memory in proportion to
+the segment.
+
+² Estimated: `chiavdf.prove` was measured at about 103,000 iterations
+per second on one Ampere Neoverse-N1 core (Oracle Cloud Always Free),
+close to what an older laptop is expected to manage; the times assume
+the same slowdown as on the desktop. Laptops, phones and Raspberry Pis
 are still to be measured (section 10).
 
 ³ Unless the group or node allows level `-` (section 5).
@@ -225,6 +233,7 @@ discriminant:
 | What                                   | Ryzen 9 5950X | Neoverse-N1 (ARM) |
 |----------------------------------------|---------------|-------------------|
 | `chiavdf.prove` (squaring and proof)   | ~165,000 it/s | ~103,000 it/s     |
+| `chiavdf.prove_low_memory` (the same, nearly constant memory) | ~107,000 it/s | not measured |
 | `vdf_bench square_asm` (squaring only, hand-optimized assembly, as used by Chia timelords) | ~200,000 it/s | not measured |
 | `chiavdf.verify_wesolowski`, any *t*   | ~3.7 ms       | ~6.8 ms           |
 | `y` plus `pi`                          | 200 octets    | 200 octets        |
@@ -289,13 +298,22 @@ node's local choices can post through another node or run their own.
   while the client is open, keep the chain and the start of its current
   segment in the encrypted vault (UN-RFC 0007), and go on after a
   restart (section 3.2).
-- Proving a segment takes memory in proportion to its length (about
-  0.7 octets an iteration with the prover of the reference
-  implementation). A client SHOULD keep within the memory the machine has
-  free, choosing shorter segments where it must (section 3.2), and SHOULD
-  ripen one key at a time on a machine; where the next level cannot then
-  be reached within 64 segments, it stops below the top and SHOULD say
-  how far this machine can go.
+- Proving a segment with `chiavdf.prove` takes memory in proportion to
+  its length (about 0.7 octets an iteration); the reference
+  implementation proves in nearly constant memory where chiavdf has
+  `prove_low_memory` (section 4). A client SHOULD keep within the memory
+  the machine has free, choosing shorter segments where it must (section
+  3.2), and SHOULD ripen one key at a time on a machine; where the next
+  level cannot then be reached within 64 segments, it stops below the top
+  and SHOULD say how far this machine can go.
+- A client SHOULD ripen to level 3, where the surcharge ends, and MAY
+  offer to go on to level 4. Before it does, it SHOULD say what that
+  costs - weeks of one core while the program runs (section 4), at this
+  machine's speed where it knows it - and what it gives: 2 bits less
+  postage, about a quarter of the work for each post. The choice belongs
+  to the device that does the work, not to the identity, so two devices
+  do not ripen one key at once. Programs that post a great deal (bots,
+  gateways) gain the most from it.
 - A browser client (UN-RFC 0043) ripens in the browser, with a
   WebAssembly build of the VDF. Nobody else ripens keys for it, so
   ripening stays a matter of one's own computer and time.

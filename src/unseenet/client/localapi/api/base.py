@@ -27,7 +27,7 @@ class ApiBase:
         self.connected = False
         self._refresh_seconds = refresh_seconds
         self._ripen_to = ripen_to if ripen_to is not None else (
-            SERVICE_RIPEN_TO if service else RIPEN_TO)
+            service_ripen_to() if service else RIPEN_TO)
         self._listeners: set[asyncio.Queue] = set()
         self._tasks: set[asyncio.Task] = set()
         self._jobs = 0

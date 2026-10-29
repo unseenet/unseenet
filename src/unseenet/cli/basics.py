@@ -20,6 +20,53 @@ async def c_id_new(app: App, args) -> None:
                                                   "fingerprint": ident.fingerprint})
 
 
+def _duration(seconds: float) -> str:
+    """About how long, in words: days, hours or minutes."""
+    for unit, size in (("days", 86400), ("hours", 3600), ("minutes", 60)):
+        if seconds >= size:
+            n = seconds / size
+            return f"about {n:.0f} {unit if round(n) != 1 else unit[:-1]}"
+    return "less than a minute"
+
+
+async def c_ripening(app: App, args) -> None:
+    """``unseenet ripening [--to 3|4]``: the key's level, the level it is ripened to on
+    this device and about how long that takes here (#740, UN-RFC 0025 section 7); with
+    ``--to``, choose 3 (the default) or 4 - a client or ``unseenet serve`` then ripens to
+    it while it runs. (``unseenet ripen --to N`` ripens a key file at once.)"""
+    from ..client.runtime import RIPEN_TO
+    from ..client.session import SessionError
+    from ..core import ripening as rp
+    s = _c._session(app, args)
+    if getattr(args, "to", None) is not None:
+        try:
+            s.set_ripening_target(args.to)
+        except SessionError as exc:
+            sys.exit(f"Not done: {exc}")
+    chain = s.ripening()
+    level, chosen = chain.level, s.ripening_target()
+    target = chosen if chosen is not None else RIPEN_TO
+    left = s.ripening_seconds_left(target)
+    speed = s.ripening_speed()
+    if left is None and speed is None:                 # nothing proved here yet: the table's
+        th = next(t for lv, t, _ in rp.LEVELS if lv == target)
+        left, guessed = max(0, th - chain.t) / 100_000, True
+    else:
+        guessed = False
+    lines = [f"Level {'-' if level is None else level} ({chain.t:,} iterations)",
+             f"Ripened to level {target} on this device" + ("" if chosen is not None else " (the default)")]
+    if left:
+        lines.append(f"Left: {_duration(left)} of one core while a client runs"
+                     + (" (a guess: nothing proved on this device yet)" if guessed else ""))
+    elif left == 0:
+        lines.append("There: nothing left to do")
+    if target == 4 and (level is None or level < 4):
+        lines.append("Level 4 pays 2 bits less postage than 3 - about a quarter of the work a post.")
+    emit(args, "\n".join(lines), {"level": level, "t": chain.t, "target": target, "chosen": chosen,
+                                  "seconds_left": round(left) if left is not None else None,
+                                  "estimated": guessed, "speed": speed})
+
+
 async def c_id_import(app: App, args) -> None:
     """``unseenet id-import NAME [--display ...]``: add an identity from its seed, 64 hex
     characters read from stdin - never from the command line, where other users of
@@ -210,7 +257,7 @@ async def c_copy_from(app: App, args) -> None:
     emit(args, "Added: " + (", ".join(added) or "nothing new"), {"added": added})
 
 
-__all__ = ['c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE',
+__all__ = ['c_ripening', 'c_id_new', 'c_id_import', 'c_whoami', 'c_node_add', 'c_passphrase', 'COPIES_NOTE',
            'c_id_words', 'c_id_restore', 'c_copy_to', 'c_copy_from', 'c_export']
 
 
