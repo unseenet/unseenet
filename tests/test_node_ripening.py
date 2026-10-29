@@ -321,3 +321,31 @@ async def test_two_askers_of_one_segment_both_go_on(tmp_path):
     assert first and second
     assert len(s.ripening().segments) == 1
     await s.close()
+
+
+async def test_a_key_that_arrives_shows_its_level_at_once(tmp_path, monkeypatch):
+    """29 Oct 2026: a key copied to a browser said *New key getting ready* although it
+    was ripe elsewhere. A key that arrives - restored from its words here, copied in the
+    same way through adopt_published_ripenings - takes over its published chain at once."""
+    from unseenet.core import recovery as rc
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    first = _session(tmp_path, "andreas", addr)
+    await first.create_group("dk.snak", "open", min_pow=8)            # ripens, publishes
+    assert first.published_level() == 0
+    words = rc.words_from_seed(bytes.fromhex(first.data["identities"]["andreas"]["seed"]))
+
+    other = _session(tmp_path, "someone", addr)
+    name, _ident, new = other.restore_identity(words, "andreas-copy")
+    assert new and other.ripening(name).level is None                # nothing here yet
+
+    async def no_ripening(*a, **k):
+        raise AssertionError("ripened again although the chain is published")
+    monkeypatch.setattr(other, "ripen_segment", no_ripening)
+    await other.restore_from_network(name)
+    assert other.ripening(name).t == first.ripening().t
+    assert other.ripening(name).level == 0
+    assert await other.adopt_published_ripenings([name]) == {}       # nothing further now
+    for s in (first, other):
+        await s.close()
+    server.close()
