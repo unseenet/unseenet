@@ -142,6 +142,12 @@ class Groups:
                "report_issuers": [{"key": k, "label": s.issuer_label(k)}
                                   for k in data.get("report_issuers", [])],
                "team_name": data.get("team_name", "") if data.get("type") == "inbox" else None,
+               # comments (UN-RFC 0030): a channel's whether, and the days a thread takes
+               # them in any group but inboxes and local groups (section 4.24)
+               "comments": data.get("comments", "none") if data.get("type") == "channel" else None,
+               "comment_days": data.get("comment_days"),
+               "comment_days_possible": data.get("type") in ("channel", "open", "moderated", "closed")
+               and not data.get("local"),
                # what to suggest you write in here, and why (UN-RFC 0052 section 5a)
                "suggested_languages": dict(zip(("codes", "from"), s.suggest_languages(gid)))}
         if out["owner"] or s.moderates(gid):

@@ -215,6 +215,9 @@ async def test_local_api_comments(tmp_path, monkeypatch):
         gid = (await api.create_group({"name": "dk.api", "type": "open",
                                        "comment_days": 14}))["id"]
         assert owner.manifest_data(gid).get("comment_days") == 14
+        head = api.group(gid)["group"]
+        assert head["comment_days"] == 14 and head["comment_days_possible"] \
+            and head["comments"] is None
         mid = await owner.post(gid, "Emne", "Tekst\n", comment_days=2)
         await owner.fetch_group(gid)
         row = next(r for r in api.group(gid)["rows"] if r["message"]["id"] == mid)

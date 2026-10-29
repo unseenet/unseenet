@@ -1170,6 +1170,9 @@ the shorter of the group's `comment_days` and the entry's own time, and
 its author, the owner and moderators can close and open them (UN-RFC
 0030 sections 3.1-3.3).
 
+- The head of a group (section 4.3) has `comments` (a channel's `open` or
+  `none`, null for other types), `comment_days` (null: no limit) and
+  `comment_days_possible`, false for inboxes and local groups.
 - `POST /api/groups/<id>/post` takes `comment_days` for a new thread: a
   whole number of days, `0` (no comments at all) up to the group's
   `comment_days`. The runtime writes `Comment-Days` only when it differs
