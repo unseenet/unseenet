@@ -125,10 +125,42 @@ class Accepting:
             first = self.store.first_date(message_id)
             if first is not None and first < int(parse_date(root["Date"]).timestamp()):
                 root.set("Date", format_datetime(datetime.fromtimestamp(first, timezone.utc)))
+            shortened = self.store.root_days(message_id)     # by an edit (UN-RFC 0030 3.1)
+            try:
+                own = cm.own_days(root)
+            except ValueError:
+                own = None
+            days = cm.shorter(shortened, own)
+            if days is not None and days != own:
+                root.set(cm.HEADER, str(days))
             return root
         if self.store.seen(message_id):      # was here, but expired or was cancelled
             raise ArticleError("permission", "that thread is no longer on this node")
         return None
+
+    def _check_root_edit(self, art: Article, manifest: Manifest, versions) -> int | None:
+        """UN-RFC 0030 section 3.1: an edit of a thread root may shorten its time for
+        comments, never lengthen it. Returns the days to keep for the root (its first
+        version, named last), or None when the edit says nothing about them."""
+        if cm.HEADER not in art or (art.get("References") or "").strip() \
+                or (manifest.type == "channel" and manifest.comments != "open"):
+            return None
+        new = cm.own_days(art)                   # its form is checked in check_permitted
+        try:
+            root = self._thread_root(versions[-1])
+        except ArticleError:
+            root = None
+        before = None
+        if root is not None:
+            try:
+                before = cm.own_days(root)
+            except ValueError:
+                before = None
+        before = cm.shorter(before, manifest.comment_days)
+        if before is not None and new > before:
+            raise ArticleError("permission", "an edit may shorten an entry's time for "
+                                             "comments, never lengthen it")
+        return new
 
     def _accept(self, raw: bytes, source: str | None, now: datetime | None,
                 from_peer: bool, staged: dict | None = None, held: bool = False) -> Article:
@@ -204,7 +236,9 @@ class Accepting:
             self._check_cancelled(art, manifest)
             self._check_superseded(art)
             check_permitted(art, manifest, self.store.epochs(art.group),
-                            self.store.closed_before(art.group), thread_root=self._thread_root)
+                            self.store.closed_before(art.group), thread_root=self._thread_root,
+                            thread_closed=self._thread_closed)
+            shorten = self._check_root_edit(art, manifest, versions) if versions else None
             if "Encrypted" not in art and rx.is_reaction(art):      # UN-RFC 0048 section 5
                 mine = self.store.reaction_by(rx.target(art), art["Author-Key"])
                 if mine and mine not in versions:
@@ -224,6 +258,8 @@ class Accepting:
             self._refusal_list(art)
             if versions:
                 self._apply_edit(art, versions, held)
+            if shorten is not None:
+                self.store.set_root_days(versions[-1], art.group, shorten)
             if self._wait_for_blobs(art, blobs, source, from_peer):
                 self._enqueue(art, source, not_before=time.time() + BLOB_WAIT_SECONDS)
                 self._notify_watchers(art)

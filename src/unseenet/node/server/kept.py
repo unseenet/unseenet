@@ -75,6 +75,50 @@ class Kept:
         self.store.add(art, raw)
         self.store.add_marker(art, action, target, replaces)
 
+    # --- closing comments on one entry (UN-RFC 0030 section 3.2) ---
+    def _accept_comment_marker(self, art: Article, manifest: Manifest, raw: bytes,
+                               action: str, target: str) -> None:
+        """Valid in the group of its target, which is a thread root, by the target's
+        author or the owner or a moderator now; never encrypted, a note of at most 256
+        characters (none in a closed group); replacing only markers of the same target.
+        One that comes before its target is a temporary failure, as a comment is (4.1)."""
+        if not (target.startswith("<") and target.endswith(">")):
+            raise ArticleError("syntax", "a comments marker names a Message-ID")
+        if manifest.type == "inbox" or manifest.local:
+            raise ArticleError("permission", "no comments to close in inboxes or local groups")
+        if "Encrypted" in art:
+            raise ArticleError("syntax", "a comments marker is never encrypted")
+        note = art.body.strip()
+        if manifest.type == "closed" and note:
+            raise ArticleError("syntax", "a comments marker in a closed group has no note")
+        if len(note) > cm.MAX_NOTE:
+            raise ArticleError("syntax", f"a note is at most {cm.MAX_NOTE} characters")
+        root = self._thread_root(target)
+        if root is None:
+            raise ArticleError("later", "the entry is not on this node yet")
+        if root.group != art.group or root.control is not None \
+                or (root.get("References") or "").strip():
+            raise ArticleError("permission", "comments are closed and opened on a thread root "
+                                             "in the same group")
+        author = art.author_key
+        if author != root.author_key and author != manifest.owner \
+                and author not in manifest.moderators:
+            raise ArticleError("permission", "only the entry's author, the owner or a moderator "
+                                             "closes or opens its comments")
+        replaces = parse_supersedes(art, control_ok=True)
+        for old in replaces:
+            held = self.store.marker(old)
+            if held is not None and (held != (art.group, target)
+                                     or self.store.marker_action(old) not in cm.ACTIONS):
+                raise ArticleError("permission", "a comments marker replaces one of the same entry")
+        self.store.add(art, raw)
+        self.store.add_marker(art, action, target, replaces)
+
+    def _thread_closed(self, root: Article):
+        """The close keeping comments on ``root`` closed, or None (section 3.2)."""
+        return self.store.comments_closed(root.group, root.message_id,
+                                          crypto.key_to_text(root.author_key))
+
     def _keep_old(self, art: Article, manifest: Manifest) -> bool:
         """An article older than the window that would be kept (UN-RFC 0017 section
         2.1): a pin that would be in force, or a target a pin in force names."""

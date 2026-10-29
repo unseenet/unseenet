@@ -46,11 +46,14 @@ class Running:
         if comments is None and view == "feed" and gtype == "channel":
             comments = "open"                           # a feed: anyone comments (UN-RFC 0034 3.2)
         att = _file_choice(data.get("files", "none"))
+        days = data.get("comment_days")                 # every group (UN-RFC 0030 section 3.3)
+        if days is not None and (isinstance(days, bool) or not isinstance(days, int) or days < 1):
+            raise SessionError("comment_days is a whole number of days, 1 or more")
         gid = await s.create_group(
             name, gtype, title=str(data.get("title", "")).strip(),
             description=str(data.get("description", "")).strip(),
             charter=str(data.get("charter", "")), charter_type=data.get("charter_type"),
-            view=view, comments=comments if gtype == "channel" else None,
+            view=view, comments=comments if gtype == "channel" else None, comment_days=days,
             low_latency=bool(data.get("fast")) and view == "chat", kinds=KINDS[kinds],
             extra={"attachments": att} if att else None)
         await self._fetch(gid)

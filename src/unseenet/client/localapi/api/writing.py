@@ -94,13 +94,17 @@ class Writing:
         if languages is not None and (not isinstance(languages, list)
                                       or not all(isinstance(c, str) for c in languages)):
             raise SessionError("languages is a list of codes such as da, en")
+        days = _comment_days(data)                          # UN-RFC 0030 section 3.1
+        if days is not None:
+            s._comment_days_header(gid, days, refs)         # refused now, not in the job
 
         async def send() -> str:
-            if kind == KIND_CHAT and not refs and not files and not origin and not tags and not languages:
+            if kind == KIND_CHAT and not refs and not files and not origin and not tags \
+                    and not languages and days is None:
                 return await s.send_chat(gid, body)
             return await s.post(gid, subject, body, references=refs or None, kind=kind,
                                 files=files or None, origin=origin, tags=tags or None,
-                                languages=languages)
+                                languages=languages, comment_days=days)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval
@@ -173,9 +177,11 @@ class Writing:
         if languages is not None and (not isinstance(languages, list)
                                       or not all(isinstance(c, str) for c in languages)):
             raise SessionError("languages is a list of codes such as da, en")
+        days = _comment_days(data)                          # only shorter (UN-RFC 0030 3.1)
 
         async def send() -> str:
-            return await s.edit(m, subject, body, tags=tags, languages=languages)
+            return await s.edit(m, subject, body, tags=tags, languages=languages,
+                                comment_days=days)
 
         async def after(msgid: str) -> None:
             await s.fetch_group(m.group)
@@ -230,6 +236,24 @@ class Writing:
         s.emit(ev.GroupUpdated(gid))
         return {"ok": True, "marker": marker, "pins": self._pins(s, gid)}
 
+    async def comments(self, gid: str, data: dict) -> dict:
+        """``POST /api/groups/{gid}/comments`` (section 4.24): close comments on an entry,
+        with an optional note, or open them again (UN-RFC 0030 section 3.2) - its author,
+        the owner or a moderator. Answers the entry's state now."""
+        s = self._ready()
+        if gid not in s.data["groups"] and gid not in s.data["subscribed"]:
+            raise NotFound("no such group")
+        mid = str(data.get("id") or "").strip()
+        if not mid:
+            raise SessionError("which entry? give its id")
+        close = data.get("close", True)
+        if not isinstance(close, bool):
+            raise SessionError('"close" is true or false')
+        marker = await s.close_comments(gid, mid, str(data.get("note") or ""), reopen=not close)
+        await self._fetch(gid)
+        s.emit(ev.GroupUpdated(gid))
+        return {"ok": True, "marker": marker, "comments": comments_dict(s.comments_state(gid, mid))}
+
     def language(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/language`` ``{"text", "reply_to", "kind"}`` (UN-RFC
         0052 5a, #686): what to suggest the author writes in, from the text as they type -
@@ -270,3 +294,19 @@ class Writing:
             return {"may": False, "names": [], "max": MAX_MENTION_NOTICES}
         return {"may": True, "names": [n for n, _ in s.mentioned(subject, body)],
                 "max": MAX_MENTION_NOTICES}
+
+
+def _comment_days(data: dict) -> int | None:
+    """``comment_days`` of a post or edit: a whole number of days, 0 or more, or None."""
+    days = data.get("comment_days")
+    if days is None:
+        return None
+    if isinstance(days, bool) or not isinstance(days, int) or days < 0:
+        raise SessionError("comment_days is a whole number of days, 0 or more")
+    return days
+
+
+def comments_dict(state: dict) -> dict:
+    """A thread's comments state (``Session.comments_state``) as JSON (section 4.24)."""
+    until = state.get("until")
+    return {**state, "until": until.isoformat() if until is not None else None}

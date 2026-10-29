@@ -200,7 +200,8 @@ class GroupsMixin:
                             charter_type=charter_type, moderators=list(moderators),
                             posters=list(posters) if gtype == "channel" else (),
                             comments=comments if gtype == "channel" else None,
-                            comment_days=comment_days if gtype == "channel" else None,
+                            comment_days=comment_days if gtype in ("channel", "open", "moderated",
+                                                                   "closed") and not local else None,
                             extra=extra,
                             pow_bits=await self.required_pow(None, node=node))
         await self._post_article(art, node)
@@ -250,6 +251,10 @@ class GroupsMixin:
             hierarchy, reason = blocked
             return Permission(False, f"The maintainers of {hierarchy} block you"
                               + (f": {reason}" if reason else ""), "blocked")
+        if gtype in ("open", "moderated", "closed"):        # replies too (UN-RFC 0030 4.2)
+            closed = self._thread_open(group_id, reply_to, now)
+            if closed is not None:
+                return closed
         if entry.get("owner") or data.get("owner") == me or me in data.get("moderators", []):
             return Permission(True)
         gw = data.get("gateway")
@@ -271,13 +276,27 @@ class GroupsMixin:
         if reply_to is None:
             return Permission(False, "Channel: only the owner and posters start threads - "
                               "you may comment on one", "channel_thread")
-        days = data.get("comment_days")
-        root = self.find_message(group_id, reply_to.thread_root)
-        if isinstance(days, int) and root is not None and root.date is not None:
-            if (now or datetime.now(timezone.utc)) > root.date + timedelta(days=days):
-                return Permission(False, "Comments on this thread have closed",
-                                  "comments_closed")
-        return Permission(True)
+        closed = self._thread_open(group_id, reply_to, now)
+        return Permission(True) if closed is None else closed
+
+    def _thread_open(self, group_id: str, reply_to: "Message | None",
+                     now: datetime | None = None) -> "Permission | None":
+        """A reply into a thread whose comments closed - its deadline passed or it was
+        closed (UN-RFC 0030 sections 3.1, 3.2): the Permission saying so, with the
+        close's note; None when the reply may go."""
+        if reply_to is None:
+            return None
+        try:
+            state = self.comments_state(group_id, reply_to.thread_root, now)
+        except SessionError:
+            return None
+        if state["open"]:
+            return None
+        if state["reason"] == "deadline":
+            return Permission(False, "Comments on this thread have closed", "comments_closed")
+        note = state.get("note") or ""
+        return Permission(False, "Comments on this thread were closed"
+                          + (f": {note}" if note else ""), "comments_closed")
 
     def find_message(self, group_id: str, message_id: str) -> "Message | None":
         """A message of a group this client has read, by Message-ID."""
@@ -482,8 +501,11 @@ class GroupsMixin:
         allowed = {"title", "description", "charter", "charter_type", "view", "low_latency", "min_pow",
                    "retention_days", "banned", "moderators", "posters", "kinds",
                    "comments", "comment_days", *EXTRA_FIELDS}
-        if ("comments" in changes or "comment_days" in changes) and data.get("type") != "channel":
-            raise SessionError("only channels take comments")
+        if "comments" in changes and data.get("type") != "channel":
+            raise SessionError("only channels choose whether readers comment")
+        if "comment_days" in changes and (data.get("type") not in ("channel", "open", "moderated",
+                                                                   "closed") or data.get("local")):
+            raise SessionError("inboxes and local groups have no time for comments")
         if changes.get("comments") == "none":
             changes["comments"] = None            # the default is left out (UN-RFC 0030)
         if "kinds" in changes and changes["kinds"] is not None:

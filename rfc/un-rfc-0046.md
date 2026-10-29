@@ -373,7 +373,8 @@ first), then those containing it, then by a word of the name.
   (UN-RFC 0052); left out, the earlier version's are kept - its tags and
   warnings apart from the `#words` in its text, which come from the new
   text. A message you may edit carries `edit_tags`, the tags an edit box
-  starts with.
+  starts with. An edit of a thread's first post may carry `comment_days`
+  to shorten its time for comments, never to lengthen it (section 4.24).
 - `POST /api/groups/<id>/withdraw` `{"id": "<Message-ID>"}`: your own
   post, or one in a group you own or moderate (UN-RFC 0004 section 7).
 - `POST /api/groups/<id>/react` `{"id": "<Message-ID>", "emoji": "👍"}`:
@@ -425,13 +426,15 @@ not (you do not own or moderate the group).
   "channel" | "closed", "title": "...", "description": "...", "view":
   "threads" | "chat" | "feed" | "pages", "kinds": "both" | "post" | "chat",
   "fast": false, "comments": "open" | "none", "files": "none" | "pictures" |
-  "pictures+pdf", "charter": "...", "charter_type": "..."}` creates a group you own;
+  "pictures+pdf", "charter": "...", "charter_type": "...", "comment_days": n}` creates a group you own;
   answers `{"id": "<group ID>"}`. `files` is what files it takes (UN-RFC
   0027 section 5.1): none (the default), pictures, or pictures and PDFs,
   up to 4 MiB each. `pages` makes a site and needs `"type": "channel"`
   (UN-RFC 0035 section 3); `comments` is for channels (UN-RFC 0030), and a
-  channel shown as `feed` takes comments unless it says `none`; `fast` is
-  for chat groups only.
+  channel shown as `feed` takes comments unless it says `none`;
+  `comment_days`, days during which a thread takes comments or replies, is
+  for any of these types (UN-RFC 0030 section 3.3); `fast` is for chat
+  groups only.
 - `POST /api/groups/<id>/settings` with the manifest fields to change
   (`title`, `description`, `charter`, `charter_type`, `view`, `kinds` as for
   creating, `min_pow`, `low_latency`, `retention_days`, `comments`,
@@ -1159,6 +1162,36 @@ Rows also have the author's `tags` (UN-RFC 0052), groups their `tags`.
 - `POST /api/groups/{gid}/post` takes `tags`, the author's own (at most 8),
   and `POST /api/groups/{gid}/settings` the group's `tags` and
   `labellers` (UN-RFC 0053 section 5).
+
+## 4.24 Comments on One Entry
+
+A thread takes comments (in a channel) or replies (in other groups) for
+the shorter of the group's `comment_days` and the entry's own time, and
+its author, the owner and moderators can close and open them (UN-RFC
+0030 sections 3.1-3.3).
+
+- `POST /api/groups/<id>/post` takes `comment_days` for a new thread: a
+  whole number of days, `0` (no comments at all) up to the group's
+  `comment_days`. The runtime writes `Comment-Days` only when it differs
+  from the group's, and refuses more than the group's, or a reply, with
+  400 before the job starts.
+- A row of a thread's first post (section 4.3) has `comments`, null where
+  there is nothing to say (no limit, no close), else `{"open": true |
+  false, "reason": null | "deadline" | "closed", "until": "<ISO 8601>" or
+  null, "note": "...", "by": "<key>" or null, "own_days": n or null,
+  "group_days": n or null}`, and `may_close_comments`. A front end tells
+  the reader when comments have closed, with the note of a close as text,
+  instead of letting a reply fail, and shows when they close once that is
+  less than a day away.
+- `POST /api/groups/<id>/comments` `{"id": "<message-id>", "close": true |
+  false, "note": "..."}` closes comments on that entry (a note is at most
+  256 characters, none in a closed group) or opens them again, and
+  answers `{"ok": true, "marker": "<message-id>", "comments": {...}}`.
+  Refused with 400 for anyone but the entry's author, the owner and
+  moderators, for a reply, and for the author opening what the owner or a
+  moderator closed.
+- `write_permission`, and with it what the runtime says before a reply is
+  written, answers `comments_closed` with the reason and the note.
 
 # 5. Events
 

@@ -22,12 +22,44 @@ class Kept:
                          int(parse_date(art["Date"]).timestamp()), " ".join(replaces)))
         self.db.commit()
 
-    def markers(self, group_id: str) -> list[pn.Marker]:
-        """Every pin and unpin held for a group."""
+    def markers(self, group_id: str, actions=(pn.PIN, pn.UNPIN)) -> list[pn.Marker]:
+        """Every marker held for a group of the given ``actions``: pins and unpins
+        (UN-RFC 0033) by default; ``comments-close``/``comments-open`` (UN-RFC 0030 3.2)
+        live in the same table."""
+        marks = ",".join("?" * len(actions))
         return [pn.Marker(mid, target, action, author, date, tuple(sup.split()))
                 for mid, target, action, author, date, sup in self.db.execute(
                     "SELECT message_id, target, action, author_key, date, supersedes "
-                    "FROM markers WHERE group_id=?", (group_id,))]
+                    f"FROM markers WHERE group_id=? AND action IN ({marks})",
+                    (group_id, *actions))]
+
+    def marker_action(self, message_id: str) -> str | None:
+        """The action of a marker we hold (pin, unpin, comments-close, comments-open)."""
+        row = self.db.execute("SELECT action FROM markers WHERE message_id=?",
+                              (message_id,)).fetchone()
+        return row[0] if row else None
+
+    # --- comments on one entry (UN-RFC 0030 sections 3.1, 3.2) ---
+    def comments_closed(self, group_id: str, target: str, target_author: str,
+                        manifest: Manifest | None = None) -> pn.Marker | None:
+        """The close that keeps comments on ``target`` closed, or None (section 3.2)."""
+        from ..comments import ACTIONS, deciding_close
+        m = manifest or self.manifest(group_id)
+        if m is None:
+            return None
+        return deciding_close(self.markers(group_id, ACTIONS), target, target_author,
+                              {crypto.key_to_text(k) for k in (m.owner, *m.moderators)})
+
+    def root_days(self, root: str) -> int | None:
+        """The shortest ``Comment-Days`` an edit of the thread root ``root`` gave it."""
+        row = self.db.execute("SELECT days FROM root_days WHERE root=?", (root,)).fetchone()
+        return row[0] if row else None
+
+    def set_root_days(self, root: str, group_id: str, days: int) -> None:
+        """An edit of a root shortened its time for comments (section 3.1): kept shortest."""
+        self.db.execute("INSERT INTO root_days VALUES (?, ?, ?) ON CONFLICT(root) DO UPDATE "
+                        "SET days=MIN(days, excluded.days)", (root, group_id, days))
+        self.db.commit()
 
     def marker(self, message_id: str) -> tuple[str, str] | None:
         """(group, target) of a pin or unpin we hold."""

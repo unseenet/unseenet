@@ -283,6 +283,10 @@ async def pin(request):
     return _json(await _api(request).pin(_gid(request), await _body(request)))
 
 
+async def comments(request):
+    return _json(await _api(request).comments(_gid(request), await _body(request)))
+
+
 async def react(request):
     return _json(_api(request).react(_gid(request), await _body(request)))
 
@@ -668,7 +672,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
-    ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/react", react),
+    ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/comments", comments), ("POST", "/api/groups/{gid}/react", react),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/groups/{gid}/language", language),
     ("GET", "/api/languages", languages_list),

@@ -173,7 +173,7 @@ async def c_group_create(app: App, args) -> None:
             charter=fields.get("charter", ""), charter_type=fields.get("charter_type"),
             view=fields.get("view"), kinds=fields.get("kinds"),
             comments=fields.get("comments") if args.type == "channel" else None,
-            comment_days=fields.get("comment_days") if args.type == "channel" else None,
+            comment_days=fields.get("comment_days"),          # every group but inboxes (0030 3.3)
             moderators=getattr(args, "moderator", None) or [],
             posters=getattr(args, "poster", None) or [], extra=extra or None)
     except (SessionError, ValueError) as exc:
@@ -213,7 +213,8 @@ def _group_options(s, *, create: bool) -> None:
     s.add_argument("--comments", choices=["none", "open"],
                    help="channels: whether readers may comment on posts (UN-RFC 0030)")
     s.add_argument("--comment-days", type=int,
-                   help="channels: days after a post during which it takes comments")
+                   help="days after a thread is started during which it takes comments or "
+                        "replies (UN-RFC 0030; not inboxes or local groups)")
     s.add_argument("--attachments", type=int, metavar="MAX_SIZE",
                    help="allow files up to this many octets (UN-RFC 0027); 0 to stop")
     s.add_argument("--types", help="with --attachments: allowed media types, e.g. image/*,application/pdf")

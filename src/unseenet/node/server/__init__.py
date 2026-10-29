@@ -52,6 +52,7 @@ from ...core import group_emoji as ge
 from ...core.encoding import b64decode
 from ...core import pages as pg
 from ...core import pins as pn
+from ...core import comments as cm
 from ...core import reactions as rx
 from ...core import ripening as rp
 from ...core.store import Store
