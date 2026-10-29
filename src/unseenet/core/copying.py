@@ -199,6 +199,9 @@ def build_payload(data: dict, names: list[str] | None = None, group_secrets: boo
     for n in names:
         e = ids[n]
         out["identities"][n] = {k: e[k] for k in ("seed", "display", "signature") if k in e}
+        segments = _ripening_of(data, e["seed"])
+        if segments:                      # the key's work travels with it (section 3.6)
+            out["identities"][n]["ripening"] = segments
     default = data.get("default_identity")
     out["default"] = default if default in names else names[0]
     if group_secrets:
@@ -207,6 +210,39 @@ def build_payload(data: dict, names: list[str] | None = None, group_secrets: boo
                                       or (entry.get("manifest") or {}).get("type") == "closed"):
                 out["groups"][gid] = {"keys": dict(entry["keys"])}
     return out
+
+
+def _key_text(seed_hex: str) -> str:
+    return crypto.Identity.from_seed(bytes.fromhex(seed_hex)).key_text
+
+
+def _ripening_of(data: dict, seed_hex: str) -> list[dict]:
+    """This key's ripening segments as the vault keeps them (UN-RFC 0025 3.2)."""
+    return list((data.get("ripening", {}).get(_key_text(seed_hex)) or {}).get("segments") or [])
+
+
+def _take_ripening(data: dict, seed_hex: str, segments) -> bool:
+    """Keep a copied ripening chain (section 3.7) when it checks out against the key and
+    reaches further than the one this vault has; drop it otherwise - the copy goes on.
+    True when it was kept."""
+    from . import ripening as rp
+    if not isinstance(segments, list) or not segments or len(segments) > rp.MAX_SEGMENTS:
+        return False
+    if not rp.available():                 # cannot check it here: not taken on trust
+        return False
+    try:
+        chain = rp.Chain([rp.Segment.from_dict(s) for s in segments])
+        have = rp.Chain([rp.Segment.from_dict(s) for s in _ripening_of(data, seed_hex)])
+        if chain.t <= have.t:
+            return False
+        ident = crypto.Identity.from_seed(bytes.fromhex(seed_hex))
+        rp.verify(ident.public_key, chain)
+    except (rp.RipeningError, KeyError, TypeError, ValueError):
+        return False
+    entry = data.setdefault("ripening", {}).setdefault(
+        ident.key_text, {"segments": [], "published": 0})
+    entry["segments"] = [s.to_dict() for s in chain.segments]
+    return True
 
 
 def check_payload(p) -> dict:
@@ -237,6 +273,8 @@ def merge_payload(data: dict, p: dict) -> list[str]:
     have = {e.get("seed"): n for n, e in data["identities"].items()}
     added, names = [], {}
     for name, e in p["identities"].items():
+        if "ripening" in e:               # also for a key already here (section 3.7)
+            _take_ripening(data, e["seed"], e["ripening"])
         if e["seed"] in have:
             names[name] = have[e["seed"]]
             continue
