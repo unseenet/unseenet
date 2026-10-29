@@ -13,6 +13,8 @@ Part of ``Session`` (see __init__.py)."""
 
 from __future__ import annotations
 
+import contextlib
+
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import session as _s   # names tests patch on the module, read at call time
 
@@ -75,6 +77,34 @@ class PersonalMixin:
             p["label"] = (self.label_of(p["key"]) if p["key"]
                           else (known.get(fp) or {}).get("name") or fp)
         return sorted(people.values(), key=lambda p: (p["label"].lower(), p["fingerprint"]))
+
+    async def adopt_published_personal_groups(self, names: list[str]) -> dict[str, list[str]]:
+        """Right after a key arrives - copied from another device, or restored from its
+        words - take its personal feed and site as started if they exist on the network,
+        as ripening is (#758): a copy carries identities and closed groups' secrets
+        (UN-RFC 0050 3.6), not the vault's entries for these public, key-bound groups, so
+        a copied identity said *Start your feed* although it has one (unseenet#771) - and
+        starting it again must never be offered. Their manifests are read in one request
+        (UN-RFC 0041), owned by the key and not expired; they are followed again. Quiet
+        when no node answers. Answers ``{name: [Group ID, ...]}`` for those taken over."""
+        out: dict[str, list[str]] = {}
+        for name in names:
+            with contextlib.suppress(SessionError, OSError, ConnectionError, NNTPError, KeyError):
+                me = self.identity(name)
+                gids = [make_group_id(kind, me.public_key) for kind in PERSONAL_KINDS]
+                found = await self.fetch_manifests(gids)
+                for gid in gids:
+                    m = found.get(gid)
+                    if m is None or m.expired() or m.raw.get("owner") != me.key_text:
+                        continue
+                    entry = self.group_entry(gid)
+                    entry["manifest"] = dict(m.raw)
+                    entry.update({"type": "channel", "owner": True})
+                    self.subscribe(gid)
+                    out.setdefault(name, []).append(gid)
+        if out:
+            self.save()
+        return out
 
     def has_personal_group(self, kind: str) -> bool:
         """Whether this identity has started its personal feed or site in this vault:
