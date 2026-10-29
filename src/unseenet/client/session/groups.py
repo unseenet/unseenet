@@ -183,7 +183,11 @@ class GroupsMixin:
         if _ge.is_emoji_name(name):      # reserved for a group's emoji (UN-RFC 0056 3.1)
             raise SessionError("a name ending in .emoji is kept for a group's emoji")
         owner = self.identity()
-        node = node or self.node
+        if node is None:                 # the default, or the next node that answers (#605)
+            node = await self._reachable(None)
+            if node is not None and node != self.node:
+                self.say(f"{self.node_label(self.node)} does not answer - the group is "
+                         f"made on {self.node_label(node)}")
         self.mark_in_use()               # making a group is using the identity (#270)
         if retention_days is None:
             retention_days = 30 if gtype == "inbox" else 90

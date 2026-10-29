@@ -182,11 +182,29 @@ class PostingMixin:
     # ------------------------------------------------------------------
     # posting
     # ------------------------------------------------------------------
+    async def _reachable(self, group_id: str | None) -> str | None:
+        """The node to post into ``group_id`` through (#604): its own node if it answers,
+        else the first of your other nodes that does - so the postage and ripening are
+        asked of the node the post goes to, not of one that is gone. Its own node when
+        none answers (the error is then the one the user sees)."""
+        preferred = self.node_for(group_id)
+
+        async def ok(c: Client) -> bool:
+            return True
+        for address in self._answering_first(preferred):
+            try:
+                await self._call(ok, address)
+                return address
+            except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError,
+                    asyncio.TimeoutError):
+                continue
+        return preferred
+
     async def _post_article(self, art: Article, node: str | None = None, blobs=()) -> str:
         name = self._identity_named_by(art.author_key)
+        where = node or await self._reachable(art.group)
         # a node from before UN-RFC 0025 gets no header: it would break the signature
-        minimum = await self.node_min_ripe(node or self.node_for(art.group)) \
-            if name is not None else None
+        minimum = await self.node_min_ripe(where) if name is not None else None
         if minimum is None:
             art.remove("Key-Ripening")
         elif art.group == self.ripe_group(name):
@@ -201,15 +219,15 @@ class PostingMixin:
             if header:                                 # outside the canonical form: signing holds
                 art.set("Key-Ripening", header)
         try:
-            return await self._send_article(art, node, blobs)
+            return await self._send_article(art, node, blobs, prefer=where)
         except SessionError as exc:
             if _too_old(str(exc)) and self._redate(art, name):
-                return await self._send_article(art, node, blobs)
+                return await self._send_article(art, node, blobs, prefer=where)
             if name is None or "ripening: unknown" not in str(exc) \
                     or art.group == self.ripe_group(name):
                 raise
-            await self.publish_ripening(name, node)    # this node lacks our chain: send it
-            return await self._send_article(art, node, blobs)
+            await self.publish_ripening(name, where)   # this node lacks our chain: send it
+            return await self._send_article(art, node, blobs, prefer=where)
 
     def _redate(self, art: Article, name: str | None) -> bool:
         """UN-RFC 0049 section 3.4: refused with ``441 date`` because it waited more than
@@ -244,7 +262,7 @@ class PostingMixin:
         blobs = list(blobs)
         if sign_with is None:
             return await self._post_article(art, node, blobs)
-        target = node or self.node_for(art.group)
+        target = node or await self._reachable(art.group)
         name = self._identity_named_by(sign_with.public_key)
         if name is not None and await self.node_wants_ripening(target):
             await self.ensure_ripe(name, target)   # the level decides the postage
@@ -281,31 +299,57 @@ class PostingMixin:
                 self.group_entry(group)["manifest"] = dict(m.raw)
         return await self.required_pow(group, node=node)
 
-    async def _send_article(self, art: Article, node: str | None = None, blobs=()) -> str:
+    async def _send_article(self, art: Article, node: str | None = None, blobs=(),
+                            prefer: str | None = None) -> str:
+        """Send a signed article. ``node``: to that node only. Otherwise to ``prefer`` (or
+        the group's node) first, then your other nodes: when a node answers that it does
+        not carry the group (someone's inbox elsewhere), or cannot be reached (#604) -
+        the group is then read from the node that took it. The same signed article is
+        sent each time: a node answering ``duplicate`` after a connection was lost
+        already has it, which is a success, not a second post."""
         raw = art.to_bytes()
-        target = node or self.node_for(art.group)
+        target = node or prefer or self.node_for(art.group)
+
+        sent = [0]                                 # times it went out, on any connection
 
         async def send(c):
             for bid, octets in blobs:              # staged on this connection (UN-RFC 0027, 6)
                 code, text = await c.blobpost(bid, octets)
                 if code != 245:
                     return code, _blob_refusal(text)
+            sent[0] += 1
             return await c.post(raw)
 
-        code, text = await self._call(send, target)
-        if code != 240 and node is None and "not carried" in text:
-            for other in (n for n in self.nodes if n != target):   # e.g. someone's inbox elsewhere
-                try:
-                    code, text = await self._call(send, other)
-                except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError):
-                    continue
-                if code == 240:
-                    if art.group in self.data["groups"]:
-                        self.pin_group(art.group, other)
-                    break
-        if code != 240:
-            raise SessionError(f"rejected by node: {text}")
-        return art.message_id
+        targets = [target] if node is not None else self._answering_first(target)
+        if not targets or targets == [None]:
+            raise SessionError("no node configured")
+        lost: BaseException | None = None          # a node that could not be reached
+        code, text = None, ""
+        for address in targets:
+            try:
+                code, text = await self._call(send, address)
+            except (OSError, ConnectionError, SessionError, asyncio.IncompleteReadError,
+                    asyncio.TimeoutError) as exc:
+                if node is not None or (isinstance(exc, SessionError)
+                                        and "is full" not in str(exc)
+                                        and "not answering" not in str(exc)):
+                    raise
+                lost = lost or exc
+                continue
+            if code != 240 and sent[0] > 1 and _duplicate(text):
+                code = 240                         # it got there before the line broke
+            if code == 240:
+                if (node is None and art.group in self.data["groups"]
+                        and address != self.node_for(art.group)):
+                    self.pin_group(art.group, address)
+                    self.say(f"{short_group_id(art.group)} is now read from "
+                             f"{self.node_label(address)}")
+                return art.message_id
+            if node is not None or "not carried" not in text:
+                break                              # a node that carries it said no
+        if code is None:
+            raise lost                             # no node of yours could be reached
+        raise SessionError(f"rejected by node: {text}")
 
     async def edit(self, msg: Message, subject: str, body: str,
                    content_type: str | None = None, files=None,
@@ -589,6 +633,11 @@ def _blob_refusal(text: str) -> str:
             "limit": "today's limit for files on this node is reached - try tomorrow",
             "hash": "the file was damaged on the way - try again"}.get(word, f"file: {text}")
 
+
+
+def _duplicate(text: str) -> bool:
+    """A node's ``441 duplicate`` (or ``435``): it has this very article already."""
+    return text.strip().lower().startswith(("duplicate", "435"))
 
 
 def _too_old(text: str) -> bool:

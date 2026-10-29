@@ -100,7 +100,18 @@ class ClientRuntime:
             try:
                 available = {g.group_id: g for g in await s.list_groups(budget=FIRST_ANSWER)}
             except NETWORK_ERRORS as exc:
-                return self._emit_refreshed(error=str(exc) or type(exc).__name__)
+                if not await self._fall_back():                    # #603
+                    return self._emit_refreshed(error=str(exc) or type(exc).__name__)
+                try:
+                    available = {g.group_id: g for g in await s.list_groups(budget=FIRST_ANSWER)}
+                except NETWORK_ERRORS as exc2:
+                    return self._emit_refreshed(error=str(exc2) or type(exc2).__name__)
+            if s.node in s.unreachable:
+                try:
+                    if await s.promote_default():                  # #605
+                        s.emit(ev.GroupsChanged())
+                except NETWORK_ERRORS:
+                    pass
             for late in s.late_answers():          # a slow node (#704): again when it answers
                 if late not in self._watched:
                     self._watched.add(late)
@@ -113,6 +124,25 @@ class ClientRuntime:
                 self.available = available = listed
                 await self._fetch(g for g in s.data["subscribed"] if g not in fetched)  # the inbox
             return self._emit_refreshed(available=len(available))
+
+    async def _fall_back(self) -> bool:
+        """None of your nodes answers, and has not for NODE_GIVE_UP (#603): carry on with a
+        node from the known-node list. Not while a node is only slow, nor when nothing
+        was reached at all because Tor itself does not work. True if it changed nodes."""
+        from .session.nodes import NODE_GIVE_UP
+        s = self.session
+        if s.slow or not s.nodes or any(s.down_for(n) < NODE_GIVE_UP for n in s.nodes):
+            return False
+        try:
+            new = await s.fall_back_to_known_node()
+        except NETWORK_ERRORS:
+            return False
+        if new is None:
+            return False
+        self.inbox_ready = False               # set the inbox up there (#605)
+        self._watch_nodes()
+        s.emit(ev.GroupsChanged())
+        return True
 
     async def sync_state(self, write: bool = True) -> str | None:
         """Your state in the network (UN-RFC 0044): fetched and merged into the vault,
@@ -421,6 +451,11 @@ class ClientRuntime:
     def nodes_changed(self) -> None:
         """After a node was added, removed or made the default (#518): stop watching
         nodes that are gone, watch new ones, and read their groups at once."""
+        self._watch_nodes()
+        self._spawn(self.refresh())
+
+    def _watch_nodes(self) -> None:
+        """Watch each of your nodes for new posts, and no node you no longer use."""
         for node, task in list(self._watching.items()):
             if node not in self.session.nodes:
                 task.cancel()
@@ -429,7 +464,6 @@ class ClientRuntime:
             for node in self.session.nodes:
                 if node not in self._watching:
                     self._watching[node] = self._spawn(self.watch_node(node))
-        self._spawn(self.refresh())
 
     def _spawn(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
