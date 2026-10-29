@@ -256,6 +256,7 @@ async def c_copy_from(app: App, args) -> None:
         sys.exit(str(exc))
     if s.node:
         await s.adopt_published_ripenings(added)            # the keys' levels, at once
+        await s.adopt_published_personal_groups(added)      # their feeds and sites (#771)
     emit(args, "Added: " + (", ".join(added) or "nothing new"), {"added": added})
 
 

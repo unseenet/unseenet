@@ -7,6 +7,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-29
+
+A fix for 0.6.3. **Update clients**; nodes gain nothing.
+
+### Fixed
+
+- **A copied or restored key has its feed and site** (#771): a copy carries identities and
+  closed groups' secrets (UN-RFC 0050 3.6), not the vault's entries for the key's own
+  feed and site, so the new device said *Start your feed* and *Start your site* although
+  both existed. Right after a key arrives - copied in the app, the browser or with
+  `unseenet copy-from`, or restored from its words - the client reads the key's feed and
+  site manifests from the network (one request, UN-RFC 0041), takes them as started and
+  follows them again, as it does for ripening (#758); starting a second one is never
+  offered. `Session.adopt_published_personal_groups`.
+
 ## [0.6.3] - 2026-10-29
 
 A fix for 0.6.2. **Update clients**; nodes gain nothing.
@@ -2093,7 +2108,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/unseenet/unseenet/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/unseenet/unseenet/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/unseenet/unseenet/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
