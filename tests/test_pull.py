@@ -166,3 +166,17 @@ def test_old_stores_learn_their_key_updates(tmp_path):
     a.store.db.commit()
     again = Store(tmp_path / "a.sqlite")
     assert len(again.state_ids(m_closed.group)) == 2
+
+
+async def test_a_listing_past_70_kb_still_pulls():
+    """29 Oct 2026: every group's state comes first in NEWNEWS, so the listing grows with
+    the network; past 70 KB every pull stopped with 'block too large' (0.6.1)."""
+    a = make_node("a")
+    owners = [crypto.Identity.generate() for _ in range(40)]
+    for i in range(2500):                          # 2500 manifests: ~110 KB listed
+        a.accept(make_manifest(owners[i % 40], f"dk.g{i}", "open", pow_bits=BITS).to_bytes())
+    server_a, addr_a = await serve(a)
+    b = make_node("b", peers=[PeerConfig(name="a", address=addr_a)])
+    res = await Puller(b, b.config.peers[0]).run_once()
+    assert res["listed"] >= 2500, res
+    server_a.close()
