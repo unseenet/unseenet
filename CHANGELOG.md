@@ -7,31 +7,38 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
-### Fixed
-
-- **Copying waits for the other device** (UN-RFC 0050): the new device gave the old
-  device's one-time onion service a few seconds, though a fresh descriptor can take a
-  minute - and the lookup had used the code up, so a second try said *No device is
-  waiting*. It now keeps trying for 90 seconds. (unseenet-entrance#58 does the same for
-  a browser.)
-- **A Tor left behind no longer blocks the client** (seen 29 Oct): when a client ended
-  without stopping its Tor, that Tor kept the data directory, and the next start waited
-  for it with *Starting Tor ...* and every node "does not answer". Tor now quits by
-  itself when its program is gone (`__OwningControllerProcess`), and at start a Tor an
-  earlier run left in the directory is told to halt through its control port.
-- **A key that arrives shows its level at once**: copied from another device or restored
-  from its words, a key said *New key getting ready* until a node asked for ripening. It
-  now takes over its published chain right away (UN-RFC 0025 3.3), so it shows the level
-  it has and is never ripened again from the start.
-- **A copied key brings its ripening** (UN-RFC 0050 3.6 as amended, #759): the old
-  device sends the key's ripening chain with it, and the new one keeps it once checked -
-  so the level shows with no node, and ripening done but not yet published is not lost.
-  Older clients ignore it; a chain that does not check out is dropped.
+### Changed
 
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
-  clients that need 0.6.1 could not be built nightly with core main. They are now
-  0.6.2.devN.
+  clients that need 0.6.1 could not be built nightly with core main. They now count
+  on from the newest release of the series.
+
+## [0.6.2] - 2026-10-29
+
+From the first live copy of an identity to a browser. **Update clients first**; nodes
+gain nothing.
+
+### Fixed
+
+- **Copying waits for the other device** (UN-RFC 0050, #754): the new device gave the
+  old device's one-time onion service a few seconds, though a fresh descriptor can take a
+  minute - and the lookup had used the code up, so a second try said *No device is
+  waiting*. It now keeps trying for 90 seconds (unseenet-entrance 0.3.1 does the same
+  for a browser).
+- **A key that arrives shows its level at once** (#758): copied from another device or
+  restored from its words, a key said *New key getting ready* until a node asked for
+  ripening. It now takes over its published chain right away, and is never ripened
+  again from the start.
+- **A copied key brings its ripening** (UN-RFC 0050 3.6 as amended, #759): the old device
+  sends the key's ripening chain with it, and the new one keeps it once checked - so
+  the level shows with no node, and ripening done but not yet published is not lost.
+  Older clients ignore it; a chain that does not check out is dropped.
+- **A Tor left behind no longer blocks the client** (#755): when a client ended without
+  stopping its Tor, that Tor kept the data directory, and the next start waited for it
+  with *Starting Tor ...* and every node "does not answer". Tor now quits by itself when
+  its program is gone (`__OwningControllerProcess`), and at start a Tor an earlier run
+  left in the directory is told to halt through its control port.
 
 ## [0.6.1] - 2026-10-29
 
@@ -2077,7 +2084,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/unseenet/unseenet/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/unseenet/unseenet/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/unseenet/unseenet/compare/v0.4.4...v0.5.0

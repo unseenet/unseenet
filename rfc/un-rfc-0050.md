@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0050                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.6.0, unseenet-entrance 0.3.0, unseenet-gui 0.3.0
+Implemented: unseenet 0.6.2, unseenet-entrance 0.3.1, unseenet-gui 0.3.0
 Updates: 0005, 0007
 
       Unseenet: Copying an Identity to Another Device, and Recovery Words
