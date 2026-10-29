@@ -144,7 +144,10 @@ Unlocked: `identity` is `{"key": "ed25519:...", "display": "...", "label",
 "source", "label"}`, and `ripening` `{"level": <0-4 or null>, "t":
 <iterations>, "next_at": <iterations or null>, "published": <the level
 nodes know, or null>, "available": <true if this runtime can ripen>,
-"paused": <true while paused>}` (UN-RFC 0025). `setup` is true while the
+"paused": <true while paused>, "target": <the level it is ripened to
+here>, "chosen": <3 or 4 when the user chose, else null>, "seconds_left":
+<about how long to the target at this device's speed, or null>, "speed":
+<iterations a second here, or null>}` (UN-RFC 0025). `setup` is true while the
 identity or the node is still missing.
 
 `status` is a line for people. `status_idle` is true when it only says
@@ -162,6 +165,16 @@ key's ripening in the vault, on this device only - it is not part of your
 state in the network (UN-RFC 0044), so pausing on a phone does not pause
 another device. It stops only the background ripening: a post that needs
 a riper key still ripens what it needs.
+
+`POST /api/ripening` `{"to": 3 | 4}` chooses the level the key is ripened
+to on this device (UN-RFC 0025 section 7), kept like the pause: 3 is the
+default, 4 takes weeks of one core while the runtime runs and then pays 2
+bits less postage. Raised, ripening starts again unless paused; lowered,
+it stops after the segment it is on. It answers the state's `ripening`,
+and every front end gets the event `ripening-target` (`target`). A front
+end SHOULD say what level 4 costs and gives, with `seconds_left`, before
+choosing it. `{"paused": ..., "to": ...}` does both. A service (section
+3.2) ripens to `UNSEENET_RIPEN_TO` (0-4) when it is set, else to 3.
 
 ## 4.2 Unlocking and Setting Up
 
@@ -1211,7 +1224,8 @@ section 3). Each message is one JSON object with its name in `event`:
   `fraction` (0 to 1) with `ripening` and `pow`, `message_id` with `sent`
   and `reached`, `error` with `failed`;
 - `ripening-paused`: `{"event": "ripening-paused", "paused": true | false}`
-  after `POST /api/ripening`, so every window follows.
+  after `POST /api/ripening`, so every window follows; `ripening-target`
+  (`target`) after a new level was chosen.
 - `status` carries `idle` (section 4.1) when the runtime says it, so a
   front end can follow without asking the state again.
 

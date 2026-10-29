@@ -48,6 +48,56 @@ class RipeningMixin:
             entry.pop("paused", None)
         self.save()
 
+    # --- the level to ripen to on this device (#740) ---
+    def ripening_target(self, name: str | None = None) -> int | None:
+        """The level this key is ripened to on this device when the user chose one (3 or
+        4, #740), else None - the program's own default then (3 for clients). Kept with
+        the key's chain like the pause (#337): the work is this machine's, and two
+        devices should not both ripen one key."""
+        if not self.has_identity():
+            return None
+        value = self._ripening_entry(name).get("target")
+        return value if value in (3, 4) else None
+
+    def set_ripening_target(self, level: int, name: str | None = None) -> None:
+        """Ripen this key to ``level`` (3 or 4) on this device (UN-RFC 0025 section 7):
+        4 costs weeks of one core while the program runs, and then pays 2 bits less
+        postage than 3 (section 4). The client runtime follows it at once."""
+        if level not in (3, 4):
+            raise SessionError("the level to ripen to is 3 or 4")
+        entry = self._ripening_entry(name)
+        if entry.get("target") == level:
+            return
+        entry["target"] = level
+        self.save()
+
+    def ripening_speed(self, name: str | None = None) -> float | None:
+        """Iterations a second this device proved the key's last segments at, or None."""
+        speed = self._ripening_entry(name).get("speed") if self.has_identity() else None
+        return float(speed) if isinstance(speed, (int, float)) and speed > 0 else None
+
+    def ripening_seconds_left(self, level: int, name: str | None = None) -> float | None:
+        """About how long ripening to ``level`` takes from where the key is, at this
+        device's speed (its last segments): None when unknown, 0 when there."""
+        target = next((th for lv, th, _ in rp.LEVELS if lv == level), None)
+        if target is None or not self.has_identity():
+            return None
+        left = target - self.ripening(name).t
+        if left <= 0:
+            return 0.0
+        speed = self.ripening_speed(name)
+        return left / speed if speed else None
+
+    def _note_speed(self, name: str | None, iterations: int, seconds: float) -> None:
+        """Keep how fast this device proves, weighted to the newest segments."""
+        if seconds <= 0 or iterations <= 0:
+            return
+        entry = self._ripening_entry(name)
+        now = iterations / seconds
+        old = entry.get("speed")
+        entry["speed"] = round(now if not isinstance(old, (int, float)) or old <= 0
+                               else 0.5 * old + 0.5 * now, 1)
+
     def ripe_group(self, name: str | None = None) -> str:
         """The Group ID where an identity publishes its ripening chain:
         ``ripe@<fingerprint>`` (UN-RFC 0025)."""
@@ -186,6 +236,7 @@ class RipeningMixin:
         _s.log.info("ripening %s: a segment of %d iterations from t=%d (about %d MiB)",
                     name, length, chain.t, rp.memory_for(length) >> 20)
         pk = self.identity(name).public_key
+        began = time.monotonic()
         try:
             seg = await self._prove_segment(pk, chain.end, length, run_file)
         finally:
@@ -197,6 +248,7 @@ class RipeningMixin:
         if len(entry["segments"]) != len(chain.segments):   # someone else ripened meanwhile
             return self.ripening(name).t > chain.t           # grown all the same (#326)
         entry["segments"].append(seg.to_dict())
+        self._note_speed(name, seg.t, time.monotonic() - began)    # for the time left (#740)
         self.save()
         t = chain.t + seg.t
         self.emit(ev.Ripening(self.identity(name).key_text, t, rp.level(t),

@@ -37,9 +37,28 @@ FIRST_ANSWER = 12.0           # seconds a node gets to list its groups before th
 RIPEN_TO = 3                  # ripen keys up to this level while running (UN-RFC 0025, 7):
                               # 3 ends the surcharge; 4 takes weeks of a core (#444)
 SERVICE_RIPEN_TO = 3          # services: no surcharge from level 3, and a core is spared
+RIPEN_TO_ENV = "UNSEENET_RIPEN_TO"   # services: the level to ripen to (#740), 0-4
 RIPEN_RECHECK = 3600.0        # a node that says "-" is asked again this often (#314)
 NETWORK_ERRORS = (SessionError, OSError, ConnectionError, NNTPError, ValueError,
                   asyncio.IncompleteReadError, asyncio.TimeoutError)
+
+
+def service_ripen_to(configured: int | None = None) -> int:
+    """The level a service (gateway, bot, help bot, watchman, registrar) ripens its key to
+    (#740): its own configuration if it gives one, else ``UNSEENET_RIPEN_TO`` (0-4) if
+    set, else SERVICE_RIPEN_TO. One way for every service, so an operator sets 4 the same
+    way everywhere - a program that posts thousands of times pays a quarter of the
+    postage at level 4 (UN-RFC 0025 section 4)."""
+    if configured is not None:
+        if configured not in range(0, 5):
+            raise ValueError("the level to ripen to is 0 to 4")
+        return configured
+    value = os.environ.get(RIPEN_TO_ENV, "").strip()
+    if value:
+        if not value.isdigit() or int(value) > 4:
+            raise ValueError(f"{RIPEN_TO_ENV} is a level from 0 to 4, not {value!r}")
+        return int(value)
+    return SERVICE_RIPEN_TO
 
 
 @dataclass
@@ -321,7 +340,7 @@ class ClientRuntime:
         try:
             while not stop.is_set():
                 lv = s.ripening().level
-                if lv is not None and lv >= self.ripen_to:
+                if lv is not None and lv >= self.ripening_to():   # the key's own choice (#740)
                     break
                 if not await s.ripen_segment(run_file=run_file):
                     break                                  # stopped, or at the top
@@ -356,6 +375,26 @@ class ClientRuntime:
                 return False                               # stop_ripening()
             except asyncio.TimeoutError:
                 pass
+
+    def ripening_to(self) -> int:
+        """The level the key is ripened to now: the user's choice on this device (#740),
+        else this program's ``ripen_to``."""
+        try:
+            chosen = self.session.ripening_target()
+        except (SessionError, AttributeError, KeyError):
+            chosen = None
+        return chosen if chosen is not None else (self.ripen_to or 0)
+
+    async def set_ripening_to(self, level: int) -> None:
+        """Ripen to ``level`` (3 or 4) from now on (#740): raised above where the key is,
+        ripening starts again unless paused; lowered, it stops after the segment it is
+        on - the work done is kept."""
+        self.session.set_ripening_target(level)
+        if self.ripen_to is None:
+            return                                  # this program does not ripen
+        lv = self.session.ripening().level
+        if (lv is None or lv < level) and self._background_started:
+            self._start_ripening()
 
     def stop_ripening(self) -> None:
         """Stop the segment being computed within a second (its run file goes)."""

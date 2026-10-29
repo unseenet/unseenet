@@ -38,9 +38,17 @@ class State:
             out["node_names"] = {a: {k: e[k] for k in ("name", "source", "label")}
                                  for a, e in ((a, s.node_entry(a)) for a in s.nodes)}
             t = s.ripening().t
+            target = (self.runtime.ripening_to() if self.runtime is not None
+                      else s.ripening_target() or self._ripen_to)
+            left = s.ripening_seconds_left(target) if target is not None else None
             out["ripening"] = {"level": rp.level(t), "t": t, "next_at": rp.next_threshold(t),
                                "published": s.published_level(), "available": rp.available(),
-                               "paused": bool(self.runtime and self.runtime.ripening_paused)}
+                               "paused": bool(self.runtime and self.runtime.ripening_paused),
+                               # where it goes on this device, chosen or not, and about
+                               # how long that takes here (#740)
+                               "target": target, "chosen": s.ripening_target(),
+                               "seconds_left": round(left) if left is not None else None,
+                               "speed": s.ripening_speed()}
         return out
 
     async def set_ripening_paused(self, paused: bool) -> dict:
@@ -55,6 +63,20 @@ class State:
             await self.runtime.resume_ripening()
         self._broadcast({"event": "ripening-paused", "paused": self.runtime.ripening_paused})
         return self.state()["ripening"]
+
+    async def set_ripening_to(self, level: int) -> dict:
+        """Ripen this key to ``level`` (3 or 4) on this device (#740), from now on. Answers
+        the state's ``ripening``; every listener gets ``ripening-target``."""
+        self._ready()
+        if level not in (3, 4):
+            raise SessionError("the level to ripen to is 3 or 4")
+        if self.runtime is not None:
+            await self.runtime.set_ripening_to(level)
+        else:
+            self.session.set_ripening_target(level)
+        ripening = self.state()["ripening"]
+        self._broadcast({"event": "ripening-target", "target": ripening["target"]})
+        return ripening
 
     def about(self) -> dict:
         """``GET /api/about`` (section 4.1): the "About Unseenet" text every client shows,

@@ -7,6 +7,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Level 4 by choice** (#740, UN-RFC 0025 section 7): a key can be ripened to level 4
+  on a device that is chosen for it - about two weeks of one core on a fast desktop
+  while the program runs, after which each post costs about a quarter of the work.
+  The default stays 3. `Session.set_ripening_target(3|4)` keeps the choice with the
+  key's chain in the vault, on this device only, like the pause; the client runtime
+  follows it at once (raised: ripening starts again; lowered: it stops after the
+  segment it is on). The time left is estimated from this device's own speed, measured
+  while it proves (`ripening_seconds_left`). Local API: `POST /api/ripening {"to": 3|4}`
+  and `target`, `chosen`, `seconds_left` and `speed` in the state's `ripening`, and the
+  event `ripening-target` (UN-RFC 0046 section 4.1). CLI: `unseenet ripening [--to 3|4]`.
+  Services: `client.runtime.service_ripen_to()` - `UNSEENET_RIPEN_TO` (0-4) if set,
+  else 3 - one way for every service to choose. UN-RFC 0025's level table now gives
+  the times with the low-memory prover (measured: about 107,000 iterations a second on
+  a Ryzen 9 5950X core, against 165,000 with `chiavdf.prove`).
+
 - **When your nodes are gone, the client carries on** (#603, #604, #605):
   - When none of your nodes has answered for two minutes, the client takes a random node
     from the newest signed known-node list that answers (UN-RFC 0010 section 5), makes it

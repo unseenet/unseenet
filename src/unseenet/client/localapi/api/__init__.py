@@ -53,7 +53,7 @@ from ....core.vault import Vault, VaultError
 from ... import events as ev
 from ... import naming
 from ...grouptree import group_tree
-from ...runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime
+from ...runtime import NETWORK_ERRORS, RIPEN_TO, SERVICE_RIPEN_TO, ClientRuntime, service_ripen_to
 from ...session import MAX_MENTION_NOTICES, REPORT_REASONS, GroupInfo, Message, Session, SessionError
 from ...threads import CONTACT, FOR_YOU, TAGGED, TIMELINE
 
