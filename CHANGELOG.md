@@ -23,6 +23,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   from its words, a key said *New key getting ready* until a node asked for ripening. It
   now takes over its published chain right away (UN-RFC 0025 3.3), so it shows the level
   it has and is never ripened again from the start.
+- **A copied key brings its ripening** (UN-RFC 0050 3.6 as amended, #759): the old
+  device sends the key's ripening chain with it, and the new one keeps it once checked -
+  so the level shows with no node, and ripening done but not yet published is not lost.
+  Older clients ignore it; a chain that does not check out is dropped.
+
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They are now
