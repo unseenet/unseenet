@@ -289,3 +289,28 @@ def test_the_cli_commands_are_there(capsys):
         with pytest.raises(SystemExit):
             cli.client_main([cmd, "--help"])
         assert word in capsys.readouterr().out
+
+
+def test_the_new_device_waits_for_the_fresh_onion_service(monkeypatch):
+    """29 Oct 2026, live: the lookup uses the code up, then the old device's one-time
+    onion service was given seconds - a fresh descriptor can take a minute."""
+    import asyncio
+    from unseenet.client.session import copying as sc
+    tries = []
+
+    async def flaky(address, socks):
+        tries.append(address)
+        if len(tries) < 4:
+            raise ConnectionError("the node's onion service was not found")
+        return "reader", "writer"
+
+    async def tor(_say):
+        return 9050
+
+    async def no_sleep(_s):
+        return None
+    monkeypatch.setattr(sc, "open_connection", flaky)
+    monkeypatch.setattr(sc.asyncio, "sleep", no_sleep)
+    s = type("S", (), {"_ensure_tor": staticmethod(tor), "say": None})()
+    got = asyncio.run(sc.CopyingMixin._copy_open(s, "a" * 56 + ".onion"))
+    assert got == ("reader", "writer") and len(tries) == 4
