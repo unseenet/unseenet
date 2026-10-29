@@ -7,6 +7,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-29
+
+### Fixed
+
+- **Nodes pull again** (#748): NEWNEWS lists every group's state first, whatever the
+  time asked for (UN-RFC 0017), so its answer grows with the network - past 250 KB on the
+  project's nodes on 29 Oct - and the pulling node read at most 70 KB of it: every pull
+  stopped with `block too large`, and a node that was down did not catch up (pushed
+  articles still arrived). It is now read with the same limit as reconciliation (16 MiB).
+  Making the listing itself smaller is #748.
+
 ## [0.6.0] - 2026-10-29
 
 **Facebook mode: feeds you follow, comments, likes - with nobody deciding what you see.
@@ -2040,7 +2051,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/unseenet/unseenet/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/unseenet/unseenet/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/unseenet/unseenet/compare/v0.4.3...v0.4.4
