@@ -131,6 +131,7 @@ class RecoveryMixin:
         except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError):
             out["state"] = "unreachable"          # no node answered: the words still worked
             return out
+        await self.adopt_published_ripenings([self.default_identity_name()])   # its level
         out["state"] = "read" if result == "read" else "none"
         self.save()
         out["closed_groups"] = await self.closed_groups_to_rejoin()

@@ -13,6 +13,7 @@ postage itself (posting.py).
 from __future__ import annotations
 
 from . import *  # noqa: F403  - the module's names, as when this was one file
+import contextlib
 from .. import session as _s   # names tests patch on the module, read at call time
 
 
@@ -325,6 +326,20 @@ class RipeningMixin:
         self.emit(ev.Ripening(self.identity(name).key_text, chain.t, rp.level(chain.t),
                               rp.next_threshold(chain.t)))
         return True
+
+    async def adopt_published_ripenings(self, names: list[str]) -> dict[str, int]:
+        """Right after a key arrives - copied from another device, or restored from its
+        words - take over each one's published chain at once, so the key shows the level
+        it has and is never ripened again from the start (29 Oct 2026: a copied key said
+        *New key getting ready* until a node asked for ripening). Quiet when no node
+        answers: ``ClientRuntime.ripen`` tries again. Answers ``{name: level}`` for those
+        taken over."""
+        out = {}
+        for name in names:
+            with contextlib.suppress(SessionError, OSError, ConnectionError, KeyError):
+                if await self.adopt_published_ripening(name):
+                    out[name] = self.ripening(name).level
+        return out
 
     async def ensure_ripe(self, name: str | None = None, node: str | None = None) -> None:
         """Before posting: ripen to level 0 if needed, and publish ripe@ when its chain

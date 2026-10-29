@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0050                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.6.0; partly - the copy to a browser client through an entrance (unseenet-entrance#53)
+Implemented: unseenet 0.6.2, unseenet-entrance 0.3.1, unseenet-gui 0.3.0
 Updates: 0005, 0007
 
       Unseenet: Copying an Identity to Another Device, and Recovery Words
@@ -177,6 +177,14 @@ under `copy_key` (UN-RFC 0003): the chosen parts of the vault payload
 
 - By default: every identity in the vault, and the group secrets of the
   closed groups those identities are in.
+- With each identity, its key ripening chain as the vault holds it
+  (UN-RFC 0025 section 3.3): at most 64 segments, the same form the
+  `ripe@<fp>` manifest carries, and so well within the size limit of
+  section 3.9. It is not a secret - anyone can read it in the key's
+  `ripe@` group - but the old device may have ripened further than it
+  has published, and the new device then needs no node to show the
+  level the key has. An old device whose client does not send it is
+  still a valid copy.
 - The user MAY deselect identities, and MAY leave out group secrets.
   Clients SHOULD make leaving out an identity easy, since a phone is
   more often lost than a stick.
@@ -193,6 +201,15 @@ in UN-RFC 0007 section 2.1, or with a PIN where section 5 allows it. If
 it already has a vault, the user unlocks it and the copied identities
 are added to it. An identity that is already there is not overwritten;
 missing group secrets are added.
+
+A ripening chain that came with an identity is checked against the
+key (UN-RFC 0025 section 3.2) and kept only when it reaches further than
+the one the new device already holds for that key; one that does not
+check out is dropped, and the copy goes on without it. Right after the
+copy the new device also takes over the chain published in `ripe@<fp>`
+when that reaches further still, as it does after a restore (section
+4.4). A copied key MUST NOT be shown as a new key while either chain
+says otherwise, and MUST NOT be ripened again from the start.
 
 After a copy the two vaults are separate files. What is in the state
 (UN-RFC 0044) follows the key and is merged as usual. Group secrets of
@@ -345,7 +362,11 @@ At first start, or from the palette, *Restore from recovery words*:
 
 What is bound to the key comes back with it: names (UN-RFC 0019),
 profiles (UN-RFC 0022), groups the identity owns, and key ripening
-(UN-RFC 0025), since `ripe@<fp>` belongs to the same key.
+(UN-RFC 0025), since `ripe@<fp>` belongs to the same key. The client
+takes over the published ripening chain as soon as a node answers, not
+first when it would ripen, so the restored key shows its level at once
+and is not ripened again. Ripening done but not yet published is lost
+with the old device; at most the work towards the next level.
 
 If no state is found - a new key, or one whose state has expired - the
 client says so plainly and starts with the default groups.
@@ -439,6 +460,13 @@ document is accepted.
   the identity, its state and every closed group would make the words
   worth far more to whoever finds them. Losing closed groups on a
   restore is the price, and clients say so up front.
+- **The ripening chain travels with the key.** It is the key's work,
+  and the user moving a key expects all of it to move. Taking it from
+  `ripe@` alone would show a phone a key it just received as *new*
+  until a node answered, and would lose ripening not yet published -
+  hours of a computer's work on a key between levels. A phone or a
+  browser can hardly ripen to the higher levels itself, so it matters
+  most where copies most often go.
 - **24 words.** The seed is 256 bits. Fewer words would mean a weaker
   key or a different key than the one users already have.
 

@@ -109,6 +109,7 @@ class Copying:
                 state = await s.sync_state(write=False)
             except SessionError:
                 state = "unreachable"
+            await s.adopt_published_ripenings(added)        # the keys' levels, at once
             if self.runtime is None and not self.needs_setup():
                 await self.start()
         self._copy_event("new", "done", added=added)
