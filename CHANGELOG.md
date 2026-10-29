@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Copying waits for the other device** (UN-RFC 0050): the new device gave the old
+  device's one-time onion service a few seconds, though a fresh descriptor can take a
+  minute - and the lookup had used the code up, so a second try said *No device is
+  waiting*. It now keeps trying for 90 seconds. (unseenet-entrance#58 does the same for
+  a browser.)
+
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They are now

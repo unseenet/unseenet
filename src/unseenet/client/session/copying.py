@@ -26,6 +26,7 @@ from ...core import copying as cp
 from ...core.tor import Socks, open_connection
 
 STEP_SECONDS = 120.0               # one step of the exchange, the user's check aside
+COPY_CONNECT_SECONDS = 90   # the old device's fresh onion service (_copy_open)
 
 
 def _say_error(exc: BaseException) -> str:
@@ -313,9 +314,18 @@ class CopyingMixin:
         return CopyReceive(self, x, reader, writer)
 
     async def _copy_open(self, onion: str):
-        """A stream to the old device's one-time onion service (section 3.9)."""
+        """A stream to the old device's one-time onion service (section 3.9). The service
+        is minutes old at most and its descriptor can take a minute or more to be found,
+        while the lookup has used the code up (section 3.3): keep trying for
+        ``COPY_CONNECT_SECONDS`` rather than the few seconds given to a node."""
         socks = await self._ensure_tor(self.say)
-        try:
-            return await open_connection(f"{onion}:{cp.PORT}", socks)
-        except (OSError, ConnectionError) as exc:
-            raise SessionError(f"The other device could not be reached: {exc}") from exc
+        loop = asyncio.get_running_loop()
+        give_up = loop.time() + COPY_CONNECT_SECONDS
+        while True:
+            try:
+                return await open_connection(f"{onion}:{cp.PORT}", socks)
+            except (OSError, ConnectionError) as exc:
+                if loop.time() + 5 > give_up:
+                    raise SessionError(f"The other device could not be reached: {exc}. "
+                                       "Start again on the other device.") from exc
+                await asyncio.sleep(5)
