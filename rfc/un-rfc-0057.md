@@ -94,6 +94,8 @@ Every field but `v` and `type` is optional; the user chooses each one
 | `areas`       | array of strings | At most 8 top-level hierarchies the user is part of (`dk`) |
 | `contacts`    | array of objects | At most 8; section 4.1                                     |
 | `org_tag`     | string           | Only for `organisation`: the tag its members carry (section 7) |
+| `address`     | string           | Only for `organisation`: a postal address, at most 200 characters (section 7.2) |
+| `groups`      | array of strings | At most 16 Group IDs of groups, feeds and sites the key stands behind (section 4.2) |
 | `web`         | boolean          | `true`: may be shown and indexed on the open web (section 10.4). Default `false` |
 
 Unknown fields MUST be preserved and ignored. An entry in canonical
@@ -102,7 +104,9 @@ text is shown (UN-RFC 0022 section 4.1), with control characters
 replaced.
 
 A place is given only as a tag (`#kvistgård`), never as coordinates or
-an address.
+an address. The one exception is an organisation's `address` (section
+7.2): an association's or company's address is public already, a
+person's is not.
 
 ## 4.1 Contacts
 
@@ -118,6 +122,33 @@ A contact has exactly one of `value` (**shown**) and `hash` (**findable
 only**). A findable-only contact lets people who already know the
 e-mail address or number find the key, without showing it to anyone
 else.
+
+## 4.2 Groups of an Entry
+
+`groups` lets an entry point at the groups, feeds and sites behind it:
+the Busshistorisk Selskab's discussion group, its feed and its site, or
+a person's hobby site. Whoever finds the entry finds them too, without
+having to know their names.
+
+A pointer alone is a claim: anybody can list `dk.busser` in their
+entry. A client therefore shows a listed group as **belonging to** the
+entry only when the group points back, that is when
+
+- the group is owned by the entry's own key, or
+- the group's manifest has the field `org` (UN-RFC 0004 section 3.1),
+  a string holding the entry key's fingerprint.
+
+A listed group that does not point back is not shown at all. A group's
+`org` field without a matching entry shows nothing either. So a
+member who runs the association's site with their own key adds `org`
+to its manifest, and the association adds the site to `groups`; neither
+can do it alone.
+
+A group in `groups` is shown to anyone who finds the entry, even if the
+group itself is not listed for group search (#775); listing it in the
+entry is the owner's choice to show it. A closed group listed in
+`groups` reveals that it exists and who stands behind it, not its
+content; clients SHOULD say so when such a group is added.
 
 # 5. The Directory Group
 
@@ -177,16 +208,27 @@ same key, so an entry restored that way simply continues.
 The terms of an entry are:
 
 - each word of `name`, and the whole `name`;
+- for an organisation, each word of `address` of at least three
+  letters (a street, a postcode, a town such as `skælskør`), as plain
+  words like those of `name`;
 - each tag in `tags`, written `#tag`;
 - the key's registered name (UN-RFC 0019), written `@name`, if its
   certificate is valid;
-- each contact, shown or findable only (section 6.2).
+- each contact, shown or findable only (section 6.2);
+- for each shown contact of kind `web`, also its host as
+  `web:<host>`, lower-cased, without `www.`, port or path, so that
+  `https://www.busshistorisk.dk/om` is found by `busshistorisk.dk`.
+
+A client given a search that looks like a domain or a web address
+searches for both `web:<host>` and the registered name `@<host>`
+(UN-RFC 0019 section 6.4).
 
 A term is normalised before it is hashed: Unicode NFC, case-folded,
 white space collapsed to one space and trimmed. An e-mail address is
 lower-cased as a whole. A phone number is written in E.164
 (`+4512345678`). An entry has at most 24 terms; a client leaves out
-whole-name and name-word terms first if there are more.
+address words first, then whole-name and name-word terms, if there are
+more.
 
 `languages`, `areas` and `type` are not terms. They are filters,
 applied by the client to the entries it has found (section 9).
@@ -285,6 +327,36 @@ Two keys can both claim `org_tag` `abakion`. Clients therefore always
 show *who* confirmed, never just "confirmed"; which organisation key is
 the real one is the reader's judgement, helped by its registered name
 and its own attestations.
+
+## 7.1 An Organisation's Groups, Feeds and Sites
+
+An organisation lists its groups, feeds and sites in `groups` (section
+4.2). Searching for "busshistorisk" then finds the association and,
+from its entry, its discussion group, feed and site, checked both ways.
+Groups run by members with their own keys carry `org` in their
+manifests.
+
+## 7.2 Website and Address
+
+People often know an organisation's website or address rather than its
+exact name. An organisation can be found by both:
+
+- **Website.** A shown contact of kind `web` is a term by its host
+  (section 6.1). That is still a claim. The strongest proof is to
+  register the domain itself as a name (UN-RFC 0019 section 6.4) with
+  the DNS record `_unseenet.<domain>`: the registrar has then checked
+  that whoever holds the domain holds the key, and a search for the
+  domain finds `@<domain>` with its certificate. Without that, the
+  website can carry a link proof (UN-RFC 0022 section 7), which a
+  reader's client checks only when asked. Results show which of the
+  two, if any, backs the website.
+- **Address.** An organisation MAY give its postal address in
+  `address`. Its words are terms (section 6.1), so a search for a town
+  finds the organisations that give it. The address is the
+  organisation's own statement; nothing checks it. Clients MUST NOT
+  allow `address` in an entry of any other `type`, and SHOULD say,
+  when it is added, that it is meant for an organisation's public
+  address, not a home.
 
 # 8. Verifying E-mail and Phone
 
@@ -401,6 +473,9 @@ fingerprint, the registered name if any, the **updated** date, the
 attestations it accepts - with who issued them, when, and whether they
 are superseded (section 8.2) - and which tags are confirmed and by whom
 (section 7). Look-alike display names MUST be easy to tell apart.
+An entry's groups, feeds and sites that point back (section 4.2) are
+shown with it, by title and kind, each opening the group, and an
+organisation's website shows what backs it (section 7.2).
 
 Clicking a `#tag` on a profile or in an entry SHOULD offer to search
 the directory for it. Contacts and directory entries SHOULD be
@@ -491,7 +566,7 @@ bucket, and MAY drop superseded and expired ones at once.
 - **Argon2id parameters** must be measured on phones and in the
   browser client (Pyodide) before this document is accepted.
 - **Founding the council** of the index groups, how the list of the
-  256 Group IDs reaches clients,, and whether it should
+  256 Group IDs reaches clients, and whether it should
   be the registrar's council (UN-RFC 0054) or a council of its own.
 
 # 15. Rationale
@@ -563,7 +638,8 @@ bucket, and MAY drop superseded and expired ones at once.
 - UN-RFC 0045: reports apply to directory entries and index articles
   (section 12).
 - UN-RFC 0004 section 3.1: the manifest field `directory` (object, only
-  in directory groups).
+  in directory groups), and the manifest field `org` (string, a key
+  fingerprint: the directory entry this group belongs to, section 4.2).
 - UN-RFC 0003: the domain separations `UNSEENET-DIR-TERM-1` and
   `UNSEENET-DIR-CONTACT-1`.
 - UN-RFC 0000 section 6: 0057 is added to the index.
