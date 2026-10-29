@@ -29,6 +29,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   clients that need 0.6.1 could not be built nightly with core main. They now count
   on from the newest release of the series.
 
+### Fixed
+
+- **A copied or restored key has its feed and site** (#771): a copy carries identities and
+  closed groups' secrets (UN-RFC 0050 3.6), not the vault's entries for the key's own
+  feed and site, so the new device said *Start your feed* and *Start your site* although
+  both existed. Right after a key arrives - copied in the app, the browser or with
+  `unseenet copy-from`, or restored from its words - the client reads the key's feed and
+  site manifests from the network (one request, UN-RFC 0041), takes them as started and
+  follows them again, as it does for ripening (#758); starting a second one is never
+  offered. `Session.adopt_published_personal_groups`.
+
 ## [0.6.3] - 2026-10-29
 
 A fix for 0.6.2. **Update clients**; nodes gain nothing.
