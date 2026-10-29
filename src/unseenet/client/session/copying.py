@@ -29,11 +29,18 @@ STEP_SECONDS = 120.0               # one step of the exchange, the user's check 
 COPY_CONNECT_SECONDS = 90   # the old device's fresh onion service (_copy_open)
 
 
+# What a code that has been used says (#757): the lookup takes the meeting off the node
+# (section 3.3), so after it the same code finds nothing - and "check the code" would send
+# the user to check a code that is right.
+USED_UP = ("This code has been used, and the copy did not get through. Start again on the "
+           "other device for a new code.")
+
+
 def _say_error(exc: BaseException) -> str:
     if isinstance(exc, cp.CopyError):
         return str(exc)
     if isinstance(exc, asyncio.TimeoutError):
-        return "The other device did not answer in time. Start again with a new code."
+        return "The other device did not answer in time."
     return f"The copy failed: {exc}"
 
 
@@ -294,9 +301,23 @@ class CopyingMixin:
             else:
                 code = cp.normal_code(text)
                 n, w1, w2 = cp.parse_code(code)
+                if code in self._copy_codes_failed():    # found, then failed: gone from the node
+                    raise SessionError(USED_UP)
                 onion = await self._lookup_meeting(n, cp.tag(w1, w2), meeting_nodes)
         except cp.CopyError as exc:
             raise SessionError(str(exc)) from exc
+        try:
+            return await self._receive_from(onion, code)
+        except SessionError as exc:
+            self._copy_codes_failed().add(code)
+            raise SessionError(f"{exc} {USED_UP}") from exc
+
+    def _copy_codes_failed(self) -> set:
+        """Codes this session found and then failed to copy with, in memory only (#757)."""
+        return self.__dict__.setdefault("_copy_codes_failed_set", set())
+
+    async def _receive_from(self, onion: str, code: str) -> CopyReceive:
+        """The exchange with the old device found at ``onion``."""
         x = cp.Exchange(cp.NEW, code)
         reader, writer = await self._copy_open(onion)
         try:
@@ -326,6 +347,5 @@ class CopyingMixin:
                 return await open_connection(f"{onion}:{cp.PORT}", socks)
             except (OSError, ConnectionError) as exc:
                 if loop.time() + 5 > give_up:
-                    raise SessionError(f"The other device could not be reached: {exc}. "
-                                       "Start again on the other device.") from exc
+                    raise SessionError(f"The other device could not be reached: {exc}.") from exc
                 await asyncio.sleep(5)
