@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Changed
 
+- **Every group's state about once a day, not on every pull** (UN-RFC 0017 3-4 as amended,
+  #748): a node lists the state in `NEWNEWS` only for a time at least 24 hours back, and
+  a node pulls that far back at start and then about daily. On the project's nodes that
+  is some 5,600 Message-IDs (~250 KB) per peer once a day instead of every hour.
+
+### Changed
+
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They now count

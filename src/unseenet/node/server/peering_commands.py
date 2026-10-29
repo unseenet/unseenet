@@ -6,8 +6,13 @@ Part of ``Session`` (see __init__.py)."""
 
 from __future__ import annotations
 
+import time
+
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import server as _s   # names tests patch on the module, read at call time
+
+
+STATE_AGE = 24 * 3600   # NEWNEWS lists the state for a time at least this far back (UN-RFC 0017 3)
 
 
 class PeeringCommands:
@@ -29,8 +34,11 @@ class PeeringCommands:
         # UN-RFC 0017: first the state of every matching group, whatever its age, so
         # that a node catching up can accept what follows; then what arrived since.
         # Key-bound groups are not in part 1 (UN-RFC 0040 section 5): their state is
-        # reconciled, and what changes still comes in part 2.
-        for gid, *_ in store.groups(ordinary=True):
+        # reconciled, and what changes still comes in part 2. Only for a time asked at
+        # least STATE_AGE back (as amended, #748): a pull from a little while ago has
+        # received any state that changed since, in part 2.
+        state = time.time() - since >= STATE_AGE
+        for gid, *_ in (store.groups(ordinary=True) if state else ()):
             if wildmat(pattern, gid):
                 for msgid in store.state_ids(gid):
                     if msgid not in listed:
