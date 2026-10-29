@@ -110,6 +110,7 @@ class Copying:
             except SessionError:
                 state = "unreachable"
             await s.adopt_published_ripenings(added)        # the keys' levels, at once
+            await s.adopt_published_personal_groups(added)  # their feeds and sites (#771)
             if self.runtime is None and not self.needs_setup():
                 await self.start()
         self._copy_event("new", "done", added=added)
