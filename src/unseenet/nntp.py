@@ -102,9 +102,11 @@ class Client:
             raise NNTPError(code, text)
         return code, text
 
-    async def multiline(self, line: str, expect: int) -> list[str]:
+    async def multiline(self, line: str, expect: int, limit: int = 70000) -> list[str]:
+        """A command whose answer is a block of lines. ``limit``: the most octets read;
+        a listing that grows with the network (NEWNEWS) passes a larger one."""
         await self.command(line, (expect,))
-        return (await read_block(self.reader)).decode("utf-8", "replace").splitlines()
+        return (await read_block(self.reader, limit)).decode("utf-8", "replace").splitlines()
 
     async def fetch_capabilities(self) -> list[str]:
         self.capabilities = await self.multiline("CAPABILITIES", 101)
