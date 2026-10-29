@@ -206,6 +206,7 @@ The protocol is designed to be extended without breaking old software:
 | 0055 | What a Node Carries                          | Standards Track |
 | 0056 | A Group's Own Emoji                          | Standards Track |
 | 0057 | A People Directory                           | Standards Track |
+| 0058 | Finding Groups                               | Standards Track |
 | 0059 | Link Cards                                   | Standards Track |
 | 0060 | Sharing                                      | Standards Track |
 
