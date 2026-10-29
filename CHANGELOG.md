@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Release notes in `unseenet.announce` are Markdown** (#611): `tools/announce.py release`
+  posts `text/markdown` (UN-RFC 0031) with a title, the changelog section - issue
+  references such as `(#518)` or `unseenet-gui#237` as links, its `###` headings one
+  level up under the title - and a *Get it* section with the downloads, `pipx` and the
+  full changelog; a test release says so at the top. A section too long for one post
+  becomes its lead and a link. `message` posts Markdown too; the lists and
+  `client-release` stay plain text, since programs read them.
+
 - **Level 4 by choice** (#740, UN-RFC 0025 section 7): a key can be ripened to level 4
   on a device that is chosen for it - about two weeks of one core on a fast desktop
   while the program runs, after which each post costs about a quarter of the work.
