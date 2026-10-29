@@ -1,0 +1,72 @@
+name: announce-repos
+# Posts each new stable release of the clients, builds and services people download
+# (unseenet-gui, -tui, -portable, -bootable, -entrance, -gateway, -bots, -watchman;
+# OTHER_REPOS in tools/other_releases.py) to unseenet.announce, one post each, with the
+# same Markdown frame as the core's release posts (announce.yml).
+#
+# Every hour it asks GitHub for releases published between the start of its last
+# successful run and the start of this one, so each is posted once. No other
+# repository needs a key or a secret: the announce key stays here, with its
+# ripening chain in tools/ripening. The look is cheap (standard library only); the core
+# and Tor are installed only when there is something to post. A failed run is tried
+# again by the next one.
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Releases after this time (ISO 8601, e.g. 2026-10-29T00:00:00Z); empty = since the last successful run"
+        required: false
+      latest_only:
+        description: "Only the newest release of each repository"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Print the posts, post nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read          # to find the last successful run
+
+concurrency:
+  group: announce
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Look for new releases
+        id: look
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SINCE: ${{ inputs.since }}
+          LATEST: ${{ inputs.latest_only && '--latest-only' || '' }}
+        run: python tools/other_releases.py ${SINCE:+--since "$SINCE"} $LATEST >> "$GITHUB_OUTPUT"
+      - if: steps.look.outputs.count != '0'
+        run: pip install .
+      - name: Install Tor
+        if: steps.look.outputs.count != '0'
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor
+          sudo systemctl stop tor || true      # we run our own
+      - name: Post
+        if: steps.look.outputs.count != '0'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_STATE_DIR: tools/ripening   # the key's public ripening chain (UN-RFC 0025)
+          SINCE: ${{ steps.look.outputs.since }}
+          UNTIL: ${{ steps.look.outputs.until }}
+          LATEST: ${{ inputs.latest_only && '--latest-only' || '' }}
+          DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python tools/announce.py repos --since "$SINCE" --until "$UNTIL" $LATEST $DRY

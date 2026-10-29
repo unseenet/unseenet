@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **The other repositories' releases in `unseenet.announce`** (#772): every hour,
+  `announce-repos.yml` posts each new stable release of the graphical and terminal
+  clients, the portable and bootable builds, the web entrance, the gateway, the bots and
+  the watchman, with the same frame as the core's release posts and issue links to the
+  right repository. Same announce key; nothing needed in the other repositories.
+
 ### Changed
 
 - **Every group's state about once a day, not on every pull** (UN-RFC 0017 3-4 as amended,

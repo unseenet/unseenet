@@ -11,6 +11,10 @@
     python tools/announce.py release v0.2.0
         post that version's CHANGELOG section to unseenet.announce, as Markdown
         (UN-RFC 0031): a title, the notes, and where to get it (#611)
+    python tools/announce.py repos [--since 2026-10-29T00:00:00Z] [--until ...] [--latest-only]
+        post the stable releases of the clients, builds and services (OTHER_REPOS) that
+        came since the last successful hourly run to unseenet.announce, one post each,
+        with the same frame as the core's (announce-repos.yml)
     python tools/announce.py message --subject "..." --body-file text.md
         post anything to unseenet.announce, as Markdown
     python tools/announce.py client-release dev SHA256SUMS.txt SHA256SUMS.txt.sig
@@ -40,12 +44,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from unseenet.core import crypto  # noqa: E402
 from unseenet.core import markup  # noqa: E402
 from unseenet.core.poster import Poster  # noqa: E402
 from unseenet.hierarchies import (CHECKGROUPS_GROUP, HIERARCHIES_GROUP,  # noqa: E402
                                   parse_hierarchy_list, parse_root_list)
+from other_releases import OTHER_REPOS, default_since, new_releases  # noqa: E402
 from unseenet.known_nodes import ANNOUNCE_GROUP, ENTRANCES_GROUP, NODES_GROUP, RELEASES_GROUP, parse_entrance_list, parse_node_list  # noqa: E402
 
 FROM = "Unseenet project"
@@ -77,16 +83,19 @@ _LINK = re.compile(r"\[[^\]]*\]\([^)]*\)")
 MAX_BODY = markup.MAX_TEXT - 8 * 1024            # room for the frame around the notes
 
 
-def link_issues(text: str) -> str:
+def link_issues(text: str, repo: str = "unseenet") -> str:
     """``#518`` and ``unseenet/unseenet-gui#237`` as links to the issue - not inside code or
-    an existing link."""
+    an existing link. A bare ``#518`` is an issue of ``repo``, whose notes these are."""
+    def link(m: re.Match) -> str:
+        return _issue_link(m, repo)
+
     def outside(part: str) -> str:
         pieces, last = [], 0
         for m in _LINK.finditer(part):                       # leave [text](url) alone
-            pieces.append(_ISSUE.sub(_issue_link, part[last:m.start()]))
+            pieces.append(_ISSUE.sub(link, part[last:m.start()]))
             pieces.append(m.group(0))
             last = m.end()
-        pieces.append(_ISSUE.sub(_issue_link, part[last:]))
+        pieces.append(_ISSUE.sub(link, part[last:]))
         return "".join(pieces)
     out = []
     for i, part in enumerate(_CODE.split(text)):
@@ -94,8 +103,8 @@ def link_issues(text: str) -> str:
     return "".join(out)
 
 
-def _issue_link(m: re.Match) -> str:
-    repo = m.group(2) or "unseenet"
+def _issue_link(m: re.Match, default: str = "unseenet") -> str:
+    repo = m.group(2) or default
     return f"[{m.group(1)}](https://github.com/unseenet/{repo}/issues/{m.group(3)})"
 
 
@@ -149,6 +158,28 @@ def release_post(tag: str) -> tuple[str, str]:
     return f"Unseenet {version} released", body
 
 
+# The releases of the other repositories people download (the clients, the builds and the
+# services; OTHER_REPOS in other_releases.py): announce-repos.yml looks every hour and
+# posts each new stable release with the same frame as the core's.
+ORG = "https://github.com/unseenet"
+
+
+def repo_release_post(repo: str, r: dict) -> tuple[str, str]:
+    """A release of one of OTHER_REPOS, for ``unseenet.announce``: the same Markdown frame
+    as the core's, with the release's own notes (from its CHANGELOG)."""
+    name, tag = OTHER_REPOS[repo], r["tag_name"]
+    version = tag.lstrip("v")
+    notes = fit_headings(link_issues((r.get("body") or "").strip(), repo)).strip()
+    if len(notes.encode("utf-8")) > MAX_BODY:
+        notes = (notes.split("\n## ", 1)[0].rstrip()[:MAX_BODY // 2]
+                 + f"\n\nThe notes are too long for one post: the whole of them are on the "
+                 f"[release page]({r['html_url']}).")
+    body = (f"# {name} {version}\n\n{notes or 'No notes for this release.'}\n\n---\n\n"
+            f"## Get it\n\n- **Release page:** [{repo} {version}]({r['html_url']})\n"
+            f"- **Full changelog:** [CHANGELOG.md]({ORG}/{repo}/blob/{tag}/CHANGELOG.md)\n")
+    return f"{name} {version} released", body
+
+
 def nodes_post() -> tuple[str, str]:
     text = (ROOT / "src" / "unseenet" / "nodes.json").read_text(encoding="utf-8")
     updated, nodes = parse_node_list(text)          # never post a list clients would reject
@@ -198,13 +229,19 @@ async def post_everywhere(group: str, subject: str, body: str, key: crypto.Ident
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("what", choices=["nodes", "entrances", "hierarchies", "checkgroups", "release", "message",
-                                    "client-release"])
+                                    "client-release", "repos"])
     p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0; client-release: the channel")
     p.add_argument("files", nargs="*", type=Path, help="client-release: SHA256SUMS.txt and its .sig")
     p.add_argument("--subject")
     p.add_argument("--body-file", type=Path)
+    p.add_argument("--since", help="repos: releases after this time (ISO 8601); "
+                   "default: the last successful run, or an hour ago")
+    p.add_argument("--until", default="9999", help="repos: and published up to this time")
+    p.add_argument("--latest-only", action="store_true", help="repos: only the newest per repository")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
+    if args.what == "repos":
+        return post_repos(args)
 
     if args.what == "nodes":
         group, (subject, body) = NODES_GROUP, nodes_post()
@@ -230,21 +267,45 @@ def main() -> None:
         body = args.body_file.read_text(encoding="utf-8")
         group, subject, body = ANNOUNCE_GROUP, args.subject, body if body.endswith("\n") else body + "\n"
 
-    seed = os.environ.get("UNSEENET_ANNOUNCE_SEED", "").strip()
-    if args.dry_run and not seed:
-        key = crypto.Identity.generate()
-    elif not seed:
-        sys.exit("UNSEENET_ANNOUNCE_SEED is not set")
-    else:
-        key = crypto.Identity.from_seed(bytes.fromhex(seed))
+    key = announce_key(args.dry_run)
     print(f"Posting as {key.key_text} to {group}: {subject}", flush=True)
-
-    _, nodes = parse_node_list((ROOT / "src" / "unseenet" / "nodes.json").read_text(encoding="utf-8"))
     ctype = markup.MARKDOWN_TYPE if args.what in MARKDOWN_POSTS else markup.PLAIN_TYPE
-    ok = asyncio.run(post_everywhere(group, subject, body, key, [n.address for n in nodes],
-                                     args.dry_run, ctype))
+    ok = asyncio.run(post_everywhere(group, subject, body, key, node_addresses(), args.dry_run, ctype))
     if not args.dry_run and ok == 0:
         sys.exit("no node took the post")
+
+
+def announce_key(dry_run: bool) -> crypto.Identity:
+    seed = os.environ.get("UNSEENET_ANNOUNCE_SEED", "").strip()
+    if dry_run and not seed:
+        return crypto.Identity.generate()
+    if not seed:
+        sys.exit("UNSEENET_ANNOUNCE_SEED is not set")
+    return crypto.Identity.from_seed(bytes.fromhex(seed))
+
+
+def node_addresses() -> list[str]:
+    _, nodes = parse_node_list((ROOT / "src" / "unseenet" / "nodes.json").read_text(encoding="utf-8"))
+    return [n.address for n in nodes]
+
+
+def post_repos(args) -> None:
+    """``repos``: each new stable release of OTHER_REPOS as its own post."""
+    since = args.since or default_since()
+    found = new_releases(since, args.latest_only, until=args.until)
+    print(f"{len(found)} new release(s) since {since}", flush=True)
+    if not found:
+        return
+    key, addresses, failed = announce_key(args.dry_run), node_addresses(), []
+    for repo, r in found:
+        subject, body = repo_release_post(repo, r)
+        print(f"Posting as {key.key_text} to {ANNOUNCE_GROUP}: {subject}", flush=True)
+        ok = asyncio.run(post_everywhere(ANNOUNCE_GROUP, subject, body, key, addresses,
+                                         args.dry_run, markup.MARKDOWN_TYPE))
+        if not args.dry_run and ok == 0:
+            failed.append(subject)
+    if failed:                       # the run fails, so the next one tries them again
+        sys.exit("no node took: " + "; ".join(failed))
 
 
 if __name__ == "__main__":
