@@ -8,6 +8,7 @@ GETINFO) are a few lines of text. See the Tor control-spec for details.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import os
@@ -239,11 +240,52 @@ class TorProcess:
             lines += [f"Bridge {b.strip()}" for b in self.bridges if b.strip()]
         return "\n".join(lines) + "\n"
 
+    async def halt_stale(self, wait: float = 10) -> bool:
+        """Stop a Tor an earlier run of this program left in our data directory (one
+        from before ``__OwningControllerProcess``, or one whose program was killed):
+        it holds the directory's lock, and a new Tor would only wait for it. Ours for
+        sure - a vault is open in one program at a time, and the directory is the
+        vault's - so it is told to halt through its control port and our cookie.
+        True when one was stopped."""
+        port_file = self.data_dir / "control_port"
+        cookie = self.data_dir / "control_auth_cookie"
+        try:
+            text = port_file.read_text().strip()
+        except OSError:
+            return False
+        if not text.startswith("PORT=") or not cookie.exists():
+            return False
+        host, port = text.split("=", 1)[1].rsplit(":", 1)
+        try:
+            control = await asyncio.wait_for(TorControl.connect(host, int(port)), 3)
+        except (OSError, ValueError, asyncio.TimeoutError):
+            return False                                  # nothing is listening there
+        try:
+            await asyncio.wait_for(control.authenticate_cookie(cookie), 3)
+            await asyncio.wait_for(control.command("SIGNAL HALT"), 3)
+        except Exception:  # noqa: BLE001 - not ours after all, or already gone
+            return False
+        finally:
+            with contextlib.suppress(Exception):
+                await control.close()
+        loop = asyncio.get_running_loop()
+        give_up = loop.time() + wait
+        while loop.time() < give_up:                   # until its port is closed
+            try:
+                _r, w = await asyncio.wait_for(asyncio.open_connection(host, int(port)), 1)
+                w.close()
+            except (OSError, asyncio.TimeoutError):
+                break
+            await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)                        # and its lock released
+        return True
+
     async def start(self, timeout: float = 120, progress=None) -> None:
         """Start Tor and wait until it has bootstrapped. ``progress(percent, summary)``
         is called as the bootstrap goes (unseenet #139)."""
         self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         port_file = self.data_dir / "control_port"
+        await self.halt_stale()
         port_file.unlink(missing_ok=True)
         # Our own, empty torrc: never inherit the system's /etc/tor/torrc (e.g. Fedora's
         # ControlSocket in /run/tor, which a normal user cannot use).
@@ -266,6 +308,10 @@ class TorProcess:
             "--CookieAuthFile", str(self.data_dir / "control_auth_cookie"),
             "--Log", f"notice file {self.log_file}",
             "--AvoidDiskWrites", "1",
+            # Tor quits by itself when this program is gone, however it ended: a Tor
+            # left running would hold the data directory, and the next start would
+            # wait for it forever (29 Oct 2026)
+            "--__OwningControllerProcess", str(os.getpid()),
             *geoip,
             env=env, cwd=str(folder),
             # Never PIPE without reading it: a full pipe would eventually block Tor.

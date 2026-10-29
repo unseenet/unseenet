@@ -14,11 +14,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   minute - and the lookup had used the code up, so a second try said *No device is
   waiting*. It now keeps trying for 90 seconds. (unseenet-entrance#58 does the same for
   a browser.)
-
+- **A Tor left behind no longer blocks the client** (seen 29 Oct): when a client ended
+  without stopping its Tor, that Tor kept the data directory, and the next start waited
+  for it with *Starting Tor ...* and every node "does not answer". Tor now quits by
+  itself when its program is gone (`__OwningControllerProcess`), and at start a Tor an
+  earlier run left in the directory is told to halt through its control port.
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They are now
   0.6.2.devN.
+
+## [0.6.1] - 2026-10-29
 
 ### Fixed
 
@@ -2062,7 +2068,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/unseenet/unseenet/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/unseenet/unseenet/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/unseenet/unseenet/compare/v0.4.3...v0.4.4
