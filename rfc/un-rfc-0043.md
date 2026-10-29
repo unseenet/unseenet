@@ -88,9 +88,10 @@ including node authentication where the node uses it.
 
 A web entrance:
 
-- MUST connect only to v3 onion addresses, and only on the ONNTP port.
-  It MUST NOT reach any address on the open web, so that it cannot be
-  used as an open proxy.
+- MUST connect only to v3 onion addresses, and only on the ONNTP port -
+  or, for copying an identity, as section 4.5 says. It MUST NOT reach
+  any address on the open web, so that it cannot be used as an open
+  proxy.
 - SHOULD connect only to nodes on a list of known nodes (UN-RFC 0010)
   or nodes its operator has added, and MAY refuse others.
 - MUST NOT read, parse, change or add to the ONNTP stream. It MUST NOT
@@ -159,9 +160,11 @@ object:
 }
 ```
 
-`nodes` is `"known"` (only listed nodes) or `"any"`. The web client
-shows this information on its About page. It is a promise, not proof
-(section 5).
+`nodes` is `"known"` (only listed nodes) or `"any"`. An entrance that
+relays the copy of an identity (section 4.5) adds `"copy": true`;
+without it, or with `false`, a web client does not offer to receive a
+copy. The web client shows this information on its About page. It is a
+promise, not proof (section 5).
 
 ## 4.4 Reconnecting
 
@@ -177,6 +180,37 @@ that fails, at most 5 minutes, and start again from the shortest wait
 once a tunnel has stayed open for a minute. An HTTP 429 from the
 entrance (section 4.2) counts as a failed attempt; after a few, the
 client moves to another entrance (section 8.3).
+
+## 4.5 Copying an Identity
+
+A web client can receive a copy of an identity from another device
+(UN-RFC 0050 section 3.8). The other device listens on a one-time onion
+address, which is on no list of nodes, on virtual port 9119 (UN-RFC
+0050 section 3.9). An entrance MAY relay that one connection:
+
+```
+wss://entrance.example/copy?onion=<56-character v3 onion address>&session=<tag>
+```
+
+An entrance that does:
+
+- MUST connect only to a v3 onion address, and only on port 9119, for
+  this endpoint, whatever its node setting (section 4.1).
+- MUST allow at most one copy connection per session at a time, and
+  count it in the session's limits (section 4.2).
+- MUST close the connection after at most 10 minutes, the code's
+  lifetime (UN-RFC 0050 section 3.2), and after at most 2 MiB in each
+  direction: a copy is a few messages of at most 64 KiB and one of at
+  most 1 MiB (UN-RFC 0050 section 3.9).
+- MUST NOT read, keep or log what passes, as for every tunnel. It sees
+  only SPAKE2 messages and ciphertext: the code never reaches it, and it
+  cannot open the copy or take the identity.
+- SHOULD let its operator turn it off, and says whether it is on in its
+  information (section 4.3).
+
+The entrance learns that a visitor received a copy, and the one-time
+address, which is never used again. The other device's onion service
+hides where that device is from the entrance as from anyone.
 
 # 5. Operating a Web Entrance
 
@@ -637,6 +671,8 @@ section 7.2. The files SHOULD say this on their first screen.
   (section 6.3).
 - **UN-RFC 0010**: web entrances are listed like known nodes, in their
   own group `unseenet.entrances` (section 8.1).
+- **UN-RFC 0050** section 3.8: the entrance's relay for a copy is
+  section 4.5 of this document.
 - **UN-RFC 0000** section 6: 0043 is added to the index.
 
 # Copyright Notice
