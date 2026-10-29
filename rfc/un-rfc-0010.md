@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0010                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.2.0, unseenet main (unreleased)
+Implemented: unseenet 0.2.0, unseenet 0.6.0
 
                   Unseenet: Lists of Known Nodes
 ```

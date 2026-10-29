@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0045                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - asking the node per page of posts (#676)
+Implemented: unseenet 0.6.0; partly - asking the node per page of posts (#676)
 Updates: 0018, 0025, 0029, 0040
 
                     Unseenet: Spam Reports

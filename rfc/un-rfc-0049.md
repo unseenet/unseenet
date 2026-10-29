@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0049                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased)
+Implemented: unseenet 0.6.0
 Updates: 0000, 0002, 0005, 0007, 0023, 0032, 0034
 
             Unseenet: Imported Posts and the Time of Posting
