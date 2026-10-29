@@ -314,3 +314,30 @@ def test_the_new_device_waits_for_the_fresh_onion_service(monkeypatch):
     s = type("S", (), {"_ensure_tor": staticmethod(tor), "say": None})()
     got = asyncio.run(sc.CopyingMixin._copy_open(s, "a" * 56 + ".onion"))
     assert got == ("reader", "writer") and len(tries) == 4
+
+
+def test_a_code_used_by_a_failed_try_says_so(monkeypatch):
+    """#757: the lookup takes the meeting off the node. When the copy then fails, the user
+    is told the code is used up - at once, and again on a second try, which looks
+    nothing up - instead of 'No device is waiting... check the code'."""
+    import asyncio
+    from unseenet.client.session import SessionError
+    from unseenet.client.session import copying as sc
+    lookups = []
+
+    class S(sc.CopyingMixin):
+        async def _lookup_meeting(self, n, tag, given=None):
+            lookups.append((n, tag))
+            return "a" * 56 + ".onion"
+
+        async def _copy_open(self, onion):
+            raise SessionError("The other device could not be reached: timed out.")
+
+    s = S()
+    for _ in range(2):
+        try:
+            asyncio.run(s.receive_copy("7-guitar-tunnel"))
+        except SessionError as exc:
+            msg = str(exc)
+        assert msg.endswith(sc.USED_UP) and "check the code" not in msg.lower()
+    assert len(lookups) == 1                                   # the second try looked nothing up
