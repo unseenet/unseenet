@@ -7,25 +7,28 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
-### Fixed
-
-- **A Tor another running program uses is never stopped** (0.6.2): the fix for a Tor left
-  behind stopped any Tor in the folder's `unseenet-tor` - also one that another running
-  Unseenet program with a vault in the same folder used, which cut a copy in progress
-  off its onion service (*could not be reached*). Now only a Tor whose program is gone is
-  stopped; otherwise the start says that another program uses this folder's Tor.
-- **A used copy code says so** (#757): the lookup takes the meeting off the node, so when
-  the copy then failed, trying the same code again said *No device is waiting with this
-  code. Check the code* - about a code that was right. A failed copy now ends with *This
-  code has been used ... Start again on the other device for a new code*, and a second
-  try with it says the same at once.
-
 ### Changed
 
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They now count
   on from the newest release of the series.
+
+## [0.6.3] - 2026-10-29
+
+A fix for 0.6.2. **Update clients**; nodes gain nothing.
+
+### Fixed
+
+- **A Tor another running program uses is never stopped** (#768): 0.6.2's fix for a Tor
+  left behind stopped any Tor in the folder's `unseenet-tor` - also one that another
+  running Unseenet program with a vault in the same folder used, which cut a copy in
+  progress off its onion service. Now only a Tor whose program is gone is stopped;
+  otherwise the start says that another program uses this folder's Tor.
+- **A used copy code says so** (#757, #765): the lookup takes the meeting off the node,
+  so when the copy then failed, trying the same code again said *No device is waiting
+  with this code. Check the code* - about a code that was right. A failed copy now ends
+  with *This code has been used ... Start again on the other device for a new code*.
 
 ## [0.6.2] - 2026-10-29
 
@@ -2097,7 +2100,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/unseenet/unseenet/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/unseenet/unseenet/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/unseenet/unseenet/compare/v0.5.0...v0.6.0
