@@ -29,6 +29,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   clients that need 0.6.1 could not be built nightly with core main. They now count
   on from the newest release of the series.
 
+## [0.6.4] - 2026-10-29
+
+A fix for 0.6.3. **Update clients**; nodes gain nothing.
+
 ### Fixed
 
 - **A copied or restored key has its feed and site** (#771): a copy carries identities and
@@ -2126,7 +2130,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/unseenet/unseenet/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/unseenet/unseenet/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/unseenet/unseenet/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/unseenet/unseenet/compare/v0.6.0...v0.6.1
