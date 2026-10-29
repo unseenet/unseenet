@@ -26,7 +26,7 @@ import time
 from ..core.article import Article, ArticleError
 from ..core.groups import is_key_bound
 from ..core.reconcile import MAX_ROUNDS, ReconcileError, reconcile
-from ..nntp import Client, NNTPError, strip_reader_headers
+from ..nntp import RECONCILE_MAX_BYTES, Client, NNTPError, strip_reader_headers
 from .peering import PeerAuthError, WrongNodeError, authenticate_with_key
 from .server import Node, PeerConfig
 
@@ -78,8 +78,11 @@ class Puller:
                 since = their_now - timedelta(days=self.node.config.retention_days)
             else:
                 since = datetime.fromtimestamp(last, timezone.utc) - OVERLAP
+            # every group's state comes first, whatever the time (UN-RFC 0017), so the
+            # listing grows with the network: past 250 KB on 29 Oct 2026, which the
+            # default 70 KB stopped every pull at (0.6.1)
             ids = await client.multiline(
-                f"NEWNEWS {peer.pull} {since:%Y%m%d %H%M%S} GMT", 230)
+                f"NEWNEWS {peer.pull} {since:%Y%m%d %H%M%S} GMT", 230, limit=RECONCILE_MAX_BYTES)
             wanted = [i.strip() for i in ids if i.strip() and not store.seen(i.strip())
                       and not store.refused_from(i.strip(), peer.name)]
             result["listed"] = len(ids)
