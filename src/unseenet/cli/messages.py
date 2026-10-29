@@ -140,6 +140,10 @@ async def c_read(app: App, args) -> None:
         await s.fetch_group(args.group)
     except SessionError as exc:
         sys.exit(f"Not read: {exc}")
+    if getattr(args, "all", False):                         # catch up (#625)
+        n = s.mark_group_read(args.group)
+        emit(args, f"Marked {args.group} read ({n} unread before)", {"group": args.group, "marked": n})
+        return
     rows = []
     reactions = s.all_reactions(args.group)                 # UN-RFC 0048
     for msg, depth in s.threads(args.group):

@@ -320,6 +320,9 @@ own group as in the head (the timeline mixes groups). Reactions are never
 rows themselves.
 
 - `POST /api/groups/<id>/read` `{"ids": [<Message-ID>, ...]}`: at most 500.
+  With `{"all": true}` instead, the whole group is marked read - a
+  newsreader's "catch up" - and the answer says how many were unread
+  (`{"ok": true, "marked": n}`).
 - `POST /api/groups/<id>/view` `{"view": "threads" | "chat" | "feed" |
   "pages" | null}`: null goes back to the owner's choice (UN-RFC 0008
   section 3.1, UN-RFC 0034 section 3.1); `pages` only for a site (section
@@ -365,6 +368,14 @@ Its progress comes as `job` events (section 5). The runtime asks about
 portals (UN-RFC 0023 section 3.5) before it sends: a group with a portal
 answers `400` with the warning until the post carries
 `"publish_outside_tor": true`.
+
+`POST /api/markup` `{"text": "...", "kind": "post" | "chat", "markdown":
+true | false}` answers `{"tree": [...], "signature": "..." or null}`: the
+tree the text will have once posted, the same as messages carry (section
+4.3), for a Write / Preview toggle in compose windows, so every client
+previews exactly what readers will see. Without `markdown` the text is
+taken as your posts go (your Markdown setting); a post's signature, after
+"-- ", comes apart as when it is shown. Nothing is sent; at most 256 KiB.
 
 `GET /api/emoji`, also while locked, is what a front end needs for an
 emoji picker and for completing `:ta` while typing (UN-RFC 0031 section

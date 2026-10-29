@@ -356,10 +356,17 @@ class Groups:
             raise NotFound("that post is not here any more")
         return m
 
-    def mark_read(self, gid: str, ids: list) -> dict:
+    def mark_read(self, gid: str, ids: list, all_: bool = False) -> dict:
         """``POST /api/groups/{gid}/read`` (section 4.3): mark posts read, by Message-ID,
-        at most ``MAX_READ`` at a time."""
+        at most ``MAX_READ`` at a time - or, with ``"all": true``, the whole group (#625):
+        answers how many were unread."""
         s = self._ready()
+        if all_:
+            if gid not in s.data["groups"] and gid not in s.data["subscribed"]:
+                raise NotFound("no such group")
+            n = s.mark_group_read(gid)
+            s.emit(ev.GroupsChanged())
+            return {"ok": True, "marked": n}
         wanted = {str(i) for i in list(ids)[:MAX_READ]}
         for m in self._pool(s, gid):
             if m.message_id in wanted:

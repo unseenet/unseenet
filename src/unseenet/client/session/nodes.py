@@ -392,6 +392,7 @@ class NodesMixin:
         for store in (self.cache, self._raw, self._high):
             store.pop(group_id, None)
         self.data["groups"].get(group_id, {}).pop("closed", None)   # numbers of the old node
+        (self.data.get("read_high") or {}).pop(group_id, None)       # ... and how far (#735)
 
     # ------------------------------------------------------------------
     # connection (one persistent connection; Tor circuits are slow to build)

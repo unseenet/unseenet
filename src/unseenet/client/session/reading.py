@@ -299,6 +299,9 @@ class ReadingMixin:
         if not keep:                                     # nothing kept but how far (#669)
             if high > self._high.get(group_id, 0):
                 self._high[group_id] = high
+            # ... and that, kept, so a restart goes on from there (#735)
+            self.data.setdefault("read_high", {})[group_id] = {
+                "node": self.node_for(group_id), "high": self._high.get(group_id, 0)}
             self.save()
             if came:
                 self.emit(ev.GroupUpdated(group_id, len(came)))
@@ -744,6 +747,51 @@ class ReadingMixin:
             del marks[:-MAX_READ_MARKS]
             if save:
                 self.save()
+
+    def mark_group_read(self, group_id: str) -> int:
+        """Mark a whole group read in one go - a newsreader's "catch up" (#625): every post
+        this client has of it, saved once; your other devices learn it with your state
+        (UN-RFC 0044 section 4.3). Not a "read up to" date of its own: Dates are rounded
+        to 10 minutes, so a post coming a minute later could carry the same one and be
+        taken as read unseen. Returns how many posts were unread."""
+        newly = 0
+        for m in list(self.cache.get(group_id, {}).values()):
+            if not self.is_read(m):
+                newly += 1
+            self.mark_read(m, save=False)
+        self.save()
+        self.emit(ev.GroupUpdated(group_id, 0))
+        return newly
+
+    # --- how far a program read groups it keeps nothing of (#735, #669) ---
+    def read_marks(self) -> dict:
+        """How far each group read with ``fetch_group(..., keep=False)`` got:
+        ``{group ID: {"node", "high"}}`` - article numbers belong to one node. Kept in the
+        vault (or the service's state file) by ``fetch_group`` itself, so a restart goes
+        on from there; a program may also keep them where it likes."""
+        return {g: dict(e) for g, e in (self.data.get("read_high") or {}).items()}
+
+    def set_read_marks(self, marks: dict) -> None:
+        """Go on from ``marks`` (as ``read_marks`` gives them): each group read from its
+        number on, where its node is still the one it is read from."""
+        kept = self.data.setdefault("read_high", {})
+        for gid, e in (marks or {}).items():
+            try:
+                node, high = e["node"], int(e["high"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            kept[gid] = {"node": node, "high": high}
+        self._restore_read_high()
+        self.save()
+
+    def _restore_read_high(self) -> None:
+        """Put the kept marks back where ``fetch_group`` reads from."""
+        for gid, e in (self.data.get("read_high") or {}).items():
+            if isinstance(e, dict) and e.get("node") == self.node_for(gid):
+                try:
+                    self._high[gid] = max(self._high.get(gid, 0), int(e.get("high", 0)))
+                except (TypeError, ValueError):
+                    pass
 
     def unread_count(self, group_id: str) -> int:
         """How many posts in the group you have not read, among those shown (not ignored

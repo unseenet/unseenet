@@ -21,6 +21,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   else 3 - one way for every service to choose. UN-RFC 0025's level table now gives
   the times with the low-memory prover (measured: about 107,000 iterations a second on
   a Ryzen 9 5950X core, against 165,000 with `chiavdf.prove`).
+- **Mark a whole group read** (#625): `Session.mark_group_read(gid)` - a newsreader's
+  "catch up", saved once - `POST /api/groups/<id>/read {"all": true}` (answers how many
+  were unread) and `unseenet read --all GROUP`.
+- **A Markdown preview from the core** (#632): `Session.preview(text, kind)` and
+  `POST /api/markup {"text", "kind", "markdown"}` give the same safe tree messages carry
+  (UN-RFC 0031), so a Write / Preview toggle in any client shows exactly what readers
+  will see (UN-RFC 0046 section 4.4).
+- **How far a program read survives a restart** (#735, #669 follow-up): groups read with
+  `fetch_group(..., keep=False)` keep how far they got in the vault or the service's
+  state file, per node, so a restart goes on from there instead of reading them from
+  the start; `Session.read_marks()` / `set_read_marks()` for programs that keep it
+  themselves. unseenet-watchman can drop its own copy.
 
 - **When your nodes are gone, the client carries on** (#603, #604, #605):
   - When none of your nodes has answered for two minutes, the client takes a random node
