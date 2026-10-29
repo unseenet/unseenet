@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **A Tor another running program uses is never stopped** (0.6.2): the fix for a Tor left
+  behind stopped any Tor in the folder's `unseenet-tor` - also one that another running
+  Unseenet program with a vault in the same folder used, which cut a copy in progress
+  off its onion service (*could not be reached*). Now only a Tor whose program is gone is
+  stopped; otherwise the start says that another program uses this folder's Tor.
 - **A used copy code says so** (#757): the lookup takes the meeting off the node, so when
   the copy then failed, trying the same code again said *No device is waiting with this
   code. Check the code* - about a code that was right. A failed copy now ends with *This

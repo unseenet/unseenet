@@ -186,6 +186,53 @@ def bootstrap_progress(phase: str) -> tuple[int, str]:
     return (int(m.group(1)) if m else 0, summary.group(1) if summary else "")
 
 
+def pid_alive(pid: int) -> bool:
+    """Whether a process runs with this pid - without signalling it (on Windows
+    ``os.kill(pid, 0)`` would send it Ctrl+C)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)   # QUERY_LIMITED
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return code.value == 259                                          # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+async def _tor_owner(control: "TorControl") -> int | None:
+    """The pid of the running program a Tor belongs to, or None when it belongs to none
+    that runs: ``__OwningControllerProcess`` (0.6.2 and later), or for an older Tor its
+    parent process on Linux (an orphan's is 1 or a subreaper; elsewhere unknown)."""
+    lines = await control.command("GETCONF __OwningControllerProcess")
+    value = lines[0].split("=", 1)[1].strip() if lines and "=" in lines[0] else ""
+    if value.isdigit():
+        pid = int(value)
+        return pid if pid != os.getpid() and pid_alive(pid) else None
+    try:
+        tor_pid = int((await control.command("GETINFO process/pid"))[0].split("=", 1)[1])
+        stat = Path(f"/proc/{tor_pid}/stat").read_text()
+        parent = int(stat.rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    if parent <= 1 or parent == os.getpid():
+        return None
+    try:
+        name = Path(f"/proc/{parent}/comm").read_text().strip()
+    except OSError:
+        return None
+    return None if name in ("systemd", "init") else parent
+
+
 @dataclass
 class TorProcess:
     """A private tor process with its data on a directory we control (e.g. the USB stick)."""
@@ -241,11 +288,11 @@ class TorProcess:
         return "\n".join(lines) + "\n"
 
     async def halt_stale(self, wait: float = 10) -> bool:
-        """Stop a Tor an earlier run of this program left in our data directory (one
-        from before ``__OwningControllerProcess``, or one whose program was killed):
-        it holds the directory's lock, and a new Tor would only wait for it. Ours for
-        sure - a vault is open in one program at a time, and the directory is the
-        vault's - so it is told to halt through its control port and our cookie.
+        """Stop a Tor an earlier run left in our data directory: it holds the
+        directory's lock, and a new Tor would only wait for it. Only one whose program
+        is gone: the directory is the vault's folder's, and two vaults in one folder
+        share it - a Tor another running program uses is never stopped (0.6.2 did,
+        which cut a copy in progress off its onion service); ``TorError`` says so.
         True when one was stopped."""
         port_file = self.data_dir / "control_port"
         cookie = self.data_dir / "control_auth_cookie"
@@ -262,7 +309,14 @@ class TorProcess:
             return False                                  # nothing is listening there
         try:
             await asyncio.wait_for(control.authenticate_cookie(cookie), 3)
+            owner = await asyncio.wait_for(_tor_owner(control), 3)
+            if owner is not None:
+                raise TorError(
+                    "Another Unseenet program is using the Tor in this folder (process "
+                    f"{owner}). Close it, or keep each vault in a folder of its own.")
             await asyncio.wait_for(control.command("SIGNAL HALT"), 3)
+        except TorError:
+            raise
         except Exception:  # noqa: BLE001 - not ours after all, or already gone
             return False
         finally:

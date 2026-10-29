@@ -85,3 +85,40 @@ asyncio.run(main())
         time.sleep(0.5)
     os.kill(pid, 9)
     pytest.fail("Tor kept running after its program was gone")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="starts a program the POSIX way")
+def test_a_tor_another_running_program_uses_is_never_stopped(tmp_path):
+    """0.6.2 stopped any Tor in the folder's data directory - also one another running
+    Unseenet program used (two vaults in one folder), cutting a copy in progress off its
+    onion service. Now that Tor is left alone and the start says why."""
+    from unseenet.core.tor import TorError
+    d = tmp_path / "tor"
+    script = f"""
+import asyncio, time
+from pathlib import Path
+from unseenet.core.tor import TorProcess
+t = TorProcess(data_dir=Path({str(d)!r}), binary={TOR!r})
+
+async def main():
+    try:
+        await t.start(timeout=20)
+    except Exception:
+        pass
+    print(t.process.pid, flush=True)
+    time.sleep(60)                         # the other program, still running
+asyncio.run(main())
+"""
+    other = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True)
+    try:
+        tor_pid = int(other.stdout.readline())
+        for _ in range(50):                     # its control port is written
+            if (d / "control_port").exists():
+                break
+            time.sleep(0.1)
+        with pytest.raises(TorError, match="Another Unseenet program"):
+            asyncio.run(TorProcess(data_dir=d, binary=TOR).halt_stale())
+        os.kill(tor_pid, 0)                     # its Tor still runs
+    finally:
+        other.kill()
+        other.wait()
