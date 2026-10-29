@@ -270,6 +270,8 @@ def client_main(argv=None) -> None:
     teams_parsers(sub)
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
+    s.add_argument("--all", action="store_true",
+                   help="mark the whole group read instead (catch up), and say how many were unread")
     s = sub.add_parser("gateways", help="list gateways to other networks (to invite one)")
     s.add_argument("--network", help="only this network, e.g. matrix")
     s.add_argument("--directory", help="another directory group")

@@ -176,7 +176,8 @@ async def group(request):
 
 async def read(request):
     data = await _body(request)
-    return _json(_api(request).mark_read(_gid(request), list(data.get("ids", []))))
+    return _json(_api(request).mark_read(_gid(request), list(data.get("ids", [])),
+                                         all_=data.get("all") is True))
 
 
 async def view(request):
@@ -196,6 +197,10 @@ async def subscribe(request):
 
 async def browse(request):
     return _json(await _api(request).browse(request.query.get("pattern", "*")))
+
+
+async def markup_preview(request):
+    return _json(_api(request).markup(await _body(request)))
 
 
 async def refresh(request):
@@ -668,7 +673,7 @@ ROUTES = [
     ("POST", "/api/groups/{gid}/read", read), ("POST", "/api/groups/{gid}/view", view),
     ("POST", "/api/groups/{gid}/timeline", timeline_choice),
     ("POST", "/api/subscribe", subscribe), ("GET", "/api/browse", browse),
-    ("POST", "/api/refresh", refresh), ("POST", "/api/ripening", ripening),
+    ("POST", "/api/refresh", refresh), ("POST", "/api/markup", markup_preview), ("POST", "/api/ripening", ripening),
     ("GET", "/api/known-nodes", known_nodes),
     ("GET", "/api/nodes", nodes), ("POST", "/api/nodes", nodes),
     ("GET", "/api/group-ref", group_ref), ("GET", "/api/address", address),

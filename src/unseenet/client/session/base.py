@@ -58,6 +58,10 @@ class BaseMixin:
         if d["nodes"]:          # groups from before several nodes: they live on the first
             for entry in d["groups"].values():
                 entry.setdefault("node", d["nodes"][0])
+        try:
+            self._restore_read_high()           # how far keep=False groups were read (#735)
+        except Exception:  # noqa: BLE001 - a Session still being built (tests): marks wait
+            pass
         self.sent: list[dict] = self._load_sent()
         self._notice_tasks: dict[str, asyncio.Task] = {}   # approved notices being posted
 
@@ -221,6 +225,18 @@ class BaseMixin:
         """The Content-Type your posts get: Markdown, unless you turned it off (UN-RFC 0031)."""
         from ...core.markup import MARKDOWN_TYPE, PLAIN_TYPE
         return PLAIN_TYPE if self.data.get("plain_text") else MARKDOWN_TYPE
+
+    def preview(self, text: str, kind: str = "post", content_type: str | None = None) -> dict:
+        """What a text will look like once posted (#632): ``{"tree", "signature"}`` - the
+        same safe tree (UN-RFC 0031) messages carry, from the same core, so every client
+        previews exactly what readers will see. ``content_type``: yours by default."""
+        from ...core import markup
+        if kind not in ("post", "chat"):
+            raise SessionError('kind is "post" or "chat"')
+        if len(text.encode("utf-8")) > markup.MAX_TEXT:
+            raise SessionError("too long to preview")
+        own, sig = _s.split_signature(text) if kind == "post" else (text, None)
+        return {"tree": markup.body(own, content_type or self.text_type(), kind), "signature": sig}
 
     def set_markdown(self, on: bool) -> None:
         """Whether you write in Markdown (UN-RFC 0031) or plain text."""

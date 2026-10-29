@@ -78,6 +78,19 @@ class State:
         self._broadcast({"event": "ripening-target", "target": ripening["target"]})
         return ripening
 
+    def markup(self, data: dict) -> dict:
+        """``POST /api/markup`` ``{"text", "kind", "markdown"}`` (section 4.4, #632): the tree
+        a text will have once posted, for a Write / Preview toggle - the same tree messages
+        carry, so a preview shows what readers will see. ``markdown`` false: as plain text;
+        left out, as your posts go (your Markdown setting)."""
+        s = self._ready()
+        text = data.get("text")
+        if not isinstance(text, str):
+            raise SessionError("give the text to preview")
+        md = data.get("markdown")
+        ctype = None if md is None else (markup.MARKDOWN_TYPE if md else markup.PLAIN_TYPE)
+        return s.preview(text, str(data.get("kind") or "post"), ctype)
+
     def about(self) -> dict:
         """``GET /api/about`` (section 4.1): the "About Unseenet" text every client shows,
         with this version."""
