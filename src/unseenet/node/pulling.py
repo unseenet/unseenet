@@ -29,6 +29,7 @@ from ..core.reconcile import MAX_ROUNDS, ReconcileError, reconcile
 from ..nntp import RECONCILE_MAX_BYTES, Client, NNTPError, strip_reader_headers
 from .peering import PeerAuthError, WrongNodeError, authenticate_with_key
 from .server import Node, PeerConfig
+from .server.peering_commands import STATE_AGE
 
 log = logging.getLogger("unseenet.pulling")
 
@@ -39,6 +40,9 @@ RECONCILE_EVERY = 86400.0            # once a day, at a random time
 PEER_ROUNDS = 4096                   # rounds per exchange when the peer knows us
 
 
+STATE_EVERY = 24 * 3600   # a state pull about this often per peer (UN-RFC 0017 4)
+
+
 class Puller:
     """Pulls what a peer has that this node has not seen."""
 
@@ -46,6 +50,12 @@ class Puller:
                  interval: float | None = None):
         self.node, self.peer, self.socks_port = node, peer, socks_port
         self.interval = interval if interval is not None else node.config.pull_interval
+
+    def _state_due(self) -> bool:
+        """Whether this pull asks for every group's state: the first since this node
+        started, then about every STATE_EVERY (in memory: a restart asks again)."""
+        due = self.node.__dict__.setdefault("state_pulled", {}).get(self.peer.name)
+        return due is None or time.time() >= due
 
     async def run_once(self) -> dict:
         """One catch-up. Returns counts: listed, fetched, accepted and rejections by
@@ -78,6 +88,11 @@ class Puller:
                 since = their_now - timedelta(days=self.node.config.retention_days)
             else:
                 since = datetime.fromtimestamp(last, timezone.utc) - OVERLAP
+            # a state pull (UN-RFC 0017 4 as amended, #748): at start, then about daily,
+            # from far enough back that the peer lists every group's state
+            state_pull = self._state_due()
+            if state_pull:
+                since = min(since, their_now - timedelta(seconds=STATE_AGE))
             # every group's state comes first, whatever the time (UN-RFC 0017), so the
             # listing grows with the network: past 250 KB on 29 Oct 2026, which the
             # default 70 KB stopped every pull at (0.6.1)
@@ -90,6 +105,8 @@ class Puller:
                 await self._fetch(client, msgid, result)
             if len(wanted) <= budget[0]:
                 store.set_pulled(peer.name, int(their_now.timestamp()))
+                if state_pull:
+                    self.node.state_pulled[peer.name] = time.time() + STATE_EVERY * random.uniform(0.8, 1.2)
         finally:
             try:
                 await client.quit()

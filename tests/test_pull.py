@@ -1,6 +1,7 @@
 """Catching up by pull (UN-RFC 0017): history for new nodes, gaps after downtime."""
 
 import time
+from datetime import datetime, timedelta, timezone
 
 from unseenet.core import crypto
 from unseenet.core.article import new_article
@@ -179,4 +180,44 @@ async def test_a_listing_past_70_kb_still_pulls():
     b = make_node("b", peers=[PeerConfig(name="a", address=addr_a)])
     res = await Puller(b, b.config.peers[0]).run_once()
     assert res["listed"] >= 2500, res
+    server_a.close()
+
+
+async def test_the_state_comes_about_once_a_day(monkeypatch):
+    """#748, UN-RFC 0017 3-4 as amended: NEWNEWS lists every group's state only for a
+    time at least STATE_AGE back; a puller asks that far back at its first pull and then
+    about daily, so hourly pulls do not carry the whole network's state each time."""
+    from unseenet.nntp import Client
+    from unseenet.node.server.peering_commands import STATE_AGE
+    a = make_node("a")
+    owner, m_open, posts, m_closed, secret = fill(a)
+    server_a, addr_a = await serve(a)
+
+    async def listed(since):
+        c = await Client.connect(addr_a, None)
+        ids = await c.multiline(f"NEWNEWS * {since:%Y%m%d %H%M%S} GMT", 230)
+        await c.quit()
+        return set(ids)
+    now = datetime.now(timezone.utc)
+    assert m_open.message_id in await listed(now - timedelta(days=2))     # far back: the state
+    assert await listed(now + timedelta(minutes=5)) == set()              # lately: nothing old
+
+    asked = []
+    real = Client.multiline
+
+    async def spy(self, line, expect, limit=70000):
+        if line.startswith("NEWNEWS"):
+            asked.append(datetime.strptime(" ".join(line.split()[2:4]), "%Y%m%d %H%M%S")
+                         .replace(tzinfo=timezone.utc))
+        return await real(self, line, expect, limit=limit)
+    monkeypatch.setattr(Client, "multiline", spy)
+    b = make_node("b", peers=[PeerConfig(name="a", address=addr_a)])
+    puller = Puller(b, b.config.peers[0])
+    assert (await puller.run_once())["accepted"] == 7    # the first pull: all of it
+    await puller.run_once()                              # soon after: from the last pull
+    b.state_pulled["a"] = 0                              # a day on: a state pull again
+    await puller.run_once()
+    t = datetime.now(timezone.utc)
+    assert t - asked[1] < timedelta(hours=1)
+    assert t - asked[2] >= timedelta(seconds=STATE_AGE)
     server_a.close()
