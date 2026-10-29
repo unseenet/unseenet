@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0050                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the copy to a browser client through an entrance (unseenet-entrance#53)
+Implemented: unseenet 0.6.0; partly - the copy to a browser client through an entrance (unseenet-entrance#53)
 Updates: 0005, 0007
 
       Unseenet: Copying an Identity to Another Device, and Recovery Words

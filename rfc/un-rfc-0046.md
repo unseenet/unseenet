@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0046                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.4.0, unseenet main (unreleased)
+Implemented: unseenet 0.4.0, unseenet 0.6.0
 Updates: none
 
                 Unseenet: The Local Client API

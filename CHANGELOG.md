@@ -7,6 +7,31 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
+**Facebook mode: feeds you follow, comments, likes - with nobody deciding what you see.
+Update the nodes first, then the clients.** 0.6 nodes check what 0.6 clients write -
+tags, spam reports and labels, comment deadlines and closes, team inboxes - and 0.6
+clients expect them. Pre-alpha: there is no compatibility code for older nodes, so a
+0.6 client on a 0.5 node misses these.
+
+- **People:** comments on feeds with an entry's own time and *Close comments*, tags and
+  content warnings, your own rules for your feed (UN-RFC 0051) and *Show all*, spam
+  reports and labels you choose to follow (and nothing ever removed from the network),
+  copying your identity to another device with a code or a QR code, recovery words, a
+  PIN on a device, and a client that carries on by itself when your nodes are gone - in
+  unseenet-gui 0.3 and unseenet-tui 0.2.
+- **Node operators:** nothing to turn on; update to 0.6 before your users' clients. A
+  node now rejects replies past a thread's deadline or in a closed thread, and checks
+  tags, report and label channels and team inboxes (UN-RFC 0030, 0045, 0047, 0052, 0053).
+- **Bots, gateways and other services:** require `unseenet>=0.6,<0.7`; ripen to level 4
+  if you post a lot (`UNSEENET_RIPEN_TO`, `client.runtime.service_ripen_to()`), post
+  through the posting queue, and keep how far you read with `keep=False` across
+  restarts. Container images for the services are published for releases
+  (`ghcr.io/unseenet/gateway`, `bots`, `entrance`, `watchman`).
+
+### Changes in this release
+
 - **Release notes in `unseenet.announce` are Markdown** (#611): `tools/announce.py release`
   posts `text/markdown` (UN-RFC 0031) with a title, the changelog section - issue
   references such as `(#518)` or `unseenet-gui#237` as links, its `###` headings one
@@ -2015,7 +2040,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/unseenet/unseenet/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/unseenet/unseenet/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/unseenet/unseenet/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/unseenet/unseenet/compare/v0.4.2...v0.4.3

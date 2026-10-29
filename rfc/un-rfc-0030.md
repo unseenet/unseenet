@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0030                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.4.0, unseenet main (unreleased); partly - choosing and closing in the clients (unseenet-gui#237, unseenet-tui#90)
+Implemented: unseenet 0.4.0, unseenet 0.6.0
 Updates: 0004, 0022, 0042
 
                  Unseenet: Comments in Channels
