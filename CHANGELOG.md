@@ -19,6 +19,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   for it with *Starting Tor ...* and every node "does not answer". Tor now quits by
   itself when its program is gone (`__OwningControllerProcess`), and at start a Tor an
   earlier run left in the directory is told to halt through its control port.
+- **A key that arrives shows its level at once**: copied from another device or restored
+  from its words, a key said *New key getting ready* until a node asked for ripening. It
+  now takes over its published chain right away (UN-RFC 0025 3.3), so it shows the level
+  it has and is never ripened again from the start.
+
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
   tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
   clients that need 0.6.1 could not be built nightly with core main. They are now
