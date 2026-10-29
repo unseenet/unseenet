@@ -126,11 +126,14 @@ NEWNEWS <wildmat> <yyyymmdd> <hhmmss> GMT
 
 MUST list, in this order:
 
-1. the Message-IDs of the **state** of every group it carries that
-   matches the wildmat, whatever their age, manifests before key
-   updates, key updates by ascending epoch, then kept articles (section
-   2.1) in the order their documents give, every marker before the
-   targets it names;
+1. when the given time is at least `STATE_AGE` (24 hours) before the
+   node's own time: the Message-IDs of the **state** of every group it
+   carries that matches the wildmat, whatever their age, manifests
+   before key updates, key updates by ascending epoch, then kept
+   articles (section 2.1) in the order their documents give, every
+   marker before the targets it names. For a more recent time this part
+   is left out: state that changed since then was received since then,
+   and comes in part 2;
 2. the Message-IDs of other articles in matching groups that it
    **received** at or after the given time, in the order it received
    them;
@@ -139,7 +142,12 @@ MUST list, in this order:
 
 Each Message-ID is listed at most once. Because state comes first, a
 node that fetches and accepts the list in order has every group's state
-before its posts. `ARTICLE` with the Message-ID of an `rmgroup` article
+before its posts.
+
+Part 1 grows with every group the node carries - about 5,600
+Message-IDs, some 250 KB, on the project's nodes in October 2026 - and
+was sent on every pull. Asked for only when it can matter (section 4),
+it is sent about once a day per peer rather than every hour. `ARTICLE` with the Message-ID of an `rmgroup` article
 MUST return it.
 
 `NEWNEWS` is a reader command; a node MUST answer it without peer
@@ -158,6 +166,11 @@ A node pulls from a peer as follows:
 3. Send `NEWNEWS <wildmat> <since> GMT`, where `since` is:
    - for the first pull from that peer, `T` minus the node's own
      retention period (UN-RFC 0012 replication window);
+   - for a **state pull** - the first since the node started, and then
+     about once a day (RECOMMENDED: every 24 hours, with some jitter) -
+     the earlier of the `T` of the last complete pull and `T` minus
+     `STATE_AGE`, so the answer carries the state (section 3) and any
+     state the node missed comes back;
    - otherwise the `T` of the last complete pull, minus a margin
      (RECOMMENDED: 15 minutes), because articles may arrive at the peer
      while it answers.
@@ -203,6 +216,12 @@ needs a peer that accepts pushes from it (UN-RFC 0016).
 - **Authority.** Pulled articles are checked exactly like pushed ones:
   signatures, postage, posting rules (UN-RFC 0004 section 5) and dates. Pulling from a malicious
   node can deliver nothing that pushing could not.
+- **Mixed versions.** A node from before `STATE_AGE` lists the state on
+  every pull, which a newer puller simply has. An older puller asking a
+  newer node gets the state on its first pull only; after that, state
+  that changes still reaches it in part 2, but a state article it lost
+  is not sent again until it pulls from the start. Updating soon is the
+  remedy; the state is never wrong, at worst incomplete.
 - **Removals.** Listing `rmgroup` articles lets a node that missed a
   removal while it was down learn about it and delete the group.
 - **Local groups** (UN-RFC 0009) appear in a node's `NEWNEWS` like any
