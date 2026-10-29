@@ -31,15 +31,35 @@ class PrivateMixin:
         self.note_opened()
         gid = self.my_inbox
         entry = self.group_entry(gid)
-        entry.setdefault("node", self.node)
-        if not entry.get("owner"):
+        if entry.get("node") is None:
+            entry["node"] = self.node
+        from .nodes import NODE_GIVE_UP
+        if entry.get("owner") and self.down_for(self.node_for(gid)) >= NODE_GIVE_UP:
+            entry["check_exists"] = True           # its node gone: is it anywhere else? (#605)
+        if not entry.get("owner") or entry.get("check_exists"):
             async def exists(c: Client) -> bool:
                 try:
                     await c.group(gid)
                     return True
                 except NNTPError:
                     return False
-            if not await self._call(exists, self.node_for(gid)):
+            # its node gone (#605): the inbox on the next node of yours that answers
+            here, found, lost, reached = None, False, None, False
+            for address in self._answering_first(self.node_for(gid)) or [self.node_for(gid)]:
+                try:
+                    found = await self._call(exists, address)
+                except (OSError, ConnectionError, SessionError,
+                        asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+                    lost = lost or exc
+                    continue
+                here, reached = address, True
+                break
+            if not reached:
+                raise lost or SessionError("no node configured")
+            if here is not None and here != self.node_for(gid):
+                self.pin_group(gid, here)
+                self.say(f"Your inbox is now on {self.node_label(here)}")
+            if not found:
                 # a serial above any we used before: the inbox may have expired (UN-RFC 0029, 8)
                 serial = int(self.manifest_data(gid).get("serial", 0)) + 1
                 from ...core import blobs as bl
@@ -53,6 +73,7 @@ class PrivateMixin:
                 await self._post_article(art)
                 entry["manifest"] = json.loads(art.body)
             entry.update({"type": "inbox", "owner": True})
+            entry.pop("check_exists", None)
         if gid not in self.data["subscribed"]:
             self.data["subscribed"].insert(0, gid)
         self.save()

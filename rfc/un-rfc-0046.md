@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0046                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.4.0
+Implemented: unseenet 0.4.0, unseenet main (unreleased)
 Updates: none
 
                 Unseenet: The Local Client API
@@ -894,9 +894,17 @@ given beside the name, for a tooltip or to copy.
   "..."}` adds a node, stops using one, or makes one the default (adding
   it if needed), and answers `GET /api/nodes` without `info`. A new node's
   groups are read at once, and new posts on it pushed. `remove` also
-  answers `moved`, the followed groups now read from the default node;
-  nothing is deleted on the node itself, and the last node cannot be
-  removed (400). An address is an onion address (56 characters and
+  answers `moved`, the followed groups now read from another of your nodes
+  that carries them, and `unavailable`, those no node of yours carries -
+  they are never moved to a node that does not carry them; nothing is
+  deleted on the node itself, and the last node cannot be removed (400).
+
+When none of your nodes has answered for a while, the runtime carries on
+with a node from the signed known-node list (UN-RFC 0010 section 5) and
+makes it the default; when only the default is gone, another of your
+nodes that answers becomes the default. Either way it sends
+`default-node-changed` (section 5), and a front end tells the user which
+node they use now. An address is an onion address (56 characters and
   `.onion`, with an optional `:port`) or `host:port`; anything else is
   400.
 
@@ -1159,8 +1167,9 @@ section 3). Each message is one JSON object with its name in `event`:
 
 - every event of the core, as `to_dict()` gives it (`client.events`):
   `status`, `group-updated`, `groups-changed`, `node-state`, `tor-state`,
-  `inbox-ready`, `refreshed`, `release-offer`, `ripening`, and
-  `pow-progress`;
+  `inbox-ready`, `refreshed`, `release-offer`, `ripening`,
+  `pow-progress`, and `default-node-changed` (`address`, `previous`,
+  `reason`: `fallback` or `default-down`, section 4.17);
 - `job`: `{"event": "job", "job": "<id>", "group": "<id>", "state": ...}`
   with `state` one of `ripening`, `pow`, `sent`, `reached`, `failed`, and
   `fraction` (0 to 1) with `ripening` and `pow`, `message_id` with `sent`

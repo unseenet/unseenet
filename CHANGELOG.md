@@ -7,6 +7,27 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **When your nodes are gone, the client carries on** (#603, #604, #605):
+  - When none of your nodes has answered for two minutes, the client takes a random node
+    from the newest signed known-node list that answers (UN-RFC 0010 section 5), makes it
+    your default and reads there the groups it carries; your inbox goes along. You are
+    told ("unseenet-node1 does not answer - you now use unseenet-node3"); the old nodes
+    stay in your list and are read again when they come back. Only listed nodes are
+    used, never one learned from an article or a page.
+  - A group is only ever moved to a node that carries it. A group only one node carries
+    (a local node, an unlisted one) stays with it and shows as not reachable until it
+    comes back. Removing a node no longer moves its groups blindly to the default: the
+    local API's `remove` answers which groups moved and which no node of yours carries
+    (`unavailable`), and `Session.rehome_groups` does the same for other programs.
+  - Posting goes through another of your nodes when the group's node cannot be reached,
+    and the postage and ripening are asked of the node the post goes to. A post sent
+    again after a broken line that the node already has (`duplicate`) is a success, not
+    an error and never a second post.
+  - When the default node has failed for two minutes and another of your nodes answers,
+    that one becomes the default: new groups and your inbox go there. Creating a group
+    and setting up your inbox no longer fail while the default is down; they use the
+    next node that answers. A new event, `default-node-changed`, tells front ends.
+
 - **UN-RFC status means what UN-RFC 0000 says** (#738): five documents (0047, 0052-0055)
   said `Status: Accepted`, which is not a status. The maintainer's acceptance agrees to a
   *change* - a new UN-RFC, an amendment, a correction - never to a status; every protocol

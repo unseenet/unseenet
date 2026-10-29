@@ -61,6 +61,10 @@ class Nodes:
             if address not in s.nodes:
                 raise SessionError(f"{address} is not one of your nodes")
             moved = s.remove_node(address)
+            try:                                       # where each group is read now (#603)
+                rehomed = await s.rehome_groups(moved)
+            except SessionError:
+                rehomed = {"moved": {}, "unavailable": []}
         else:
             raise SessionError('action is "add", "remove" or "default"')
         if self.runtime is not None:
@@ -68,7 +72,8 @@ class Nodes:
         self.session.emit(ev.GroupsChanged())
         out = await self.nodes()
         if action == "remove":
-            out["moved"] = moved
+            out["moved"] = [g for g in moved if g not in rehomed["unavailable"]]
+            out["unavailable"] = rehomed["unavailable"]   # no node of yours carries them
         return out
 
 

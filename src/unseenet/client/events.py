@@ -78,6 +78,18 @@ class NodeState(Event):
 
 
 @dataclass(frozen=True)
+class DefaultNodeChanged(Event):
+    """The client chose another default node by itself (#603, #605): your nodes stopped
+    answering and ``address`` from the known-node list took over (``reason``
+    ``"fallback"``), or the default stopped answering and another of your nodes became
+    the default (``"default-down"``). New groups and your inbox go there now."""
+    address: str
+    previous: str | None = None
+    reason: str = "fallback"
+    name = "default-node-changed"
+
+
+@dataclass(frozen=True)
 class TorState(Event):
     """Tor starting: bootstrap progress 0-100, for the unlock screen."""
     progress: int

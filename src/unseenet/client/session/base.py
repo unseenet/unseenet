@@ -32,6 +32,7 @@ class BaseMixin:
         # wait (UN-RFC 0043 section 4.4, #297): not everyone at once after a restart
         self._backoff: dict[str, Backoff] = {}
         self._retry_at: dict[str, float] = {}
+        self._down_since: dict[str, float] = {}       # failing since (#603, #605)
         self._locks: dict[str, asyncio.Lock] = {}
         self.unreachable: list[str] = []               # nodes that did not answer last time
         # nodes asked but not answered yet, past the first answer's budget (#704): their

@@ -14,6 +14,10 @@ from __future__ import annotations
 from . import *  # noqa: F403  - the module's names, as when this was one file
 from .. import session as _s   # names tests patch on the module, read at call time
 
+# A node that has failed this long (no connection opened in between) is taken to be gone
+# (#603, #605): longer than a node's restart, short enough that nobody waits long.
+NODE_GIVE_UP = 120.0
+
 
 class NodesMixin:
     # ------------------------------------------------------------------
@@ -41,7 +45,13 @@ class NodesMixin:
         self.save()
 
     def remove_node(self, address: str) -> list[str]:
-        """Stop using a node. Its groups move to the default node; returns them."""
+        """Stop using a node. Returns the followed groups that were read from it.
+
+        They are no longer bound to any node: the next read looks for them on your
+        other nodes, default first, and keeps the one that carries each (``fetch_group``)
+        - never moved blindly to a node that does not carry them (#603). A group nobody
+        else carries shows as not reachable. ``rehome_groups`` does the looking at once,
+        and says which groups no node of yours carries."""
         nodes = self.data["nodes"]
         if address not in nodes:
             return []
@@ -51,8 +61,8 @@ class NodesMixin:
         (self.data.get("node_names") or {}).pop(address, None)
         moved = [gid for gid, e in self.data["groups"].items() if e.get("node") == address]
         for gid in moved:
-            self.data["groups"][gid]["node"] = nodes[0]
             self._forget_numbers(gid)
+            self.data["groups"][gid]["node"] = None
         client = self._clients.pop(address, None)
         if client is not None:
             client.writer.close()
@@ -88,6 +98,116 @@ class NodesMixin:
                 self._forget_numbers(group_id)
             entry["node"] = address
             self.save()
+
+    # --- when nodes are gone (#603, #604, #605) ------------------------------------
+    # Every followed group keeps its own node, whatever the default is, and is only ever
+    # moved to a node that carries it - a group only an unlisted node carries (a local
+    # node, an association's own) stays with it and is read again when it comes back.
+    async def carried_by(self, address: str) -> set[str] | None:
+        """The Group IDs ``address`` carries, or None when it does not answer."""
+        async def run(c: Client) -> set[str]:
+            lines = await c.multiline("LIST NEWSGROUPS *", 215)
+            return {line.partition("\t")[0] for line in lines}
+        try:
+            return await self._call(run, address)
+        except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError,
+                asyncio.TimeoutError):
+            return None
+
+    def down_for(self, address: str | None) -> float:
+        """Seconds ``address`` has failed without a connection opening in between (0: up)."""
+        since = self._down_since.get(address or "")
+        return 0.0 if since is None else time.monotonic() - since
+
+    def _move_groups(self, to: str, carried: set[str], away_from) -> list[str]:
+        """Read the groups of the nodes ``away_from`` from ``to``, where it carries them;
+        your own inbox goes along in any case (``ensure_inbox`` makes it there). Returns
+        the Group IDs moved."""
+        away_from, moved = set(away_from), []
+        inbox = self.my_inbox if self.has_identity() else None
+        for gid, entry in list(self.data["groups"].items()):
+            if entry.get("node") not in away_from and entry.get("node") is not None:
+                continue
+            if gid in carried:
+                self.pin_group(gid, to)
+                moved.append(gid)
+            elif gid == inbox:
+                self.pin_group(gid, to)
+                entry["check_exists"] = True        # not there yet: ensure_inbox makes it
+                moved.append(gid)
+        return moved
+
+    async def rehome_groups(self, group_ids=None) -> dict:
+        """Find a node of yours for groups without one (after ``remove_node``), asking
+        your nodes what they carry: the default first. ``{"moved": {gid: node},
+        "unavailable": [gid]}`` - unavailable: no node of yours carries it."""
+        todo = [g for g in (group_ids if group_ids is not None else self.data["subscribed"])
+                if self.data["groups"].get(g, {}).get("node") not in self.data["nodes"]]
+        out: dict = {"moved": {}, "unavailable": []}
+        if not todo:
+            return out
+        carried = {}
+        for n in self.nodes:
+            got = await self.carried_by(n)
+            if got is not None:
+                carried[n] = got
+        for gid in todo:
+            home = next((n for n in self.nodes if gid in carried.get(n, ())), None)
+            if home is None:
+                out["unavailable"].append(gid)
+            else:
+                self.pin_group(gid, home)
+                out["moved"][gid] = home
+        return out
+
+    async def fall_back_to_known_node(self) -> str | None:
+        """None of your nodes answers (#603): take a random node from the newest signed
+        known-node list (UN-RFC 0010 section 5) that does, make it your default, and read
+        the groups there that it carries; your inbox goes along. Only listed nodes -
+        never one learned from an article or a page. Returns its address, or None when
+        no listed node answers either."""
+        previous = self.node
+        dead = list(self.nodes)
+        candidates = [n.address for n in self.known_nodes() if n.address not in dead]
+        random.shuffle(candidates)
+        for address in candidates:
+            carried = await self.carried_by(address)
+            if carried is None:
+                continue
+            self.add_node(address, default=True)
+            self._move_groups(address, carried, dead)
+            self.save()
+            self.say(f"{self.node_label(previous)} does not answer - "
+                     f"you now use {self.node_label(address)}")
+            self.emit(ev.DefaultNodeChanged(address, previous, "fallback"))
+            return address
+        return None
+
+    async def promote_default(self, give_up: float | None = None) -> str | None:
+        """The default node has failed for ``give_up`` seconds while another of your
+        nodes answers (#605): make that one the default, so new groups and your inbox go
+        there. The groups keep their own nodes. Returns the new default, or None."""
+        give_up = NODE_GIVE_UP if give_up is None else give_up
+        previous = self.node
+        if previous is None or self.down_for(previous) < give_up:
+            return None
+        for address in self.nodes[1:]:
+            if self.down_for(address) > 0 or address in self.slow:
+                continue
+            if await self.carried_by(address) is None:
+                continue
+            self.add_node(address, default=True)
+            self.say(f"{self.node_label(previous)} does not answer - new groups and your "
+                     f"inbox now go to {self.node_label(address)}")
+            self.emit(ev.DefaultNodeChanged(address, previous, "default-down"))
+            return address
+        return None
+
+    def _answering_first(self, preferred: str | None) -> list[str]:
+        """Your nodes to try for something, ``preferred`` first, then those not failing."""
+        rest = [n for n in self.nodes if n != preferred]
+        rest.sort(key=lambda n: self.down_for(n) > 0)
+        return ([preferred] if preferred else []) + rest
 
     # --- names of nodes (#518) -------------------------------------------------
     # The signed known-node list (UN-RFC 0010) is trusted; a node's own name (UN-RFC
@@ -287,6 +407,7 @@ class NodesMixin:
             self._backoff.pop(a, None)
 
     def _failed(self, address: str) -> float:
+        self._down_since.setdefault(address, time.monotonic())
         wait = self._backoff.setdefault(address, Backoff()).next()
         self._retry_at[address] = time.monotonic() + wait
         return wait
@@ -317,6 +438,7 @@ class NodesMixin:
             raise
         self._backoff.setdefault(address, Backoff()).up()
         self._retry_at.pop(address, None)
+        self._down_since.pop(address, None)
         self.emit(ev.NodeState(address, True))
         status(f"Connected to {self.node_label(address)}", idle=True)
         return client
