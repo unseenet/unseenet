@@ -59,7 +59,7 @@ def is_test_release(version: str) -> bool:
 
 
 def changelog_section(version: str) -> str:
-    text = (ROOT / "CHANGELOG.md").read_text()
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
     if not m and is_test_release(version):      # its notes are what is not released yet
         m = re.search(r"^## \[Unreleased\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
@@ -150,25 +150,25 @@ def release_post(tag: str) -> tuple[str, str]:
 
 
 def nodes_post() -> tuple[str, str]:
-    text = (ROOT / "src" / "unseenet" / "nodes.json").read_text()
+    text = (ROOT / "src" / "unseenet" / "nodes.json").read_text(encoding="utf-8")
     updated, nodes = parse_node_list(text)          # never post a list clients would reject
     return f"Known nodes, {updated} ({len(nodes)})", text if text.endswith("\n") else text + "\n"
 
 
 def entrances_post() -> tuple[str, str]:
-    text = (ROOT / "src" / "unseenet" / "entrances.json").read_text()
+    text = (ROOT / "src" / "unseenet" / "entrances.json").read_text(encoding="utf-8")
     updated, entrances = parse_entrance_list(text)   # never post a list clients would reject
     return f"Known web entrances, {updated} ({len(entrances)})", text if text.endswith("\n") else text + "\n"
 
 
 def hierarchies_post() -> tuple[str, str]:
-    text = (ROOT / "src" / "unseenet" / "hierarchies.json").read_text()
+    text = (ROOT / "src" / "unseenet" / "hierarchies.json").read_text(encoding="utf-8")
     updated, entries = parse_root_list(text, strict=True)   # never post a list with mistakes
     return f"Hierarchies, {updated} ({len(entries)})", text if text.endswith("\n") else text + "\n"
 
 
 def checkgroups_post() -> tuple[str, str]:
-    text = (ROOT / "src" / "unseenet" / "checkgroups.json").read_text()
+    text = (ROOT / "src" / "unseenet" / "checkgroups.json").read_text(encoding="utf-8")
     lst = parse_hierarchy_list(text, "unseenet")
     data = json.loads(text)
     if len(lst.groups) != len(data["groups"]):          # never post a list with mistakes
@@ -223,11 +223,11 @@ def main() -> None:
         if args.tag not in ("stable", "dev") or len(args.files) != 2:
             sys.exit("client-release needs the channel, SHA256SUMS.txt and SHA256SUMS.txt.sig")
         group = RELEASES_GROUP
-        subject, body = update.release_post(args.files[0].read_bytes(), args.files[1].read_text(), args.tag)
+        subject, body = update.release_post(args.files[0].read_bytes(), args.files[1].read_text(encoding="utf-8"), args.tag)
     else:
         if not (args.subject and args.body_file):
             sys.exit("message needs --subject and --body-file")
-        body = args.body_file.read_text()
+        body = args.body_file.read_text(encoding="utf-8")
         group, subject, body = ANNOUNCE_GROUP, args.subject, body if body.endswith("\n") else body + "\n"
 
     seed = os.environ.get("UNSEENET_ANNOUNCE_SEED", "").strip()
@@ -239,7 +239,7 @@ def main() -> None:
         key = crypto.Identity.from_seed(bytes.fromhex(seed))
     print(f"Posting as {key.key_text} to {group}: {subject}", flush=True)
 
-    _, nodes = parse_node_list((ROOT / "src" / "unseenet" / "nodes.json").read_text())
+    _, nodes = parse_node_list((ROOT / "src" / "unseenet" / "nodes.json").read_text(encoding="utf-8"))
     ctype = markup.MARKDOWN_TYPE if args.what in MARKDOWN_POSTS else markup.PLAIN_TYPE
     ok = asyncio.run(post_everywhere(group, subject, body, key, [n.address for n in nodes],
                                      args.dry_run, ctype))
