@@ -254,6 +254,8 @@ async def c_copy_from(app: App, args) -> None:
         added = await got.finish()
     except SessionError as exc:
         sys.exit(str(exc))
+    if s.node:
+        await s.adopt_published_ripenings(added)            # the keys' levels, at once
     emit(args, "Added: " + (", ".join(added) or "nothing new"), {"added": added})
 
 
