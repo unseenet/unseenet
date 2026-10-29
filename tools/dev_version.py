@@ -35,10 +35,32 @@ def dev_version(tag: str, distance: int) -> str:
     return f"{major}.{minor}.{int(patch) + 1}.dev{distance}"
 
 
+def _key(tag: str) -> tuple:
+    m = _TAG.match(tag)
+    major, minor, patch, pre, num = m.groups()
+    return (int(major), int(minor), int(patch), pre is None, pre or "", int(num or 0))
+
+
+def newest_of_series(tag: str, tags: list[str]) -> str:
+    """``tag``, or a newer release of the same MAJOR.MINOR tagged on a release branch
+    (v0.6.1 on release/0.6 while main is past v0.6.0): main's development builds then
+    count on from it - 0.6.2.devN, not 0.6.1.devN, which PEP 440 sorts below 0.6.1."""
+    m = _TAG.match(tag)
+    if not m or m.group(4):
+        return tag
+    same = [t for t in tags if _TAG.match(t) and not _TAG.match(t).group(4)
+            and _TAG.match(t).groups()[:2] == m.groups()[:2]]
+    return max([tag, *same], key=_key)
+
+
 def from_git() -> str:
     out = subprocess.run(["git", "describe", "--tags", "--long", "--match", "v[0-9]*"],
                          cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     tag, distance, _sha = out.rsplit("-", 2)
+    if int(distance):
+        tags = subprocess.run(["git", "tag", "--list", "v[0-9]*"], cwd=ROOT,
+                              capture_output=True, text=True, check=True).stdout.split()
+        tag = newest_of_series(tag, tags)
     return dev_version(tag, int(distance))
 
 

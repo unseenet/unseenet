@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+- **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
+  tagged on `release/0.6`, main's builds were 0.6.1.devN - below 0.6.1 by PEP 440 - so
+  clients that need 0.6.1 could not be built nightly with core main. They are now
+  0.6.2.devN.
+
 ### Fixed
 
 - **Nodes pull again** (#748): NEWNEWS lists every group's state first, whatever the
