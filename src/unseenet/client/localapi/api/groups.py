@@ -142,6 +142,12 @@ class Groups:
                "report_issuers": [{"key": k, "label": s.issuer_label(k)}
                                   for k in data.get("report_issuers", [])],
                "team_name": data.get("team_name", "") if data.get("type") == "inbox" else None,
+               # comments (UN-RFC 0030): a channel's whether, and the days a thread takes
+               # them in any group but inboxes and local groups (section 4.24)
+               "comments": data.get("comments", "none") if data.get("type") == "channel" else None,
+               "comment_days": data.get("comment_days"),
+               "comment_days_possible": data.get("type") in ("channel", "open", "moderated", "closed")
+               and not data.get("local"),
                # what to suggest you write in here, and why (UN-RFC 0052 section 5a)
                "suggested_languages": dict(zip(("codes", "from"), s.suggest_languages(gid)))}
         if out["owner"] or s.moderates(gid):
@@ -323,6 +329,11 @@ class Groups:
                 "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6
                 "identicon": _identicon(key),                         # UN-RFC 0022 section 8.4
                 "may_edit": s.may_edit(m), "may_withdraw": s.may_cancel(m),
+                # a thread root: whether it takes comments now, and who may close them
+                # (UN-RFC 0030 sections 3.1, 3.2; section 4.24)
+                "comments": _comments_of(s, m),
+                "may_close_comments": (not m.references and not m.private
+                                       and s.may_close_comments(m.group, m.message_id)),
                 # what an edit box starts with (#733): the tags and warnings that are not
                 # #words in the text; languages are in "languages"
                 "edit_tags": s.tags_to_keep(m) if s.may_edit(m) else [],
@@ -459,3 +470,21 @@ def _page(rows: list, limit: int, chat: bool) -> tuple[list[int], bool]:
                 return kept, True
         kept.append(i)
     return kept, False
+
+
+def _comments_of(s: Session, m: Message) -> dict | None:
+    """A thread root's comments state for its row (section 4.24), None where there is
+    nothing to say: a reply, a private post, a group without limits or closes."""
+    if m.references or m.private or m.kind == "reaction":
+        return None
+    if (m.comment_days is None and s.manifest_data(m.group).get("comment_days") is None
+            and not s.group_entry(m.group).get("comment_markers")):
+        return None                       # most groups: nothing to work out
+    from .writing import comments_dict
+    try:
+        state = s.comments_state(m.group, m.message_id)
+    except SessionError:
+        return None
+    if state["until"] is None and state["open"] and state["group_days"] is None:
+        return None
+    return comments_dict(state)

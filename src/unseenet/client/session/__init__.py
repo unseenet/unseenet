@@ -148,6 +148,8 @@ def resolve_edits(msgs: list[Message]) -> list[Message]:
         original = by_id.get(first)
         if original is not None and original.date is not None:
             shown.date = original.date              # where and when it was first posted
+        days = [m.comment_days for m in present if m.comment_days is not None]
+        shown.comment_days = min(days) if days else None   # an edit only shortens (0030 3.1)
         for i in ids | {winner.message_id}:
             canonical[i] = shown
     out: list[Message] = []
@@ -233,6 +235,7 @@ class Message:
     # never shown or sent anywhere
     file_keys: dict = field(default_factory=dict, repr=False)
     node: str = ""                        # the node it was read from (a local group: #134)
+    comment_days: int | None = None       # a thread root's own time for comments (0030 3.1)
     tags: tuple = ()                      # the author's own tags (UN-RFC 0052)
     languages: tuple = ()                 # Content-Language, the author's (UN-RFC 0052 5a)
     labels: dict | None = None            # warnings and topics, what to do (UN-RFC 0053)

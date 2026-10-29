@@ -50,6 +50,8 @@ class Controls:
                 self.sweep_blobs(retention=False)        # its blobs go too (UN-RFC 0027 7.2)
         elif ctl[0] in (pn.PIN, pn.UNPIN) and len(ctl) == 2:
             self._accept_pin(art, manifest, raw, ctl[0], ctl[1])
+        elif ctl[0] in cm.ACTIONS and len(ctl) == 2:            # UN-RFC 0030 section 3.2
+            self._accept_comment_marker(art, manifest, raw, ctl[0], ctl[1])
         else:
             raise ArticleError("syntax", f"unknown control {ctl[0]!r}")
 

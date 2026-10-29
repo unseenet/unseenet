@@ -168,12 +168,18 @@ def _kinds(data: dict) -> tuple[str, ...]:
 COMMENTS_NONE, COMMENTS_OPEN = "none", "open"
 
 
+COMMENT_DAYS_TYPES = ("channel", "open", "moderated", "closed")   # UN-RFC 0030 section 3
+
+
 def _comments(data: dict) -> tuple[str, int | None]:
-    """A manifest's ``comments`` and ``comment_days`` (UN-RFC 0030 section 3);
-    raises ValueError if invalid or given for a group that is not a channel."""
-    has = "comments" in data or "comment_days" in data
-    if has and data.get("type") != "channel":
-        raise ValueError("comments and comment_days are for channels only")
+    """A manifest's ``comments`` and ``comment_days`` (UN-RFC 0030 section 3); raises
+    ValueError if invalid: ``comments`` belongs to channels only, ``comment_days`` to
+    channels and open, moderated and closed groups (3.3), never an inbox or a local group."""
+    if "comments" in data and data.get("type") != "channel":
+        raise ValueError("comments is for channels only")
+    if "comment_days" in data and (data.get("type") not in COMMENT_DAYS_TYPES
+                                   or data.get("local") is True):
+        raise ValueError("comment_days is not for inboxes or local groups")
     comments = data.get("comments", COMMENTS_NONE)
     if comments not in (COMMENTS_NONE, COMMENTS_OPEN):
         raise ValueError('comments must be "none" or "open"')
@@ -857,14 +863,20 @@ def _banned_key(entry) -> bytes:
 ThreadRoot = Callable[[str], "Article | None"]
 
 
+ThreadClosed = Callable[["Article"], "object | None"]
+
+
 def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, bytes],
-                    closed_before: int = 0, thread_root: ThreadRoot | None = None) -> None:
+                    closed_before: int = 0, thread_root: ThreadRoot | None = None,
+                    thread_closed: ThreadClosed | None = None) -> None:
     """Raise ArticleError('permission') unless the article may be posted.
 
     ``thread_root`` looks up an article this node holds by Message-ID (None if it
     does not hold it yet); it is needed for comments in channels (UN-RFC 0030). An
     article that may become acceptable once its thread arrives raises
     ArticleError('later'), which a node answers as a temporary failure.
+    ``thread_closed``: for a thread root, the close that keeps its comments closed, or
+    None (UN-RFC 0030 section 3.2).
     """
     pk = art.author_key
     if manifest.type != "inbox" and pk in manifest.banned:
@@ -886,6 +898,7 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
             if size < TEAM_BOX_MIN:
                 raise ArticleError("permission", "a team box too small to be one")
         return
+    _check_thread_rules(art, manifest, thread_root, thread_closed)   # UN-RFC 0030 3.1, 4.2
     if manifest.type == "closed":
         if "Encrypted" not in art:
             raise ArticleError("permission", "closed group requires encryption")
@@ -914,7 +927,7 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
     if manifest.type == "moderated" and has_valid_approval(art, manifest):
         return
     if manifest.type == "channel" and manifest.comments == COMMENTS_OPEN and art.control is None:
-        _check_comment(art, manifest, thread_root)
+        _check_comment(art, manifest, thread_root, thread_closed)
         return
     raise ArticleError("permission", f"not allowed to post in {manifest.type} group")
 
@@ -950,7 +963,7 @@ def _check_reaction(art: Article, manifest: Manifest, thread_root: ThreadRoot | 
         raise ArticleError("later", "the article reacted to is not on this node yet")
     if tgt.group != art.group or tgt.control is not None or is_reaction(tgt):
         raise ArticleError("permission", "a reaction is to an ordinary article in this group")
-    if manifest.type == "channel" and manifest.comment_days is not None:   # section 4.4
+    if manifest.comment_days is not None:            # section 4.4, every group (0030 7)
         root_id = (art.get("References") or "").split()[0]
         root = tgt if root_id == tgt.message_id else thread_root(root_id)
         if root is not None and parse_date(art["Date"]) > (
@@ -958,8 +971,50 @@ def _check_reaction(art: Article, manifest: Manifest, thread_root: ThreadRoot | 
             raise ArticleError("permission", "reactions on this thread have closed")
 
 
-def _check_comment(art: Article, manifest: Manifest, thread_root: ThreadRoot | None) -> None:
-    """UN-RFC 0030 section 4: a reply to a thread a starter began."""
+def _check_thread_rules(art: Article, manifest: Manifest, thread_root: ThreadRoot | None,
+                        thread_closed: ThreadClosed | None) -> None:
+    """UN-RFC 0030 section 3.1: a root's own ``Comment-Days`` is a whole number and not
+    longer than the group's. Section 4.2: in open, moderated and closed groups a reply
+    past its thread's deadline, or in a closed thread, is rejected when the node holds
+    the root (channels: ``_check_comment``, where starters are not comments)."""
+    from . import comments as cm
+    from .reactions import is_reaction
+    if art.control is not None or manifest.type not in COMMENT_DAYS_TYPES or manifest.local \
+            or is_reaction(art):
+        return
+    refs = (art.get("References") or "").split()
+    if not refs:                                         # a thread root
+        if cm.HEADER not in art or (manifest.type == "channel"
+                                    and manifest.comments != COMMENTS_OPEN):
+            return                                       # ignored there (section 3.1)
+        try:
+            days = cm.own_days(art)
+        except ValueError as exc:
+            raise ArticleError("syntax", str(exc)) from exc
+        if manifest.comment_days is not None and days > manifest.comment_days:
+            raise ArticleError("permission", "an entry's Comment-Days is longer than the "
+                                             "group's comment_days")
+        return
+    if manifest.type == "channel" or thread_root is None:
+        return
+    try:
+        root = thread_root(refs[0])
+    except ArticleError:                     # was here, now gone: neither rule (4.2)
+        return
+    if root is None or root.group != art.group or root.control is not None \
+            or (root.get("References") or "").strip():
+        return
+    if cm.root_closed_by_time(root, manifest.comment_days, parse_date(art["Date"])):
+        raise ArticleError("permission", "replies to this thread have closed")
+    if thread_closed is not None and thread_closed(root) is not None:
+        raise ArticleError("permission", "replies to this thread were closed")
+
+
+def _check_comment(art: Article, manifest: Manifest, thread_root: ThreadRoot | None,
+                   thread_closed: ThreadClosed | None = None) -> None:
+    """UN-RFC 0030 section 4: a reply to a thread a starter began, within its deadline
+    (the shorter of the entry's own and the group's) and not closed."""
+    from . import comments as cm
     refs = art.get("References", "").split()
     if not refs:
         raise ArticleError("permission", "only the channel's posters start threads; "
@@ -969,7 +1024,7 @@ def _check_comment(art: Article, manifest: Manifest, thread_root: ThreadRoot | N
         raise ArticleError("later", "the thread is not on this node yet")
     if root.group != art.group or root.control is not None or root.get("References", "").strip():
         raise ArticleError("permission", "not a comment on a thread in this channel")
-    if manifest.comment_days is not None:
-        limit = parse_date(root["Date"]) + timedelta(days=manifest.comment_days)
-        if parse_date(art["Date"]) > limit:
-            raise ArticleError("permission", "comments on this thread have closed")
+    if cm.root_closed_by_time(root, manifest.comment_days, parse_date(art["Date"])):
+        raise ArticleError("permission", "comments on this thread have closed")
+    if thread_closed is not None and thread_closed(root) is not None:
+        raise ArticleError("permission", "comments on this thread were closed")

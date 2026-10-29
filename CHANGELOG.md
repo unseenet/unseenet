@@ -27,6 +27,29 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
     that one becomes the default: new groups and your inbox go there. Creating a group
     and setting up your inbox no longer fail while the default is down; they use the
     next node that answers. A new event, `default-node-changed`, tells front ends.
+- **An entry's own time for comments, and closing comments on one entry** (#732, the
+  UN-RFC 0030 amendment):
+  - Whoever starts a thread can give it a shorter time for comments than the group's,
+    from none (`0`) up to the group's `comment_days` (`Comment-Days`, an outer header in
+    closed groups). The thread's deadline is the shorter of the two; an edit of the
+    root can shorten it, never lengthen it.
+  - The entry's author, the owner and moderators can close comments on one entry, with
+    a short note for readers, and open them again (`comments-close`/`comments-open`).
+    The author can close and open their own, but not open what the owner or a moderator
+    closed. Reactions are not touched by either.
+  - `comment_days` can now be set in open, moderated and closed groups too, not only
+    channels - there it limits replies in a thread - and never in inboxes or local
+    groups. Reactions close with the group's `comment_days` in every group that sets it.
+  - Nodes reject a root whose own time is longer than the group's, an edit that would
+    lengthen it, and replies past the deadline or in a closed thread (when they hold
+    the root); a close that arrives before its entry is "try later", as a comment is.
+  - Session: `post(comment_days=)`, `edit(comment_days=)`, `comments_state`,
+    `close_comments`, and `write_permission` answering `comments_closed` with the
+    reason and the note. Local API: `comment_days` on post, edit and creating a group,
+    `comments` and `may_close_comments` on a thread's row, and
+    `POST /api/groups/<id>/comments` (UN-RFC 0046 section 4.24). CLI: `post
+    --comment-days`, `comments-close`, `comments-open`, and `group create
+    --comment-days` for every type.
 
 - **UN-RFC status means what UN-RFC 0000 says** (#738): five documents (0047, 0052-0055)
   said `Status: Accepted`, which is not a status. The maintainer's acceptance agrees to a

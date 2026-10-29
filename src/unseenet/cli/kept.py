@@ -1,4 +1,4 @@
-"""`unseenet pin`, `pins`, `page-put`, `page-remove`, `pages`, `feed-start`, `site-start`.
+"""`unseenet pin`, `pins`, `comments-close`, `comments-open`, `page-put`, `page-remove`, `pages`, `feed-start`, `site-start`.
 
 Belongs here: pinning posts (UN-RFC 0033), writing and listing the pages of a site
 (UN-RFC 0035), and starting a personal feed or site (UN-RFC 0029 section 2.1) - all
@@ -34,6 +34,22 @@ async def c_pin(app: App, args) -> None:
         sys.exit(f"Not done: {exc}")
     what = "Unpinned" if getattr(args, "unpin", False) else "Pinned"
     emit(args, f"{what} {args.message_id} ({mid})", {"marker": mid, "unpin": bool(getattr(args, "unpin", False))})
+
+
+async def c_comments(app: App, args) -> None:
+    """``unseenet comments-close GROUP MSGID [--note TEXT]`` / ``comments-open GROUP
+    MSGID``: close comments on an entry, or open them again (UN-RFC 0030 section 3.2)."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    reopen = args.cmd == "comments-open"
+    try:
+        await _read(s, args.group)
+        mid = await s.close_comments(args.group, args.message_id,
+                                     getattr(args, "note", None) or "", reopen=reopen)
+    except (SessionError, ValueError) as exc:
+        sys.exit(f"Not done: {exc}")
+    what = "Opened comments on" if reopen else "Closed comments on"
+    emit(args, f"{what} {args.message_id} ({mid})", {"marker": mid, "open": reopen})
 
 
 async def c_pins(app: App, args) -> None:
@@ -195,5 +211,5 @@ async def c_site_start(app: App, args) -> None:
     await _start(app, args, "site")
 
 
-__all__ = ['c_pin', 'c_pins', 'c_page_put', 'c_site_publish', 'c_page_remove', 'c_pages', 'c_feed_start',
+__all__ = ['c_pin', 'c_pins', 'c_comments', 'c_page_put', 'c_site_publish', 'c_page_remove', 'c_pages', 'c_feed_start',
            'c_site_start', '_read', '_start', '_local_images']

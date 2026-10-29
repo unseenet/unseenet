@@ -596,6 +596,17 @@ class ReadingMixin:
             entry.setdefault("cancels", {}).setdefault(ctl[1], {
                 "by": art["Author-Key"], "date": art.get("Date", "")})
             return None
+        if ctl and ctl[0] in ("comments-close", "comments-open") and len(ctl) == 2:
+            # whose markers count is worked out when asked (kept.py, UN-RFC 0030 3.2)
+            try:
+                when = int(parse_date(art["Date"]).timestamp())
+                replaces = parse_supersedes(art, control_ok=True)
+            except (ArticleError, TypeError, ValueError):
+                return None
+            entry.setdefault("comment_markers", {})[art.message_id] = {
+                "target": ctl[1], "action": ctl[0], "by": art["Author-Key"], "date": when,
+                "supersedes": replaces, "note": art.body.strip()[:256]}
+            return None
         if ctl and ctl[0] in ("pin", "unpin") and len(ctl) == 2:
             # whose pins count is worked out from the manifest when shown (kept.py)
             try:
@@ -620,6 +631,12 @@ class ReadingMixin:
             msg.date = parse_date(art["Date"])
         except (TypeError, ValueError):
             pass
+        if not msg.references and art.get("Comment-Days") is not None:   # UN-RFC 0030 3.1
+            from ...core import comments as cm
+            try:
+                msg.comment_days = cm.own_days(art)
+            except ValueError:
+                pass
         if art.get("Encrypted", "").strip() in INBOX_SCHEMES:
             msg.encrypted = msg.private = True
             self._open_private(msg, art, group_id)

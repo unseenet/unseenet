@@ -351,9 +351,35 @@ class PostingMixin:
             raise lost                             # no node of yours could be reached
         raise SessionError(f"rejected by node: {text}")
 
+    def _comment_days_header(self, group_id: str, days: int | None, references) -> list:
+        """``Comment-Days`` for a new thread (UN-RFC 0030 3.1): checked, and left out when
+        it says what the group says anyway. An outer header in a closed group."""
+        if days is None:
+            return []
+        if references:
+            raise SessionError("only a new thread has its own time for comments")
+        from ...core import comments as cm
+        from ...core.groups import COMMENT_DAYS_TYPES
+        data = self.manifest_data(group_id)
+        gtype = data.get("type") or self.group_entry(group_id).get("type")
+        if gtype not in COMMENT_DAYS_TYPES or data.get("local") \
+                or (gtype == "channel" and data.get("comments") != "open"):
+            raise SessionError("this group takes no comments to give a time to")
+        try:
+            days = cm.parse_days(days)
+        except ValueError as exc:
+            raise SessionError(str(exc)) from exc
+        group_days = data.get("comment_days")
+        if isinstance(group_days, int):
+            if days > group_days:
+                raise SessionError(f"at most the group's {group_days} days")
+            if days == group_days:
+                return []
+        return [(cm.HEADER, str(days))]
+
     async def edit(self, msg: Message, subject: str, body: str,
                    content_type: str | None = None, files=None,
-                   tags=None, languages=None) -> str:
+                   tags=None, languages=None, comment_days: int | None = None) -> str:
         """Post a new version of your own post or chat line (UN-RFC 0042 section 4.3):
         same group, kind and place in its thread, naming every earlier version.
 
@@ -377,10 +403,17 @@ class PostingMixin:
             tags = self.tags_to_keep(msg)
         if languages is None:
             languages = list(getattr(msg, "languages", ()) or ()) or None
+        if comment_days is not None:              # only shorter (UN-RFC 0030 section 3.1)
+            if msg.references:
+                raise SessionError("only a new thread has its own time for comments")
+            state = self.comments_state(msg.group, msg.message_id)
+            before = state["own_days"] if state["own_days"] is not None else state["group_days"]
+            if before is not None and comment_days > before:
+                raise SessionError("an edit can shorten the time for comments, not lengthen it")
         return await self.post(msg.group, subject, body, references=original.references or None,
                                kind=msg.kind, content_type=content_type or msg.content_type or None,
                                supersedes=versions, files=files or None,
-                               tags=tags, languages=languages)
+                               tags=tags, languages=languages, comment_days=comment_days)
 
     @staticmethod
     def _versions_to_name(msg: Message) -> list[str]:
@@ -512,8 +545,12 @@ class PostingMixin:
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
                    from_name: str | None = None, files=None, origin: dict | None = None,
-                   tags=None, languages=None) -> str:
+                   tags=None, languages=None, comment_days: int | None = None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
+
+        ``comment_days``: a new thread's own time for comments, from 0 (none) up to the
+        group's ``comment_days`` (UN-RFC 0030 section 3.1); written only when it differs
+        from the group's. Not for replies.
 
         ``extra`` are more headers, for a program's own (``X-``, ``Gateway-*``,
         UN-RFC 0046 section 4.9); ``from_name`` replaces your display name.
@@ -551,6 +588,7 @@ class PostingMixin:
             tag_header = [tag_header] if tag_header else []
         edit_header = [("Supersedes", " ".join(supersedes))] if supersedes else []   # 0042
         edit_header += list(extra or [])
+        edit_header += self._comment_days_header(group_id, comment_days, references)
         if origin:
             from ...core import origins
             try:

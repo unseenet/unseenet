@@ -77,6 +77,128 @@ class KeptMixin:
         self.save()
         return mid
 
+    # --- comments on one entry (UN-RFC 0030 sections 3.1-3.3) ---
+    def _comment_markers(self, group_id: str):
+        from ...core import pins as pn
+        return [pn.Marker(mid, m["target"], m["action"], m["by"], int(m["date"]),
+                          tuple(m.get("supersedes") or ()))
+                for mid, m in self.group_entry(group_id).get("comment_markers", {}).items()]
+
+    def _thread_versions(self, group_id: str, root_id: str) -> list:
+        """The thread root ``root_id`` (its first version) and its edits, as read."""
+        return [m for m in self.cache.get(group_id, {}).values()
+                if m.message_id == root_id or root_id in (m.supersedes or ())]
+
+    def comment_root(self, group_id: str, message_id: str) -> str:
+        """The Message-ID comments name for a thread root shown as ``message_id`` (an
+        edit names its first version last, UN-RFC 0042). SessionError for a reply."""
+        mid = message_id if message_id.startswith("<") else f"<{message_id}>"
+        msg = self.find_message(group_id, mid)
+        if msg is None:
+            return mid
+        if msg.references:
+            raise SessionError("comments are closed and opened on a thread's first post")
+        return msg.supersedes[-1] if msg.supersedes else msg.message_id
+
+    def comments_state(self, group_id: str, message_id: str,
+                       now: datetime | None = None) -> dict:
+        """Whether a thread takes comments now (UN-RFC 0030): ``{"open", "reason",
+        "until", "note", "by", "own_days", "group_days"}`` - ``reason`` ``"deadline"`` or
+        ``"closed"`` when not open, ``until`` when comments close (None: no deadline),
+        ``note`` and ``by`` of a close, ``own_days`` the entry's own Comment-Days."""
+        from ...core import comments as cm
+        from ...core.groups import COMMENT_DAYS_TYPES
+        data = self.manifest_data(group_id)
+        out = {"open": True, "reason": None, "until": None, "note": "", "by": None,
+               "own_days": None, "group_days": None}
+        gtype = data.get("type") or self.group_entry(group_id).get("type")
+        if gtype not in COMMENT_DAYS_TYPES or data.get("local"):
+            return out
+        root_id = self.comment_root(group_id, message_id)
+        versions = self._thread_versions(group_id, root_id)
+        root = next((m for m in versions if m.message_id == root_id), None)
+        dates = [m.date for m in versions if m.date is not None]
+        group_days = data.get("comment_days") if isinstance(data.get("comment_days"), int) else None
+        own = cm.shorter(*(m.comment_days for m in versions))
+        if gtype == "channel" and data.get("comments") != "open":
+            own = None                                   # ignored there (section 3.1)
+        out.update(own_days=own, group_days=group_days)
+        if dates:
+            out["until"] = cm.deadline(min(dates), group_days, own)
+            if cm.closed_by_time(now or datetime.now(timezone.utc), min(dates), group_days, own):
+                out.update(open=False, reason="deadline")
+                return out
+        elif own == 0:
+            out.update(open=False, reason="deadline")
+            return out
+        author = (root or (versions[0] if versions else None))
+        if author is None or not data.get("owner"):
+            return out
+        close = cm.deciding_close(self._comment_markers(group_id), root_id, author.author_key,
+                                  {data["owner"], *data.get("moderators", [])})
+        if close is not None:
+            note = self.group_entry(group_id).get("comment_markers", {}) \
+                .get(close.message_id, {}).get("note", "")
+            out.update(open=False, reason="closed", note=note, by=close.author_key)
+        return out
+
+    def may_close_comments(self, group_id: str, message_id: str) -> bool:
+        """Whether you may close or open comments on this entry: its author, the owner or
+        a moderator, in a group that has comments to close."""
+        from ...core.groups import COMMENT_DAYS_TYPES
+        data = self.manifest_data(group_id)
+        if (data.get("type") or self.group_entry(group_id).get("type")) not in COMMENT_DAYS_TYPES \
+                or data.get("local"):
+            return False
+        try:
+            root_id = self.comment_root(group_id, message_id)
+        except SessionError:
+            return False
+        root = next((m for m in self._thread_versions(group_id, root_id)
+                     if m.message_id == root_id), None)
+        me = self.identity().key_text
+        if root is None:                     # not read back yet: one you just posted
+            return self.moderates_or_owns(group_id) or root_id in self.data.get("mine", [])
+        return self.moderates_or_owns(group_id) or root.author_key == me
+
+    async def close_comments(self, group_id: str, message_id: str, note: str = "", *,
+                             reopen: bool = False) -> str:
+        """Close comments on an entry (or open them again, ``reopen=True``) with an
+        optional note for readers (UN-RFC 0030 section 3.2): its author, the owner or a
+        moderator. The marker names the one it replaces in its chain - the author's own,
+        or the owner's and moderators'. Returns its Message-ID."""
+        from ...core import comments as cm
+        from ...core import pins as pn
+        if not self.may_close_comments(group_id, message_id):
+            raise SessionError("only the entry's author, the owner or a moderator can close "
+                               "or open its comments")
+        data = self.manifest_data(group_id)
+        if data.get("type") == "closed" and note.strip():
+            raise SessionError("in a closed group a close has no note: nodes can read it")
+        root_id = self.comment_root(group_id, message_id)
+        me = self.identity()
+        privileged = {data.get("owner"), *data.get("moderators", [])}
+        chain = privileged if me.key_text in privileged else {me.key_text}
+        markers = self._comment_markers(group_id)
+        now = pn.current([m for m in markers if m.target == root_id], chain).get(root_id)
+        if reopen and me.key_text not in privileged:
+            held = cm.deciding_close(markers, root_id, me.key_text, privileged)
+            if held is not None and held.author_key in privileged:
+                raise SessionError("the owner or a moderator closed it: only they can open it")
+        try:
+            art = cm.marker_article(me, group_id, root_id, close=not reopen, note=note,
+                                    replaces=[now.message_id] if now else (),
+                                    pow_bits=await self.required_pow(group_id))
+        except ValueError as exc:
+            raise SessionError(str(exc)) from exc
+        mid = await self.post_article(art, sign_with=me)
+        self.group_entry(group_id).setdefault("comment_markers", {})[mid] = {
+            "target": root_id, "action": cm.OPEN if reopen else cm.CLOSE, "by": me.key_text,
+            "date": int(parse_date(art["Date"]).timestamp()),
+            "supersedes": [now.message_id] if now else [], "note": note.strip()}
+        self.save()
+        return mid
+
     # --- sites (UN-RFC 0035) ---
     def _page_versions(self, group_id: str):
         from ...core import pages as pg

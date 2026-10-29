@@ -124,6 +124,12 @@ CREATE TABLE IF NOT EXISTS markers (          -- pins and unpins (UN-RFC 0033), 
 CREATE INDEX IF NOT EXISTS markers_group ON markers(group_id);
 CREATE INDEX IF NOT EXISTS markers_target ON markers(target);
 
+CREATE TABLE IF NOT EXISTS root_days (        -- UN-RFC 0030 3.1: Comment-Days an edit shortened
+    root       TEXT PRIMARY KEY,                -- the thread root's first version
+    group_id   TEXT NOT NULL,
+    days       INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS blob_refs (        -- UN-RFC 0027 7.1: which articles reference a blob
     message_id TEXT NOT NULL,
     blob_id    TEXT NOT NULL,

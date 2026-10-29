@@ -31,7 +31,7 @@ COMMANDS = {
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
-    "pin": c_pin, "pins": c_pins, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
+    "pin": c_pin, "pins": c_pins, "comments-close": c_comments, "comments-open": c_comments, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
     "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
     "timeline": c_timeline, "rules": c_rules, "thread": c_thread, "address": c_address, "open": c_open,
@@ -155,6 +155,9 @@ def client_main(argv=None) -> None:
     s.add_argument("--attach", action="append", metavar="FILE",
                    help="a file to post with it, up to 4 (UN-RFC 0027); pictures are saved "
                         "again without their metadata (GPS, time, camera)")
+    s.add_argument("--comment-days", type=int, metavar="DAYS",
+                   help="a new thread's own time for comments, 0 (none) up to the group's "
+                        "(UN-RFC 0030); with --edit: shorter only")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
     s.add_argument("--origin-network", metavar="NAME",
@@ -174,6 +177,13 @@ def client_main(argv=None) -> None:
     s.add_argument("message_id", help="the post's Message-ID")
     s.add_argument("emoji", help="one emoji the group takes, e.g. 👍")
     s.add_argument("--who", action="store_true", help="list who gave this emoji instead")
+    for name, what in (("comments-close", "close"), ("comments-open", "open again")):
+        s = sub.add_parser(name, help=f"the entry's author, the owner or a moderator: {what} "
+                                      "comments on one entry or thread (UN-RFC 0030)")
+        s.add_argument("group")
+        s.add_argument("message_id", help="the thread's first post")
+        if name == "comments-close":
+            s.add_argument("--note", help="a short note for readers, e.g. why")
     s = sub.add_parser("pins", help="the posts pinned in a group")
     s.add_argument("group")
     s = sub.add_parser("page-put", help="write a page of a site (UN-RFC 0035)")

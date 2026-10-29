@@ -93,7 +93,8 @@ async def c_post(app: App, args) -> None:
             # --tag/--lang replace the post's own; left out, they are kept (#733)
             msgid = await s.edit(target, args.subject or target.subject, body, ctype,
                                  tags=getattr(args, "tag", None),
-                                 languages=getattr(args, "lang", None))
+                                 languages=getattr(args, "lang", None),
+                                 comment_days=getattr(args, "comment_days", None))
         else:
             perm = s.write_permission(group, reply_to=parent, kind=kind)
             if not perm:
@@ -111,6 +112,7 @@ async def c_post(app: App, args) -> None:
                                  references=[*parent.references, parent.message_id] if parent else None,
                                  kind=kind, content_type=ctype, files=files, origin=origin,
                                  tags=getattr(args, "tag", None),
+                                 comment_days=getattr(args, "comment_days", None),
                                  languages=(getattr(args, "lang", None)       # else from the text (#686)
                                             or s.suggest_languages(group, text=f"{subject}\n{body}",
                                                                    kind=kind)[0] or None))
