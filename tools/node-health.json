@@ -1,6 +1,6 @@
 {
   "canaries": {
-    "date": "2026-10-28",
+    "date": "2026-10-29",
     "posted": [
       "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a",
       "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka",
@@ -10,34 +10,19 @@
   },
   "key_bound": {
     "ed25519:bulo5resazfbqmewywp7djguxghmbixpiwr6fert4xgt4ymbqu4a": {
-      "date": "2026-10-28",
+      "date": "2026-10-29",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node1"
     },
     "ed25519:gh7y6uk2fe2zlzvai5qriq7m6jsgk57aoi3jfkhookv7v4pd7hka": {
-      "date": "2026-10-28",
+      "date": "2026-10-29",
       "lacking": [],
       "over": false,
       "reference": "unseenet-node2"
     },
-    "ed25519:ppdz4ubrcxwklyysv2x6qrmp5rbyahfbmpty6oqu7zkehswxwrya": {
-      "date": "2026-10-28",
-      "lacking": [
-        "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
-        "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
-        "55db29ee9a0c0023cb9f94b35e1d6b2a6e0f2eec6a1e57fe1bdd389d9b429b19",
-        "62ee27e34218ff476bfacd0096a56db7b6dad9fa25d329167c3e3db8674e1d50",
-        "8b7323a6ae8228c0033b75ba8704e7302fb1f7163c838f5352ec784f364cf007",
-        "c7aef03884eb6fd18620a2fc605a2d742fb1733c1b5617b7fb83c8545dd09c2f",
-        "dc5c14edf1bfeb05ab16302ee793fc217c6aa1458ec5872ac5b997314b2f0f70",
-        "fbcf3833ce2d98ad34430c020470e6119b7b4cbc43a7af18b91c253caede6e60"
-      ],
-      "over": false,
-      "reference": "unseenet-node1"
-    },
     "ed25519:qkuxmeeiq5tano23nvdf3nmng6o3rfgcxdrc6z2fhvsx474mh5tq": {
-      "date": "2026-10-28",
+      "date": "2026-10-29",
       "lacking": [
         "0b1fe4b5694d61bb9748470e7cdc37ce07c8b8bbcf925c1b6e57235957f64747",
         "396764c360b238a2fe10bd166e96149f20dcdab1256800aaca830410d41b5413",
