@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A used copy code says so** (#757): the lookup takes the meeting off the node, so when
+  the copy then failed, trying the same code again said *No device is waiting with this
+  code. Check the code* - about a code that was right. A failed copy now ends with *This
+  code has been used ... Start again on the other device for a new code*, and a second
+  try with it says the same at once.
+
 ### Changed
 
 - **Development builds count on from a fix release** (`tools/dev_version.py`): with v0.6.1
