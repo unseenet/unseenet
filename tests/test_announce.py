@@ -61,3 +61,44 @@ def test_a_too_long_section_becomes_its_lead(monkeypatch):
 
 def test_people_read_markdown_programs_read_plain():
     assert announce.MARKDOWN_POSTS == ("release", "message")
+
+
+# The other repositories' releases (announce-repos.yml)
+def _rel(tag, at, **kw):
+    return {"tag_name": tag, "published_at": at, "html_url": f"https://github.com/unseenet/x/releases/tag/{tag}",
+            "body": f"Notes for {tag} (#12).", **kw}
+
+
+def _fetch(path):
+    if "/actions/workflows/" in path:
+        return {"workflow_runs": [{"run_started_at": "2026-10-29T10:00:00Z"}]}
+    if path.startswith("/repos/unseenet/unseenet-gui/"):
+        return [_rel("v0.3.1", "2026-10-29T15:57:29Z"), _rel("v0.3.0", "2026-10-29T10:58:43Z"),
+                _rel("v0.2.0", "2026-10-25T12:52:17Z"), _rel("v0.4.0a1", "2026-10-29T12:00:00Z"),
+                _rel("v0.4.0", "2026-10-29T12:00:00Z", draft=True)]
+    if path.startswith("/repos/unseenet/unseenet-entrance/"):
+        return [_rel("web-20261029.1904", "2026-10-29T19:05:05Z"),
+                _rel("dev", "2026-10-29T13:00:00Z", prerelease=True)]
+    if path.startswith("/repos/unseenet/unseenet-portable/"):
+        return [_rel("v0.6.3.post1", "2026-10-29T19:18:36Z")]
+    return []
+
+
+def test_other_releases_only_stable_ones_in_the_window():
+    since = announce.default_since(_fetch)
+    assert since == "2026-10-29T10:00:00Z"
+    got = announce.new_releases(since, fetch=_fetch, until="2026-10-29T19:00:00Z")
+    assert [(r, x["tag_name"]) for r, x in got] == [("unseenet-gui", "v0.3.0"), ("unseenet-gui", "v0.3.1")]
+    got = announce.new_releases(since, latest_only=True, fetch=_fetch)
+    assert [(r, x["tag_name"]) for r, x in got] == [("unseenet-gui", "v0.3.1"), ("unseenet-portable", "v0.6.3.post1")]
+
+
+def test_other_release_post_has_the_same_frame_and_links_its_own_issues():
+    subject, body = announce.repo_release_post("unseenet-gui", _rel("v0.3.1", "2026-10-29T15:57:29Z"))
+    assert subject == "Unseenet graphical client 0.3.1 released"
+    assert body.startswith("# Unseenet graphical client 0.3.1\n\nNotes for v0.3.1")
+    assert "[#12](https://github.com/unseenet/unseenet-gui/issues/12)" in body
+    assert "## Get it" in body and "/unseenet-gui/blob/v0.3.1/CHANGELOG.md" in body
+    tree = markup.body(body, markup.MARKDOWN_TYPE, "post")
+    assert "https://github.com/unseenet/unseenet-gui/issues/12" in json.dumps(tree)
+    assert [n["n"] for n in tree if n.get("t") == "h"] == [1, 2]
