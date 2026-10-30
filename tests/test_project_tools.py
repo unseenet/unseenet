@@ -110,7 +110,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert "portals" not in v.data["groups"][talk]["manifest"]        # none, left out
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
-                if e.get("owner")}) == 22
+                if e.get("owner")}) == 30
 
     async def as_published_before(gid, change):
         """Put a newer manifest on the node, as an older script would have made it."""
