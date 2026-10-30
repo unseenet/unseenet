@@ -11,7 +11,7 @@ LONG = " ".join(f"Sentence number {i} is here." for i in range(60))
 def test_cut_at_a_sentence_with_a_mark():
     p = mk.preview(LONG, lines=3, width=40)
     assert p["cut"] and not p["read_more"]
-    assert p["text"].endswith(". …") and len(p["text"]) <= 3 * 40 + 2
+    assert p["text"].endswith("is here.") and len(p["text"]) <= 3 * 40
     assert p["tree"] and p["tree"][0]["t"] == "p"
 
 
@@ -60,7 +60,7 @@ async def test_the_local_api_gives_each_feed_row_its_cut(tmp_path, monkeypatch):
     await owner.fetch_group(gid)
     rows = api.group(gid, preview=(6, 3, 60))["rows"]
     top, comment = rows[0], rows[1]
-    assert top["depth"] == 0 and top["preview"]["cut"] and top["preview"]["text"].endswith("…")
+    assert top["depth"] == 0 and top["preview"]["cut"] and top["preview"]["text"].endswith(".")
     assert comment["depth"] == 1 and comment["preview"]["text"].startswith("Sentence number 0")
     assert len(comment["preview"]["text"]) < len(top["preview"]["text"])          # a shorter cut
     assert all("preview" not in r for r in api.group(gid)["rows"])                 # only when asked

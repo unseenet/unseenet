@@ -236,7 +236,8 @@ def preview(text: str, content_type: str | None = None, kind: str = "post", line
     normal cut applies. Only a little more than the cut (``LITTLE`` lines) is shown
     whole. The cut ends at a sentence or a word, never inside a link, a code block or a
     table. ``quotes`` False: what the text starts by quoting is left out of the preview
-    (a comment's own words first). A chat line (``kind`` chat) is never cut."""
+    (a comment's own words first). A chat line (``kind`` chat) is never cut. No mark is
+    added: each client shows ``cut`` its own way ("… more", "… [more]")."""
     def done(shown: str, cut: bool, more: bool) -> dict:
         return {"text": shown, "cut": cut, "read_more": more,
                 "tree": body(shown, content_type, KIND_POST)}
@@ -277,11 +278,11 @@ def preview(text: str, content_type: str | None = None, kind: str = "post", line
         elif lines - used > 0 and line.strip():
             part = _cut_line(line, (lines - used) * width)
             if part.strip():
-                out.append(part.rstrip() + " …")
+                out.append(part.rstrip())
         break
     shown = "\n".join(out).rstrip()
     if not shown.strip():                              # a long first block: its start
-        shown = _cut_line(text.split("\n", 1)[0], lines * width).rstrip() + " …"
+        shown = _cut_line(text.split("\n", 1)[0], lines * width).rstrip()
     return done(shown, True, False)
 
 
