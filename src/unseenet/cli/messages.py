@@ -85,6 +85,7 @@ async def c_post(app: App, args) -> None:
         for f in files:
             if f.note:
                 print(f"Note: {f.note}", file=sys.stderr)
+        card = await _card_for(s, args, body)                       # UN-RFC 0059
         if target is not None:
             if not s.may_edit(target):
                 sys.exit("You can only edit your own posts (and not past their number of versions).")
@@ -94,7 +95,9 @@ async def c_post(app: App, args) -> None:
             msgid = await s.edit(target, args.subject or target.subject, body, ctype,
                                  tags=getattr(args, "tag", None),
                                  languages=getattr(args, "lang", None),
-                                 comment_days=getattr(args, "comment_days", None))
+                                 comment_days=getattr(args, "comment_days", None),
+                                 card=(None if getattr(args, "no_card", False)
+                                       else card if card is not None else ...))
         else:
             perm = s.write_permission(group, reply_to=parent, kind=kind)
             if not perm:
@@ -111,6 +114,7 @@ async def c_post(app: App, args) -> None:
             msgid = await s.post(group, "" if kind == KIND_CHAT else subject, body,
                                  references=[*parent.references, parent.message_id] if parent else None,
                                  kind=kind, content_type=ctype, files=files, origin=origin,
+                                 card=card,
                                  tags=getattr(args, "tag", None),
                                  comment_days=getattr(args, "comment_days", None),
                                  languages=(getattr(args, "lang", None)       # else from the text (#686)
@@ -119,10 +123,63 @@ async def c_post(app: App, args) -> None:
     except SessionError as exc:
         sys.exit(f"Not posted: {exc}")
     what = "Edited" if target is not None else "Posted"
-    text = f"{what} {msgid}" + (f" with {len(files)} file(s)" if files else "")
+    text = f"{what} {msgid}" + (f" with {len(files)} file(s)" if files else "") \
+        + (f" and a card for {card.url}" if card is not None else "")
     emit(args, text, {"message_id": msgid, "edited": target is not None,
+                      "card": card.url if card is not None else None,
                       "files": [{"name": f.name, "type": f.media_type, "size": len(f.octets),
                                  "note": f.note} for f in files]})
+
+
+async def _card_for(s, args, body: str):
+    """The link card ``post`` sends (UN-RFC 0059): none unless ``--card`` is given - a
+    script should not reach the web unasked. ``--card`` alone: for the first link in the
+    text; ``--card URL``: for that one. ``--card-title`` and ``--card-desc`` change what the
+    page says, ``--card-no-picture`` leaves its picture out. A page that gives no title
+    and no ``--card-title``: no card, with a note."""
+    from ..client.session import SessionError
+    wanted = getattr(args, "card", None)
+    if not wanted or getattr(args, "no_card", False):
+        return None
+    url = s.card_url(body) if wanted == "first" else wanted
+    if not url:
+        raise SessionError("--card: the text has no link a card is made for")
+    draft = await s.make_card(url)
+    if getattr(args, "card_title", None):
+        draft.title = args.card_title
+    if getattr(args, "card_desc", None) is not None:
+        draft.desc = args.card_desc
+    if getattr(args, "card_no_picture", False):
+        draft.picture = None
+    if draft.note:
+        print(f"Note: {draft.note}", file=sys.stderr)
+    if not draft.title.strip():
+        print("Note: no card - the page gave no title; add --card-title.", file=sys.stderr)
+        return None
+    return draft
+
+
+async def c_card(app: App, args) -> None:
+    """``unseenet card URL``: the link card a post with this link would get (UN-RFC 0059),
+    made over Tor - to see it before posting with ``post --card``."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        draft = await s.make_card(args.url)
+    except SessionError as exc:
+        sys.exit(f"No card: {exc}")
+    d = draft.to_dict()
+    pic = d["picture"]
+    text = "\n".join(line for line in (
+        f"{d['domain']}" + (f" · {d['site']}" if d["site"] else "")
+        + ("  (may look like another domain!)" if d["domain_confusable"] else ""),
+        d["title"] or "(no title)", d["desc"],
+        "Icon: " + ("yes" if d["icon"] else "none"),
+        "Picture: " + (f"{pic['type']}, {pic['dim'][0]}x{pic['dim'][1]}, {pic['size'] // 1024} KiB"
+                       if pic and pic.get("dim") else "none"),
+        f"Note: {d['note']}" if d["note"] else "") if line)
+    emit(args, text, {k: v for k, v in d.items() if k not in ("icon", "picture")}
+         | {"icon": bool(d["icon"]), "picture": bool(pic)})
 
 
 async def c_read(app: App, args) -> None:
@@ -154,10 +211,14 @@ async def c_read(app: App, args) -> None:
                      "subject": msg.subject, "date": msg.date.isoformat() if msg.date else None,
                      "references": list(msg.references), "kind": msg.kind,
                      "page": msg.page, "blobs": list(msg.blobs), "readable": msg.readable,
-                     "body": msg.body})
+                     "body": msg.body,
+                     "card": ({k: v for k, v in msg.card.to_dict().items() if k != "icon"}
+                              if msg.card else None)})          # UN-RFC 0059
     text = "\n".join(f"\n{'  ' * r['depth']}{r['subject'] or r['body'].strip()[:60]}\n"
                      f"    From: {r['from']} ({r['author']})\n    Date: {r['date']}\n"
                      f"    Message-ID: {r['message_id']}"
+                     + (f"\n    Link: {r['card']['domain']} - {r['card']['title']}"
+                        if r["card"] else "")
                      + ("\n    " + "  ".join(f"{e} {n}" for e, n in r["reactions"].items())
                         if r["reactions"] else "") for r in rows) or "No posts."
     emit(args, text, {"group": args.group, "posts": rows})
@@ -192,4 +253,4 @@ async def c_react(app: App, args) -> None:
              {"message_id": mid, "taken_back": False})
 
 
-__all__ = ['c_withdraw', 'c_post', 'c_read', 'c_react']
+__all__ = ['c_withdraw', 'c_post', 'c_read', 'c_react', 'c_card']

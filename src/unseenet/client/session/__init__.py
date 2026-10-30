@@ -224,6 +224,7 @@ class Message:
     page_removed: bool = False            # ... a removal of that path
     blobs: tuple = ()                     # the blob IDs it carries (UN-RFC 0027, Blobs)
     attachments: tuple = ()               # ... as shown: blob, type, size, name, alt, dim (4.2)
+    card: object | None = None            # its link card, checked (UN-RFC 0059): core.cards.Card
     # first published elsewhere (UN-RFC 0049 section 4): the network, its date (the
     # author's or gateway's claim), the other network's ID and author
     origin_network: str = ""
@@ -292,6 +293,8 @@ class Message:
             "supersedes": list(self.supersedes), "edited": _iso(self.edited),
             "versions": list(self.versions),
             "attachments": [dict(a) for a in self.attachments],
+            # UN-RFC 0059: the link card, its picture being the attachment marked "card"
+            "card": self.card.to_dict() if self.card else None,
             # UN-RFC 0049: where it was first published, and whether it is old on arrival
             "origin": ({"network": self.origin_network, "date": _iso(self.origin_date),
                         "id": self.origin_id or None, "from": self.origin_from or None,
@@ -480,9 +483,10 @@ from .reports import ReportsMixin  # noqa: E402
 from .content_labels import ContentLabelsMixin  # noqa: E402
 from .teams import TeamsMixin  # noqa: E402
 from .group_emoji import GroupEmojiMixin  # noqa: E402
+from .cards import CardsMixin, CardDraft  # noqa: E402,F401
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

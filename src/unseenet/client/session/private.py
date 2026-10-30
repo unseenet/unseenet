@@ -242,8 +242,8 @@ class PrivateMixin:
                            anonymous: bool = False, content_type: str | None = None,
                            kind: str = KIND_POST, remember: bool = True,
                            extra: list[tuple[str, str]] | None = None, files=None,
-                           as_team: str | None = None) -> str:
-        """Send a message to an inbox. Only its owner can read it.
+                           as_team: str | None = None, card=None) -> str:
+        """Send a message to an inbox. ``card``: a link card (UN-RFC 0059), inside. Only its owner can read it.
 
         ``kind`` is ``"post"`` (a subject, read on its own, answered with a quote)
         or ``"chat"`` (a line in a running conversation, no subject) - UN-RFC 0028.
@@ -281,7 +281,7 @@ class PrivateMixin:
                 self.group_entry(group_id)["manifest"] = dict(m.raw)
         readers = self._team_readers_for(group_id) or None
         outer, blobs, file_bits = [], [], 0
-        files = list(files or [])
+        files, card_pic = await self._card_files(group_id, card, body, list(files or []))
         if files:
             from ...core import blobs as bl
             if not isinstance(self.manifest_data(group_id).get("attachments"), dict):
@@ -294,6 +294,7 @@ class PrivateMixin:
                 (self.manifest_data(group_id).get("attachments") or {}).get("max_size"))
             inner = list(inner or []) + inner_files
             file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
+        inner = list(inner or []) + self._card_header(card, card_pic, files, blobs)   # 0059
         two = not readers and await self.takes_sealedbox2(group_id)   # both ends (0009, 2.3)
         copy_to = self.identity().public_key if (two and remember and not as_team) else None
 
@@ -416,7 +417,8 @@ class PrivateMixin:
             return False
         return m.kind != KIND_CHAT or not (m.sender_key or m.to_key)
 
-    async def send_chat(self, group_id: str, text: str, files=None, languages=None) -> str:
+    async def send_chat(self, group_id: str, text: str, files=None, languages=None,
+                        card=None) -> str:
         """Send a chat line (UN-RFC 0028): to a group, or to one person when
         ``group_id`` is ``contact:<key>``. No subject and no signature, unlike
         a post. ``files`` are prepared files, as for ``post()`` (UN-RFC 0028
@@ -428,10 +430,12 @@ class PrivateMixin:
             self.open_chat(group_id[len(CONTACT):])       # writing to them opens it again
             owner = crypto.key_from_text(group_id[len(CONTACT):])
             return await self.send_private(personal_inbox_id(owner), "", text,
-                                           owner_key=owner, kind=KIND_CHAT, files=files)
+                                           owner_key=owner, kind=KIND_CHAT, files=files,
+                                           card=card)
         if languages is None:
             languages = self.suggest_languages(group_id, text=text, kind="chat")[0] or None
-        return await self.post(group_id, "", text, kind=KIND_CHAT, files=files, languages=languages)
+        return await self.post(group_id, "", text, kind=KIND_CHAT, files=files, languages=languages,
+                               card=card)
 
     def private_posts(self) -> list["Message"]:
         """What the "Private posts" view shows (UN-RFC 0028 section 6.2), oldest first."""
@@ -622,6 +626,7 @@ class PrivateMixin:
         if inner.get("Team-Inbox") and inner.get("Team-Key") and sender is not None:
             msg.team_invite = {"group": inner["Team-Inbox"].strip(), "seed": inner["Team-Key"].strip()}
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
+        self._take_card(msg, inner.get)                      # UN-RFC 0059, inside
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
             msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
             msg.mention_of = (inner.get("Mention-Of") or "").strip() or None

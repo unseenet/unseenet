@@ -677,6 +677,7 @@ class ReadingMixin:
                     msg.blobs = ()
                 msg.attachments = tuple(a for a in bl.shown_attachments(art.headers)
                                         if a["blob"] in msg.blobs)
+            self._take_card(msg, art.get)                    # its link card (UN-RFC 0059)
             if art.get("Page") is not None:                  # a site's page (UN-RFC 0035)
                 msg.page = art["Page"].strip()
                 msg.page_removed = (art.get("Page-Removed") or "").strip().lower() == "yes"
@@ -698,6 +699,7 @@ class ReadingMixin:
         msg.reaction = (inner.get("Reaction") or "").strip()     # UN-RFC 0048 section 8
         msg.content_type = inner.get("Content-Type", "")
         self._encrypted_files(msg, art, inner, msg.group)    # UN-RFC 0027, 3.3 and 4.4
+        self._take_card(msg, inner.get)                      # UN-RFC 0059, inside
         if msg.content_type.startswith(prof.PRIVATE_TYPE):  # shared with the group (0022, 6)
             self._keep_private_profile(msg, msg.group)
 

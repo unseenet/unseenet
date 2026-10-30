@@ -264,6 +264,7 @@ class Identity:
                 "show_blocked": bool(s.data.get("show_blocked")), "hide_bots": s.hide_bots(),
                 "pictures": s.show_pictures(), "state_local": s.state_kept_local(),
                 "notifications": s.notification_settings(),
+                "link_cards": s.link_cards(),               # UN-RFC 0059 section 7.5
                 "report_issuer": bool(s.issuer_names())}    # UN-RFC 0045: offer publishing
 
     async def change_settings(self, data: dict) -> dict:
@@ -312,7 +313,8 @@ class Identity:
         Markdown, notices, the ripening level private senders need, blocked posts, bots."""
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
-                               "show_blocked", "hide_bots", "pictures", "notifications"}
+                               "show_blocked", "hide_bots", "pictures", "notifications",
+                               "link_cards"}
         if unknown:
             raise SessionError(f"unknown setting {sorted(unknown)[0]}")
         level = data.get("private_min_ripe")
@@ -335,6 +337,8 @@ class Identity:
             s.set_hide_bots(bool(data["hide_bots"]))
         if "pictures" in data:
             s.set_show_pictures(bool(data["pictures"]))
+        if "link_cards" in data:
+            s.set_link_cards(bool(data["link_cards"]))
         if "notifications" in data:
             n = data["notifications"] or {}
             if not isinstance(n, dict):
