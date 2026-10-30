@@ -206,10 +206,26 @@ class Groups:
         except Exception:  # noqa: BLE001 - lists not read yet
             return False
 
-    def group(self, gid: str, show_all: bool = False, limit: int | None = None) -> dict:
+    def group(self, gid: str, show_all: bool = False, limit: int | None = None,
+              preview: tuple[int, int, int] | None = None) -> dict:
         """``GET /api/groups/{gid}`` (section 4.3): one group as a client shows it - its
         head (title, view, roles, charter, write permission) and its rows, threaded or as a chat,
-        each with whether you may reply. Also the pseudo-groups of a contact and "for you"."""
+        each with whether you may reply. Also the pseudo-groups of a contact and "for you".
+        ``preview`` (entry lines, comment lines, width): in a feed or the timeline, each
+        readable row also gets ``preview``, the one shared cut (#781, ``markup.preview``)."""
+        out = self._group_view(gid, show_all, limit)
+        if preview and (out["group"].get("view") == "feed" or gid == TIMELINE or gid.startswith(TAGGED)):
+            entry, comment, width = preview
+            for row in out["rows"]:
+                m = row["message"]
+                if m.get("readable") and m.get("text"):
+                    # comments in a feed are chat lines (0034 4.2) but cut as replies (0031 3.2.1)
+                    row["preview"] = markup.preview(
+                        m["text"], m.get("content_type"), "post",
+                        lines=comment if row["depth"] else entry, width=width, quotes=not row["depth"])
+        return out
+
+    def _group_view(self, gid: str, show_all: bool, limit: int | None) -> dict:
         s = self._ready()
         if gid == TIMELINE:
             return self._timeline_group(s, rules=not show_all)

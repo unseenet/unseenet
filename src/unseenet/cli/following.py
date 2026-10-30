@@ -10,6 +10,7 @@ Part of ``unseenet.cli`` (see __init__.py)."""
 from __future__ import annotations
 
 from . import *  # noqa: F403  - the shared names, as when this was one file
+from ..core import markup
 from .. import cli as _c   # names tests patch on the module, read at call time
 
 
@@ -178,6 +179,9 @@ async def c_timeline(app: App, args) -> None:
         row = {"id": m.message_id, "feed": m.group, "feed_label": s.group_label(m.group),
                "author": s.label_of(m.author_key), "date": m.date.isoformat() if m.date else None,
                "subject": m.subject, "text": m.body.strip().splitlines()[0][:120] if m.body.strip() else ""}
+        if m.readable and m.body.strip():         # the shared cut, as the clients show it (#781)
+            p = markup.preview(m.body.strip(), m.content_type, "post", lines=10, width=72)
+            row.update(preview=p["text"], cut=p["cut"])
         if rules:
             row.update(score=res.score, why=res.explain())
         out.append(row)
