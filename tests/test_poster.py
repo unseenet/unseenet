@@ -185,3 +185,62 @@ async def test_a_node_without_files_refuses_the_post(tmp_path):
         result = await p.post(manifest.group, "Picture", "x", files=[("a.png", _png())])
     assert not result.ok and "carries no files" in result.refused[addr]
     server.close()
+
+
+def _card(url, picture=True):
+    """A link card as ``make_card`` gives one (UN-RFC 0059), without going to the web."""
+    from datetime import datetime, timezone
+
+    from unseenet.client import media
+    from unseenet.client.session import CardDraft
+    return CardDraft(url=url, title="Kunstig solformørkelse", desc="ESA's Proba-3",
+                     site="ESA", made=datetime(2026, 10, 30, tzinfo=timezone.utc),
+                     picture=media.card_picture(_png(1200, 630)) if picture else None)
+
+
+async def _read_back(tmp_path, addr, group):
+    from unseenet.client.session import Session
+    reader = Session(Vault.open(tmp_path / "r.vault", "pw", ops=1, mem=8192 * 1024),
+                     status=lambda *_: None)
+    reader.new_identity("r", "R")
+    reader.add_node(addr)
+    reader.subscribe(group)
+    return reader, reader.visible(await reader.fetch_group(group))
+
+
+async def test_a_link_card_goes_with_the_post(tmp_path):
+    url = "https://www.esa.int/proba-3"
+    owner, bot = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = _channel_with_files(owner, bot, {"max_size": 1048576, "types": ["image/*"]})
+    node, server, addr = await _node_with_blobs(max_size=1048576)
+    node.accept(manifest.to_bytes())
+    async with Poster(bot, [addr], tor="none", state=tmp_path / "bot.json") as p:
+        result = await p.post(manifest.group, "Proba-3", f"Fra [ESA]({url})", card=_card(url))
+    assert result.ok, result
+    reader, [msg] = await _read_back(tmp_path, addr, manifest.group)
+    try:
+        assert msg.card.url == url and msg.card.title == "Kunstig solformørkelse"
+        [att] = msg.attachments                     # the card's picture, and only in the card
+        assert att["card"] is True and msg.card.image == att["blob"]
+    finally:
+        await reader.close()
+        server.close()
+
+
+async def test_a_link_card_without_files_and_a_card_for_another_link(tmp_path):
+    url = "https://www.esa.int/proba-3"
+    owner, bot = crypto.Identity.generate(), crypto.Identity.generate()
+    manifest = _channel_with_files(owner, bot, None)          # the group takes no files
+    node, server, addr = await _node_with_blobs(max_size=1048576)
+    node.accept(manifest.to_bytes())
+    async with Poster(bot, [addr], tor="none", state=tmp_path / "bot.json") as p:
+        with pytest.raises(PosterError, match="not in the text"):
+            await p.post(manifest.group, "Proba-3", "no link here", card=_card(url))
+        result = await p.post(manifest.group, "Proba-3", f"Se {url}", card=_card(url))
+    assert result.ok, result
+    reader, [msg] = await _read_back(tmp_path, addr, manifest.group)
+    try:
+        assert msg.card.url == url and msg.card.image is None and not msg.attachments
+    finally:
+        await reader.close()
+        server.close()

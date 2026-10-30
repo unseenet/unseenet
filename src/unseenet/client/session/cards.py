@@ -175,7 +175,6 @@ class CardsMixin:
         (sections 5, 6, 7.4). What cannot be had is left out, with a ``note``; a page
         that cannot be read at all gives a card with no title for the poster to fill in.
         ``SessionError`` when cards are off, the link is not one, or Tor is not there."""
-        from .. import webfetch
         if not self.link_cards():
             raise SessionError("link cards are turned off")
         url = (url or "").strip()
@@ -185,68 +184,81 @@ class CardsMixin:
         if is_web_form(url):
             raise SessionError("Unseenet addresses get their card from the network")
         socks = await self._ensure_tor(lambda *a, **k: None)
-        draft = CardDraft(url=url, made=datetime.now(timezone.utc))
+        return await fetch_card(url, socks, language=language)
 
-        async def page():
-            got = await webfetch.fetch(url, socks, limit=cd.HTML_OCTETS, language=language)
-            ctype = got.content_type.split(";")[0].strip().lower()
-            if ctype and ctype not in ("text/html", "application/xhtml+xml"):
-                raise webfetch.FetchError("the link is not a web page")
-            text = got.octets.decode(cd.charset_of(got.content_type, got.octets), "replace")
-            return cd.read_head(text, got.url)
-        try:
-            meta = await asyncio.wait_for(page(), cd.FETCH_SECONDS)
-        except (webfetch.FetchError, LookupError) as exc:
-            draft.note = f"No card from the page: {exc}. You can write a title yourself."
-            return draft
-        except asyncio.TimeoutError:
-            draft.note = ("The page did not answer over Tor in time. You can write a "
-                          "title yourself.")
-            return draft
-        draft.title, draft.desc, draft.site = meta.title, meta.desc, meta.site
-        icon, picture = await asyncio.gather(self._card_icon(meta.icons, socks),
-                                             self._card_picture(meta.picture, socks))
-        draft.icon, draft.picture = icon, picture
-        if not draft.title:
-            draft.note = "The page gives no title. You can write one yourself."
-        elif meta.picture and picture is None:
-            draft.note = "The page's picture could not be had - the card goes without one."
+
+async def fetch_card(url: str, socks: int, *, language: str = "en",
+                     picture: bool = True) -> CardDraft:
+    """A card for ``url`` made over the Tor at SOCKS port ``socks`` (UN-RFC 0059 section 7),
+    for a program without a Session (a gateway): the page's ``<head>`` read in the order
+    of section 7.3, its icon and - unless ``picture`` is False - its picture fetched and
+    saved again. What cannot be had is left out, with a ``note``; a page that cannot be
+    read gives a card with no title. ``Session.make_card`` checks the setting and the link
+    first, then makes it here."""
+    from .. import webfetch
+    draft = CardDraft(url=url, made=datetime.now(timezone.utc))
+
+    async def page():
+        got = await webfetch.fetch(url, socks, limit=cd.HTML_OCTETS, language=language)
+        ctype = got.content_type.split(";")[0].strip().lower()
+        if ctype and ctype not in ("text/html", "application/xhtml+xml"):
+            raise webfetch.FetchError("the link is not a web page")
+        text = got.octets.decode(cd.charset_of(got.content_type, got.octets), "replace")
+        return cd.read_head(text, got.url)
+    try:
+        meta = await asyncio.wait_for(page(), cd.FETCH_SECONDS)
+    except (webfetch.FetchError, LookupError) as exc:
+        draft.note = f"No card from the page: {exc}. You can write a title yourself."
         return draft
+    except asyncio.TimeoutError:
+        draft.note = ("The page did not answer over Tor in time. You can write a "
+                      "title yourself.")
+        return draft
+    draft.title, draft.desc, draft.site = meta.title, meta.desc, meta.site
+    icon, pic = await asyncio.gather(_card_icon(meta.icons, socks),
+                                     _card_picture(meta.picture if picture else None, socks))
+    draft.icon, draft.picture = icon, pic
+    if not draft.title:
+        draft.note = "The page gives no title. You can write one yourself."
+    elif picture and meta.picture and pic is None:
+        draft.note = "The page's picture could not be had - the card goes without one."
+    return draft
 
-    async def _card_icon(self, urls, socks) -> bytes | None:
-        """The first of the page's icons that can be fetched and made into a card icon."""
-        from .. import media, webfetch
-        for url in list(urls)[:4]:
-            try:
-                got = await asyncio.wait_for(
-                    webfetch.fetch(url, socks, limit=ICON_FETCH_OCTETS,
-                                   accept=webfetch.PICTURE_ACCEPT), cd.FETCH_SECONDS)
-            except (webfetch.FetchError, asyncio.TimeoutError):
-                continue
-            if got.cut or got.octets.lstrip()[:5].lower() in (b"<svg ", b"<?xml"):
-                continue                               # too large, or SVG (section 7.4)
-            try:
-                return await asyncio.to_thread(media.card_icon, got.octets)
-            except ValueError:
-                continue
-        return None
 
-    async def _card_picture(self, url, socks):
-        """The page's picture, decoded in the separate decoding process (UN-RFC 0027
-        section 9.2) and saved again small (section 6); None when it cannot be had."""
-        from .. import decode, media, webfetch
-        if not url:
-            return None
+async def _card_icon(urls, socks) -> bytes | None:
+    """The first of the page's icons that can be fetched and made into a card icon."""
+    from .. import media, webfetch
+    for url in list(urls)[:4]:
         try:
             got = await asyncio.wait_for(
-                webfetch.fetch(url, socks, limit=cd.FILE_OCTETS, accept=webfetch.PICTURE_ACCEPT),
-                cd.FETCH_SECONDS)
+                webfetch.fetch(url, socks, limit=ICON_FETCH_OCTETS,
+                               accept=webfetch.PICTURE_ACCEPT), cd.FETCH_SECONDS)
         except (webfetch.FetchError, asyncio.TimeoutError):
-            return None
-        if got.cut:
-            return None
+            continue
+        if got.cut or got.octets.lstrip()[:5].lower() in (b"<svg ", b"<?xml"):
+            continue                               # too large, or SVG (section 7.4)
         try:
-            clean = await decode.picture_async(got.octets)
-            return await asyncio.to_thread(media.card_picture, clean.octets)
-        except (decode.DecodeError, ValueError):
-            return None
+            return await asyncio.to_thread(media.card_icon, got.octets)
+        except ValueError:
+            continue
+    return None
+
+async def _card_picture(url, socks):
+    """The page's picture, decoded in the separate decoding process (UN-RFC 0027
+    section 9.2) and saved again small (section 6); None when it cannot be had."""
+    from .. import decode, media, webfetch
+    if not url:
+        return None
+    try:
+        got = await asyncio.wait_for(
+            webfetch.fetch(url, socks, limit=cd.FILE_OCTETS, accept=webfetch.PICTURE_ACCEPT),
+            cd.FETCH_SECONDS)
+    except (webfetch.FetchError, asyncio.TimeoutError):
+        return None
+    if got.cut:
+        return None
+    try:
+        clean = await decode.picture_async(got.octets)
+        return await asyncio.to_thread(media.card_picture, clean.octets)
+    except (decode.DecodeError, ValueError):
+        return None
