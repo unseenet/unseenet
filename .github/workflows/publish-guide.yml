@@ -1,0 +1,81 @@
+name: publish-guide
+# Publishes the user guide (unseenet.org/use/, from unseenet-docs) as the site
+# unseenet.help.guide inside Unseenet (unseenet-docs#7), so people find it where they
+# already are - also on the bootable client, which never opens the web.
+#
+# The pages are made from the docs: unseenet-docs' tools/gather.py puts the guide and
+# its pictures together, tools/guide_site.py turns them into UN-RFC 0031 Markdown, and
+# the core's site import publishes the folder (#538): only changed pages get a new
+# version, and pages no longer in the guide are removed. It posts with the announce
+# key, a poster in the group (tools/project/create_groups.py), so no other repository
+# needs a key.
+#
+# Weekly, and by hand from the Actions tab after a change to the guide. Until the group
+# exists (the project owner runs create_groups.py once), it says so and stops.
+on:
+  schedule:
+    - cron: "37 5 * * 2"          # Tuesdays 05:37 UTC, after the demo's Monday reset
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Show what would change, send nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-guide
+  cancel-in-progress: false
+
+env:
+  GUIDE_GROUP: unseenet.help.guide@ph5fc5hop5232qsz
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: unseenet/unseenet-docs
+          path: _docs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: The guide as a folder of pages
+        run: |
+          pip install -q pyyaml
+          python _docs/tools/gather.py
+          python _docs/tools/guide_site.py _docs/build/docs _guide
+          ls -l _guide _guide/img
+      - run: pip install .
+      - name: Install Tor
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq tor
+          sudo systemctl stop tor || true      # we run our own
+      - name: Publish
+        env:
+          UNSEENET_ANNOUNCE_SEED: ${{ secrets.UNSEENET_ANNOUNCE_SEED }}
+          UNSEENET_PASSPHRASE: ${{ github.run_id }}-guide   # a throwaway vault, gone with the run
+          UNSEENET_INSECURE_FAST_KDF: "1"
+          UNSEENET_STATE_DIR: tools/ripening                 # the key's public ripening chain
+          DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          V="--vault $RUNNER_TEMP/guide.vault"
+          printf '%s\n' "$UNSEENET_ANNOUNCE_SEED" | unseenet $V id-import announce
+          python - <<'EOF' > "$RUNNER_TEMP/nodes.txt"
+          from pathlib import Path
+          from unseenet.known_nodes import parse_node_list
+          _, nodes = parse_node_list(Path("src/unseenet/nodes.json").read_text(encoding="utf-8"))
+          print("\n".join(n.address for n in nodes))
+          EOF
+          while read -r a; do unseenet $V node-add "$a"; done < "$RUNNER_TEMP/nodes.txt"
+          if ! unseenet $V group-show "$GUIDE_GROUP" > /dev/null; then
+            echo "::notice::Could not read $GUIDE_GROUP: not created yet (the project owner runs tools/project/create_groups.py), or no node answered"
+            exit 0
+          fi
+          unseenet $V site-publish _guide "$GUIDE_GROUP" --prune --yes $DRY
