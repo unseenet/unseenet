@@ -116,7 +116,8 @@ client, the vault, nodes, names, groups. Any question is welcome; say what
 you did and what happened. People answer when they can. The help bot
 (unseenet/unseenet-helpbot) answers from the documentation if nobody has
 after a while, or right away if you write @helpbot - it can be wrong, and it
-says where its answer comes from. Ideas and talk about the project belong in
+says where its answer comes from. The user guide is the site unseenet.help.guide@""" + FP + """
+(and unseenet.org/use/). Ideas and talk about the project belong in
 unseenet@""" + FP + "."
 
 NEWS = """What's new in Unseenet, told in plain words by the help bot (unseenet-helpbot#13)
@@ -124,6 +125,13 @@ when the project releases something: what changed for you, what node operators m
 and where to get it. Its posts are written by a program from the release notes and can
 be wrong; the official word is in unseenet.announce. Comment to ask about a release -
 stay on it; the bot answers, and so may people. New threads are the bot's."""
+
+GUIDE = """The user guide, as a site: how to do things in Unseenet - first start, your key,
+groups, writing, following, private posts, names, nodes, backup - for the graphical and
+the terminal client. The pages are published by a program from the documentation
+(unseenet-docs, the same as unseenet.org/use/); nobody edits them here. Something wrong
+or missing? Ask in unseenet.help@""" + FP + """, or open an issue in unseenet-docs.
+Comments are off; questions belong in unseenet.help."""
 
 BOT_CHARTER = """Posts here are made by a bot from {source}, credited in each post.
 Comment on a post to talk about it; new threads are the bot's. Be kind, stay
@@ -147,6 +155,9 @@ GROUPS = (
      "The help bot tells about new releases in ordinary language. Comment to ask; "
      "the official release notes are in unseenet.announce.",
      NEWS, "ed25519:6gf6zqd6hzligjk57kdbna3z7uwlnipfgg47v765kitkn2avdxfa", 20),
+    ("unseenet.help.guide", "channel", "pages", "The Unseenet user guide",
+     "How do I ...: the user guide for both clients, published from unseenet.org.",
+     GUIDE, "github_poster", 20),
     ("unseenet.announce", "channel", "threads", "Unseenet announcements: releases and news",
      "Releases, security notices and network news from the Unseenet project.", ANNOUNCE,
      "github_poster", 20),
@@ -220,6 +231,8 @@ BOT_PICTURES = {"max_size": 512 * 1024, "types": ["image/*"]}
 ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.privacy.eff", "alt.space.nasa")}
+# the user guide's screenshots (unseenet-docs#7): about a dozen, each under 64 KiB
+ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
 
 
 # The project's spam report issuer (tools/project/report_issuer.py), named in the bot
@@ -235,6 +248,7 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
 # they say none. Clients suggest the group's language to those who write there.
 LANGUAGES = {name: ["en"] for name in (
     "unseenet", "unseenet.chat", "unseenet.test", "unseenet.help", "unseenet.help.news",
+    "unseenet.help.guide",
     "unseenet.announce", "unseenet.admin",
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}

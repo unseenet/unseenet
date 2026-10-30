@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The user guide inside Unseenet** (unseenet-docs#7): the project's site
+  `unseenet.help.guide`, in `create_groups.py` and the `unseenet` hierarchy list, and a
+  weekly workflow (`publish-guide.yml`) that publishes unseenet.org's guide there with
+  the site import, posting with the announce key. `unseenet.help`'s charter points to it.
 - **A stick finds a mirror by every version it has** (unseenet-entrance#44): a mirror keeps
   the portable builds and the bootable images each at its own newest version (a portable
   post-release can be ahead of the images) and names them all in `mirror_all`;

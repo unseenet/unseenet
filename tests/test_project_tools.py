@@ -26,7 +26,8 @@ KDF = {"ops": 1, "mem": 8192 * 1024}
 @pytest.fixture
 async def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    # sites: the project groups include one (unseenet.help.guide), as the project nodes carry
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0), sites="accept"))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
 
@@ -94,7 +95,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
-    assert setup["names_group"] in owned and len(owned) == 21
+    assert setup["names_group"] in owned and len(owned) == 22     # + unseenet.help.guide
     news = v.data["groups"][f"alt.news.wikipedia@{setup['project'].fingerprint}"]["manifest"]
     assert (news["type"], news["comments"], news["comment_days"]) == ("channel", "open", 14)
     assert news["posters"] == ["ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza"]
@@ -109,7 +110,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert "portals" not in v.data["groups"][talk]["manifest"]        # none, left out
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
-                if e.get("owner")}) == 21
+                if e.get("owner")}) == 22
 
     async def as_published_before(gid, change):
         """Put a newer manifest on the node, as an older script would have made it."""
