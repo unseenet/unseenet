@@ -206,6 +206,7 @@ The protocol is designed to be extended without breaking old software:
 | 0055 | What a Node Carries                          | Standards Track |
 | 0056 | A Group's Own Emoji                          | Standards Track |
 | 0057 | A People Directory                           | Standards Track |
+| 0059 | Link Cards                                   | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
