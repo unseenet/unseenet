@@ -308,3 +308,12 @@ async def test_a_card_in_a_closed_group_and_a_private_post(net):
     assert not Article.from_bytes(node.store.get(pid)).get(cd.HEADER)
     await bob.fetch_group(bob.my_inbox)
     assert bob.find_message(bob.my_inbox, pid).card.site == "B.T."
+
+
+def test_pictures_are_asked_for_only_in_formats_the_decoder_shows():
+    """A server that negotiates the format (DR's sends AVIF when asked) must only be asked
+    for what decode shows, or the card's picture is dropped (#813)."""
+    from unseenet.client import decode, webfetch
+    asked = [t.split(";")[0].strip() for t in webfetch.PICTURE_ACCEPT.split(",")]
+    assert set(asked) == set(decode.SHOWN)
+    assert "image/avif" not in asked and "image/*" not in asked
