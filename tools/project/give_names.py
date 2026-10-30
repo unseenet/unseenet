@@ -64,6 +64,11 @@ NAMES = {
     "cisa-bot": "ed25519:wggtcww3ydpnokwcsisijnpzqvkvdq7vte6mtb762yswrpdzhava",  # alt.security.cisa
     "kev-bot": "ed25519:5j7vmq2ne2o4whkljwzv6ri4olm7amztr5uyed2zce2f254pmpga",  # alt.security.kev
     "owid-bot": "ed25519:rwtgrrqovdt6orirlao4psc2nr6dih3vebnliv3lwujuoyevk6zq",  # alt.news.ourworldindata
+    "xkcd-bot": "ed25519:rwj6qoyalfou7w4a3nazzixdwrmvsc6h3gvadnus4vdmftvkpeda",  # alt.humor.xkcd
+    "peppercarrot-bot": "ed25519:dyzd56345u3yzbgphywngnh7tuvrjxkerrf2swbh4pdlc4l4e6sa",  # alt.comics.peppercarrot
+    "arxiv-security-bot": "ed25519:o4sro6pdc53lccwx7kachdbgbza5vpq4n6m4skwo2bc3lib4o4oq",  # alt.science.arxiv.security
+    "arxiv-ai-bot": "ed25519:p55753qjde57jmh76hxxkbbfdt5kfbeydcigxxhuhlikwdmay4tq",  # alt.science.arxiv.ai
+    "fedoramagazine-bot": "ed25519:ygh3colomeyhtnelrcwccze5amfgotljvklj5oiexbj5vqahurmq",  # alt.news.fedoramagazine
 }
 
 
