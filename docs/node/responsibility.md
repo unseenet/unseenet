@@ -6,7 +6,7 @@ node is open to anyone.
 
 ## What Unseenet does to make this easier
 
-- **Text by default.** Posts are at most 64 KB. From 0.5.0 posts may carry
+- **Text by default.** Posts are at most 64 KB. Posts may carry
   small files (pictures, PDFs), but a node carries them only if you turn
   that on, and you can refuse any single file - binaries are what got
   many Usenet servers into trouble. See [`[blobs]`](configuration.md#blobs).
