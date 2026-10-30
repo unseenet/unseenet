@@ -1246,7 +1246,9 @@ the poster's side only; readers never fetch.
   needs a title, else `400`. Its picture goes as one more file (section
   4.10) when the group takes files, else the card goes without it. An
   edit without `card` keeps the earlier version's card; `"card": null`
-  takes it off.
+  takes it off; a changed card with `"keep_picture": true` and no
+  `picture` keeps the earlier version's picture, when it is for the same
+  link.
 - A message (section 4.3) has `card`: null, or `{"url", "domain",
   "domain_confusable", "title", "desc", "site", "icon", "image",
   "made"}`, checked as UN-RFC 0059 section 4.2 says. `image` is the blob
