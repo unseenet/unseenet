@@ -95,7 +95,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
-    assert setup["names_group"] in owned and len(owned) == 22     # + unseenet.help.guide
+    assert setup["names_group"] in owned and len(owned) == 30     # + 8 news bot channels
     news = v.data["groups"][f"alt.news.wikipedia@{setup['project'].fingerprint}"]["manifest"]
     assert (news["type"], news["comments"], news["comment_days"]) == ("channel", "open", 14)
     assert news["posters"] == ["ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza"]
