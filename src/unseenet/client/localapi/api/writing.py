@@ -209,8 +209,18 @@ class Writing:
         # the link card (UN-RFC 0059 section 10): left out, the earlier version's is kept;
         # null takes it off
         card = self._card_to_post(data["card"], body) if "card" in data else ...
+        # "keep_picture": the card changed (its title, say) but keeps the picture the
+        # earlier version carries, for the same link
+        given = data.get("card") if isinstance(data.get("card"), dict) else {}
+        keep = bool(given.get("keep_picture")) and not given.get("picture")
 
         async def send() -> str:
+            nonlocal card
+            if keep and card not in (None, ...):
+                from ....core import cards as cd
+                old = await s._card_of(m)
+                if old is not None and old.picture is not None and cd.same_url(old.url, card.url):
+                    card.picture = old.picture
             return await s.edit(m, subject, body, tags=tags, languages=languages,
                                 comment_days=days, card=card)
 

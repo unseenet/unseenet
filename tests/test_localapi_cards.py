@@ -80,6 +80,14 @@ async def test_make_send_show_keep_and_take_off_a_card(tmp_path):
         await _job(r, ws, f"/api/groups/{_gid(gid)}/edit", {"id": msg["id"], "body": body + "\nmere"})
         _, view = await r.get(f"/api/groups/{_gid(gid)}")
         assert view["rows"][0]["message"]["card"]["title"] == "Min egen overskrift"   # kept
+        m2 = view["rows"][0]["message"]
+        await _job(r, ws, f"/api/groups/{_gid(gid)}/edit",
+                   {"id": m2["id"], "body": body, "card": {**m2["card"], "title": "Ny titel",
+                                                           "keep_picture": True}})
+        _, view = await r.get(f"/api/groups/{_gid(gid)}")
+        m3 = view["rows"][0]["message"]
+        assert m3["card"]["title"] == "Ny titel" and m3["card"]["image"]           # picture kept
+        assert [a for a in m3["attachments"] if a.get("card")]
         await _job(r, ws, f"/api/groups/{_gid(gid)}/edit",
                    {"id": view["rows"][0]["message"]["id"], "body": body, "card": None})
         _, view = await r.get(f"/api/groups/{_gid(gid)}")
