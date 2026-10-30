@@ -54,6 +54,16 @@ NAMES = {
     "amnesty-bot": "ed25519:b2gelza74qehsnfljhrirznshd6d3xh22bqdj75kaqjhx7hevc6a",  # alt.news.amnesty
     "hrw-bot": "ed25519:etro7xostry7gziwwp2xxfmor4yor5qq23i2jmijdf6elg2j6o7q",  # alt.news.hrw
     "mongabay-bot": "ed25519:wrcdtwg3wfha6a7qemiu747rloiftewtx2hseag4nffemikuzejq",  # alt.news.mongabay
+    "hackernews-bot": "ed25519:tkn5j46njfdk56ojtfix5lun6xapnbgptxz2ywq5kffexqr6zwba",  # alt.news.hackernews
+    "lobsters-bot": "ed25519:yx35numaoxlzliuzn2q7ctwiyelvkujayccleavn6g32hivozrca",  # alt.news.lobsters
+    "arstechnica-bot": "ed25519:w75d6nqo2lbff7fmu6dwn5orrh7mx7p42lf7zh3wxp3u4xtjwvdq",  # alt.news.arstechnica
+    "theregister-bot": "ed25519:cpskhfrj5mjukw3ivjwvxjl5dbl7xuvhfjbmgigaa7mmpneoweuq",  # alt.news.theregister
+    "lwn-bot": "ed25519:lfvhanh5alwm72cu54hjatdrsrxwc2qyufpnnd33bdtvpt4gaoxq",  # alt.news.lwn
+    "propublica-bot": "ed25519:yvystooedk3ycxfjmsuayhqbmdmr5nb5fmq53yj4yifr2zhe6v6q",  # alt.news.propublica
+    "restofworld-bot": "ed25519:z6lddwg7s7wt3dvyccbwrcvkkeh3lqy3qkqfatzp5gbop3ptw5yq",  # alt.news.restofworld
+    "cisa-bot": "ed25519:wggtcww3ydpnokwcsisijnpzqvkvdq7vte6mtb762yswrpdzhava",  # alt.security.cisa
+    "kev-bot": "ed25519:5j7vmq2ne2o4whkljwzv6ri4olm7amztr5uyed2zce2f254pmpga",  # alt.security.kev
+    "owid-bot": "ed25519:rwtgrrqovdt6orirlao4psc2nr6dih3vebnliv3lwujuoyevk6zq",  # alt.news.ourworldindata
 }
 
 
