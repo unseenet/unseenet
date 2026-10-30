@@ -46,6 +46,14 @@ NAMES = {
     "theconversation-bot": "ed25519:7ky3decxcamoqttl2fqysiie24ptdxt4mld5yrxdb2ftbheukydq",
     "eff-bot": "ed25519:uangztkgxp6ql2nxj6fy34d2bjspykt5taxfi7i4urrcm2o4kvca",         # alt.privacy.eff
     "nasa-bot": "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq",        # alt.space.nasa
+    "un-bot": "ed25519:cwxjr6326cibedbh4dc3j33m5zxsvur7f5ascmzytogvwzhypifa",  # alt.news.un
+    "un-climate-bot": "ed25519:al3byojikma4r4jklzp56bey2gmqrmu52cwrxduntlj4dk56ubmq",  # alt.news.un.climate
+    "un-humanrights-bot": "ed25519:xnxyjxmftqffvdke5lgyyoutmz5lhnrg7acruovmricerzkubmlq",  # alt.news.un.humanrights
+    "un-humanitarian-bot": "ed25519:ffzw5te4jcjck3z5svshstli7ei2zn345dvoadkqxvyyim2cxqiq",  # alt.news.un.humanitarian
+    "un-health-bot": "ed25519:guozb7adn5bm224ogtrz4cfk5lhpq7ozst6p7bkfikfhom7erzoq",  # alt.news.un.health
+    "amnesty-bot": "ed25519:b2gelza74qehsnfljhrirznshd6d3xh22bqdj75kaqjhx7hevc6a",  # alt.news.amnesty
+    "hrw-bot": "ed25519:etro7xostry7gziwwp2xxfmor4yor5qq23i2jmijdf6elg2j6o7q",  # alt.news.hrw
+    "mongabay-bot": "ed25519:wrcdtwg3wfha6a7qemiu747rloiftewtx2hseag4nffemikuzejq",  # alt.news.mongabay
 }
 
 

@@ -209,6 +209,38 @@ GROUPS = (
      "NASA's Image of the Day: the caption and a link to the picture, by a bot.",
      BOT_CHARTER.format(source="NASA (not copyrighted)"),
      "ed25519:ftseuejwlor33343q7d6on3zq4yow2dn5ro7zbltfbufilacu3eq", 20),
+    ("alt.news.un", "channel", "feed", "UN News: stories from across the United Nations",
+     "The summary of each UN News story, with a link to the whole story, by a bot.",
+     BOT_CHARTER.format(source="UN News (credited, the UN told)"),
+     "ed25519:cwxjr6326cibedbh4dc3j33m5zxsvur7f5ascmzytogvwzhypifa", 20),
+    ("alt.news.un.climate", "channel", "feed", "UN News: climate change",
+     "UN News stories on climate change: the summary and a link, by a bot.",
+     BOT_CHARTER.format(source="UN News (credited, the UN told)"),
+     "ed25519:al3byojikma4r4jklzp56bey2gmqrmu52cwrxduntlj4dk56ubmq", 20),
+    ("alt.news.un.humanrights", "channel", "feed", "UN News: human rights",
+     "UN News stories on human rights: the summary and a link, by a bot.",
+     BOT_CHARTER.format(source="UN News (credited, the UN told)"),
+     "ed25519:xnxyjxmftqffvdke5lgyyoutmz5lhnrg7acruovmricerzkubmlq", 20),
+    ("alt.news.un.humanitarian", "channel", "feed", "UN News: humanitarian aid",
+     "UN News stories on humanitarian aid: the summary and a link, by a bot.",
+     BOT_CHARTER.format(source="UN News (credited, the UN told)"),
+     "ed25519:ffzw5te4jcjck3z5svshstli7ei2zn345dvoadkqxvyyim2cxqiq", 20),
+    ("alt.news.un.health", "channel", "feed", "UN News: health",
+     "UN News stories on health: the summary and a link, by a bot.",
+     BOT_CHARTER.format(source="UN News (credited, the UN told)"),
+     "ed25519:guozb7adn5bm224ogtrz4cfk5lhpq7ozst6p7bkfikfhom7erzoq", 20),
+    ("alt.news.amnesty", "channel", "feed", "Amnesty International: human rights news",
+     "Whole news items from Amnesty International, by a bot. Comment on any story.",
+     BOT_CHARTER.format(source="Amnesty International (CC BY-NC-ND 4.0)"),
+     "ed25519:b2gelza74qehsnfljhrirznshd6d3xh22bqdj75kaqjhx7hevc6a", 20),
+    ("alt.news.hrw", "channel", "feed", "Human Rights Watch: human rights news",
+     "Whole news items from Human Rights Watch, by a bot. Comment on any story.",
+     BOT_CHARTER.format(source="Human Rights Watch (CC BY-NC-ND 4.0)"),
+     "ed25519:etro7xostry7gziwwp2xxfmor4yor5qq23i2jmijdf6elg2j6o7q", 20),
+    ("alt.news.mongabay", "channel", "feed", "Mongabay: conservation and environment news",
+     "The opening of articles from Mongabay, with a link to the rest, by a bot.",
+     BOT_CHARTER.format(source="Mongabay (an opening and a link)"),
+     "ed25519:wrcdtwg3wfha6a7qemiu747rloiftewtx2hseag4nffemikuzejq", 20),
 )
 
 # Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
@@ -220,13 +252,22 @@ COMMENTS = {
     "alt.news.theconversation": ("open", 14),
     "alt.privacy.eff": ("open", 14),
     "alt.space.nasa": ("open", 7),
+    "alt.news.un": ("open", 14),
+    "alt.news.un.climate": ("open", 14),
+    "alt.news.un.humanrights": ("open", 14),
+    "alt.news.un.humanitarian": ("open", 14),
+    "alt.news.un.health": ("open", 14),
+    "alt.news.amnesty": ("open", 14),
+    "alt.news.hrw": ("open", 14),
+    "alt.news.mongabay": ("open", 14),
 }
 
 
 # Files the bot channels take (UN-RFC 0027 section 5.1): pictures, kept small - a node
 # keeps at most 8 MiB of files per group (UN-RFC 0017 2.2), so a picture a day must be
 # a few hundred KiB for its channel to keep them for weeks. The Conversation's are
-# agency pictures the bot does not post (unseenet-bots#7), so it takes none.
+# agency pictures the bot does not post (unseenet-bots#7), so it takes none; nor do the
+# UN News, Amnesty, HRW and Mongabay channels, whose bots post no pictures (bots#30, #32).
 BOT_PICTURES = {"max_size": 512 * 1024, "types": ["image/*"]}
 ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
@@ -241,7 +282,10 @@ ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
 PROJECT_ISSUER = "ed25519:mhgvcdevmx5g2r6tqm5nrsm62k4hp3ahpgpx7re5lqvmw326btmq"
 REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
-    "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}
+    "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",
+    "alt.news.un", "alt.news.un.climate", "alt.news.un.humanrights",
+    "alt.news.un.humanitarian", "alt.news.un.health", "alt.news.amnesty",
+    "alt.news.hrw", "alt.news.mongabay")}
 
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
@@ -251,7 +295,10 @@ LANGUAGES = {name: ["en"] for name in (
     "unseenet.help.guide",
     "unseenet.announce", "unseenet.admin",
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
-    "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa")}
+    "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",
+    "alt.news.un", "alt.news.un.climate", "alt.news.un.humanrights",
+    "alt.news.un.humanitarian", "alt.news.un.health", "alt.news.amnesty",
+    "alt.news.hrw", "alt.news.mongabay")}
 
 
 # The project's labeller (UN-RFC 0053), named in the bot channels for their readers'
