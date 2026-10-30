@@ -25,7 +25,7 @@ from ..core.tor import Socks, _proxy_url
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
 PAGE_ACCEPT = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
-PICTURE_ACCEPT = "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8"
+PICTURE_ACCEPT = "image/webp,image/png,image/jpeg,image/gif"   # what decode.SHOWN shows - no AVIF (#813)
 
 
 class FetchError(Exception):

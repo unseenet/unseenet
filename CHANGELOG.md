@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-31
+
+### Fixed
+
+- **Link cards lost their picture** where the picture's server chooses the format (#813):
+  the client asked for AVIF, which it cannot show, so DR's pictures - sent as AVIF when
+  asked - were dropped. Pictures and icons are now asked for only as WebP, PNG, JPEG or
+  GIF, the formats the decoder shows; a test keeps the two lists in step.
+
 ## [0.6.6] - 2026-10-30
 
 Sharing - "Facebook mode" is complete with it (UN-RFC 0060). **Update the nodes first**: a
