@@ -48,6 +48,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   clients that need 0.6.1 could not be built nightly with core main. They now count
   on from the newest release of the series.
 
+### Fixed
+
+- **Publishing a site from a vault that has not read it** (unseenet-docs#7): `site-publish`
+  checked who may write before it had fetched the site's manifest, so a poster whose
+  vault had never seen the site - a CI key in a throwaway vault - was told "this group
+  is not a site". The manifest is now fetched first.
+
 ## [0.6.4] - 2026-10-29
 
 A fix for 0.6.3. **Update clients**; nodes gain nothing.
