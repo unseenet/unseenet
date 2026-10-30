@@ -468,9 +468,6 @@ Unseenet cannot keep.
 
 # 11. Open Issues
 
-- Section 7.2 requires a comment for a share into a discussion group,
-  and makes chat groups refuse shares unless their owner allows them.
-  Both are proposals, to be confirmed.
 - Whether a node SHOULD keep fetched articles longer than 24 hours when
   many of its users ask for them, as a cache for popular shares.
 
