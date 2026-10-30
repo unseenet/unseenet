@@ -207,8 +207,22 @@ class Poster:
         await self._session.adopt_published_ripening()
         return self._session.ripening().level
 
+    async def make_card(self, url: str, *, language: str = "en"):
+        """A link card for ``url`` (UN-RFC 0059), made over the Poster's Tor as a client
+        makes one (``Session.make_card``): the page's title, description, site name,
+        icon and picture, each left out when it cannot be had (``.note`` says why). A
+        program may change or drop any of them before :meth:`post` - its picture above
+        all, when its licence is not known. PosterError when no card can be made."""
+        from ..client.session import SessionError
+        if self._session is None:
+            raise PosterError("use the Poster in 'async with' (or call start() first)")
+        try:
+            return await self._session.make_card(url, language=language)
+        except SessionError as exc:
+            raise PosterError(str(exc)) from exc
+
     async def post(self, group: str, subject: str, body: str, *, files=None,
-                   **kw) -> PostResult:
+                   card=None, **kw) -> PostResult:
         """Post a message to every node; see :meth:`build` for the arguments.
 
         ``files`` (UN-RFC 0027): pictures and other files on the post, each a path,
@@ -216,17 +230,36 @@ class Poster:
         They are prepared as in the clients (the type from the content, a picture
         cleaned of its metadata) and checked against the group's manifest before any
         postage is computed; PosterError if the group may not carry them. A node
-        that carries no files refuses the post (``PostResult.refused``)."""
+        that carries no files refuses the post (``PostResult.refused``).
+
+        ``card`` (UN-RFC 0059): a link card from :meth:`make_card` for a link in
+        ``body``; its picture goes as one more file where the group takes files, else
+        the card goes without it. PosterError when the link is not in the text."""
+        card_pic = None
+        if card is not None:
+            from ..client.session import SessionError
+            if self._session is None:
+                raise PosterError("use the Poster in 'async with' (or call start() first)")
+            try:
+                files, card_pic = await self._session._card_files(group, card, body,
+                                                                  list(files or []))
+            except SessionError as exc:
+                raise PosterError(str(exc)) from exc
+        extra = list(kw.pop("extra", None) or [])
         if not files:
-            return await self.post_article(self.build(group, subject, body, **kw))
+            if card is not None:
+                extra += self._session._card_header(card, None, [], [])
+            return await self.post_article(self.build(group, subject, body, extra=extra, **kw))
         prepared = await self.prepare_files(group, files)
         from .blobs import attachment_headers, blob_id, extra_bits_for
-        extra = list(kw.pop("extra", None) or [])
+        blobs = [(blob_id(f.octets), f.octets) for f in prepared]
         extra += attachment_headers([(f.name, f.media_type, f.octets, f.alt, f.dim)
                                      for f in prepared])
+        if card is not None:
+            extra += self._session._card_header(card, card_pic, prepared, blobs)
         art = self.build(group, subject, body, extra=extra, **kw)
         return await self.post_article(
-            art, blobs=[(blob_id(f.octets), f.octets) for f in prepared],
+            art, blobs=blobs,
             extra_bits=extra_bits_for(sum(len(f.octets) for f in prepared)))
 
     async def prepare_files(self, group: str, files) -> list:
