@@ -379,7 +379,8 @@ class PostingMixin:
 
     async def edit(self, msg: Message, subject: str, body: str,
                    content_type: str | None = None, files=None,
-                   tags=None, languages=None, comment_days: int | None = None) -> str:
+                   tags=None, languages=None, comment_days: int | None = None,
+                   card=...) -> str:
         """Post a new version of your own post or chat line (UN-RFC 0042 section 4.3):
         same group, kind and place in its thread, naming every earlier version.
 
@@ -397,8 +398,10 @@ class PostingMixin:
         if len(versions) > MAX_SUPERSEDES:
             raise SessionError(f"a post can be edited at most {MAX_SUPERSEDES} times")
         original = self.find_message(msg.group, msg.message_id) or msg   # its own References
+        if card is ...:                           # keep the card it has (UN-RFC 0059, 10)
+            card = await self._card_of(msg)
         if files is None:
-            files = await self._files_of(msg)
+            files = [f for f in await self._files_of(msg, skip_card=True)]
         if tags is None:
             tags = self.tags_to_keep(msg)
         if languages is None:
@@ -413,7 +416,8 @@ class PostingMixin:
         return await self.post(msg.group, subject, body, references=original.references or None,
                                kind=msg.kind, content_type=content_type or msg.content_type or None,
                                supersedes=versions, files=files or None,
-                               tags=tags, languages=languages, comment_days=comment_days)
+                               tags=tags, languages=languages, comment_days=comment_days,
+                               card=card)
 
     @staticmethod
     def _versions_to_name(msg: Message) -> list[str]:
@@ -435,16 +439,40 @@ class PostingMixin:
         written = set(tg.in_text(f"{msg.subject or ''}\n{msg.body or ''}"))
         return [t for t in (getattr(msg, "tags", ()) or ()) if t not in written]
 
-    async def _files_of(self, msg: Message) -> list:
-        """The files a post carries, as prepared files to send again with a new version."""
+    async def _files_of(self, msg: Message, skip_card: bool = False) -> list:
+        """The files a post carries, as prepared files to send again with a new version
+        (``skip_card``: not its link card's picture, which goes with the card)."""
         from ..media import Prepared
         out = []
         for a in msg.attachments or []:
+            if skip_card and a.get("card"):
+                continue
             octets = await self.fetch_blob(msg.group, a["blob"])
             dim = tuple(a["dim"]) if a.get("dim") else None
             out.append(Prepared(a.get("name") or "file", a["type"], octets,
                                 alt=a.get("alt") or "", dim=dim))
         return out
+
+    async def _card_of(self, msg: Message):
+        """The link card a post has, as a ``CardDraft`` to send again with a new version
+        (its picture fetched again), or None (UN-RFC 0059 section 10)."""
+        from .cards import CardDraft
+        from ..media import Prepared
+        c = msg.card
+        if c is None:
+            return None
+        picture = None
+        for a in msg.attachments or []:
+            if a.get("card"):
+                try:
+                    octets = await self.fetch_blob(msg.group, a["blob"])
+                except SessionError:
+                    break                        # not to be had: the card goes without it
+                dim = tuple(a["dim"]) if a.get("dim") else None
+                picture = Prepared(a.get("name") or "card", a["type"], octets,
+                                   alt=a.get("alt") or "", dim=dim)
+        return CardDraft(url=c.url, title=c.title, desc=c.desc, site=c.site, icon=c.icon,
+                         picture=picture, made=c.made)
 
     def may_edit(self, msg: Message) -> bool:
         """True when you may publish a new version of this post (UN-RFC 0042): your own,
@@ -545,8 +573,12 @@ class PostingMixin:
                    supersedes: list[str] | None = None,
                    extra: list[tuple[str, str]] | None = None,
                    from_name: str | None = None, files=None, origin: dict | None = None,
-                   tags=None, languages=None, comment_days: int | None = None) -> str:
+                   tags=None, languages=None, comment_days: int | None = None,
+                   card=None) -> str:
         """Post to a group: a post (with a subject) or a chat line (UN-RFC 0028).
+
+        ``card``: a link card (``CardDraft``, UN-RFC 0059) for a link in ``body``; its
+        picture goes as one more file when the group takes files, else it goes without.
 
         ``comment_days``: a new thread's own time for comments, from 0 (none) up to the
         group's ``comment_days`` (UN-RFC 0030 section 3.1); written only when it differs
@@ -601,7 +633,7 @@ class PostingMixin:
                                                       proof=proof)
             except origins.OriginError as exc:
                 raise SessionError(str(exc)) from exc
-        files = list(files or [])
+        files, card_pic = await self._card_files(group_id, card, body, list(files or []))
         blobs, file_bits, inner_files = [], 0, []
         entry = self.group_entry(group_id)
         if files:
@@ -622,6 +654,9 @@ class PostingMixin:
                 edit_header += bl.attachment_headers(described)
                 blobs = [(bl.blob_id(f.octets), f.octets) for f in files]
             file_bits = bl.extra_bits_for(sum(len(b) for _, b in blobs))
+        card_header = self._card_header(card, card_pic, files, blobs)     # UN-RFC 0059
+        if entry.get("type") != "closed":
+            edit_header += card_header
         shown = from_name or self.display_name()
         author = self.identity()
         cert = None
@@ -636,7 +671,7 @@ class PostingMixin:
                     group_id, epoch, keys, author, from_name=shown,
                     subject=subject, body=body, references=references, kind=kind,
                     content_type=content_type, pow_bits=bits + file_bits, extra=edit_header,
-                    inner_extra=inner_files + tag_header)
+                    inner_extra=inner_files + tag_header + card_header)
         else:
             await naming.keep_my_names(self)              # a service's own names, once a day
             cert = naming.header_for(self, group_id)     # your name, once a week here (UN-RFC 0019)

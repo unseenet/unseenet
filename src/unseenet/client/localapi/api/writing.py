@@ -58,6 +58,7 @@ class Writing:
         subject = "" if kind == KIND_CHAT else str(data.get("subject", "")).strip()
         refs = [str(r) for r in data.get("references", []) or []][:MAX_REFERENCES]
         files = self._files_to_post(s, gid, data.get("files"))         # section 4.10
+        card = self._card_to_post(data.get("card"), body)              # UN-RFC 0059
         if not body.strip() and not files:
             raise SessionError("nothing to send")
         if kind not in s.group_kinds(gid):
@@ -101,16 +102,42 @@ class Writing:
         async def send() -> str:
             if kind == KIND_CHAT and not refs and not files and not origin and not tags \
                     and not languages and days is None:
-                return await s.send_chat(gid, body)
+                return await s.send_chat(gid, body, card=card)
             return await s.post(gid, subject, body, references=refs or None, kind=kind,
                                 files=files or None, origin=origin, tags=tags or None,
-                                languages=languages, comment_days=days)
+                                languages=languages, comment_days=days, card=card)
 
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval
                 self.spawn(s.send_mention_notices(gid, msgid, subject, kind, keys))
             await s.fetch_group(gid)
         return {"job": self._new_job(gid, send, after)}
+
+    @staticmethod
+    def _card_to_post(data, body: str):
+        """The ``card`` of ``POST .../post``, ``/api/private`` and ``.../edit`` (UN-RFC
+        0059): as ``POST /api/card`` gave it, perhaps changed by the user; absent or null
+        for none. Its link must be in ``body`` - refused here, before the job starts."""
+        if not data:
+            return None
+        from ...session import CardDraft
+        from ....core import cards as cd
+        card = CardDraft.from_dict(data)
+        if not any(cd.same_url(card.url, u) for u in cd.urls_in(body, quoted=True)):
+            raise SessionError("the card's link is not in the text")
+        return card
+
+    async def card(self, data: dict) -> dict:
+        """``POST /api/card`` ``{"url"}`` or ``{"text"}`` (UN-RFC 0059 section 7): a link
+        card for the URL, or for the first link in a text being written, made over Tor -
+        for the composer to show, let the user change, and send with the post as
+        ``card``. ``{"card": null}`` when the text has no link a card is made for."""
+        s = self._ready()
+        url = str(data.get("url") or "").strip() or s.card_url(str(data.get("text") or ""))
+        if not url:
+            return {"card": None}
+        lang = str(data.get("language") or "en")[:8]
+        return {"card": (await s.make_card(url, language=lang)).to_dict()}
 
     def private(self, data: dict) -> dict:
         """``POST /api/private`` (section 4.4): a private post or chat line to a key's
@@ -127,6 +154,7 @@ class Writing:
         owner = crypto.key_from_text(key)
         # encrypted with it (UN-RFC 0027 3.3, #497); checked against their inbox when sent
         files = self._files_to_post(s, personal_inbox_id(owner), data.get("files"), check=False)
+        card = self._card_to_post(data.get("card"), body)              # UN-RFC 0059
         if not body.strip() and not files:
             raise SessionError("nothing to send")
         inbox, refs = personal_inbox_id(owner), []
@@ -147,10 +175,10 @@ class Writing:
 
         async def send() -> str:
             if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner) and not as_team:
-                return await s.send_chat(CONTACT + key, body, files=files or None)
+                return await s.send_chat(CONTACT + key, body, files=files or None, card=card)
             return await s.send_private(inbox, subject, body, owner_key=owner,
                                         references=refs or None, kind=kind, files=files or None,
-                                        as_team=as_team)
+                                        as_team=as_team, card=card)
 
         async def after(msgid: str) -> None:
             s.emit(ev.GroupUpdated(group))
@@ -178,10 +206,13 @@ class Writing:
                                       or not all(isinstance(c, str) for c in languages)):
             raise SessionError("languages is a list of codes such as da, en")
         days = _comment_days(data)                          # only shorter (UN-RFC 0030 3.1)
+        # the link card (UN-RFC 0059 section 10): left out, the earlier version's is kept;
+        # null takes it off
+        card = self._card_to_post(data["card"], body) if "card" in data else ...
 
         async def send() -> str:
             return await s.edit(m, subject, body, tags=tags, languages=languages,
-                                comment_days=days)
+                                comment_days=days, card=card)
 
         async def after(msgid: str) -> None:
             await s.fetch_group(m.group)

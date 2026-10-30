@@ -9,6 +9,18 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Link cards** (#792, UN-RFC 0059): a post with a link can carry a preview of the
+  page - its icon, domain, title, description and picture - made once by the poster's
+  client over Tor and carried in the signed post as a `Link-Card` header, the picture as an
+  ordinary attachment; readers never fetch. `core.cards` (the header, a reader's checks,
+  reading a page's head in the order og: -> twitter: -> `<title>`, the domain with
+  look-alikes marked, hosts never fetched), `client.webfetch` (HTTP over Tor only, with
+  limits), `media.card_icon` / `card_picture`, and `Session.make_card`,
+  `post(card=...)`, `send_private`/`send_chat(card=...)`, `edit` keeping the card,
+  `Message.card`. Settings: `link_cards`, off by default in the bootable client. Local API:
+  `POST /api/card`, `card` on posts, private posts, edits and messages (UN-RFC 0046 4.25).
+  CLI: `unseenet card URL`, `post --card [URL]`, `--card-title`, `--card-desc`,
+  `--card-no-picture`, `--no-card`, and the card's domain and title in `read`.
 - **The user guide inside Unseenet** (unseenet-docs#7): the project's site
   `unseenet.help.guide`, in `create_groups.py` and the `unseenet` hierarchy list, and a
   weekly workflow (`publish-guide.yml`) that publishes unseenet.org's guide there with

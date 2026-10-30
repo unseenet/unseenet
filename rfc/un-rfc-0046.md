@@ -1220,6 +1220,44 @@ its author, the owner and moderators can close and open them (UN-RFC
 - `write_permission`, and with it what the runtime says before a reply is
   written, answers `comments_closed` with the reason and the note.
 
+## 4.25 Link Cards
+
+A link in a post can carry a card: the page's icon, domain, title,
+description and picture (UN-RFC 0059). The runtime makes it over Tor on
+the poster's side only; readers never fetch.
+
+- `POST /api/card` `{"url": "..."}` or `{"text": "<what is being
+  written>"}` (then the first link in it that is not quoted and not an
+  Unseenet address) answers `{"card": null}` when there is no link, else
+  `{"card": {"url", "domain", "domain_confusable", "title", "desc",
+  "site", "icon": "<base64 PNG>" or null, "picture": {"type", "data":
+  "<base64>", "size", "dim": [w, h]} or null, "made": "<ISO 8601>",
+  "note": "..."}}`. It can take up to about a minute. A page that cannot
+  be had gives a card with an empty `title` and a `note` for the user,
+  never an error; with cards turned off it is `400`. A front end shows the
+  card in the compose window as it will be sent, lets the user change its
+  title and description, remove its picture or the card, or make it for
+  another link, and asks again only when the user pastes a link or stops
+  typing.
+- `POST /api/groups/<id>/post`, `POST /api/private` and `POST
+  /api/groups/<id>/edit` take `"card"`: that object, changed or not
+  (`domain`, `note` and the like are ignored; icon and picture are saved
+  again by the runtime). The card's link must be in the body, and it
+  needs a title, else `400`. Its picture goes as one more file (section
+  4.10) when the group takes files, else the card goes without it. An
+  edit without `card` keeps the earlier version's card; `"card": null`
+  takes it off.
+- A message (section 4.3) has `card`: null, or `{"url", "domain",
+  "domain_confusable", "title", "desc", "site", "icon", "image",
+  "made"}`, checked as UN-RFC 0059 section 4.2 says. `image` is the blob
+  ID of the attachment that is its picture, fetched like any file
+  (section 4.10); that attachment has `"card": true` and is shown in the
+  card only. A front end always shows `domain`, as text, and says the
+  card is the poster's.
+- `GET /api/settings` and `POST /api/settings` have `link_cards` (true or
+  false): whether cards are made at all; off by default in the bootable
+  client.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,

@@ -29,7 +29,7 @@ COMMANDS = {
     "id-words": c_id_words, "id-restore": c_id_restore, "copy-to": c_copy_to, "copy-from": c_copy_from, "node-add": c_node_add, "groups": c_groups,
     "group-create": c_group_create, "group-remove": c_group_remove, "invite": c_invite,
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
-    "post": c_post, "read": c_read,
+    "post": c_post, "read": c_read, "card": c_card,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
     "pin": c_pin, "pins": c_pins, "comments-close": c_comments, "comments-open": c_comments, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
@@ -158,6 +158,14 @@ def client_main(argv=None) -> None:
     s.add_argument("--comment-days", type=int, metavar="DAYS",
                    help="a new thread's own time for comments, 0 (none) up to the group's "
                         "(UN-RFC 0030); with --edit: shorter only")
+    s.add_argument("--card", nargs="?", const="first", metavar="URL",
+                   help="a link card (UN-RFC 0059), made over Tor: for the first link in the "
+                        "text, or for URL; see 'unseenet card URL' first. Without it, none "
+                        "(an edit keeps the card it had)")
+    s.add_argument("--card-title", metavar="TEXT", help="the card's title instead of the page's")
+    s.add_argument("--card-desc", metavar="TEXT", help="the card's description instead of the page's")
+    s.add_argument("--card-no-picture", action="store_true", help="the card without the page's picture")
+    s.add_argument("--no-card", action="store_true", help="with --edit: take the card off")
     s.add_argument("--publish-outside-tor", action="store_true",
                    help="post even though the group has portals to other networks")
     s.add_argument("--origin-network", metavar="NAME",
@@ -166,6 +174,8 @@ def client_main(argv=None) -> None:
                    help="when it was first published there, e.g. 2026-08-03T14:20:00Z")
     s.add_argument("--origin-id", metavar="ID", help="its ID there (links this key to that account)")
     s.add_argument("--origin-from", metavar="NAME", help="its author there")
+    s = sub.add_parser("card", help="the link card a post with this link would get (UN-RFC 0059)")
+    s.add_argument("url")
     s = sub.add_parser("pin", help="owner or moderator: pin a post at the top of a group")
     s.add_argument("group")
     s.add_argument("message_id", help="the post's Message-ID")

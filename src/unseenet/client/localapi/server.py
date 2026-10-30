@@ -250,6 +250,10 @@ async def post(request):
     return _json(_api(request).post(_gid(request), await _body(request)))
 
 
+async def card(request):
+    return _json(await _api(request).card(await _body(request)))
+
+
 async def private(request):
     return _json(_api(request).private(await _body(request)))
 
@@ -691,7 +695,7 @@ ROUTES = [
     ("GET", "/api/groups/{gid}/site", group_site),
     ("GET", "/api/groups/{gid}/page", page), ("POST", "/api/groups/{gid}/page", page),
     ("POST", "/api/groups/{gid}/site", publish_folder),
-    ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private),
+    ("POST", "/api/groups/{gid}/post", post), ("POST", "/api/private", private), ("POST", "/api/card", card),
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
     ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/comments", comments), ("POST", "/api/groups/{gid}/react", react),

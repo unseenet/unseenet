@@ -204,3 +204,63 @@ def group_emoji(octets: bytes, *, px: int = 32, max_octets: int = 1024) -> tuple
         if len(out.getvalue()) <= max_octets:
             return out.getvalue(), ctype
     raise ValueError("the picture cannot be made small enough")
+
+
+def card_icon(octets: bytes, *, px: int = 32, max_octets: int = 2048) -> bytes:
+    """A link card's icon (UN-RFC 0059 section 5) from a site's favicon in any format
+    Pillow reads (ICO, PNG, GIF, JPEG, WebP): the largest frame, the middle square, at
+    most 32 by 32 pixels, one still frame, as PNG within ``max_octets`` - saved again,
+    so nothing of the fetched file is carried. ``ValueError`` if it is not a picture or
+    cannot be made small enough. SVG icons are not read (section 7.4)."""
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(octets))
+        if img.format == "ICO" and getattr(img, "ico", None) is not None:
+            sizes = sorted(img.ico.sizes(), key=lambda s: s[0] * s[1])
+            img.size = sizes[-1]                     # the largest in the file
+        img.load()
+    except Exception as exc:  # noqa: BLE001 - Pillow raises many kinds
+        raise ValueError(f"not a picture that can be read: {exc}") from exc
+    img = _bare(img.convert("RGBA"))
+    side = min(img.size)
+    left, top = (img.width - side) // 2, (img.height - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    for size in (min(px, side), 24, 16):
+        if size > min(px, side):
+            continue
+        small = img.resize((size, size), Image.LANCZOS)
+        for colours in (None, 64, 16):
+            out = io.BytesIO()
+            (small if colours is None else small.quantize(colours)).save(out, "PNG", optimize=True)
+            if len(out.getvalue()) <= max_octets:
+                return out.getvalue()
+    raise ValueError("the icon cannot be made small enough")
+
+
+def card_picture(octets: bytes, *, px: int = 600, aim: int = 64 * 1024) -> Prepared:
+    """A link card's picture (UN-RFC 0059 section 6): its first frame, turned the way it
+    was shown, at most ``px`` pixels on its long side, saved again with no metadata -
+    as JPEG, or WebP when it has transparency - aiming at ``aim`` octets. A ``Prepared``
+    ready to post as an attachment; ``ValueError`` if it is not a picture."""
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(octets))
+        img.load()
+    except Exception as exc:  # noqa: BLE001 - Pillow raises many kinds
+        raise ValueError(f"not a picture that can be read: {exc}") from exc
+    img = _turned(img)
+    alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
+    img = _bare(img.convert("RGBA" if alpha else "RGB"))
+    img.thumbnail((px, px), Image.LANCZOS)
+    fmt, ctype = ("WEBP", "image/webp") if alpha else ("JPEG", "image/jpeg")
+    best = b""
+    for quality in (82, 72, 62, 50, 40):
+        out = io.BytesIO()
+        img.save(out, fmt, quality=quality, **({"optimize": True} if fmt == "JPEG" else {}))
+        best = out.getvalue()
+        if len(best) <= aim:
+            break
+    name = "card." + ("webp" if alpha else "jpg")
+    return Prepared(name, ctype, best, dim=img.size)
