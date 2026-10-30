@@ -9,6 +9,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Long entries and comments in a feed, cut by one shared rule** (#781): `markup.preview`
+  decides what a feed's preview shows - the author's read-more line within twice the
+  normal cut (UN-RFC 0031 3.2.1), nothing cut for a line or two, a cut at a sentence or a
+  word and never inside a link, a code block or a table, and in a comment its own words
+  before what it quotes. The numbers stay the clients' (an entry's and a comment's normal
+  cut). The local API gives each feed row its `preview` with
+  `GET /api/groups/{gid}?preview=ENTRY,COMMENT,WIDTH` (UN-RFC 0046 4.3 as amended), and
+  `unseenet timeline --json` each entry's. UN-RFC 0034 section 4.2 amended (draft): comments
+  in a feed are cut like posts, with a shorter cut; only the feed and the timeline cut.
+
 - **The other repositories' releases in `unseenet.announce`** (#772): every hour,
   `announce-repos.yml` posts each new stable release of the graphical and terminal
   clients, the portable and bootable builds, the web entrance, the gateway, the bots and

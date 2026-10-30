@@ -147,6 +147,21 @@ layout; they SHOULD keep what each point is for.
 - Write controls follow the group's settings (UN-RFC 0030 section 5): a
   reader who may not start an entry is not offered one, and comments on
   an entry whose `comment_days` has passed are shown as closed.
+- **Long entries and comments are cut in the feed** (as amended, #781).
+  A feed is read by skimming, so a client SHOULD show only the start of
+  a long entry or comment, with a way to open the rest in place. Both
+  are cut by the rule of UN-RFC 0031 section 3.2.1: the author's
+  read-more line decides the cut when it comes within twice the normal
+  cut; otherwise the client's normal cut applies. A comment is cut like
+  a post even when it is a chat line, since it is a reply; a comment's
+  normal cut SHOULD be shorter than an entry's (about three or four
+  lines against about ten). A client SHOULD NOT cut when only a line or
+  two would be hidden, SHOULD end the cut at a sentence or a word, and
+  MUST NOT cut inside a link, a code block or a table. In a comment's
+  preview, what it starts by quoting MAY be left out, so the person's
+  own words come first; opened, the whole text is shown. Only the feed
+  and the timeline cut: the threads view, the chat view and pages show
+  everything. What is shown is still chosen only by time (section 4.4).
 
 ## 4.3 Quoting
 

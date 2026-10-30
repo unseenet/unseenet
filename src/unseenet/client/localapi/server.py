@@ -166,12 +166,20 @@ async def groups(request):
 async def group(request):
     # ?all=1: Show all, a look without your rules - never saved (UN-RFC 0051 section 3);
     # ?limit=N: the newest N threads, entries or chat lines (#724)
+    # ?preview=ENTRY,COMMENT,WIDTH: in a feed, each row's shared cut (#781): the normal cut
+    # of an entry and of a comment, in lines of WIDTH characters - the client's numbers
     try:
         limit = max(1, int(request.query["limit"])) if "limit" in request.query else None
+        preview = None
+        if "preview" in request.query:
+            entry, comment, width = (int(x) for x in request.query["preview"].split(","))
+            if not (1 <= entry <= 200 and 1 <= comment <= 200 and 10 <= width <= 400):
+                raise ValueError
+            preview = (entry, comment, width)
     except ValueError:
-        raise web.HTTPBadRequest(text="limit is a number") from None
+        raise web.HTTPBadRequest(text="limit is a number; preview is ENTRY,COMMENT,WIDTH") from None
     return _json(_api(request).group(_gid(request), request.query.get("all") in ("1", "true"),
-                                     limit=limit))
+                                     limit=limit, preview=preview))
 
 
 async def read(request):

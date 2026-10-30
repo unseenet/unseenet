@@ -28,6 +28,7 @@ from importlib import resources
 from markdown_it import MarkdownIt
 
 KIND_CHAT = "chat"
+KIND_POST = "post"
 MARKDOWN_TYPE = "text/markdown; charset=utf-8; variant=unseenet"
 PLAIN_TYPE = "text/plain; charset=utf-8"
 LINK_SCHEMES = ("http", "https", "unseenet", "news")
@@ -172,6 +173,116 @@ def read_more(text: str, kind: str = "post") -> tuple[str, str] | None:
         elif _READ_MORE.match(line) and not quote:   # 4 spaces in: indented code, no match
             return "\n".join(lines[:i]).rstrip("\n"), "\n".join(lines[i + 1:]).lstrip("\n")
     return None
+
+
+# ---- the cut of a feed's preview (#781, UN-RFC 0034 section 4.2 as amended) ------------
+# One rule for every client, so the terminal and the graphical client cut alike; only the
+# number of lines is the client's (a post's normal cut, a comment's shorter one).
+LITTLE = 2                             # hide only this little: show it all instead
+_TABLE_ROW = re.compile(r"^ {0,3}\|")
+_ATTRIB = re.compile(r"^.{1,80}(wrote|skrev|schrieb|écrit|escribió):\s*$", re.IGNORECASE)
+_LINKS = re.compile(r"\[[^\]\n]*\]\([^)\n]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
+
+
+def _rows(line: str, width: int) -> int:
+    """How many lines of ``width`` characters a source line takes, wrapped."""
+    return max(1, -(-len(line.rstrip()) // width))
+
+
+def _rows_of(text: str, width: int) -> int:
+    return sum(_rows(line, width) for line in text.split("\n")) if text else 0
+
+
+def without_leading_quotes(text: str) -> str:
+    """The text without what it starts by quoting - an attribution line ("Sonia wrote:")
+    and the ``>`` lines under it - so a comment's preview shows the person's own words.
+    The whole text when it is nothing but quotes."""
+    lines = text.split("\n")
+    i = 0
+    if i < len(lines) and _ATTRIB.match(lines[i]) and i + 1 < len(lines) and lines[i + 1].lstrip().startswith(">"):
+        i += 1
+    if i >= len(lines) or not lines[i].lstrip().startswith(">"):
+        return text
+    while i < len(lines) and (lines[i].lstrip().startswith(">") or not lines[i].strip()):
+        i += 1
+    rest = "\n".join(lines[i:]).strip("\n")
+    return rest if rest.strip() else text
+
+
+def _cut_line(line: str, keep: int) -> str:
+    """At most ``keep`` characters of a line, ending at a sentence or else a word, and
+    never inside a link."""
+    if len(line) <= keep:
+        return line
+    for m in _LINKS.finditer(line):                    # a link across the cut: before it
+        if m.start() < keep < m.end():
+            keep = m.start()
+            break
+    part = line[:keep]
+    sentence = max(part.rfind(". "), part.rfind("! "), part.rfind("? "))
+    if sentence >= keep // 2:
+        return part[:sentence + 1]
+    word = part.rfind(" ")
+    return part[:word] if word > 0 else part
+
+
+def preview(text: str, content_type: str | None = None, kind: str = "post", lines: int = 10,
+            width: int = 72, quotes: bool = True) -> dict:
+    """What a feed's preview shows of a post or a comment (#781): ``{"text", "cut",
+    "read_more", "tree"}`` - the part to show, whether something was left out, whether
+    the author's read-more line decided it (UN-RFC 0031 section 3.2.1), and that part as
+    a safe tree (``body``). ``lines`` is the client's normal cut, in lines of ``width``
+    characters. A read-more line counts within twice the normal cut; further down the
+    normal cut applies. Only a little more than the cut (``LITTLE`` lines) is shown
+    whole. The cut ends at a sentence or a word, never inside a link, a code block or a
+    table. ``quotes`` False: what the text starts by quoting is left out of the preview
+    (a comment's own words first). A chat line (``kind`` chat) is never cut."""
+    def done(shown: str, cut: bool, more: bool) -> dict:
+        return {"text": shown, "cut": cut, "read_more": more,
+                "tree": body(shown, content_type, KIND_POST)}
+    if kind == KIND_CHAT or not text:
+        return done(text or "", False, False)
+    full = text
+    if not quotes:
+        text = without_leading_quotes(text)
+    split = read_more(text, KIND_POST)
+    if split and _rows_of(split[0], width) <= 2 * lines:
+        return done(split[0].rstrip(), bool(split[1].strip()) or text != full, True)
+    if _rows_of(text, width) <= lines + LITTLE:
+        return done(text, text != full, False)
+    out, used, fence, table_from = [], 0, None, None
+    for line in text.split("\n"):
+        f = _FENCE.match(line)
+        if fence is not None or f:                     # a code block goes whole, or not at all
+            if fence is None:
+                fence, block = f.group(1), [line]
+                continue
+            block.append(line)
+            if f and f.group(1)[0] == fence[0] and len(f.group(1)) >= len(fence):
+                need = _rows_of("\n".join(block), width)
+                if used + need > lines:
+                    break
+                out += block
+                used += need
+                fence = None
+            continue
+        table_from = (table_from if table_from is not None else len(out)) if _TABLE_ROW.match(line) else None
+        need = _rows(line, width)
+        if used + need <= lines:
+            out.append(line)
+            used += need
+            continue
+        if table_from is not None:                     # a table goes whole, or not at all
+            del out[table_from:]
+        elif lines - used > 0 and line.strip():
+            part = _cut_line(line, (lines - used) * width)
+            if part.strip():
+                out.append(part.rstrip() + " …")
+        break
+    shown = "\n".join(out).rstrip()
+    if not shown.strip():                              # a long first block: its start
+        shown = _cut_line(text.split("\n", 1)[0], lines * width).rstrip() + " …"
+    return done(shown, True, False)
 
 
 # a page's links without a scheme lead within its site (UN-RFC 0035 section 8)

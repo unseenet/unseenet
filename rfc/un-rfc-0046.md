@@ -271,7 +271,7 @@ read as a chat. `?limit=N` asks for the newest N threads (or feed entries),
 each with all its replies, or the newest N lines of a chat; the group's
 `more` is true when older ones were left out, and a front end asks again
 with a larger `limit` to show them. Without `limit` every row comes, as
-before; a front end showing large groups SHOULD ask with one. `for_me` is `"reply"`, `"mention"` or null. `who` is how
+before; a front end showing large groups SHOULD ask with one. `?preview=ENTRY,COMMENT,WIDTH` (as amended, #781): in a group read as a feed, the timeline and a tag's view, each readable row also has `preview`, `{"text", "cut", "read_more", "tree"}` - the start to show of a long entry or comment, cut by the one rule of UN-RFC 0034 section 4.2 at the front end's own normal cut (ENTRY lines for an entry, COMMENT for a comment, in lines of WIDTH characters); `tree` draws it, and `cut` says there is more to open in place. `for_me` is `"reply"`, `"mention"` or null. `who` is how
 the runtime names the author (a contact's name, a verified name, UN-RFC
 0019), so that every front end names people alike. `tree` is the text
 rendered for showing (UN-RFC 0031): Markdown or plain by the post's
