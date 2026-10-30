@@ -276,8 +276,10 @@ class KeptMixin:
         "files"}], "notes", "problems", "sent"}``; nothing is sent when there are
         problems. ``progress(done, total, path)`` is called as pages go."""
         from .. import siteimport
+        # the manifest first: a writer whose vault has never seen the site (a CI poster's
+        # throwaway vault) has nothing to check yet (unseenet-docs#7)
+        await self.fetch_group(group_id)                 # the manifest, the versions in force
         self._writes_pages(group_id)
-        await self.fetch_group(group_id)                 # the versions in force
         plan = siteimport.plan(folder, self.manifest_data(group_id))
         current = {p["path"]: p["current"] for p in self.site(group_id)["pages"]}
         changes = []

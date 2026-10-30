@@ -167,3 +167,22 @@ async def test_the_local_api(setup, folder, capsys):
             break
         await asyncio.sleep(0.05)
     assert job and len(me._session.site(gid)["pages"]) == 3
+
+
+async def test_a_poster_whose_vault_never_saw_the_site(setup, folder, capsys, tmp_path):
+    """unseenet-docs#7: CI publishes with a poster key from a throwaway vault, which has
+    not read the site before - the manifest is fetched before who may write is checked."""
+    node, me = setup
+    poster = cli.App(Vault.open(tmp_path / "poster.vault", "pw", **KDF))
+    poster.data["nodes"].extend(me.data["nodes"])
+    await cli.c_id_new(poster, Namespace(name="ci", display=None))
+    capsys.readouterr()
+    key = poster.session.identity().key_text
+    await cli.c_group_create(me, _args(name="dk.guide", type="channel", view="pages",
+                                       poster=[key], attachments=1048576, types="image/*"))
+    gid = json.loads(capsys.readouterr().out.strip().splitlines()[-1])["group"]
+    try:
+        done = await poster.session.publish_site(gid, folder)
+        assert done["sent"] == 3 and not done["problems"]
+    finally:
+        await poster.session.close()
