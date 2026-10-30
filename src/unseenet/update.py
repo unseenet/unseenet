@@ -609,7 +609,10 @@ def mirrors_with(onions: list[str], channel: str, version: str, socks_port: int)
     for onion in random.sample(onions, len(onions)):
         try:
             info = json.loads(fetch(f"http://{onion}/.well-known/unseenet-entrance", socks_port))
-            if (info.get("mirror") or {}).get(channel) == version:
+            # every version it has ("mirror_all": a bootable image can be at another version
+            # than the portable builds, unseenet-entrance#44), else the one "mirror" names
+            every = (info.get("mirror_all") or {}).get(channel)
+            if version in (every if isinstance(every, list) else [(info.get("mirror") or {}).get(channel)]):
                 out.append(f"http://{onion}/")
         except (UpdateError, ValueError, AttributeError):
             continue
