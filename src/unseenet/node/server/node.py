@@ -129,6 +129,7 @@ class NodeBase:
                            "archive": False, "honours_blocks": cfg.honour_blocks,
                            "profiles": cfg.profiles, "avatars": cfg.avatars,
                            "sites": cfg.sites, "emoji": cfg.emoji,
+                           "fetch": cfg.fetch,                   # UN-RFC 0060 section 6.4
                            "logging": op.get("logging", "accepted articles only, no reading activity")}}
         if cfg.follow_reports:                      # UN-RFC 0045 section 6: MAY publish
             info["policy"]["report_issuers"] = [f["issuer"] for f in cfg.follow_reports]

@@ -33,6 +33,7 @@ class Articles:
         self.db.executemany("INSERT OR IGNORE INTO blob_refs VALUES (?, ?, ?, ?)",
                             [(art.message_id, b, group, n) for b, n in refs])
         self._index_reaction(art)                          # UN-RFC 0048
+        self._index_share(art)                             # UN-RFC 0060
         self.remember(art.message_id)
         self.db.commit()
         return number

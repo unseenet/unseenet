@@ -265,6 +265,8 @@ class Identity:
                 "pictures": s.show_pictures(), "state_local": s.state_kept_local(),
                 "notifications": s.notification_settings(),
                 "link_cards": s.link_cards(),               # UN-RFC 0059 section 7.5
+                "share_notices": s.share_notices_on(),      # UN-RFC 0060 section 8
+                "hide_shares": s.hidden_shares(),          # ... section 5.4
                 "report_issuer": bool(s.issuer_names())}    # UN-RFC 0045: offer publishing
 
     async def change_settings(self, data: dict) -> dict:
@@ -310,11 +312,12 @@ class Identity:
 
     def set_settings(self, data: dict) -> dict:
         """``POST /api/settings`` (section 4.8): change your settings - signature,
-        Markdown, notices, the ripening level private senders need, blocked posts, bots."""
+        Markdown, notices, the ripening level private senders need, blocked posts, bots,
+        share notices and hidden shares (UN-RFC 0060 sections 8, 5.4)."""
         s = self._ready()
         unknown = set(data) - {"signature", "markdown", "notices", "private_min_ripe",
                                "show_blocked", "hide_bots", "pictures", "notifications",
-                               "link_cards"}
+                               "link_cards", "share_notices", "hide_shares"}
         if unknown:
             raise SessionError(f"unknown setting {sorted(unknown)[0]}")
         level = data.get("private_min_ripe")
@@ -337,6 +340,18 @@ class Identity:
             s.set_hide_bots(bool(data["hide_bots"]))
         if "pictures" in data:
             s.set_show_pictures(bool(data["pictures"]))
+        if "share_notices" in data:                          # UN-RFC 0060 section 8
+            s.set_share_notices(bool(data["share_notices"]))
+        if "hide_shares" in data:                            # ... section 5.4
+            h = data["hide_shares"] or {}
+            if not isinstance(h, dict):
+                raise SessionError('hide_shares is {"all": true|false, "groups": [...]}')
+            if "all" in h:
+                s.set_hide_shares(None, bool(h["all"]))
+            for g in h.get("groups", []) or []:
+                s.set_hide_shares(str(g), True)
+            for g in h.get("show", []) or []:
+                s.set_hide_shares(str(g), False)
         if "link_cards" in data:
             s.set_link_cards(bool(data["link_cards"]))
         if "notifications" in data:

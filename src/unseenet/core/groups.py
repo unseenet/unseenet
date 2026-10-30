@@ -119,6 +119,7 @@ def parse_canonical_json(body: str) -> dict:
 KIND_CHAT, KIND_POST = "chat", "post"
 MESSAGE_KINDS = (KIND_CHAT, KIND_POST)     # what ``kinds`` may name (UN-RFC 0028, 4.1)
 KIND_REACTION = "reaction"                 # UN-RFC 0048: never in ``kinds``
+KIND_SHARE = "share"                       # UN-RFC 0060: a plain share, never in ``kinds``
 
 
 MAX_SUPERSEDES = 32       # earlier versions an edit may name (UN-RFC 0042 section 2)
@@ -149,6 +150,8 @@ def message_kind(art: Article) -> str:
     value = art.get("Message-Kind", "").strip().lower()
     if value == KIND_REACTION and art.control is None:     # UN-RFC 0048 section 3.1
         return KIND_REACTION
+    if value == KIND_SHARE and art.control is None:        # UN-RFC 0060 section 4.1
+        return KIND_SHARE
     return KIND_CHAT if value == KIND_CHAT else KIND_POST
 
 
@@ -444,7 +447,8 @@ EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reacti
                 "readers", "team_name",                 # team inboxes (UN-RFC 0047)
                 "report_issuers",                       # a group's own (UN-RFC 0045, 7.5)
                 "tags", "languages",                    # the group's tags, languages (0052)
-                "labellers", "topics")                  # UN-RFC 0053 sections 3, 5
+                "labellers", "topics",                  # UN-RFC 0053 sections 3, 5
+                "share_from", "share_into")             # UN-RFC 0060 sections 4.4, 7.2
 
 
 def check_team_fields(data: dict) -> None:
@@ -502,6 +506,8 @@ def check_extra_fields(data: dict) -> None:
     max_pins(data)
     if data.get("type") != "inbox":
         check_reactions(data)                              # UN-RFC 0048 section 4.1
+    from .shares import check_manifest_fields as check_share_fields
+    check_share_fields(data)                               # UN-RFC 0060 sections 4.4, 7.2
     if data.get("view") == "pages":
         check_manifest_fields(data)
     elif "max_pages" in data or "home" in data or "index" in data:
@@ -918,7 +924,10 @@ def check_permitted(art: Article, manifest: Manifest, epoch_keys: dict[int, byte
     if kind == KIND_REACTION:                              # UN-RFC 0048 section 6.1
         _check_reaction(art, manifest, thread_root)
         return
-    if art.control is None and kind not in manifest.kinds:
+    if art.control is None and (kind == KIND_SHARE or art.get("Share-Of") is not None):
+        from .shares import check as check_share           # UN-RFC 0060 sections 4.1, 7.2
+        check_share(art, manifest.raw)
+    if art.control is None and kind != KIND_SHARE and kind not in manifest.kinds:
         raise ArticleError("permission", "this group takes " + " and ".join(
             {"chat": "chat lines", "post": "posts with a subject"}[k] for k in manifest.kinds)
             + f", not a {'chat line' if kind == KIND_CHAT else 'post with a subject'}")

@@ -332,6 +332,10 @@ class Groups:
             notice = {"group": m.mention_group, "id": m.mention_of,
                       "label": s.group_label(m.mention_group), "ref": f"!{name}@{fp}",
                       "followed": m.mention_group in s.data["subscribed"]}
+        if s.is_share_notice(m):                                  # UN-RFC 0060 section 8
+            notice = {"share": m.shared_as, "in": m.shared_in, "label": s.group_label(m.shared_in),
+                      "of": m.share_of, "group": m.share_group,
+                      "followed": m.shared_in in s.data["subscribed"]}
         return {"message": d, "depth": depth, "read": s.is_read(m),
                 "mine": m.author_key in keys or bool(m.to_key),
                 # the text as a safe tree, Markdown or plain (UN-RFC 0031): draw this,
@@ -340,6 +344,9 @@ class Groups:
                 "groups": [r.text for r in group_refs(f"{m.subject}\n{d['text']}")]
                 if m.readable else [],
                 "notice": notice,
+                # UN-RFC 0060: whether it can be shared (section 5.5), and who shared it
+                "share": _perm(s.share_permission(m)) if not m.private else
+                {"allowed": False, "reason": "Closed things are not shared", "code": "closed"},
                 "for_me": s.for_me(m, mine, patterns), "who": who, "who_key": key,
                 "contact": bool(key and s.contact_name(key)),
                 "bot": not m.private and s.is_bot(m.author_key),     # UN-RFC 0030 section 6

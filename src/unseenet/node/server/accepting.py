@@ -239,6 +239,7 @@ class Accepting:
                             self.store.closed_before(art.group), thread_root=self._thread_root,
                             thread_closed=self._thread_closed)
             shorten = self._check_root_edit(art, manifest, versions) if versions else None
+            self._check_share(art)                          # UN-RFC 0060 sections 4.4, 7.2, 12
             if "Encrypted" not in art and rx.is_reaction(art):      # UN-RFC 0048 section 5
                 mine = self.store.reaction_by(rx.target(art), art["Author-Key"])
                 if mine and mine not in versions:

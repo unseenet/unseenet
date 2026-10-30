@@ -627,6 +627,7 @@ class PrivateMixin:
             msg.team_invite = {"group": inner["Team-Inbox"].strip(), "seed": inner["Team-Key"].strip()}
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4
         self._take_card(msg, inner.get)                      # UN-RFC 0059, inside
+        self._take_share(msg, inner.get)                     # sent to you (UN-RFC 0060, 7.4)
         if msg.content_type.startswith(MENTION_TYPE):          # UN-RFC 0032
             msg.mention_group = (inner.get("Mention-Group") or "").strip() or None
             msg.mention_of = (inner.get("Mention-Of") or "").strip() or None

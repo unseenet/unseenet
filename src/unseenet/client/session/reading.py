@@ -315,6 +315,7 @@ class ReadingMixin:
             await self.check_private_senders()     # UN-RFC 0025, section 3.5 (if wanted)
             await self.check_team_senders()        # UN-RFC 0047, section 8
             await self.check_notices()             # UN-RFC 0032, section 5
+            await self.check_share_notices()       # UN-RFC 0060, section 8
         if group_id == self.my_inbox:
             self._schedule_notice_posting()        # approved notices still to go (4.3)
         return sorted(cache.values(), key=lambda m: m.number)
@@ -678,6 +679,7 @@ class ReadingMixin:
                 msg.attachments = tuple(a for a in bl.shown_attachments(art.headers)
                                         if a["blob"] in msg.blobs)
             self._take_card(msg, art.get)                    # its link card (UN-RFC 0059)
+            self._take_share(msg, art.get)                   # what it shares (UN-RFC 0060)
             if art.get("Page") is not None:                  # a site's page (UN-RFC 0035)
                 msg.page = art["Page"].strip()
                 msg.page_removed = (art.get("Page-Removed") or "").strip().lower() == "yes"

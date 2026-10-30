@@ -32,6 +32,8 @@ SETTINGS = ("show_pictures", "show_blocked", "hide_bots", "private_min_ripe", "m
             "labellers",          # labellers followed, and what to do per warning (UN-RFC 0053)
             "languages_by_group",  # what you wrote in, per group, to suggest (UN-RFC 0052 5a)
             "chat_languages",      # what you chose for chat lines and comments, per group
+            "share_notices",      # whether you take share notices (UN-RFC 0060 section 8)
+            "hide_shares",        # plain shares hidden, in some feeds or all (0060 5.4)
             "clients")                # each client's own: the TUI's theme, the GUI's (UN-RFC 0044, 4.2)
 
 

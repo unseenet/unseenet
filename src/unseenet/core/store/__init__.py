@@ -12,6 +12,7 @@ split by area:
     blobs.py        blob references, deletion, refusal, quotas
     withdrawals.py  cancels and edits
     reactions.py    reactions and the article each is to (UN-RFC 0048)
+    shares.py       shares and the article each refers to (UN-RFC 0060)
     peers.py        peer queues, pull and reconcile state
     stats.py        numbers for the operator's monitor
 
@@ -97,6 +98,14 @@ CREATE TABLE IF NOT EXISTS reactions (        -- UN-RFC 0048: a reaction -> its 
     author_key TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS reactions_target ON reactions(target, author_key);
+
+CREATE TABLE IF NOT EXISTS shares (           -- UN-RFC 0060: a share -> the article it refers to
+    message_id TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    target     TEXT NOT NULL,
+    author_key TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS shares_target ON shares(target, author_key);
 
 CREATE TABLE IF NOT EXISTS tombstones (       -- UN-RFC 0013
     group_id   TEXT PRIMARY KEY,
@@ -230,10 +239,11 @@ from .blobs import Blobs  # noqa: E402
 from .withdrawals import Withdrawals  # noqa: E402
 from .peers import Peers  # noqa: E402
 from .reactions import Reactions  # noqa: E402
+from .shares import Shares  # noqa: E402
 from .stats import Stats  # noqa: E402
 
 
-class Store(StoreBase, Articles, Groups, KeyBound, Kept, Blobs, Withdrawals, Peers, Reactions,
+class Store(StoreBase, Articles, Groups, KeyBound, Kept, Blobs, Withdrawals, Peers, Reactions, Shares,
             Stats):
     """The node's store.
 

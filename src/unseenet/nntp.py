@@ -161,6 +161,18 @@ class Client:
             return None
         return await read_block(self.reader)
 
+    async def fetch(self, message_id: str, group_id: str) -> tuple[int, bytes | None]:
+        """``XUN-FETCH`` (UN-RFC 0060 section 6.1): ``(220, article)``, or ``(430|436|503,
+        None)``. A node that does not know the command (``500``) is asked with
+        ``ARTICLE`` instead, and answers 220 or 430."""
+        code, _ = await self.command(f"XUN-FETCH {message_id} {group_id}")
+        if code == 500:
+            raw = await self.article(message_id)
+            return (220, raw) if raw is not None else (430, None)
+        if code != 220:
+            return code, None
+        return 220, await read_block(self.reader)
+
     OVERVIEW = ("Subject", "From", "Date", "Message-ID", "References", ":bytes", ":lines")
 
     async def over(self, first: int, last: int) -> list[dict]:

@@ -253,4 +253,53 @@ async def c_react(app: App, args) -> None:
              {"message_id": mid, "taken_back": False})
 
 
-__all__ = ['c_withdraw', 'c_post', 'c_read', 'c_react', 'c_card']
+async def c_share(app: App, args) -> None:
+    """``unseenet share GROUP MSGID``: share a post into your feed (UN-RFC 0060) -
+    ``--comment`` with words of your own, ``--into GROUP`` another group (at most three
+    besides your feed), ``--to KEY`` one person, privately. The author gets a notice
+    unless ``--no-notice``."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        split_group_id(args.group)
+    except ValueError:
+        sys.exit(f"{args.group!r} is not a group ID")
+    try:
+        await s.fetch_group(args.group)
+        msg = s.find_message(args.group, args.message_id)
+        if msg is None:
+            sys.exit(f"{args.message_id} is not in {args.group}")
+        if args.to:
+            mid = await s.send_share(msg, args.to, args.comment or "")
+            emit(args, f"Sent {args.message_id} to {args.to} ({mid})", {"message_id": mid})
+            return
+        mid = await s.share(msg, args.comment or "", into=args.into, subject=args.subject or "")
+        if args.no_notice:
+            s.data.get("share_notices_to_send", {}).pop(mid, None)
+            s.save()
+        else:
+            await s.send_share_notice(mid, delay=0)
+    except SessionError as exc:
+        sys.exit(f"Not done: {exc}")
+    where = args.into or "your feed"
+    emit(args, f"Shared {args.message_id} into {where} ({mid})",
+         {"message_id": mid, "group": args.into or s.personal_group("feed")})
+
+
+async def c_unshare(app: App, args) -> None:
+    """``unseenet unshare GROUP MSGID``: take back your shares of a post (UN-RFC 0060
+    section 4.5) - everywhere, or ``--from GROUP`` only."""
+    from ..client.session import SessionError
+    s = _session(app, args)
+    try:
+        await s.fetch_group(args.group)
+        msg = s.find_message(args.group, args.message_id)
+        target = s.share_target(msg)[0] if msg is not None else args.message_id
+        done = await s.unshare(target, getattr(args, "from_group", None))
+    except SessionError as exc:
+        sys.exit(f"Not done: {exc}")
+    emit(args, ("Took back the share in " + ", ".join(done)) if done else "Nothing to take back.",
+         {"groups": done})
+
+
+__all__ = ['c_withdraw', 'c_post', 'c_read', 'c_react', 'c_card', 'c_share', 'c_unshare']
