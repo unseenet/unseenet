@@ -45,8 +45,10 @@ def _confirm(args, warning: str, question: str) -> None:
 
 async def c_profile(app: App, args) -> None:
     """``unseenet profile [--about ...] [--link KIND=VALUE] [--lang ..] [--feed GID]
-    [--picture FILE]``: show your profile, or publish it - after the warning that a
-    public profile is public (UN-RFC 0022 section 5.3). ``--of`` shows someone's."""
+    [--picture FILE] [--bot | --no-bot]``: show your profile, or publish it - after the
+    warning that a public profile is public (UN-RFC 0022 section 5.3). ``--of`` shows
+    someone's. ``--bot`` sets the bot mark, ``--no-bot`` takes it away; without either
+    the mark the profile has is kept (#801)."""
     from ..client.session import SessionError
     from ..core import profiles as prof
     s = _session(app, args)
@@ -59,8 +61,9 @@ async def c_profile(app: App, args) -> None:
             emit(args, json.dumps(data, indent=2, ensure_ascii=False) if data else "No public profile.",
                  {"fingerprint": fp, "profile": data or None})
             return
+        bot = getattr(args, "bot", None)
         changes = any(getattr(args, k, None) for k in ("about", "link", "lang", "feed")) \
-            or getattr(args, "empty", False)
+            or getattr(args, "empty", False) or bot is not None
         picture = getattr(args, "picture", None)
         if changes or picture or getattr(args, "remove_picture", False):
             _confirm(args, prof.PROFILE_WARNING, "Publish it?")
@@ -76,7 +79,8 @@ async def c_profile(app: App, args) -> None:
                     about=args.about if args.about is not None else old.get("about", ""),
                     links=links, lang=args.lang or old.get("lang"),
                     feeds=args.feed or old.get("feeds"),
-                    markdown=bool(getattr(args, "markdown", False)), bot=bool(old.get("bot")))
+                    markdown=bool(getattr(args, "markdown", False)),
+                    bot=bool(old.get("bot")) if bot is None else bot)
                 await s.publish_profile(obj)
         if picture:
             await s.publish_picture_file(picture, getattr(args, "alt", None) or "")

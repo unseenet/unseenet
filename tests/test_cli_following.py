@@ -52,7 +52,7 @@ def _args(**kw):
                 home=None, yes=True, of=None, about=None, markdown=False, link=None, lang=None,
                 feed=None, picture=None, alt=None, remove_picture=False, empty=False,
                 refresh=False, limit=50, group=None, message=None, page=None, node=None,
-                follow=False)
+                follow=False, bot=None)
     return Namespace(**(base | kw))
 
 
@@ -250,3 +250,24 @@ async def test_labels_for_personal_feeds_and_people_followed(setup, tmp_path, ca
     finally:
         if again._session is not None:
             await again._session.close()
+
+
+async def test_the_bot_mark(setup, capsys):
+    """#801: --bot sets the mark, a later change without it keeps it, --no-bot takes
+    it away - and --bot alone is a change that publishes."""
+    _node, app = setup
+    alice, bob = await app("alice"), await app("bob")
+    fp = alice.session.identity().fingerprint
+    await cli.c_profile(alice, _args(about="Daily pictures", bot=True))
+    assert _json(capsys)["profile"]["bot"] is True
+    await cli.c_profile(bob, _args(of=fp))
+    assert _json(capsys)["profile"]["bot"] is True
+    await cli.c_profile(alice, _args(about="Daily pictures, with captions"))
+    mine = _json(capsys)["profile"]
+    assert mine["bot"] is True and mine["about"].endswith("captions")
+    await cli.c_profile(alice, _args(bot=False))
+    mine = _json(capsys)["profile"]
+    assert "bot" not in mine and mine["about"].endswith("captions")
+    await cli.c_profile(alice, _args(bot=True))
+    assert _json(capsys)["profile"]["bot"] is True
+
