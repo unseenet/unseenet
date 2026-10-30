@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-30
+
+Sharing - "Facebook mode" is complete with it (UN-RFC 0060). **Update the nodes first**: a
+node before 0.6.6 refuses shares as posts without a subject, and only 0.6.6 nodes answer
+`XUN-FETCH`. A client before 0.6.6 shows a share as a post with an `unseenet:` address.
+
 ### Added
 
 - **Sharing** (#805, #808, UN-RFC 0060): share a post into your feed, plainly or with words
@@ -2207,7 +2213,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/unseenet/unseenet/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/unseenet/unseenet/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/unseenet/unseenet/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/unseenet/unseenet/compare/v0.6.2...v0.6.3
