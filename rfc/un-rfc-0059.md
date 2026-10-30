@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0059                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased), unseenet-gui main (unreleased), unseenet-tui main (unreleased)
+Implemented: unseenet 0.6.5, unseenet-gui main (unreleased), unseenet-tui main (unreleased)
 Updates: 0002, 0027, 0031, 0042
 
                        Unseenet: Link Cards
