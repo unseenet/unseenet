@@ -7,6 +7,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Changed
+
+- **A post's own pictures before its link card** (UN-RFC 0059 section 8): a post with
+  pictures or files of its own shows them first and its card small, as in a chat - a NASA
+  picture of the day is the picture, with a line saying where the link goes.
+
 ## [0.6.5] - 2026-10-30
 
 A patch release with new features, by choice: link cards and the rest below. Nothing
