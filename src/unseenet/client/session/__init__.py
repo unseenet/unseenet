@@ -483,7 +483,7 @@ from .reports import ReportsMixin  # noqa: E402
 from .content_labels import ContentLabelsMixin  # noqa: E402
 from .teams import TeamsMixin  # noqa: E402
 from .group_emoji import GroupEmojiMixin  # noqa: E402
-from .cards import CardsMixin, CardDraft  # noqa: E402,F401
+from .cards import CardsMixin, CardDraft, fetch_card  # noqa: E402,F401
 
 
 class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin):

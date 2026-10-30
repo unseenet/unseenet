@@ -12,7 +12,8 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 - **Link cards from programs** (UN-RFC 0059): `Poster.make_card(url)` makes a card over the
   Poster's Tor as a client does, and `Poster.post(..., card=...)` sends it with the post -
   its picture as one more file where the group takes files, else without it. Bots can drop
-  the picture when its licence is not known.
+  the picture when its licence is not known. `client.session.fetch_card(url, socks,
+  picture=)` makes one at a given Tor without a Session, for a gateway.
 - **Link cards** (#792, UN-RFC 0059): a post with a link can carry a preview of the
   page - its icon, domain, title, description and picture - made once by the poster's
   client over Tor and carried in the signed post as a `Link-Card` header, the picture as an

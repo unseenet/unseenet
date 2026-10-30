@@ -192,6 +192,15 @@ async def test_make_a_card(web, tmp_path, monkeypatch):
     await s.close()
 
 
+async def test_fetch_a_card_without_a_session_or_its_picture(web):
+    """A gateway makes cards at its own Tor, and may leave the page's picture alone."""
+    from unseenet.client.session import fetch_card
+    _, asked = web
+    d = await fetch_card(BT, 9050, picture=False)
+    assert d.title.startswith("Ansat i politiet") and cd.icon_ok(d.icon) and d.picture is None
+    assert "https://www.bt.dk/brands/bt/share.jpg" not in asked and not d.note
+
+
 def test_cards_off_in_the_bootable_client(tmp_path, monkeypatch):
     s = _session(tmp_path)
     monkeypatch.setenv("UNSEENET_BOOTABLE", "1")
