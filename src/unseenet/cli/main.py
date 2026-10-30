@@ -31,7 +31,7 @@ COMMANDS = {
     "withdraw": c_withdraw, "group-edit": c_group_edit, "group-show": c_group_show,
     "post": c_post, "read": c_read, "card": c_card,
     "bridges": c_bridges, "tor": c_tor, "gateways": c_gateways,
-    "pin": c_pin, "pins": c_pins, "comments-close": c_comments, "comments-open": c_comments, "react": c_react, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
+    "pin": c_pin, "pins": c_pins, "comments-close": c_comments, "comments-open": c_comments, "react": c_react, "share": c_share, "unshare": c_unshare, "page-put": c_page_put, "export": c_export, "site-publish": c_site_publish, "page-remove": c_page_remove,
     "pages": c_pages, "feed-start": c_feed_start, "site-start": c_site_start,
     "profile": c_profile, "follow": c_follow, "unfollow": c_unfollow, "following": c_following,
     "timeline": c_timeline, "rules": c_rules, "thread": c_thread, "address": c_address, "open": c_open,
@@ -187,6 +187,19 @@ def client_main(argv=None) -> None:
     s.add_argument("message_id", help="the post's Message-ID")
     s.add_argument("emoji", help="one emoji the group takes, e.g. 👍")
     s.add_argument("--who", action="store_true", help="list who gave this emoji instead")
+    s = sub.add_parser("share", help="share a post into your feed or a group, or send it to "
+                                     "one person (UN-RFC 0060)")
+    s.add_argument("group")
+    s.add_argument("message_id", help="the post's Message-ID")
+    s.add_argument("--comment", help="words of your own (a share with a comment)")
+    s.add_argument("--subject", help="with --comment: a subject, making it a post")
+    s.add_argument("--into", metavar="GROUP", help="another group than your feed (at most three)")
+    s.add_argument("--to", metavar="KEY", help="send it to one person, privately")
+    s.add_argument("--no-notice", action="store_true", help="do not tell the author")
+    s = sub.add_parser("unshare", help="take back your shares of a post (UN-RFC 0060)")
+    s.add_argument("group")
+    s.add_argument("message_id", help="the post's Message-ID")
+    s.add_argument("--from", dest="from_group", metavar="GROUP", help="only in this group")
     for name, what in (("comments-close", "close"), ("comments-open", "open again")):
         s = sub.add_parser(name, help=f"the entry's author, the owner or a moderator: {what} "
                                       "comments on one entry or thread (UN-RFC 0030)")

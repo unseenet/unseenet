@@ -192,6 +192,8 @@ class PeopleMixin:
                 if (not unread_only or not self.is_read(m)) and self.for_me(m, mine, patterns):
                     out.append(m)
         out += [m for m in self.notices() if not unread_only or not self.is_read(m)]
+        # share notices are listed, never counted (UN-RFC 0060 section 8)
+        out += [m for m in self.share_notices() if not unread_only or not self.is_read(m)]
         return sorted(out, key=lambda m: m.date or datetime.min.replace(tzinfo=timezone.utc),
                       reverse=True)
 

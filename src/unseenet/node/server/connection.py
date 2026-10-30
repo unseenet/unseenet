@@ -90,7 +90,8 @@ class ConnectionBase:
                     "UNSEENET-NODEINFO", "UNSEENET-WATCH", "UNSEENET-PEERKEY",
                     "UNSEENET-RECONCILE 1", f"UNSEENET-MANIFESTS {MANIFESTS_MAX}",
                     "UNSEENET-SEALEDBOX2",                       # UN-RFC 0009 section 2.4
-                    "XUNMEET"):                                  # UN-RFC 0050 section 6
+                    "XUNMEET",                                   # UN-RFC 0050 section 6
+                    "XUN-FETCH"):                                # UN-RFC 0060 section 6.1
             self.send(cap)
         if cfg.blobs is not None:
             self.send(f"UNSEENET-BLOB {cfg.max_blob}")             # UN-RFC 0027 section 6.1

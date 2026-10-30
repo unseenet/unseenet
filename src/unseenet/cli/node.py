@@ -57,6 +57,7 @@ def load_node_config(path: Path | None):
                       require_peer_auth=node.get("require_peer_auth", True),
                       pull_interval=float(node.get("pull_interval", 3600)),
                       honour_blocks=bool(node.get("honour_blocks", False)),
+                      fetch=bool(node.get("fetch", True)),       # UN-RFC 0060 section 6.4
                       follow_reports=_follow_reports(path, data.get("follow_reports", [])),
                       profiles=str(node.get("profiles", "accept")),
                       avatars=str(node.get("avatars", "refuse")),
@@ -202,6 +203,7 @@ async def run_node(args) -> None:
         await tor.start()
         node.stats.tor = tor
         socks_port = tor.socks_port
+        node.socks_port = socks_port           # for fetching shared articles (UN-RFC 0060)
         key_file = data / "onion_key.vault"
         key = unseal(key_file.read_bytes(), passphrase).decode() if key_file.exists() else None
         onion, new_key = await tor.control.add_onion(key, 119, f"{host}:{port}")

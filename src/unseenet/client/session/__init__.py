@@ -216,6 +216,16 @@ class Message:
     mention_group: str | None = None      # a mention notice: where the post is (UN-RFC 0032)
     mention_of: str | None = None         # ... and its Message-ID
     notices_for: str | None = None        # a bundle of notices for a submission (0032, 4.3)
+    # a share (UN-RFC 0060): the article it refers to, by Message-ID and group; a plain
+    # share is kind "share". ``sharing_no``: the author asked not to share it (4.4).
+    # ``shared_by``: set by the timeline - who shared it, among those you follow (5.4)
+    share_of: str | None = None
+    share_group: str | None = None
+    sharing_no: bool = False
+    shared_by: list = field(default_factory=list)
+    # a share notice (UN-RFC 0060 section 8): the share that shared your post, and where
+    shared_as: str | None = None
+    shared_in: str | None = None
     supersedes: list[str] = field(default_factory=list)   # an edit: earlier versions (0042)
     edited: datetime | None = None        # shown version is an edit, made then (0042, 4.2)
     versions: list[str] = field(default_factory=list)     # earlier versions this one replaced
@@ -290,6 +300,14 @@ class Message:
             "private": self.private, "sender_key": self.sender_key,
             "reply_inbox": self.reply_inbox, "to_key": self.to_key,
             "mention_group": self.mention_group, "mention_of": self.mention_of,
+            # UN-RFC 0060: what it shares, whether it may be shared, who shared it
+            "share": ({"of": self.share_of, "group": self.share_group,
+                       "plain": self.kind == "share"} if self.share_of else None),
+            "sharing": "no" if self.sharing_no else None,
+            "shared_by": list(self.shared_by),
+            "share_notice": ({"of": self.share_of, "group": self.share_group,
+                              "as": self.shared_as, "in": self.shared_in}
+                             if self.shared_as else None),
             "supersedes": list(self.supersedes), "edited": _iso(self.edited),
             "versions": list(self.versions),
             "attachments": [dict(a) for a in self.attachments],
@@ -473,6 +491,7 @@ from .personal import PersonalMixin  # noqa: E402
 from .following import FollowingMixin  # noqa: E402
 from .state import StateMixin  # noqa: E402
 from .reactions import ReactionsMixin  # noqa: E402
+from .shares import SharesMixin  # noqa: E402
 from .recovery import RecoveryMixin  # noqa: E402
 from .copying import CopyingMixin, CopyOffer, CopyReceive  # noqa: E402,F401
 from .queue import QueueMixin, PostingQueue  # noqa: E402,F401
@@ -486,7 +505,7 @@ from .group_emoji import GroupEmojiMixin  # noqa: E402
 from .cards import CardsMixin, CardDraft, fetch_card  # noqa: E402,F401
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, SharesMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

@@ -7,6 +7,28 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **Sharing** (#805, #808, UN-RFC 0060): share a post into your feed, plainly or with words
+  of your own, into up to three other groups, or send it to one person. A share is a
+  reference, never a copy: an edit or a withdrawal by the author reaches every share, and
+  nothing is counted - no "shared 12 times". In the timeline each original shows once,
+  "shared by" those you follow; plain shares can be hidden per feed or everywhere
+  (`hide_shares`). The author gets a share notice in For you (`share_notices`, on).
+  Session: `share`, `unshare`, `send_share`, `share_permission`, `share_destinations`,
+  `fetch_share_target`; local API: `GET/POST /api/groups/{gid}/share`, `.../unshare`,
+  `GET /api/share-target` (`503 later` while a node fetches); CLI: `unseenet share`
+  (`--comment`, `--into`, `--to`) and `unseenet unshare`.
+- **Nodes: shares and `XUN-FETCH`** (UN-RFC 0060 sections 4, 6, 7): nodes take
+  `Message-Kind: share` and the `Share-Of`/`Share-Group`/`Sharing` headers, refuse shares
+  of encrypted articles they hold, of articles that ask not to be shared, into groups with
+  `share_into: false` (chat groups by default), plain shares into discussion groups, and a
+  fourth group for one key's shares of one article. `XUN-FETCH <message-id> <group-id>`
+  answers with a shared article - or its newest version - and fetches one from peers into a
+  cache of its own (a day at most, never carried, listed or forwarded); `fetch = false` in
+  `[node]` turns that off for groups the node does not carry. **Update the nodes first**:
+  a node before 0.6.6 refuses shares as posts without a subject.
+
 ### Changed
 
 - **A post's own pictures before its link card** (UN-RFC 0059 section 8): a post with

@@ -321,6 +321,7 @@ class FollowingMixin:
         epoch = datetime.min.replace(tzinfo=timezone.utc)
         # an import sits where it belongs in its author's history (UN-RFC 0049 5.3)
         rows.sort(key=lambda m: (m.sort_date or epoch, m.message_id), reverse=True)
+        rows = self._merge_shares(rows)               # each shared original once (0060 5.4)
         for m in rows:
             self.seen_name(m.author_key)              # remember the names of those followed
         self._save_learnt_labels()

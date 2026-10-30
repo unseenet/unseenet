@@ -14,6 +14,8 @@ joined here from parts, one file per area:
     blocks.py      maintainers' blocks      blob_commands.py     BLOBPOST, BLOB
                                             meet_commands.py     XUNMEET (UN-RFC 0050)
     edits.py       edits (Supersedes)
+    shares.py      shares (UN-RFC 0060)       fetch_commands.py    XUN-FETCH (UN-RFC 0060)
+    fetching.py    fetching shared articles
     forwarding.py  queueing for peers
 
 The rules for one kind of article go in its file; ``accepting.py`` only decides the
@@ -116,6 +118,8 @@ class NodeConfig:
     # UN-RFC 0027 section 8: blobs are carried only when the operator turns them on.
     # None: off. Otherwise {"max_size", "retention_days", "encrypted", "groups"}.
     blobs: dict | None = None
+    # UN-RFC 0060 section 6.4: fetch shared articles of groups not carried, for users
+    fetch: bool = True
 
     def carries_blobs(self, group_id: str, encrypted: bool = False) -> bool:
         b = self.blobs
@@ -178,6 +182,8 @@ from .kept import Kept  # noqa: E402
 from .blobs import Blobs  # noqa: E402
 from .blocks import Blocks  # noqa: E402
 from .edits import Edits  # noqa: E402
+from .shares import Shares  # noqa: E402
+from .fetching import Fetching, FETCH_CACHE_SECONDS, FETCH_MISS_SECONDS, FETCH_HOLD_SECONDS  # noqa: E402,F401
 from .reports import Reports  # noqa: E402
 from .forwarding import Forwarding  # noqa: E402
 from .connection import ConnectionBase  # noqa: E402
@@ -188,14 +194,15 @@ from .peering_commands import PeeringCommands  # noqa: E402
 from .posting_commands import PostingCommands  # noqa: E402
 from .blob_commands import BlobCommands  # noqa: E402
 from .meet_commands import MeetCommands  # noqa: E402
+from .fetch_commands import FetchCommands  # noqa: E402
 
 
-class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Reports, Edits,
-           Forwarding):
+class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Reports, Edits, Shares,
+           Fetching, Forwarding):
     """A node: takes articles from clients and peers, keeps them, passes them on.
     Split into parts by area (node/server/*.py, see above)."""
 
 
-class Session(ConnectionBase, AuthCommands, ListsCommands, ReadingCommands, PeeringCommands, PostingCommands, BlobCommands, MeetCommands):
+class Session(ConnectionBase, AuthCommands, ListsCommands, ReadingCommands, PeeringCommands, PostingCommands, BlobCommands, MeetCommands, FetchCommands):
     """One ONNTP connection to a node, from a client or a peer. Split into parts
     by area (node/server/*_commands.py, see above)."""

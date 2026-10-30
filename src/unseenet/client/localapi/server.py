@@ -317,6 +317,21 @@ async def react(request):
     return _json(_api(request).react(_gid(request), await _body(request)))
 
 
+async def share(request):
+    if request.method == "GET":                                   # UN-RFC 0060 section 5.5
+        return _json(_api(request).share_options(_gid(request), request.query.get("id", "")))
+    return _json(_api(request).share(_gid(request), await _body(request)))
+
+
+async def unshare(request):
+    return _json(await _api(request).unshare(_gid(request), await _body(request)))
+
+
+async def share_target(request):
+    return _json(await _api(request).share_target(request.query.get("of", ""),
+                                                  request.query.get("group", "")))
+
+
 async def withdraw(request):
     data = await _body(request)
     return _json(await _api(request).withdraw(_gid(request), str(data.get("id", ""))))
@@ -699,6 +714,8 @@ ROUTES = [
     ("GET", "/api/groups/{gid}/files/{blob}", files),
     ("POST", "/api/groups/{gid}/edit", edit), ("POST", "/api/groups/{gid}/withdraw", withdraw),
     ("POST", "/api/groups/{gid}/pin", pin), ("POST", "/api/groups/{gid}/comments", comments), ("POST", "/api/groups/{gid}/react", react),
+    ("GET", "/api/groups/{gid}/share", share), ("POST", "/api/groups/{gid}/share", share),
+    ("POST", "/api/groups/{gid}/unshare", unshare), ("GET", "/api/share-target", share_target),
     ("POST", "/api/groups/{gid}/mentioned", mentioned),
     ("POST", "/api/groups/{gid}/language", language),
     ("GET", "/api/languages", languages_list),
