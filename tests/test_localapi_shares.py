@@ -56,7 +56,9 @@ async def test_sharing_through_the_api(tmp_path, monkeypatch):
         await api.share_target("<x@y>", gid)
     assert e.value.status == 503 and e.value.fields == {"later": True}
 
-    assert (await api.unshare(gid, {"id": mid}))["groups"] == [feed]
+    share_id = owner.my_shares(mid)[feed]                          # from your own share too
+    await owner.fetch_group(feed)
+    assert (await api.unshare(feed, {"id": share_id}))["groups"] == [feed]
     assert owner.my_shares(mid) == {}
     s = api.settings()
     assert s["share_notices"] is True and s["hide_shares"] == {"all": False, "groups": []}

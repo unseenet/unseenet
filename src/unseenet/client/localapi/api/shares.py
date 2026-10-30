@@ -55,7 +55,9 @@ class Shares:
         (its original, for a plain share) - in ``group`` only, or everywhere."""
         s = self._ready()
         m = self._find(s, gid, str(data.get("id", "")))
-        target, _ = s.share_target(m)
+        # your own share (plain or with a comment): what it shares; else the post itself
+        target = m.share_of if m.share_of and m.author_key == s.identity().key_text \
+            else s.share_target(m)[0]
         groups = await s.unshare(target, str(data.get("group") or "") or None)
         for g in groups:
             await self._fetch(g)
