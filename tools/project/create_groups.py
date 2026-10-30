@@ -241,6 +241,46 @@ GROUPS = (
      "The opening of articles from Mongabay, with a link to the rest, by a bot.",
      BOT_CHARTER.format(source="Mongabay (an opening and a link)"),
      "ed25519:wrcdtwg3wfha6a7qemiu747rloiftewtx2hseag4nffemikuzejq", 20),
+    ("alt.news.hackernews", "channel", "feed", "Hacker News front page: headlines",
+     "Stories from Hacker News' front page as headlines and links, with the HN discussion, by a bot.",
+     BOT_CHARTER.format(source="Hacker News (headlines and links only)"),
+     "ed25519:tkn5j46njfdk56ojtfix5lun6xapnbgptxz2ywq5kffexqr6zwba", 20),
+    ("alt.news.lobsters", "channel", "feed", "Lobsters: headlines",
+     "Stories from Lobsters as headlines and links, with the Lobsters discussion, by a bot.",
+     BOT_CHARTER.format(source="Lobsters (headlines and links only)"),
+     "ed25519:yx35numaoxlzliuzn2q7ctwiyelvkujayccleavn6g32hivozrca", 20),
+    ("alt.news.arstechnica", "channel", "feed", "Ars Technica: headlines",
+     "Ars Technica's headlines with links to the articles, by a bot.",
+     BOT_CHARTER.format(source="Ars Technica (headlines and links only)"),
+     "ed25519:w75d6nqo2lbff7fmu6dwn5orrh7mx7p42lf7zh3wxp3u4xtjwvdq", 20),
+    ("alt.news.theregister", "channel", "feed", "The Register: headlines",
+     "The Register's headlines with links to the articles, by a bot.",
+     BOT_CHARTER.format(source="The Register (headlines and links only)"),
+     "ed25519:cpskhfrj5mjukw3ivjwvxjl5dbl7xuvhfjbmgigaa7mmpneoweuq", 20),
+    ("alt.news.lwn", "channel", "feed", "LWN.net: headlines",
+     "LWN.net's headlines with links to the articles, by a bot.",
+     BOT_CHARTER.format(source="LWN.net (headlines and links only)"),
+     "ed25519:lfvhanh5alwm72cu54hjatdrsrxwc2qyufpnnd33bdtvpt4gaoxq", 20),
+    ("alt.news.propublica", "channel", "feed", "ProPublica: headlines",
+     "ProPublica's headlines with links to the stories, by a bot.",
+     BOT_CHARTER.format(source="ProPublica (headlines and links only)"),
+     "ed25519:yvystooedk3ycxfjmsuayhqbmdmr5nb5fmq53yj4yifr2zhe6v6q", 20),
+    ("alt.news.restofworld", "channel", "feed", "Rest of World: headlines",
+     "Rest of World's headlines with links to the stories, by a bot.",
+     BOT_CHARTER.format(source="Rest of World (headlines and links only)"),
+     "ed25519:z6lddwg7s7wt3dvyccbwrcvkkeh3lqy3qkqfatzp5gbop3ptw5yq", 20),
+    ("alt.security.cisa", "channel", "feed", "CISA cybersecurity advisories",
+     "CISA's cybersecurity advisories, by a bot. Comment on any advisory.",
+     BOT_CHARTER.format(source="CISA (public domain)"),
+     "ed25519:wggtcww3ydpnokwcsisijnpzqvkvdq7vte6mtb762yswrpdzhava", 20),
+    ("alt.security.kev", "channel", "feed", "Known exploited vulnerabilities",
+     "One post a day with what CISA added to its Known Exploited Vulnerabilities catalog, by a bot.",
+     BOT_CHARTER.format(source="CISA's KEV catalog (public domain)"),
+     "ed25519:5j7vmq2ne2o4whkljwzv6ri4olm7amztr5uyed2zce2f254pmpga", 20),
+    ("alt.news.ourworldindata", "channel", "feed", "Our World in Data: data insights",
+     "Our World in Data's Data Insights with their charts, by a bot. Comment on any insight.",
+     BOT_CHARTER.format(source="Our World in Data (CC BY 4.0)"),
+     "ed25519:rwtgrrqovdt6orirlao4psc2nr6dih3vebnliv3lwujuoyevk6zq", 20),
 )
 
 # Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
@@ -260,6 +300,16 @@ COMMENTS = {
     "alt.news.amnesty": ("open", 14),
     "alt.news.hrw": ("open", 14),
     "alt.news.mongabay": ("open", 14),
+    "alt.news.hackernews": ("open", 14),
+    "alt.news.lobsters": ("open", 14),
+    "alt.news.arstechnica": ("open", 14),
+    "alt.news.theregister": ("open", 14),
+    "alt.news.lwn": ("open", 14),
+    "alt.news.propublica": ("open", 14),
+    "alt.news.restofworld": ("open", 14),
+    "alt.security.cisa": ("open", 14),
+    "alt.security.kev": ("open", 7),
+    "alt.news.ourworldindata": ("open", 14),
 }
 
 
@@ -267,11 +317,12 @@ COMMENTS = {
 # keeps at most 8 MiB of files per group (UN-RFC 0017 2.2), so a picture a day must be
 # a few hundred KiB for its channel to keep them for weeks. The Conversation's are
 # agency pictures the bot does not post (unseenet-bots#7), so it takes none; nor do the
-# UN News, Amnesty, HRW and Mongabay channels, whose bots post no pictures (bots#30, #32).
+# UN News, Amnesty, HRW and Mongabay channels, whose bots post no pictures (bots#30, #32),
+# nor the headline channels (bots#35) or CISA's; Our World in Data's take its charts (bots#38).
 BOT_PICTURES = {"max_size": 512 * 1024, "types": ["image/*"]}
 ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
-    "alt.privacy.eff", "alt.space.nasa")}
+    "alt.privacy.eff", "alt.space.nasa", "alt.news.ourworldindata")}
 # the user guide's screenshots (unseenet-docs#7): about a dozen, each under 64 KiB
 ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
 
@@ -285,7 +336,11 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",
     "alt.news.un", "alt.news.un.climate", "alt.news.un.humanrights",
     "alt.news.un.humanitarian", "alt.news.un.health", "alt.news.amnesty",
-    "alt.news.hrw", "alt.news.mongabay")}
+    "alt.news.hrw", "alt.news.mongabay",
+    "alt.news.hackernews", "alt.news.lobsters", "alt.news.arstechnica",
+    "alt.news.theregister", "alt.news.lwn", "alt.news.propublica",
+    "alt.news.restofworld", "alt.security.cisa", "alt.security.kev",
+    "alt.news.ourworldindata")}
 
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
@@ -298,7 +353,11 @@ LANGUAGES = {name: ["en"] for name in (
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",
     "alt.news.un", "alt.news.un.climate", "alt.news.un.humanrights",
     "alt.news.un.humanitarian", "alt.news.un.health", "alt.news.amnesty",
-    "alt.news.hrw", "alt.news.mongabay")}
+    "alt.news.hrw", "alt.news.mongabay",
+    "alt.news.hackernews", "alt.news.lobsters", "alt.news.arstechnica",
+    "alt.news.theregister", "alt.news.lwn", "alt.news.propublica",
+    "alt.news.restofworld", "alt.security.cisa", "alt.security.kev",
+    "alt.news.ourworldindata")}
 
 
 # The project's labeller (UN-RFC 0053), named in the bot channels for their readers'
