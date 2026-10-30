@@ -62,3 +62,20 @@ def test_offer_follows_the_channel(tmp_path):
     assert s.update_offer() == {"version": "99.0.0", "channel": channel}
     s.data["releases"] = {channel: {"version": "0.0.1"}}
     assert s.update_offer() is None
+
+
+def test_a_mirror_is_found_by_every_version_it_has(monkeypatch):
+    """unseenet-entrance#44: a mirror keeps the portable builds and the bootable images
+    each at its own newest version, and names all of them in "mirror_all"; one that names
+    only "mirror" (an older entrance) is found by that."""
+    import json
+
+    from unseenet import update
+    said = {"new.onion": {"mirror": {"stable": "1.0.post1"}, "mirror_all": {"stable": ["1.0.post1", "1.0"]}},
+            "old.onion": {"mirror": {"stable": "1.0"}},
+            "none.onion": {}}
+    monkeypatch.setattr(update, "fetch", lambda url, port: json.dumps(said[url.split("/")[2]]).encode())
+    onions = list(said)
+    assert sorted(update.mirrors_with(onions, "stable", "1.0", 9050)) == ["http://new.onion/", "http://old.onion/"]
+    assert update.mirrors_with(onions, "stable", "1.0.post1", 9050) == ["http://new.onion/"]
+    assert update.mirrors_with(onions, "dev", "1.0", 9050) == []

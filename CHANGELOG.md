@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A stick finds a mirror by every version it has** (unseenet-entrance#44): a mirror keeps
+  the portable builds and the bootable images each at its own newest version (a portable
+  post-release can be ahead of the images) and names them all in `mirror_all`;
+  `update.mirrors_with` uses it, and an older entrance's `mirror` as before.
+
 - **Long entries and comments in a feed, cut by one shared rule** (#781): `markup.preview`
   decides what a feed's preview shows - the author's read-more line within twice the
   normal cut (UN-RFC 0031 3.2.1), nothing cut for a line or two, a cut at a sentence or a
