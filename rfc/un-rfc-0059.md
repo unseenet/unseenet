@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0059                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.6.5, unseenet-gui main (unreleased), unseenet-tui main (unreleased)
+Implemented: unseenet 0.6.5, unseenet-gui 0.4.0, unseenet-tui 0.3.0
 Updates: 0002, 0027, 0031, 0042
 
                        Unseenet: Link Cards
@@ -253,6 +253,11 @@ out. SVG icons are rasterised or left out; they are never carried.
   A post with more links shows "+N links".
 - **A card without a picture** is shown compactly: a larger icon beside
   the text, rather than an empty picture area.
+- **A post with pictures or files of its own** (UN-RFC 0027) shows them
+  first, as it would without a card; its card SHOULD then be shown small,
+  as in a chat (icon, domain and title), after them. The poster's own
+  pictures are what the post is about; the card only says where the link
+  goes.
 - **The post view** shows the same card, with all links in the text.
 - **Chats** show a small card: icon, domain and title.
 - **Text-only clients** show the domain, site, title and description as
