@@ -244,6 +244,9 @@ def client_main(argv=None) -> None:
     s.add_argument("--alt", help="with --picture: what it shows, for screen readers")
     s.add_argument("--remove-picture", action="store_true")
     s.add_argument("--empty", action="store_true", help="publish an empty profile")
+    s.add_argument("--bot", action=argparse.BooleanOptionalAction, default=None,
+                   help="mark the key as automatic (a bot), so clients show it as one; "
+                        "--no-bot takes the mark away (default: keep what the profile has)")
     s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
     s = sub.add_parser("follow", help="follow a feed, or a person (nobody is told)")
     s.add_argument("target", help="a Group ID or address, or a key, fingerprint or name")
