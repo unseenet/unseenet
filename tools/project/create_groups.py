@@ -281,6 +281,26 @@ GROUPS = (
      "Our World in Data's Data Insights with their charts, by a bot. Comment on any insight.",
      BOT_CHARTER.format(source="Our World in Data (CC BY 4.0)"),
      "ed25519:rwtgrrqovdt6orirlao4psc2nr6dih3vebnliv3lwujuoyevk6zq", 20),
+    ("alt.humor.xkcd", "channel", "feed", "xkcd",
+     "xkcd by Randall Munroe: each new comic with its title text, by a bot. Comment on any comic.",
+     BOT_CHARTER.format(source="xkcd (CC BY-NC 2.5)"),
+     "ed25519:rwj6qoyalfou7w4a3nazzixdwrmvsc6h3gvadnus4vdmftvkpeda", 20),
+    ("alt.comics.peppercarrot", "channel", "feed", "Pepper&Carrot",
+     "Pepper&Carrot by David Revoy: one episode a week from the archive, as a thread, by a bot.",
+     BOT_CHARTER.format(source="Pepper&Carrot by David Revoy (CC BY 4.0)"),
+     "ed25519:dyzd56345u3yzbgphywngnh7tuvrjxkerrf2swbh4pdlc4l4e6sa", 20),
+    ("alt.science.arxiv.security", "channel", "feed", "arXiv: new papers in cryptography and security",
+     "A daily digest of new arXiv papers in cs.CR: titles, authors and links, by a bot.",
+     BOT_CHARTER.format(source="arXiv metadata (CC0)"),
+     "ed25519:o4sro6pdc53lccwx7kachdbgbza5vpq4n6m4skwo2bc3lib4o4oq", 20),
+    ("alt.science.arxiv.ai", "channel", "feed", "arXiv: new papers in artificial intelligence",
+     "A daily digest of new arXiv papers in cs.AI: titles, authors and links, by a bot.",
+     BOT_CHARTER.format(source="arXiv metadata (CC0)"),
+     "ed25519:p55753qjde57jmh76hxxkbbfdt5kfbeydcigxxhuhlikwdmay4tq", 20),
+    ("alt.news.fedoramagazine", "channel", "feed", "Fedora Magazine: headlines",
+     "Fedora Magazine's headlines with links to the articles, by a bot.",
+     BOT_CHARTER.format(source="Fedora Magazine (headlines and links only)"),
+     "ed25519:ygh3colomeyhtnelrcwccze5amfgotljvklj5oiexbj5vqahurmq", 20),
 )
 
 # Channels open for comments (UN-RFC 0030): name -> (comments, comment_days).
@@ -310,6 +330,11 @@ COMMENTS = {
     "alt.security.cisa": ("open", 14),
     "alt.security.kev": ("open", 7),
     "alt.news.ourworldindata": ("open", 14),
+    "alt.humor.xkcd": ("open", 14),
+    "alt.comics.peppercarrot": ("open", 14),
+    "alt.science.arxiv.security": ("open", 14),
+    "alt.science.arxiv.ai": ("open", 14),
+    "alt.news.fedoramagazine": ("open", 14),
 }
 
 
@@ -322,7 +347,8 @@ COMMENTS = {
 BOT_PICTURES = {"max_size": 512 * 1024, "types": ["image/*"]}
 ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
-    "alt.privacy.eff", "alt.space.nasa", "alt.news.ourworldindata")}
+    "alt.privacy.eff", "alt.space.nasa", "alt.news.ourworldindata", "alt.humor.xkcd",
+    "alt.comics.peppercarrot")}
 # the user guide's screenshots (unseenet-docs#7): about a dozen, each under 64 KiB
 ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
 
@@ -340,7 +366,9 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.news.hackernews", "alt.news.lobsters", "alt.news.arstechnica",
     "alt.news.theregister", "alt.news.lwn", "alt.news.propublica",
     "alt.news.restofworld", "alt.security.cisa", "alt.security.kev",
-    "alt.news.ourworldindata")}
+    "alt.news.ourworldindata",
+    "alt.humor.xkcd", "alt.comics.peppercarrot", "alt.science.arxiv.security",
+    "alt.science.arxiv.ai", "alt.news.fedoramagazine")}
 
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
@@ -357,7 +385,9 @@ LANGUAGES = {name: ["en"] for name in (
     "alt.news.hackernews", "alt.news.lobsters", "alt.news.arstechnica",
     "alt.news.theregister", "alt.news.lwn", "alt.news.propublica",
     "alt.news.restofworld", "alt.security.cisa", "alt.security.kev",
-    "alt.news.ourworldindata")}
+    "alt.news.ourworldindata",
+    "alt.humor.xkcd", "alt.comics.peppercarrot", "alt.science.arxiv.security",
+    "alt.science.arxiv.ai", "alt.news.fedoramagazine")}
 
 
 # The project's labeller (UN-RFC 0053), named in the bot channels for their readers'
