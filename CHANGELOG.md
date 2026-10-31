@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The council's room** (UN-RFC 0054 section 21, #819): a closed council group for the
+  members, named by the council's `room`, whose key the replicas hand on by themselves -
+  the full member whose key sorts first issues the first epoch, grants the key to each
+  newcomer, and starts a new epoch closing the one before when somebody leaves; the next
+  one in that order acts if nothing has come within 24 hours. Nodes take a room's keys
+  only from full members, the first key update for each epoch, and a grant only for an
+  epoch they know. `unseenet council create --room` founds the room with the council.
 - **`unseenet-replica`: a council registrar that runs by itself** (UN-RFC 0054 sections
   7-13, 19 and 20, #690). Each replica decides the public claims in the order of section
   8 and keeps every decision; as a **shadow** it signs nothing and posts a daily report of

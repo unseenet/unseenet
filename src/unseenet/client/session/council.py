@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from . import *  # noqa: F403  - the shared names: SessionError, Message, ...
 from ...core import council as cn
+from ...core.encoding import b64
+from ...core.groups import parse_key_update
 
 
 class CouncilMixin:
@@ -72,12 +74,13 @@ class CouncilMixin:
                         fields: dict | None = None, min_level: int | None = None,
                         sponsors: int | None = None, date: datetime | None = None,
                         founding_years: int | None = None, founding_size: int = 9,
-                        founder: str | None = None) -> tuple[str, str]:
+                        founder: str | None = None, room: str | None = None) -> tuple[str, str]:
         """(group ID, body) of a new council's genesis: ``members`` as key texts, all
         full, joined on ``date`` (today, 00:00 UTC, by default). Nothing is posted:
         every member posts the same body with ``council_sign``. ``founding_years``: a
         founding period (UN-RFC 0054 section 19) of that many years, at most 3, whose
-        founder is ``founder`` - the first member by default."""
+        founder is ``founder`` - the first member by default. ``room``: the Group ID of
+        the council's closed room (UN-RFC 0054 section 21), founded by the same members."""
         keys = []
         for k in members:
             pk = crypto.key_from_text(k)
@@ -106,7 +109,7 @@ class CouncilMixin:
         body = cn.council_body(name, gtype, seq=1, date=day,
                                members=[cn.Member(k, day, True) for k in keys],
                                min_level=min_level, sponsors=sponsors, founding=founding,
-                               fields=fields)
+                               room=room, fields=fields)
         return cn.make_council_group_id(name, body), body
 
     async def council_check(self, group_id: str, body: str, node: str | None = None) -> tuple[cn.CouncilManifest, cn.Chain]:
@@ -186,3 +189,63 @@ class CouncilMixin:
         body = "{}\n" if act in ("admit", "renounce", "resign") else \
             canonical_json({"sponsor": key, "v": 1}) + "\n"
         return await self.post(where, subject, body, content_type="application/json")
+
+    # --- the council's room (UN-RFC 0054 section 21) ---
+    async def council_room_keys(self, room: str, node: str | None = None) -> list[dict]:
+        """Every key update and grant a node holds for a council's room, oldest first:
+        ``{"kind", "epoch", "author", "tags", "closes", "date"}`` - ``tags`` the
+        envelope tags, which say whose key it was sealed to (UN-RFC 0004 section 6).
+        The node has checked that a full member signed each."""
+        async def run(c: Client):
+            try:
+                _, low, high = await c.group(room)
+            except NNTPError:
+                return []
+            if high < low:
+                return []
+            out = []
+            for line in await c.multiline(f"HDR Control {low}-{high}", 225):
+                number, _, value = line.partition(" ")
+                parts = value.split()
+                if not parts or parts[0] not in ("key-update", "key-grant"):
+                    continue
+                try:
+                    raw = strip_reader_headers(await c.article(number))
+                    art = Article.from_bytes(raw)
+                    epoch, member_key, envelopes = parse_key_update(art)
+                    closes = json.loads(art.body).get("closes_previous") is True
+                    date = parse_date(art["Date"])
+                except (ArticleError, NNTPError, ValueError, TypeError, KeyError):
+                    continue
+                out.append({"kind": parts[0], "epoch": epoch,
+                            "author": crypto.key_to_text(art.author_key),
+                            "tags": set(envelopes), "closes": closes, "date": date})
+            return sorted(out, key=lambda x: (x["date"], x["epoch"]))
+        return await self._call(run, node or self.node_for(room))
+
+    async def council_room_issue(self, room: str, epoch: int, members: list[bytes], *,
+                                 secret: bytes | None = None, closes_previous: bool = False) -> str:
+        """As a full member: seal the room's key for ``members``. Without ``secret``, a
+        new epoch (``key-update``, with a fresh key) - else a ``key-grant`` of that
+        epoch's key. Keeps the key here as for any closed group."""
+        from ...core.groups import envelope_tag
+        me = self.identity()
+        keys = crypto.GroupKeys(secret) if secret else crypto.GroupKeys.generate()
+        sealed = list(dict.fromkeys([me.public_key, *members]))
+        data: dict = {"v": 1, "epoch": epoch,
+                      "envelopes": {envelope_tag(room, epoch, pk): b64(crypto.seal_to(pk, keys.secret))
+                                    for pk in sealed}}
+        kind = "key-grant" if secret else "key-update"
+        if not secret:
+            data["member_key"] = keys.member.key_text
+            if closes_previous:
+                data["closes_previous"] = True
+        from ...core.groups import canonical_json
+        art = new_article(room, None, canonical_json(data),
+                          extra=[("Control", f"{kind} {epoch}"), ("Content-Type", "application/json")])
+        mid = await self.post_article(art, sign_with=me)
+        entry = self.group_entry(room)
+        entry["type"] = "closed"
+        entry.setdefault("keys", {})[str(epoch)] = keys.secret.hex()
+        self.save()
+        return mid

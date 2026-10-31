@@ -139,7 +139,9 @@ class Replica:
                 await self._sign(change, chain, self.agreed(cfg))
         else:
             self.st["held"] = {}                 # nothing is due: nothing waits
-        await self._keep_claims_in_step(chain)
+        await self._keep_in_step(chain, self.reg.claims_group)
+        await self._keep_in_step(chain, cur.room)
+        await self._room_keys(chain, now)
         self.status["held"] = dict(self.st["held"])
         self.s.save()
         self._write_status()
@@ -237,18 +239,18 @@ class Replica:
         self.st["held"].pop(change.label, None)
         log.info("signed the council's %s of %s: %s", change.kind, change.key or "-", change.why)
 
-    async def _keep_claims_in_step(self, chain: cn.Chain) -> None:
-        """Section 8: the claims group's council is kept the same as the registrar's.
-        A full member posts, there, the change that brings it in step."""
+    async def _keep_in_step(self, chain: cn.Chain, group_id: str | None) -> None:
+        """Sections 8 and 21: the claims group's council, and the room's, are kept the
+        same as the registrar's. A full member posts there the change that brings it in
+        step."""
         cur = chain.current
-        claims = self.reg.claims_group
-        if not claims or cur is None or self.role(cur) != "full member":
+        if not group_id or cur is None or self.role(cur) != "full member":
             return
-        other = await self.s.council_chain(claims)
+        other = await self.s.council_chain(group_id)
         oc = other.current
         if oc is None or other.disputed:
             return
-        # a claims group founded without a founding period keeps none (section 19)
+        # a group founded without a founding period keeps none (section 19)
         founding = cur.founding if oc.founding is not None else None
         if [m.as_json() for m in oc.members] == [m.as_json() for m in cur.members] \
                 and oc.founding == founding:
@@ -257,12 +259,70 @@ class Replica:
                             founding=founding)
         if body in self.st["signed"]:
             return
-        m = cn.CouncilManifest.from_body(claims, body)
+        m = cn.CouncilManifest.from_body(group_id, body)
         if cn.change_ok(oc, m, other.last_admission or other.counted[0].date) is not None:
-            log.warning("the claims group's council cannot be brought in step in one change")
+            log.warning("%s cannot be brought in step with the council in one change", group_id)
             return
-        await self._post_manifest(claims, body)
+        await self._post_manifest(group_id, body)
         self.st["signed"] = (self.st["signed"] + [body])[-50:]
+
+    # --- the room's keys (section 21) -------------------------------------------------------
+
+    async def _room_keys(self, chain: cn.Chain, now: datetime) -> None:
+        """Hand on the room's key by itself: a first epoch for all members; a grant to a
+        member that has no envelope of the current epoch; a new epoch, closing the one
+        before, when someone who is no longer a member holds the current key. The full
+        member whose key sorts first acts; the next one if nothing has come within 24
+        hours, and so on. Envelope tags say whose key each was sealed to, so every
+        replica sees the same need from public articles."""
+        from ..core.groups import envelope_tag
+        room = chain.current.room if chain.current else None
+        if not room or self.role(chain.current) != "full member":
+            return
+        rc = await self.s.council_chain(room)
+        cur = rc.current
+        if cur is None or rc.disputed:
+            return
+        self.s.group_entry(room)["type"] = "closed"     # posts there are encrypted
+        await self.s.fetch_group(room)                  # opens our envelopes: the keys
+        keys = await self.s.council_room_keys(room)
+        updates = {k["epoch"]: k for k in keys if k["kind"] == "key-update"}
+        epoch = max(updates) if updates else None
+        members = cur.keys
+        ever = {k for m in chain.counted for k in m.keys} | {k for m in rc.counted for k in m.keys}
+        if epoch is None:
+            need, label, todo = "update", "room:1", (1, members, False)
+        else:
+            tags = set().union(*(k["tags"] for k in keys if k["epoch"] == epoch))
+            gone = [k for k in ever - set(members) if envelope_tag(room, epoch, k) in tags]
+            missing = [k for k in members if envelope_tag(room, epoch, k) not in tags]
+            if gone:
+                need, label, todo = "update", f"room:{epoch + 1}", (epoch + 1, members, True)
+            elif missing:
+                need = "grant"
+                label = f"room:{epoch}:" + ",".join(sorted(crypto.key_to_text(k) for k in missing))
+                todo = (epoch, missing, False)
+            else:
+                self.st.pop("room_need", None)
+                return
+        since = self.st.setdefault("room_need", {}).setdefault(label, nm.rfc3339(now))
+        self.st["room_need"] = {label: since}
+        order = sorted(crypto.key_to_text(k) for k in cur.full)
+        mine = order.index(self.me.key_text) if self.me.key_text in order else None
+        if mine is None or now < nm.parse_rfc3339(since) + timedelta(hours=24) * mine:
+            return
+        ep, to, closes = todo
+        secret = None
+        if need == "grant":
+            hexed = self.s.group_entry(room).get("keys", {}).get(str(ep))
+            if not hexed:
+                return                                  # we do not hold it: the next one acts
+            secret = bytes.fromhex(hexed)
+        try:
+            await self.s.council_room_issue(room, ep, to, secret=secret, closes_previous=closes)
+            log.info("room %s: %s of epoch %d for %d member(s)", room, need, ep, len(to))
+        except SessionError as exc:                     # another member was first
+            log.info("room %s: %s not taken (%s)", room, need, exc)
 
     async def _post_manifest(self, group_id: str, body: str) -> None:
         art = new_article(group_id, None, body.rstrip("\n").rstrip("\r"),

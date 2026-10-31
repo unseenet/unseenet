@@ -39,6 +39,9 @@ def council_parsers(sub) -> None:
                         "admit members faster (UN-RFC 0054 section 19)")
     p.add_argument("--founding-size", type=int, default=9,
                    help="... ending early once the council has this many full members (default 9)")
+    p.add_argument("--room", action="store_true",
+                   help="also a closed room for the members, whose key the replicas hand on "
+                        "(UN-RFC 0054 section 21)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
@@ -105,20 +108,32 @@ async def c_council(app: App, args) -> None:
             fields = {k: v for k, v in (("title", args.title), ("description", args.description),
                                         ("min_pow", args.min_pow),
                                         ("retention_days", args.retention_days)) if v}
-            gid, body = s.council_genesis(args.name, args.type, [me.key_text, *args.member],
-                                          fields=fields, min_level=args.min_level,
-                                          sponsors=args.sponsors,
-                                          founding_years=getattr(args, "founding", None),
-                                          founding_size=getattr(args, "founding_size", 9))
+            common = dict(min_level=args.min_level, sponsors=args.sponsors,
+                          founding_years=getattr(args, "founding", None),
+                          founding_size=getattr(args, "founding_size", 9))
+            members = [me.key_text, *args.member]
+            also, room = [], None
+            if getattr(args, "room", False):
+                room, room_body = s.council_genesis(f"{args.name}.room", "closed", members,
+                                                    fields={"title": "The council's room"},
+                                                    **common)
+                also.append({"group": room, "body": room_body})
+            gid, body = s.council_genesis(args.name, args.type, members, fields=fields,
+                                          room=room, **common)
             out = Path(args.out or f"{args.name}.council.json")
-            out.write_text(json.dumps({"v": 1, "group": gid, "body": body}, indent=2,
-                                      ensure_ascii=False) + "\n", encoding="utf-8")
+            draft = {"v": 1, "group": gid, "body": body}
+            if also:
+                draft["also"] = also
+            out.write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n",
+                           encoding="utf-8")
             text = [f"Draft written to {out}.", "",
                     *_describe(CouncilManifest.from_body(gid, body), me.public_key), "",
                     "The council exists when every member has posted exactly this. Send the",
                     "file to the others; each runs:  unseenet council sign " + out.name]
             mid = None
             if args.sign:
+                for x in also:
+                    await s.council_sign(x["group"], x["body"])
                 mid = await s.council_sign(gid, body)
                 text.append("Your own copy is posted.")
             emit(args, "\n".join(text), {"group": gid, "draft": str(out), "posted": mid})
@@ -133,6 +148,8 @@ async def c_council(app: App, args) -> None:
                     sys.exit("Not signed. Add --yes to confirm when not running interactively.")
                 if input("Post your copy of this? [y/N] ").strip().lower() not in ("y", "yes", "j", "ja"):
                     sys.exit("Not signed.")
+            for x in draft.get("also", []):          # the room (UN-RFC 0054 section 21)
+                await s.council_sign(x["group"], x["body"])
             mid = await s.council_sign(gid, body)
             emit(args, f"Posted your copy ({mid}). Check with: unseenet council show {gid}",
                  {"group": gid, "posted": mid})

@@ -115,3 +115,25 @@ async def test_a_council_with_a_founding_period(net, tmp_path, capsys):
     with pytest.raises(SessionError, match="1 to 3 years"):
         a.council_genesis("dk.x", "open", [a.identity().key_text, b.identity().key_text],
                           founding_years=4)
+
+
+async def test_a_council_with_a_room(net, tmp_path, capsys):
+    """``council create --room``: the room's genesis goes in the same draft and is
+    signed with it; the council names it (UN-RFC 0054 section 21)."""
+    a, b = net("andreas"), net("bente")
+    draft = tmp_path / "dk.lister.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="dk.lister", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=None, sponsors=None, out=str(draft), sign=True,
+        room=True))
+    capsys.readouterr()
+    d = json.loads(draft.read_text())
+    room = d["also"][0]["group"]
+    assert room.startswith("dk.lister.room@")
+    assert CouncilManifest.from_body(d["group"], d["body"]).room == room
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    assert (await a.council_chain(room)).current.type == "closed"
+    assert (await a.council_chain(d["group"])).current.room == room

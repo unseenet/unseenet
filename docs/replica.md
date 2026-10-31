@@ -139,6 +139,13 @@ Anybody can post an **objection** to a shadow or a member; `status` shows the
 objections made by full members, so that you have the reason in front of you.
 `sudo unseenet-replica hold none` lets everything go ahead again.
 
+## The council's room
+
+A council can have a closed **room** where the members talk. Nobody hands its key
+over by hand: the replicas do it - a newcomer gets the key when it is admitted, and
+when a member leaves, the others get a new key that the one who left does not have.
+A member reads and writes the room with the same key its replica uses.
+
 ## Stepping down
 
 ```bash

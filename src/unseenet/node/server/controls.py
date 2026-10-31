@@ -19,9 +19,21 @@ class Controls:
         ctl = art.control or []
         author = art.author_key
         if ctl[0] in ("key-update", "key-grant"):
-            if manifest.type != "closed" or author != manifest.owner:
-                raise ArticleError("permission", "only the owner of a closed group may issue keys")
+            if manifest.type != "closed":
+                raise ArticleError("permission", "keys are issued only in closed groups")
             epoch, member_key, _ = parse_key_update(art)
+            if manifest.is_council:
+                # a council's room (UN-RFC 0054 section 21): any full member, and the
+                # first key update for an epoch wins; a grant needs that epoch
+                if author not in manifest.council_full:
+                    raise ArticleError("permission", "only full members issue a council room's keys")
+                known = self.store.epochs(art.group)
+                if member_key is not None and epoch in known:
+                    raise ArticleError("permission", "that epoch's key is set already")
+                if member_key is None and epoch not in known:
+                    raise ArticleError("later", "a grant for an epoch not seen yet")
+            elif author != manifest.owner:
+                raise ArticleError("permission", "only the owner of a closed group may issue keys")
             self.store.add(art, raw)
             if member_key is not None:
                 self.store.set_epoch(art.group, epoch, member_key, art.message_id)

@@ -276,6 +276,7 @@ class Manifest:
     message_id: str = ""
     raw: dict = field(default_factory=dict)
     council: list[bytes] = field(default_factory=list)   # UN-RFC 0054: members, no owner
+    council_full: list[bytes] = field(default_factory=list)   # ... its full members (21)
 
     @property
     def is_council(self) -> bool:
@@ -294,12 +295,14 @@ class Manifest:
             raise ArticleError("syntax", "not a manifest")
         data = parse_canonical_json(art.body)
         members: list[bytes] = []
+        full: list[bytes] = []
         if "council" in data and "owner" not in data:
             if not council_ok:
                 raise ArticleError("permission", "a council manifest counts only through "
                                                  "its chain (UN-RFC 0054 section 5)")
             from .council import CouncilManifest
-            members = CouncilManifest.from_body(art.group, art.body).keys
+            cm = CouncilManifest.from_body(art.group, art.body)
+            members, full = cm.keys, cm.full
         try:
             name, fp = split_group_id(art.group)
             owner = crypto.key_from_text(data["owner"]) if not members else b""
@@ -318,7 +321,7 @@ class Manifest:
                 # an inbox takes both kinds, whatever it says (UN-RFC 0028, 4.1)
                 kinds=MESSAGE_KINDS if data.get("type") == "inbox" else _kinds(data),
                 banned=[_banned_key(b) for b in data.get("banned", [])],
-                message_id=art.message_id, raw=data, council=members,
+                message_id=art.message_id, raw=data, council=members, council_full=full,
             )
             if members:          # a channel council group: members post (UN-RFC 0054, 6)
                 m.posters = list(members) + [p for p in m.posters if p not in members]
