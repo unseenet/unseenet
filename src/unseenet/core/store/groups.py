@@ -21,7 +21,9 @@ class Groups:
         if not row or self.expired(group_id):
             return None
         raw = self.get(row[0])
-        return Manifest.from_article(Article.from_bytes(raw), stored=True) if raw else None
+        # a council manifest is set here only once its chain counted (UN-RFC 0054)
+        return (Manifest.from_article(Article.from_bytes(raw), stored=True, council_ok=True)
+                if raw else None)
 
     def set_manifest(self, m: Manifest) -> None:
         """Make a manifest the group's current one; a key-bound group's is also put in
@@ -70,9 +72,11 @@ class Groups:
         out = []
         if self.expired(group_id):
             return out
+        # a council group's chain, oldest first, so it can be counted as it comes (0054, 6)
+        out += self.council_kept(group_id)
         row = self.db.execute("SELECT manifest_id FROM groups WHERE group_id=? AND serial > 0",
                               (group_id,)).fetchone()
-        if row and row[0]:
+        if row and row[0] and row[0] not in out:
             out.append(row[0])
         out += [r[0] for r in self.db.execute(
             "SELECT e.message_id FROM epoch_articles e JOIN articles a USING (message_id) "

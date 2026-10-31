@@ -275,17 +275,34 @@ class Manifest:
     expires: datetime | None = None      # UN-RFC 0029, key-bound groups only
     message_id: str = ""
     raw: dict = field(default_factory=dict)
+    council: list[bytes] = field(default_factory=list)   # UN-RFC 0054: members, no owner
+
+    @property
+    def is_council(self) -> bool:
+        return bool(self.council)
 
     @classmethod
-    def from_article(cls, art: Article, *, stored: bool = False) -> "Manifest":
+    def from_article(cls, art: Article, *, stored: bool = False,
+                     council_ok: bool = False) -> "Manifest":
         """Validate a manifest article (section 4, steps 1-3). ``stored``: one a node
-        already carries, which may be from before UN-RFC 0029 and lack ``expires``."""
+        already carries, which may be from before UN-RFC 0029 and lack ``expires``.
+
+        A council manifest (UN-RFC 0054) proves nothing by itself: it counts only
+        through its chain (core.council). ``council_ok`` is for a copy whose chain the
+        caller has counted; without it, a council manifest is refused."""
         if art.control != ["manifest"]:
             raise ArticleError("syntax", "not a manifest")
         data = parse_canonical_json(art.body)
+        members: list[bytes] = []
+        if "council" in data and "owner" not in data:
+            if not council_ok:
+                raise ArticleError("permission", "a council manifest counts only through "
+                                                 "its chain (UN-RFC 0054 section 5)")
+            from .council import CouncilManifest
+            members = CouncilManifest.from_body(art.group, art.body).keys
         try:
             name, fp = split_group_id(art.group)
-            owner = crypto.key_from_text(data["owner"])
+            owner = crypto.key_from_text(data["owner"]) if not members else b""
             m = cls(
                 group_id=art.group, name=data["name"], type=data["type"], owner=owner,
                 serial=int(data["serial"]),
@@ -301,8 +318,11 @@ class Manifest:
                 # an inbox takes both kinds, whatever it says (UN-RFC 0028, 4.1)
                 kinds=MESSAGE_KINDS if data.get("type") == "inbox" else _kinds(data),
                 banned=[_banned_key(b) for b in data.get("banned", [])],
-                message_id=art.message_id, raw=data,
+                message_id=art.message_id, raw=data, council=members,
             )
+            if members:          # a channel council group: members post (UN-RFC 0054, 6)
+                m.posters = list(members) + [p for p in m.posters if p not in members]
+                m.moderators = []
             m.comments, m.comment_days = _comments(data)
             from .pins import max_pins
             max_pins(data)                                  # UN-RFC 0033 section 4.1
@@ -331,7 +351,12 @@ class Manifest:
             raise ArticleError("syntax", f"bad manifest: {exc}") from exc
         if data.get("v") != 1 or m.name != name or m.type not in GROUP_TYPES or m.serial < 1:
             raise ArticleError("syntax", "bad manifest fields")
-        if crypto.fingerprint(owner) != fp or owner != art.author_key:
+        if members:
+            if is_key_bound(art.group):
+                raise ArticleError("syntax", "a key-bound name is never a council group")
+            if art.author_key not in members:
+                raise ArticleError("permission", "council manifest not posted by a member")
+        elif crypto.fingerprint(owner) != fp or owner != art.author_key:
             raise ArticleError("permission", "manifest not signed by group owner")
         if m.view == "pages" and m.type != "channel":       # UN-RFC 0035 section 3
             raise ArticleError("syntax", "only a channel can be shown as pages")

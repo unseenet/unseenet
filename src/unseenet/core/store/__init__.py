@@ -8,7 +8,7 @@ split by area:
     articles.py     storing, finding, deleting and expiring articles
     groups.py       manifests, carried groups, state, epochs, removal
     keybound.py     key-bound groups: lifetime and reconciliation sums
-    kept.py         kept articles: pins and pages
+    kept.py         kept articles: pins and pages, and the copies of council manifests
     blobs.py        blob references, deletion, refusal, quotas
     withdrawals.py  cancels and edits
     reactions.py    reactions and the article each is to (UN-RFC 0048)
@@ -176,6 +176,14 @@ CREATE TABLE IF NOT EXISTS pages (            -- page articles of sites (UN-RFC 
     supersedes TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS pages_group ON pages(group_id);
+
+CREATE TABLE IF NOT EXISTS council_copies (   -- council manifests, every member's copy (UN-RFC 0054)
+    message_id TEXT PRIMARY KEY,
+    group_id   TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    author_key TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS council_copies_group ON council_copies(group_id, seq);
 
 CREATE TABLE IF NOT EXISTS pull_state (       -- UN-RFC 0017: how far we have pulled from a peer
     peer       TEXT PRIMARY KEY,
