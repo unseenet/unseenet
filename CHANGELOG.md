@@ -7,6 +7,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-31
+
+For the graphical client's new share flow; nodes need no update.
+
 ### Added
 
 - **A share written like any post** (UN-RFC 0060, unseenet-gui): `POST /api/groups/{gid}/post`
@@ -2231,7 +2235,9 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/unseenet/unseenet/compare/v0.6.7...v0.6.8
+[0.6.7]: https://github.com/unseenet/unseenet/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/unseenet/unseenet/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/unseenet/unseenet/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/unseenet/unseenet/compare/v0.6.3...v0.6.4
