@@ -28,6 +28,13 @@ DEFAULT_MAX_PROBATION = 1
 ADMISSION_GAP = timedelta(days=30)        # section 5, item 2
 PROBATION = timedelta(days=180)           # section 5, item 2
 MIN_FULL = 2                              # section 5, item 3
+# the founding period (section 19)
+FOUNDER = "founder"                       # a member's ``by`` when the founder admitted it
+FOUNDER_GAP = timedelta(days=7)           # between admissions while it lasts
+FOUNDER_PROBATION = timedelta(days=30)
+FOUNDING_MAX = timedelta(days=3 * 366)    # ``until``: at most 3 years after the genesis
+EXTEND_MAX = timedelta(days=366)          # an extension: at most a year after its date
+DEFAULT_FOUNDING_PROBATION = 2
 
 
 def council_fingerprint(genesis_body: str) -> str:
@@ -55,10 +62,47 @@ class Member:
     key: bytes
     joined: datetime
     full: bool
+    by: str | None = None                 # "founder" for a founder admission (section 19)
 
     def as_json(self) -> dict:
-        return {"full": self.full, "joined": format_expires(self.joined),
-                "key": crypto.key_to_text(self.key)}
+        out = {"full": self.full, "joined": format_expires(self.joined),
+               "key": crypto.key_to_text(self.key)}
+        if self.by:
+            out["by"] = self.by
+        return out
+
+
+@dataclass(frozen=True)
+class Founding:
+    """Section 19: who may ask for faster admissions, and until when."""
+    founder: bytes
+    until: datetime
+    size: int
+    max_probation: int = DEFAULT_FOUNDING_PROBATION
+    renounced: bool = False
+
+    @classmethod
+    def from_json(cls, f) -> "Founding":
+        if not isinstance(f, dict):
+            raise ValueError("founding is not an object")
+        size = f["size"]
+        mp = f.get("max_probation", DEFAULT_FOUNDING_PROBATION)
+        ren = f.get("renounced", False)
+        for v in (size, mp):
+            if not isinstance(v, int) or isinstance(v, bool):
+                raise ValueError("founding numbers are integers")
+        if not 1 <= size <= MAX_MEMBERS or mp < 0 or not isinstance(ren, bool):
+            raise ValueError("bad founding fields")
+        return cls(crypto.key_from_text(f["founder"]), parse_expires(f["until"]), size, mp, ren)
+
+    def as_json(self) -> dict:
+        out = {"founder": crypto.key_to_text(self.founder), "size": self.size,
+               "until": format_expires(self.until)}
+        if self.max_probation != DEFAULT_FOUNDING_PROBATION:
+            out["max_probation"] = self.max_probation
+        if self.renounced:
+            out["renounced"] = True
+        return out
 
 
 @dataclass
@@ -76,6 +120,16 @@ class CouncilManifest:
     succeeds: dict | None
     body: str                              # the canonical body, without line ends
     data: dict = field(default_factory=dict)
+    founding: Founding | None = None       # section 19
+    room: str | None = None                # section 21
+
+    def founding_lasts(self, at: datetime) -> bool:
+        """Section 19: whether a manifest dated ``at`` after this one is inside the
+        founding period - before ``until``, fewer than ``size`` full members here, and
+        not renounced."""
+        f = self.founding
+        return (f is not None and not f.renounced and at < f.until
+                and len(self.full) < f.size)
 
     @property
     def hash(self) -> str:
@@ -109,8 +163,11 @@ class CouncilManifest:
             for m in c["members"]:
                 if not isinstance(m, dict) or not isinstance(m.get("full"), bool):
                     raise ValueError("bad member")
+                by = m.get("by")
+                if by not in (None, FOUNDER):
+                    raise ValueError("a member's by is founder or absent")
                 members.append(Member(crypto.key_from_text(m["key"]),
-                                      parse_expires(m["joined"]), m["full"]))
+                                      parse_expires(m["joined"]), m["full"], by))
             seq = c["seq"]
             if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
                 raise ValueError("bad seq")
@@ -121,7 +178,11 @@ class CouncilManifest:
                 min_level=_int(c, "min_level", DEFAULT_MIN_LEVEL),
                 max_probation=_int(c, "max_probation", DEFAULT_MAX_PROBATION),
                 sponsors=_int(c, "sponsors", 0), succeeds=c.get("succeeds"),
-                body=text, data=data)
+                body=text, data=data,
+                founding=Founding.from_json(c["founding"]) if "founding" in c else None,
+                room=c.get("room"))
+            if cm.room is not None:
+                split_group_id(cm.room)
         except (KeyError, TypeError, ValueError, crypto.CryptoError) as exc:
             raise ArticleError("syntax", f"bad council manifest: {exc}") from exc
         if "owner" in data:
@@ -138,6 +199,11 @@ class CouncilManifest:
             raise ArticleError("syntax", "succeeds is for the genesis only")
         if cm.min_level < 0 or cm.max_probation < 0 or cm.sponsors < 0:
             raise ArticleError("syntax", "council numbers are not negative")
+        if seq == 1 and cm.founding is not None:
+            if cm.founding.until > cm.date + FOUNDING_MAX or cm.founding.renounced:
+                raise ArticleError("syntax", "a founding period lasts at most 3 years")
+            if any(x.by for x in members):
+                raise ArticleError("syntax", "the genesis members were not admitted")
         return cm
 
     @classmethod
@@ -170,7 +236,8 @@ def is_council_manifest(art: Article) -> bool:
 def council_body(name: str, gtype: str, *, seq: int, date: datetime, members: list[Member],
                  prev: str | None = None, min_level: int | None = None,
                  max_probation: int | None = None, sponsors: int | None = None,
-                 succeeds: dict | None = None, fields: dict | None = None) -> str:
+                 succeeds: dict | None = None, founding: Founding | None = None,
+                 room: str | None = None, fields: dict | None = None) -> str:
     """The canonical body of a council manifest. ``fields``: the other manifest
     fields of UN-RFC 0004 section 3.1 (``title``, ``posters``, ``min_pow``, ...)."""
     c: dict = {"date": format_expires(date), "members": [m.as_json() for m in members],
@@ -185,6 +252,10 @@ def council_body(name: str, gtype: str, *, seq: int, date: datetime, members: li
         c["sponsors"] = sponsors
     if succeeds is not None:
         c["succeeds"] = succeeds
+    if founding is not None:
+        c["founding"] = founding.as_json()
+    if room is not None:
+        c["room"] = room
     data = dict(fields or {})
     for k in ("owner", "council", "serial", "name", "type", "v"):
         data.pop(k, None)
@@ -193,9 +264,10 @@ def council_body(name: str, gtype: str, *, seq: int, date: datetime, members: li
 
 
 def next_body(prev: CouncilManifest, *, date: datetime, members: list[Member] | None = None,
-              **changes) -> str:
+              founding: Founding | None = None, **changes) -> str:
     """The body of the manifest after ``prev``: same fields, ``seq`` + 1, ``prev`` its
-    hash, and the given changes (``members``, ``min_level``, other manifest fields)."""
+    hash, ``founding`` and ``room`` carried on, and the given changes (``members``,
+    ``founding``, ``min_level``, other manifest fields)."""
     c = prev.data["council"]
     fields = {k: v for k, v in prev.data.items() if k != "council"}
     for k in list(changes):
@@ -206,7 +278,9 @@ def next_body(prev: CouncilManifest, *, date: datetime, members: list[Member] | 
         members=prev.members if members is None else members, prev=prev.hash,
         min_level=changes.get("min_level", c.get("min_level")),
         max_probation=changes.get("max_probation", c.get("max_probation")),
-        sponsors=changes.get("sponsors", c.get("sponsors")), fields=fields)
+        sponsors=changes.get("sponsors", c.get("sponsors")),
+        founding=founding if founding is not None else prev.founding, room=prev.room,
+        fields=fields)
 
 
 def council_article(member: crypto.Identity, group_id: str, body: str, pow_bits: int = 18,
@@ -231,23 +305,61 @@ def change_ok(prev: CouncilManifest, m: CouncilManifest, last_admission: datetim
     changed = [k for k in new if k in old and new[k] != old[k]]
     if len(added) + len(removed) + len(changed) > 1:
         return "more than one change of members"
+    if m.room != prev.room:
+        return "the room is set at the genesis"
+    why = _founding_change(prev, m, bool(added or removed or changed))
+    if why:
+        return why
     if added:
         x = new[added[0]]
         if x.full or x.joined != m.date:
             return "an admitted member starts on probation, joined on the manifest's date"
-        if m.date < last_admission + ADMISSION_GAP:
-            return "less than 30 days since the last admission"
-        if len(prev.on_probation) >= prev.max_probation:
-            return "as many members on probation as max_probation"
+        if x.by == FOUNDER:                                     # section 19
+            if not prev.founding_lasts(m.date):
+                return "a founder admission only while the founding period lasts"
+            if m.date < last_admission + FOUNDER_GAP:
+                return "less than 7 days since the last admission"
+            if len(prev.on_probation) >= prev.founding.max_probation:
+                return "as many members on probation as the founding period allows"
+        else:
+            if m.date < last_admission + ADMISSION_GAP:
+                return "less than 30 days since the last admission"
+            if len(prev.on_probation) >= prev.max_probation:
+                return "as many members on probation as max_probation"
     if changed:
         a, b = old[changed[0]], new[changed[0]]
-        if not (not a.full and b.full and a.joined == b.joined):
+        if not (not a.full and b.full and a.joined == b.joined and a.by == b.by):
             return "a member's fields change only by promotion"
-        if m.date < a.joined + PROBATION:
-            return "promotion less than 180 days after joining"
+        if m.date < a.joined + (FOUNDER_PROBATION if a.by == FOUNDER else PROBATION):
+            return ("promotion less than 30 days after a founder admission" if a.by == FOUNDER
+                    else "promotion less than 180 days after joining")
     if len(m.full) < MIN_FULL:
         return "fewer than 2 full members left"
     return None
+
+
+def _founding_change(prev: CouncilManifest, m: CouncilManifest, members_change: bool) -> str | None:
+    """Section 19: ``founding`` is carried on unchanged, except a renunciation or,
+    once the period is over, an extension - each in a manifest that changes no member."""
+    a, b = prev.founding, m.founding
+    if a == b:
+        return None
+    if a is None or b is None:
+        return "the founding period is set at the genesis"
+    if members_change:
+        return "the founding period changes only in a manifest that changes no member"
+    if a.renounced:
+        return "a renounced founding period stays renounced"
+    same = (a.founder, a.size, a.max_probation) == (b.founder, b.size, b.max_probation)
+    if same and b.renounced and b.until == a.until:
+        return None                                             # renouncing
+    if same and not b.renounced and b.until != a.until:
+        if prev.founding_lasts(m.date):
+            return "the founding period is extended only once it is over"
+        if not m.date < b.until <= m.date + EXTEND_MAX:
+            return "an extension sets until to at most a year after its date"
+        return None
+    return "the founding period changes only by renouncing or extending"
 
 
 def quorum(eligible: int) -> int:

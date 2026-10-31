@@ -31,6 +31,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   would not) and posts your copy, and `council show` lists the members - and, until the
   genesis counts, who has still to sign. A node now lets you select such a group before
   its genesis counts, so that can be seen.
+- **A council's founding period** (UN-RFC 0054 section 19, #819): a genesis may name a
+  founder who can admit members faster while the period lasts - until a date at most 3
+  years on, or until the council has `size` full members, or until the founder renounces.
+  A founder admission (`by: founder`) comes at least 7 days after the last admission and
+  is on probation for 30 days instead of 180; at most `max_probation` (default 2) at once.
+  The period changes only by renouncing, or - once over - by an extension of at most a
+  year. `unseenet council create --founding YEARS` makes one with you as founder;
+  `council show` and `sign` show it openly.
 
 ## [0.6.8] - 2026-10-31
 

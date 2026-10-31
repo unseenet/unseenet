@@ -34,6 +34,11 @@ def council_parsers(sub) -> None:
                    help="ripening level a newcomer's key needs (default 4)")
     p.add_argument("--sponsors", type=int, default=None,
                    help="full members who must sponsor a newcomer (default 0)")
+    p.add_argument("--founding", type=int, default=None, metavar="YEARS",
+                   help="a founding period of up to 3 years in which you, as founder, can "
+                        "admit members faster (UN-RFC 0054 section 19)")
+    p.add_argument("--founding-size", type=int, default=9,
+                   help="... ending early once the council has this many full members (default 9)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
@@ -57,8 +62,18 @@ def _describe(m, me: bytes) -> list[str]:
         lines.append(f"Title      {m.data['title']}")
     lines.append(f"Members    {len(m.members)} ({len(m.full)} full)")
     for x in m.members:
-        tag = " (you)" if x.key == me else ""
+        tag = (" (you)" if x.key == me else "") + (" (admitted by the founder)" if x.by else "")
         lines.append(f"  {'full     ' if x.full else 'probation'}  {_short(x.key)}{tag}")
+    f = m.founding
+    if f is not None:
+        who = _short(f.founder) + (" (you)" if f.founder == me else "")
+        if f.renounced:
+            lines.append(f"Founding   renounced; the founder was {who}")
+        elif m.founding_lasts(m.date):
+            lines.append(f"Founding   until {f.until:%Y-%m-%d} at the latest, or {f.size} full "
+                         f"members; founder: {who}")
+        else:
+            lines.append(f"Founding   over; the founder was {who}")
     lines.append(f"Newcomers  key ripened to level {m.min_level}; {m.sponsors} sponsor(s); "
                  f"at most {m.max_probation} on probation at a time")
     return lines
@@ -78,7 +93,9 @@ async def c_council(app: App, args) -> None:
                                         ("retention_days", args.retention_days)) if v}
             gid, body = s.council_genesis(args.name, args.type, [me.key_text, *args.member],
                                           fields=fields, min_level=args.min_level,
-                                          sponsors=args.sponsors)
+                                          sponsors=args.sponsors,
+                                          founding_years=getattr(args, "founding", None),
+                                          founding_size=getattr(args, "founding_size", 9))
             out = Path(args.out or f"{args.name}.council.json")
             out.write_text(json.dumps({"v": 1, "group": gid, "body": body}, indent=2,
                                       ensure_ascii=False) + "\n", encoding="utf-8")

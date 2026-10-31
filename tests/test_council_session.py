@@ -97,3 +97,21 @@ async def test_the_command_line(net, tmp_path, capsys):
     await cli.c_council(App(a), Namespace(json=True, identity=None, what="show", group=gid))
     shown = json.loads(capsys.readouterr().out)
     assert shown["seq"] == 1 and len(shown["members"]) == 2
+
+
+async def test_a_council_with_a_founding_period(net, tmp_path, capsys):
+    a, b = net("andreas"), net("bente")
+    draft = tmp_path / "dk.lister.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=False, identity=None, what="create", name="dk.lister", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=None, sponsors=None, out=str(draft), sign=False,
+        founding=3, founding_size=9))
+    out = capsys.readouterr().out
+    assert "Founding   until" in out and "founder:" in out and "(you)" in out
+    gid = json.loads(draft.read_text())["group"]
+    m = CouncilManifest.from_body(gid, json.loads(draft.read_text())["body"])
+    assert m.founding.founder == a.identity().public_key and m.founding.size == 9
+    with pytest.raises(SessionError, match="1 to 3 years"):
+        a.council_genesis("dk.x", "open", [a.identity().key_text, b.identity().key_text],
+                          founding_years=4)
