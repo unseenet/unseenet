@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0054                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - Part I, the claims of section 8 and the rules of section 19; the replica (#690), sections 20-21 (#819)
+Implemented: unseenet main (unreleased); partly - the room of section 21 (#819)
 Updates: 0003, 0004, 0015, 0019
 
         Unseenet: Councils, and a Registrar Without an Owner
@@ -273,12 +273,20 @@ left out, so wording cannot make two equal decisions differ.
 A decision **depends on DNS** when it concerns a domain name (UN-RFC
 0019 section 6.4).
 
+**Which day.** A decision belongs to the UTC day of its commit's `Date`. A
+day is **settled** once every commit of it has been revealed or has lapsed,
+that is seven days and an hour after it ends. A shadow posts its report for
+day *D* on day *D* + 8, and a report counts only if it was posted on that
+day, so that nobody can fill in days afterwards. A replica that was not
+running on day *D* + 8 has no report for *D*.
+
 # 11. Admission and Promotion
 
 A shadow is **eligible** when
 
 1. its key is ripened to the council's `min_level`;
-2. it has posted a shadow report on at least 55 of the last 60 days;
+2. it has posted a shadow report on at least 55 of the last 60 settled
+   days - judged on day *E*, the days *E* - 68 to *E* - 9 (section 10);
 3. on each day it reported, it reported every claim the council handled
    that day; and
 4. none of its reports in those 60 days disagrees with the council on a
@@ -570,13 +578,16 @@ is before `until`, the manifest before it has fewer than `size` full
 members, and `renounced` is not `true`.
 
 **A founder admission.** The founder posts, in the council group, an
-article with `Subject: admit <key>` and an empty JSON object. Each full
+article with `Subject: admit <key>` and an empty JSON object. So that
+nodes take it, a genesis whose founder is not a member lists the founder in
+its `posters` (section 6); posters do not sign certificates (section 7). Each full
 member's replica posts the manifest that admits that key, with `by` set
 to `founder`, when
 
 1. the founding period lasts;
 2. the key is ripened to the council's `min_level`;
-3. it has run as a shadow (section 10) on each of the last 7 days, and
+3. it has run as a shadow (section 10) on each of the last 7 settled days,
+   and
    none of its reports in those days disagrees with the council on a
    decision that does not depend on DNS; and
 4. the last admission was at least 7 days ago; and

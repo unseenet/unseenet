@@ -146,7 +146,9 @@ timeline, addresses), and
 ## Around them
 
 `known_nodes.py` and `hierarchies.py` (the project's lists), `names.py` and
-`registrar.py` (names, UN-RFC 0019), `nntp.py` (the ONNTP client),
+`registrar.py` (names, UN-RFC 0019), `replica/` (`unseenet-replica`, a replica of a
+council registrar, UN-RFC 0054 Part II: `rules.py` what every replica computes alike,
+`run.py` a round, `cli.py` setup and status), `nntp.py` (the ONNTP client),
 `portable.py`, `launcher.py`, `update.py` and `boot.py` (the portable and
 bootable builds), `monitor.py` (`unseenet-monitor`).
 

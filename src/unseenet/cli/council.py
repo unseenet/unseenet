@@ -46,6 +46,20 @@ def council_parsers(sub) -> None:
     p.add_argument("--yes", action="store_true", help="do not ask")
     p = t.add_parser("show", help="a council's members, and who still has to sign")
     p.add_argument("group")
+    for act, helptext in (
+            ("admit", "as founder: ask the replicas to admit a shadow faster (UN-RFC 0054, 19)"),
+            ("renounce", "as founder: give up the founding period for good"),
+            ("resign", "as a member: step down (UN-RFC 0054 section 20)"),
+            ("sponsor", "as a full member: sponsor a shadow (UN-RFC 0054 section 11.1)"),
+            ("unsponsor", "as a full member: take a sponsorship back"),
+            ("object", "object to a shadow or a member, with a reason (section 13.1)")):
+        p = t.add_parser(act, help=helptext)
+        p.add_argument("group")
+        if act in ("admit", "sponsor", "unsponsor", "object"):
+            p.add_argument("key")
+        if act == "object":
+            p.add_argument("reason", help="why - the operators see it next to the key")
+        p.add_argument("--yes", action="store_true", help="do not ask")
 
 
 def _short(key: bytes) -> str:
@@ -154,6 +168,25 @@ async def c_council(app: App, args) -> None:
                      *(f"  {_short(k)}{' (you)' if k == me else ''}" for k in missing)]
             emit(args, "\n".join(lines), {"group": args.group, "seq": 0,
                                           "missing": [_short(k) for k in missing]})
+        elif what in ("admit", "renounce", "resign", "sponsor", "unsponsor", "object"):
+            key = getattr(args, "key", None)
+            plain = {"admit": f"Ask the council's replicas to admit {key}. They do it once it "
+                              "has run as a shadow for 7 days, agreeing.",
+                     "renounce": "Give up the founding period. This cannot be undone.",
+                     "resign": "Step down from the council. The other members' replicas remove "
+                               "your key. This cannot be undone.",
+                     "sponsor": f"Sponsor {key}. You can sponsor one shadow in 180 days.",
+                     "unsponsor": f"Take back your sponsorship of {key}.",
+                     "object": f"Object, in public, to {key}."}[what]
+            if not args.json:
+                print(plain)
+            if not getattr(args, "yes", False):
+                if not sys.stdin.isatty():
+                    sys.exit("Not posted. Add --yes to confirm when not running interactively.")
+                if input("Post it? [y/N] ").strip().lower() not in ("y", "yes", "j", "ja"):
+                    sys.exit("Not posted.")
+            mid = await s.council_act(args.group, what, key, getattr(args, "reason", ""))
+            emit(args, f"Posted ({mid}).", {"group": args.group, "act": what, "posted": mid})
     except SessionError as exc:
         sys.exit(str(exc))
 

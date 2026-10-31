@@ -9,6 +9,31 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **`unseenet-replica`: a council registrar that runs by itself** (UN-RFC 0054 sections
+  7-13, 19 and 20, #690). Each replica decides the public claims in the order of section
+  8 and keeps every decision; as a **shadow** it signs nothing and posts a daily report of
+  outcome hashes (for day *D* on day *D* + 8, once the day is settled); as a **member** it
+  signs certificates with its member key, answers through `reply_inbox`, and posts a
+  heartbeat with its software version at random times; as a **full member** it computes
+  and posts the one next council manifest - removals first (a certificate no claim
+  explains, losing alone on DNS three times in 30 days, 90 days of silence, `resign`),
+  then promotions, admissions of the eligible shadow that started first (55 of the last
+  60 settled days, all agreeing; key ripened; sponsors where the council wants them),
+  founder admissions and a renunciation - with dates from the articles, so every replica
+  posts the same body; and keeps the claims group's council in step. The operator can
+  **hold** admissions, promotions or removals and agree to them one by one; objections by
+  full members are shown. The registrar (`unseenet-registrar`) reads council registrars
+  too, and has a shadow mode.
+- **Easy to set up on a Raspberry Pi or a small VPS**: `deploy/install-replica.sh`, then
+  `unseenet-replica setup` makes the key, a vault with a random passphrase kept for
+  systemd, the service and a daily self-update; the key ripens beside the rounds.
+  `unseenet-replica status` says in plain words what the replica is and what comes next;
+  `hold`, `agree` and `resign` change what the running service does at its next round.
+  Guide: `docs/replica.md`.
+- **`unseenet council admit|renounce|resign|sponsor|unsponsor|object`**: the articles the
+  replicas read (UN-RFC 0054 sections 11.1, 13.1, 19 and 20). A council made with a
+  founding period lists a founder that is not a member as a poster, so nodes take its
+  `admit`.
 - **Public name claims, commit then reveal** (UN-RFC 0054 section 8, #689): where the
   registrar is a council, a claim goes out in the open in two steps. Claiming posts a
   commit in the registrar's claims group and keeps the claim and its nonce in the vault;
