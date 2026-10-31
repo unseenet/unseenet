@@ -14,7 +14,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   their chain from the identical copies the members posted: the genesis, the quorum (the
   larger of 2 and a majority of the full members that remain), one change of members at a
   time (admission after 30 days, promotion after 180, removal), at least 2 full members
-  left, and forks, which freeze the chain before them. Nodes and clients do not use it yet.
+  left, and forks, which freeze the chain before them.
+- **Nodes carry council groups** (UN-RFC 0054 sections 5 and 6, #688): a node takes each
+  member's copy of a council manifest - before it counts, so the copies can come
+  together - counts the chain, and makes a new manifest the group's own only when it
+  counts. Only members (and posters) post in a council channel; cancels are refused. The
+  copies that make the chain count are kept whatever the retention and offered first, so
+  a node that catches up counts the chain as it goes; a copy ahead of the chain is asked
+  again later. A new council group follows `new_groups`, with `trusted` meaning one of
+  its founding members is a trusted owner.
 
 ## [0.6.8] - 2026-10-31
 
