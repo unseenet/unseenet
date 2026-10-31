@@ -44,6 +44,7 @@ import sys
 import _owner
 from _owner import FP, fetch_manifests, open_owner_session, post_everywhere
 
+from unseenet.core.article import new_article
 from unseenet.core.groups import make_manifest, manifest_article, with_charter
 
 TALK = """The place to talk about Unseenet itself: the protocol (the UN-RFCs), the
@@ -378,6 +379,12 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.humor.xkcd", "alt.comics.peppercarrot", "alt.science.arxiv.security",
     "alt.science.arxiv.ai", "alt.news.fedoramagazine")}
 
+# Groups the project moved (old name -> new name): the old one is removed from the
+# network by its owner (UN-RFC 0013), once, with the new name as the reason. Every node
+# carries the endorsed groups of unseenet.*, so groups where anything may be posted
+# live elsewhere (UN-RFC 0055 section 4.1, #821).
+MOVED = {"unseenet.test": "test.unseenet"}
+
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
 # they say none. Clients suggest the group's language to those who write there.
@@ -508,6 +515,14 @@ async def main() -> None:
             art = manifest_article(owner, gid, data, pow_bits=_owner.POW_BITS)
         todo.append((art, gtype, True))
         print(f"{gid}: will create ({gtype}, view {view}, posters {posters or 'none'})")
+    for old, new in MOVED.items():              # once: then the vault no longer owns it
+        gid = f"{old}@{owner.fingerprint}"
+        if not s.data["groups"].get(gid, {}).get("owner"):
+            continue
+        art = new_article(gid, None, f"Moved to {new}@{owner.fingerprint}.\n",
+                          extra=[("Control", "rmgroup")]).finalize(owner, _owner.POW_BITS)
+        todo.append((art, None, False))
+        print(f"{gid}: will remove from the network (moved to {new})")
     if not dry:
         s.save()                                # remembers the manifests read from the nodes
     if not todo or dry:
@@ -516,6 +531,9 @@ async def main() -> None:
     if await post_everywhere([a for a, _, _ in todo], session=s) == 0:
         sys.exit("No node took the manifests; nothing stored. Try again later.")
     for art, gtype, new in todo:
+        if art.control == ["rmgroup"]:
+            s.forget_group(art.group)
+            continue
         entry = s.group_entry(art.group)
         entry.update({"type": gtype, "owner": True, "owner_key": owner.key_text,
                       "manifest": json.loads(art.body)})
