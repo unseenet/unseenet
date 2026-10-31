@@ -151,7 +151,7 @@ class CouncilMixin:
                     "sponsor": "claims", "unsponsor": "claims", "object": "claims"}
 
     async def council_act(self, group_id: str, act: str, key: str | None = None,
-                          reason: str = "") -> str:
+                          reason: str = "", withdraw: bool = False) -> str:
         """Post one of the articles a council's replicas read: the founder's ``admit
         <key>`` or ``renounce``, a member's ``resign`` (in the council group), a full
         member's ``sponsor``/``unsponsor <key>``, or anybody's ``object <key>`` with a
@@ -173,6 +173,8 @@ class CouncilMixin:
             raise SessionError("you are not a member of this council")
         if act in ("sponsor", "unsponsor") and me not in cur.full:
             raise SessionError("only full members sponsor")
+        if act == "object" and key and not key.startswith("ed25519:"):
+            return await self._object_to_proposal(cur, key, reason, withdraw)
         if act in ("admit", "sponsor", "unsponsor", "object"):
             if not key:
                 raise SessionError(f"{act} needs the key it is about")
@@ -189,6 +191,55 @@ class CouncilMixin:
         body = "{}\n" if act in ("admit", "renounce", "resign") else \
             canonical_json({"sponsor": key, "v": 1}) + "\n"
         return await self.post(where, subject, body, content_type="application/json")
+
+    # --- proposals and hearings (UN-RFC 0061) ---
+    async def _object_to_proposal(self, cur, proposal: str, reason: str, withdraw: bool) -> str:
+        """Object to a proposal in the council's proposals group (UN-RFC 0061 section 6),
+        or take the objection back. It counts if your key is ripened to the council's
+        ``min_level``; it is public."""
+        from ...core import proposals as pr
+        where = cur.data.get("proposals")
+        if not where:
+            raise SessionError("this council has no proposals group")
+        try:
+            body = pr.objection_body(proposal, reason.strip(), withdrawn=withdraw)
+        except pr.ProposalProblem as exc:
+            raise SessionError(str(exc)) from exc
+        return await self.post(where, f"{pr.OBJECTION} {proposal}", body,
+                               content_type="application/json")
+
+    async def council_hearings(self, group_id: str, now: datetime | None = None) -> list[dict]:
+        """The council's proposals that count, with their state and objections so far
+        (UN-RFC 0061 sections 4-7), newest last. Objectors' levels are read from their
+        ``Key-Ripening`` headers, as a node checked them; the replicas check the chains."""
+        from ...core import proposals as pr
+        chain = await self.council_chain(group_id)
+        cur = chain.current
+        if cur is None or not cur.data.get("proposals"):
+            return []
+        msgs = await self.fetch_group(cur.data["proposals"])
+        talk = await self.fetch_group(cur.data["talk"]) if cur.data.get("talk") else []
+
+        def items(ms):
+            return [pr.Item(m.message_id, m.subject or "", m.author_key, m.date, m.body)
+                    for m in ms if m.readable and m.author_key and m.date]
+        props = items(msgs)
+        level: dict[str, int | None] = {}
+        for m in msgs:
+            try:
+                header = Article.from_bytes(m.raw).get("Key-Ripening") if m.raw else None
+                level[m.author_key] = rp.level(rp.parse_header(header)[0]) if header else None
+            except (ArticleError, rp.RipeningError, ValueError, TypeError):
+                level.setdefault(m.author_key, None)
+        now = now or datetime.now(timezone.utc)
+        out = []
+        for h in pr.hearings(chain, props, items(talk)):
+            o = pr.outcome(h, props, level, cur.min_level, now)
+            out.append({"id": h.proposal.id, "kind": h.proposal.kind, "change": h.proposal.change,
+                        "reason": h.proposal.reason, "urgent": h.proposal.urgent,
+                        "state": o.state, "objections": o.objections, "active": o.active,
+                        "closes": o.closes, "applies": o.applies})
+        return out
 
     # --- the council's room (UN-RFC 0054 section 21) ---
     async def council_room_keys(self, room: str, node: str | None = None) -> list[dict]:

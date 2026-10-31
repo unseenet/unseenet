@@ -46,7 +46,7 @@ class Net:
         return Replica(s, group, tlds=lambda: TLDS, dns_txt=lambda n: [], now=lambda: self.clock,
                        levels=lambda k: 4, **kw)
 
-    async def found(self, members, founder=None, room=False):
+    async def found(self, members, founder=None, room=False, groups=False):
         keys = [m.identity().key_text for m in members]
         a = members[0]
         fk = dict(founding_years=1, founder=founder.identity().key_text) if founder else {}
@@ -61,10 +61,17 @@ class Net:
                                          date=self.clock, **fk)
         for m in members:
             await m.council_sign(claims, body)
+        fields = {"min_pow": 0, "retention_days": 365, "claims": claims}
+        if groups:                                       # UN-RFC 0061 section 3
+            for part, kind in (("proposals", "open"), ("talk", "open"), ("log", "channel")):
+                g, b = a.council_genesis(f"unseenet.names.{part}", kind, keys,
+                                         fields={"min_pow": 8} if kind == "open" else {},
+                                         date=self.clock, **fk)
+                for m in members:
+                    await m.council_sign(g, b)
+                fields[part] = g
         group, body = a.council_genesis("unseenet.names", "channel", keys,
-                                        fields={"min_pow": 0, "retention_days": 365,
-                                                "claims": claims}, date=self.clock,
-                                        room=room_id, **fk)
+                                        fields=fields, date=self.clock, room=room_id, **fk)
         for m in members:
             await m.council_sign(group, body)
         return (group, claims, room_id) if room else (group, claims)
@@ -313,7 +320,7 @@ def test_setup_without_systemd(tmp_path, monkeypatch, capsys):
     assert cli.main(["--dir", str(d), "status"]) == 0
     assert "has not finished a round" in capsys.readouterr().out
     assert cli.main(["--dir", str(d), "hold", "all"]) == 0
-    assert _json.loads((d / "config.json").read_text())["hold"] == ["admission", "promotion", "removal"]
+    assert _json.loads((d / "config.json").read_text())["hold"] == ["admission", "promotion", "proposal", "removal"]
     with pytest.raises(SystemExit):
         cli.main(["--dir", str(d), "hold", "everything"])
 
@@ -392,3 +399,115 @@ async def test_the_replicas_hand_on_the_rooms_key(net, monkeypatch):
     await a.post(room, "Ny nøgle", "Efter Carl\n")
     assert "Efter Carl" in await readable(shadow, room)
     assert "Efter Carl" not in await readable(c, room)
+
+
+# --- proposals, hearings and the log (UN-RFC 0061, #820) ---------------------------------------
+
+async def test_a_proposal_with_a_hearing(net, monkeypatch, tmp_path):
+    """Members propose and second through the outbox, the hearing opens in the log,
+    ripened keys object, and a passed proposal is applied by the replicas themselves;
+    one with more objections than active members fails."""
+    from unseenet.replica import cli
+    a, b, c = net.session("a"), net.session("b"), net.session("c")
+    group, claims = await net.found([a, b, c], groups=True)
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    dirs = {s: tmp_path / s.identity().key_text[8:16] for s in (a, b, c)}
+    for d in dirs.values():
+        d.mkdir()
+    reps = [net.replica(s, group, state_dir=dirs[s], config=lambda d=dirs[s]: cli.read_config(d))
+            for s in (a, b, c)]
+    for r in reps:
+        await r.run_once()
+    cur = (await a.council_chain(group)).current
+    logbook = cur.data["log"]
+
+    # b speaks in the talk group (active); a proposes, b seconds; c is silent (not active)
+    assert cli.main(["--dir", str(dirs[b]), "talk", "Hej", "Jeg er her"]) == 0
+    for r in reps:
+        await r.run_once()
+    assert cli.main(["--dir", str(dirs[a]), "propose", "--set", "min_level=3",
+                     "--reason", "Billigere nøgler"]) == 0
+    await reps[0].run_once()
+    net.clock += timedelta(hours=2)
+    for r in reps:
+        await r.run_once()
+    (pid,) = cli.read_status(dirs[b])["proposals_pending"]
+    assert cli.main(["--dir", str(dirs[b]), "second", pid, "--yes"]) == 0
+    for r in reps:
+        await r.run_once()
+    (h,) = await a.council_hearings(group, now=net.clock)
+    assert h["id"] == pid and h["state"] == "open" and h["active"] == 2
+    assert f"hearing {pid} open" in {m.subject for m in await a.fetch_group(logbook)}
+
+    # one ripened outsider objects: O = 1 is not more than F / 2 = 1 - it passes
+    outsider = net.session("outsider")
+    await outsider.council_act(group, "object", pid, "Nej tak")
+    net.clock += timedelta(days=15, hours=1)
+    for r in reps:
+        await r.run_once()
+    cur = (await a.council_chain(group)).current
+    assert cur.seq == 2 and cur.min_level == 3
+    subjects = {m.subject for m in await a.fetch_group(logbook)}
+    assert {f"hearing {pid} closed", "council 2"} <= subjects
+    assert "passed" in next(m.body for m in await a.fetch_group(logbook)
+                            if m.subject == f"hearing {pid} closed")
+
+    # a second proposal meets three objections: more than the 2 active members - it fails.
+    # It is made from the council as it is now (manifest 2): one made from an older
+    # manifest would never count (UN-RFC 0061 section 4)
+    for r in reps:
+        await r.run_once()
+    assert cli.read_status(dirs[a])["seq"] == 2
+    assert cli.main(["--dir", str(dirs[a]), "propose", "--set", "title=Navne",
+                     "--reason", "Et navn"]) == 0
+    for r in reps:
+        await r.run_once()
+    (pid2,) = cli.read_status(dirs[b])["proposals_pending"]
+    assert cli.main(["--dir", str(dirs[b]), "second", pid2, "--yes"]) == 0
+    for r in reps:
+        await r.run_once()
+    for n in range(3):
+        await net.session(f"o{n}").council_act(group, "object", pid2, "Nej")
+    net.clock += timedelta(days=15, hours=1)
+    for r in reps:
+        await r.run_once()
+    assert (await a.council_chain(group)).current.seq == 2
+    closed = next(m.body for m in await a.fetch_group(logbook) if m.subject == f"hearing {pid2} closed")
+    assert "failed" in closed and "3 objections" in closed
+
+
+async def test_two_passed_proposals_one_manifest_each(net, monkeypatch, tmp_path):
+    """Two proposals that pass on the same day are applied one after the other, each in
+    its own manifest, never as two manifests with one number (UN-RFC 0061 section 4)."""
+    from unseenet.replica import cli
+    a, b, c = net.session("a"), net.session("b"), net.session("c")
+    group, _ = await net.found([a, b, c], groups=True)
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    dirs = {s: tmp_path / s.identity().key_text[8:16] for s in (a, b, c)}
+    for d in dirs.values():
+        d.mkdir()
+    reps = [net.replica(s, group, state_dir=dirs[s], config=lambda d=dirs[s]: cli.read_config(d))
+            for s in (a, b, c)]
+    for r in reps:
+        await r.run_once()
+    assert cli.main(["--dir", str(dirs[b]), "talk", "Hej", "Jeg er her"]) == 0
+    for change in (["min_level=3"], ["title=Navne"]):
+        assert cli.main(["--dir", str(dirs[a]), "propose", "--set", *change,
+                         "--reason", "To ting"]) == 0
+    for r in reps:
+        await r.run_once()
+    pending = cli.read_status(dirs[b])["proposals_pending"]
+    assert len(pending) == 2
+    for pid in pending:
+        assert cli.main(["--dir", str(dirs[b]), "second", pid, "--yes"]) == 0
+    for r in reps:
+        await r.run_once()
+    assert len(await a.council_hearings(group, now=net.clock)) == 2
+    net.clock += timedelta(days=15, hours=1)
+    for _ in range(3):
+        for r in reps:
+            await r.run_once()
+    chain = await a.council_chain(group)
+    assert not chain.disputed
+    assert chain.current.seq == 3
+    assert chain.current.min_level == 3 and chain.current.data["title"] == "Navne"

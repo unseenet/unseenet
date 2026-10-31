@@ -9,6 +9,21 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Council proposals, hearings and objections** (UN-RFC 0061, #820). A proposal counts
+  when a majority of the council's *active* members (those who spoke in its proposals or
+  talk group in the last 90 days) post the same one within 7 days; it then stands in
+  public for 14 to 60 days (3 when urgent, with two thirds). Anybody whose key is ripened
+  to the council's level may object; more objections than active members fail it, more
+  than half extend it once. The replicas open and close hearings in the council's log,
+  count the objections (checking each objector's ripening chain), and apply a passed
+  `manifest` proposal themselves - parameters, manifest fields, or a longer founding
+  period. They also keep the log by themselves: admissions, promotions, removals, the
+  founding period, forks, and members about to stop being active. Rules in
+  `unseenet.core.proposals`. The operator speaks with the member key through the
+  replica's outbox: `unseenet-replica propose|second|talk|object`, and can `hold
+  proposal`. Everybody else: `unseenet council hearings` and `unseenet council object
+  <group> <proposal id> "why"` (`--withdraw`). `unseenet council create --groups` founds
+  the proposals, talk and log groups with the council.
 - **The council's room** (UN-RFC 0054 section 21, #819): a closed council group for the
   members, named by the council's `room`, whose key the replicas hand on by themselves -
   the full member whose key sorts first issues the first epoch, grants the key to each

@@ -32,15 +32,16 @@ from ..core.article import new_article
 from ..core.groups import make_group_id
 from ..registrar import Registrar, dig_txt
 from . import rules
+from .public import PublicDuties
 
 log = logging.getLogger("unseenet.replica")
 
 SOFTWARE = f"unseenet-replica {__version__}"
 ALIVE_EVERY = (timedelta(days=7), timedelta(days=29))   # a random time within, section 9
-HOLDABLE = ("admission", "promotion", "removal")         # section 13; a renunciation follows
+HOLDABLE = ("admission", "promotion", "removal", "proposal")   # section 13 (0061: proposals)
 
 
-class Replica:
+class Replica(PublicDuties):
     """A replica of the council registrar ``group``. ``hold``: the kinds of change the
     operator agrees to first (section 13); ``state_dir``: where ``status.json`` goes."""
 
@@ -110,6 +111,7 @@ class Replica:
             self._write_status()
             return self.status
         self.reg.shadow = role == "shadow"
+        await self._outbox()                   # what the operator said with the member key
         await self.reg.run_once()
         posts = await self.reg.read_public()
         council_posts = [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
@@ -142,6 +144,7 @@ class Replica:
         await self._keep_in_step(chain, self.reg.claims_group)
         await self._keep_in_step(chain, cur.room)
         await self._room_keys(chain, now)
+        await self._public(chain, now, self.agreed(cfg), busy=change is not None)  # UN-RFC 0061
         self.status["held"] = dict(self.st["held"])
         self.s.save()
         self._write_status()

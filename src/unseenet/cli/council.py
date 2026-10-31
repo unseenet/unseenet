@@ -42,6 +42,8 @@ def council_parsers(sub) -> None:
     p.add_argument("--room", action="store_true",
                    help="also a closed room for the members, whose key the replicas hand on "
                         "(UN-RFC 0054 section 21)")
+    p.add_argument("--groups", action="store_true",
+                   help="also the council's proposals, talk and log groups (UN-RFC 0061)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
@@ -49,19 +51,25 @@ def council_parsers(sub) -> None:
     p.add_argument("--yes", action="store_true", help="do not ask")
     p = t.add_parser("show", help="a council's members, and who still has to sign")
     p.add_argument("group")
+    p = t.add_parser("hearings", help="a council's proposals and their hearings (UN-RFC 0061)")
+    p.add_argument("group")
     for act, helptext in (
             ("admit", "as founder: ask the replicas to admit a shadow faster (UN-RFC 0054, 19)"),
             ("renounce", "as founder: give up the founding period for good"),
             ("resign", "as a member: step down (UN-RFC 0054 section 20)"),
             ("sponsor", "as a full member: sponsor a shadow (UN-RFC 0054 section 11.1)"),
             ("unsponsor", "as a full member: take a sponsorship back"),
-            ("object", "object to a shadow or a member, with a reason (section 13.1)")):
+            ("object", "object to a shadow or a member (a key), or to a proposal (its id), "
+                       "with a reason (UN-RFC 0054 13.1, 0061 6)")):
         p = t.add_parser(act, help=helptext)
         p.add_argument("group")
         if act in ("admit", "sponsor", "unsponsor", "object"):
             p.add_argument("key")
         if act == "object":
-            p.add_argument("reason", help="why - the operators see it next to the key")
+            p.add_argument("reason", nargs="?", default="",
+                           help="why - everybody sees it (needed for a key)")
+            p.add_argument("--withdraw", action="store_true",
+                           help="take an objection to a proposal back")
         p.add_argument("--yes", action="store_true", help="do not ask")
 
 
@@ -118,6 +126,13 @@ async def c_council(app: App, args) -> None:
                                                     fields={"title": "The council's room"},
                                                     **common)
                 also.append({"group": room, "body": room_body})
+            if getattr(args, "groups", False):           # UN-RFC 0061 section 3
+                for part, kind in (("proposals", "open"), ("talk", "open"), ("log", "channel")):
+                    extra = {"min_pow": 24} if part == "proposals" else {}
+                    g, b = s.council_genesis(f"{args.name}.{part}", kind, members,
+                                             fields=extra, **common)
+                    also.append({"group": g, "body": b})
+                    fields[part] = g
             gid, body = s.council_genesis(args.name, args.type, members, fields=fields,
                                           room=room, **common)
             out = Path(args.out or f"{args.name}.council.json")
@@ -185,6 +200,17 @@ async def c_council(app: App, args) -> None:
                      *(f"  {_short(k)}{' (you)' if k == me else ''}" for k in missing)]
             emit(args, "\n".join(lines), {"group": args.group, "seq": 0,
                                           "missing": [_short(k) for k in missing]})
+        elif what == "hearings":
+            hs = await s.council_hearings(args.group)
+            lines = [f"{h['id']}  {h['state']:8}  {h['kind']:8}  {h['objections']} objection(s) / "
+                     f"{h['active']} active  closes {h['closes']:%Y-%m-%d}"
+                     + (" (urgent)" if h["urgent"] else "") + f"\n    {h['reason'][:200]}"
+                     for h in hs] or ["No proposals with a hearing."]
+            if any(h["state"] in ("open", "extended") for h in hs):
+                lines += ["", "Object with:  unseenet council object " + args.group + " <id> \"why\""]
+            emit(args, "\n".join(lines), {"group": args.group, "hearings": [
+                {**h, "closes": h["closes"].isoformat(),
+                 "applies": h["applies"].isoformat() if h["applies"] else None} for h in hs]})
         elif what in ("admit", "renounce", "resign", "sponsor", "unsponsor", "object"):
             key = getattr(args, "key", None)
             plain = {"admit": f"Ask the council's replicas to admit {key}. They do it once it "
@@ -194,7 +220,11 @@ async def c_council(app: App, args) -> None:
                                "your key. This cannot be undone.",
                      "sponsor": f"Sponsor {key}. You can sponsor one shadow in 180 days.",
                      "unsponsor": f"Take back your sponsorship of {key}.",
-                     "object": f"Object, in public, to {key}."}[what]
+                     "object": (f"Object, in public, to {key}." if (key or "").startswith("ed25519:")
+                                else f"{'Withdraw your objection to' if getattr(args, 'withdraw', False) else 'Object to'} "
+                                     f"proposal {key}. Objections are public: anybody can see which "
+                                     "key objected and why. It counts if your key is ripened to the "
+                                     "council's level.")}[what]
             if not args.json:
                 print(plain)
             if not getattr(args, "yes", False):
@@ -202,7 +232,8 @@ async def c_council(app: App, args) -> None:
                     sys.exit("Not posted. Add --yes to confirm when not running interactively.")
                 if input("Post it? [y/N] ").strip().lower() not in ("y", "yes", "j", "ja"):
                     sys.exit("Not posted.")
-            mid = await s.council_act(args.group, what, key, getattr(args, "reason", ""))
+            mid = await s.council_act(args.group, what, key, getattr(args, "reason", ""),
+                                      withdraw=getattr(args, "withdraw", False))
             emit(args, f"Posted ({mid}).", {"group": args.group, "act": what, "posted": mid})
     except SessionError as exc:
         sys.exit(str(exc))
