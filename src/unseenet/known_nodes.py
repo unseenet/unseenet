@@ -58,8 +58,18 @@ STARTER_GROUP_VERSIONS = (
     ("unseenet.chat@ph5fc5hop5232qsz",),                                # 2 (#388)
     ("unseenet.demo.site@lcgptqqjydt2sevj", "unseenet.demo.feed@lcgptqqjydt2sevj"),      # 3: the demo (#385, #388)
     ("unseenet.help.news@ph5fc5hop5232qsz",),                          # 4: the help bot's news (helpbot#21)
+    ("test.unseenet@ph5fc5hop5232qsz", "demo.unseenet.site@lcgptqqjydt2sevj",  # 5: moved out of
+     "demo.unseenet.feed@lcgptqqjydt2sevj"),                           # unseenet.* (UN-RFC 0055 4.1)
 )
-STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version)
+# Starter groups that moved (old -> new): a new vault never gets the old one, and a vault
+# that follows the old one follows the new one in its place.
+MOVED_STARTER_GROUPS = {
+    "unseenet.test@ph5fc5hop5232qsz": "test.unseenet@ph5fc5hop5232qsz",
+    "unseenet.demo.site@lcgptqqjydt2sevj": "demo.unseenet.site@lcgptqqjydt2sevj",
+    "unseenet.demo.feed@lcgptqqjydt2sevj": "demo.unseenet.feed@lcgptqqjydt2sevj",
+}
+STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version
+                       if g not in MOVED_STARTER_GROUPS)
 
 _ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
 MAX_NODES = 200

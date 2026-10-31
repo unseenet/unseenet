@@ -48,7 +48,7 @@ from unseenet.core.groups import make_manifest, manifest_article, with_charter
 
 TALK = """The place to talk about Unseenet itself: the protocol (the UN-RFCs), the
 node and client software, ideas, bugs and questions. Danish is fine too.
-To try posting, use unseenet.test."""
+To try posting, use test.unseenet."""
 
 ANNOUNCE = """Announcements from the Unseenet project: releases, security notices,
 changes to the network. Only the project posts here - it is a channel.
@@ -147,7 +147,7 @@ GROUPS = (
     ("unseenet.chat", "open", "chat", "Unseenet chat - also on Matrix",
      "Chat about Unseenet, open on Matrix as #unseenet:unseenet.org (a portal: what you "
      "write here is published there too, outside Tor).", CHAT, None, 18),
-    ("unseenet.test", "open", "threads", "Unseenet test posts - say hello",
+    ("test.unseenet", "open", "threads", "Unseenet test posts - say hello",
      "For trying things out.", TEST, None, 20),
     ("unseenet.help", "open", "threads", "Unseenet help - ask anything",
      "Questions about using Unseenet; people and the help bot answer.", HELP, None, 20),
@@ -374,7 +374,7 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
 # and the bot channels' sources are English. Data channels hold no text for people, so
 # they say none. Clients suggest the group's language to those who write there.
 LANGUAGES = {name: ["en"] for name in (
-    "unseenet", "unseenet.chat", "unseenet.test", "unseenet.help", "unseenet.help.news",
+    "unseenet", "unseenet.chat", "test.unseenet", "unseenet.help", "unseenet.help.news",
     "unseenet.help.guide",
     "unseenet.announce", "unseenet.admin",
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",

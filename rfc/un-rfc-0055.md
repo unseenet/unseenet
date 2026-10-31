@@ -168,6 +168,13 @@ and its hierarchy list states these limits, which nodes MAY enforce:
 Endorsing or retiring a group is a proposal with a hearing (UN-RFC 0061),
 not a decision of one key.
 
+Groups for trying things out and for demonstrations hold whatever their
+users post, files and sites included, so they do not belong among the
+endorsed groups. They live in the free hierarchies `test.*` and `demo.*`
+(UN-RFC 0018 section 9), such as the project's `test.unseenet` and its
+demo village `demo.unseenet.*`, and are carried by the nodes that choose
+to.
+
 ## 4.2 Why Every Node
 
 They are the network's telephone book. If a node could leave out the
@@ -215,6 +222,13 @@ A node announces itself by posting an ordinary article with
 | `operator`| key string | no   | As in node information (UN-RFC 0011)           |
 | `contact` | Group ID   | no   | As in node information                         |
 | `date`    | date       | yes  | RFC 3339 UTC, the article's `Date`             |
+
+Each node MUST have a node key of its own; two nodes MUST NOT share one.
+Nodes are told apart by their keys: a node keeps only the newest
+announcement per key (section 5.4), so two nodes with one key would hide
+each other, connection checks and coverage would count them as one, and
+a key stolen from one machine would speak for all of them. `addresses`
+is for further ways to reach the same node, not for other nodes.
 
 A node MUST announce itself when it starts carrying, when `carries`
 changes, and at least every 30 days. An announcement nobody has renewed

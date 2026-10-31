@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Testing and the demo moved out of `unseenet.*`** (UN-RFC 0055 section 4.1, #821). Every
+  node carries the endorsed groups of `unseenet.*`, so groups where anything may be posted
+  live elsewhere: `test.unseenet` replaces `unseenet.test`, and the demo village moves to
+  `demo.unseenet.*`. `demo` is a free hierarchy in the root list, like `test` and `alt`.
+  New clients follow the new groups; a client that follows the old ones follows the new
+  ones in their place, and one that left them gets neither. The project's list for
+  `unseenet` no longer endorses them.
 - **A node carries the hierarchies its operator chooses, and always the network's own
   groups** (UN-RFC 0055, #700, #821). `carries = ["alt.*", "dk.*", "!dk.politik.*"]` in
   `[node]` (default `["*"]`, everything); the node says so in its node information

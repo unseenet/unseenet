@@ -379,6 +379,7 @@ The project's root list initially says:
 | `unseenet` | governed | The project's own groups. Maintainer: the project key.  |
 | `alt`      | free     | Anything goes, by tradition.                            |
 | `test`     | free     | For trying things out. Nodes SHOULD keep it briefly (RECOMMENDED: 7 days). |
+| `demo`     | free     | Demonstrations of what Unseenet can do, such as the project's demo village in `demo.unseenet.*`. |
 | `comp`, `humanities`, `misc`, `news`, `rec`, `sci`, `soc`, `talk` | reserved | The Usenet "Big 8", held for communities that want to revive them. |
 | `control`, `junk`, `local`, `inbox`, `all`, `example`, `invalid` | reserved | Never granted. They have special meanings on Usenet or in Unseenet, or are used in documentation. |
 

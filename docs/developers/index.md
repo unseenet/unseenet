@@ -31,7 +31,7 @@ import asyncio
 from unseenet.client.session import Session
 from unseenet.core.vault import Vault
 
-GROUP = "unseenet.test@ph5fc5hop5232qsz"
+GROUP = "test.unseenet@ph5fc5hop5232qsz"
 
 
 async def main():

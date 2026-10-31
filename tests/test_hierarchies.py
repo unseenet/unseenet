@@ -86,10 +86,11 @@ def hierarchy_list(hierarchy, groups, sub=()):
 
 def test_project_checkgroups_endorse_the_project_groups():
     lst = hz.builtin_checkgroups()
-    assert lst.hierarchy == "unseenet" and len(lst.groups) == 21      # + unseenet.help.guide
-    demo = {n: g for n, g in lst.groups.items() if n == "unseenet.demo" or n.startswith("unseenet.demo.")}
-    assert len(demo) == 5 and all(g.endswith("@lcgptqqjydt2sevj") for g in demo.values())  # #385
-    assert all(g.endswith("@ph5fc5hop5232qsz") for n, g in lst.groups.items() if n not in demo)
+    assert lst.hierarchy == "unseenet" and len(lst.groups) == 15
+    # UN-RFC 0055 4.1: every node carries these, so test and the demo moved out (#821)
+    assert not any(n.startswith(("unseenet.test", "unseenet.demo")) for n in lst.groups)
+    assert all(g.endswith("@ph5fc5hop5232qsz") for g in lst.groups.values())
+    assert hz.builtin_root_list()[1]["demo"].policy == "free"
     assert lst.groups["unseenet.announce"] == "unseenet.announce@ph5fc5hop5232qsz"
 
 
