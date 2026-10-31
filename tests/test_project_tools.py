@@ -239,3 +239,50 @@ def test_create_groups_moves_a_charter_to_its_name():
     assert data["charter"] == "Be kind" and "rules" not in data and data["serial"] == 5
     assert notes == ["    rules -> charter (the field's current name)"]
     assert cg.updated_manifest(data, "open", wanted) == (None, [])
+
+
+async def test_welcome_posts_pin_once_and_replace_when_changed(setup, monkeypatch, capsys):
+    """welcome_posts.py posts and pins each group's welcome, does nothing when run
+    again, and replaces the pinned one (withdrawing it) when its text changes."""
+    run, addr, project = setup["run"], setup["addr"], setup["project"]
+    v = Vault.open(setup["vault"], "pw")
+    k = crypto.Identity.generate()
+    v.data["registrar_poster"] = {"seed": k.seed.hex(), "key": k.key_text}
+    v.save()
+    await run("create_groups")
+
+    sys.modules.pop("welcome_posts", None)
+    wp = importlib.import_module("welcome_posts")
+    owner_mod = importlib.import_module("_owner")
+    monkeypatch.setattr(wp, "FP", project.fingerprint)
+    monkeypatch.setattr(wp, "open_owner_session",
+                        lambda: owner_mod.open_owner_session(setup["vault"], project.key_text))
+    monkeypatch.setattr(wp, "WELCOME", {n: dict(w) for n, w in wp.WELCOME.items()})
+
+    async def pinned(name):
+        s = owner_mod.open_owner_session(setup["vault"], project.key_text)
+        try:
+            gid = f"{name}@{project.fingerprint}"
+            await s.fetch_group(gid)
+            return [(p["note"], s.find_message(gid, p["id"])) for p in s.pins(gid)]
+        finally:
+            await s.close()
+
+    await wp.run(False, None, nodes=[addr])
+    out = capsys.readouterr().out
+    assert out.count("posted and pinned") == len(wp.WELCOME), out
+    pins = await pinned("unseenet")
+    assert [(note, m.subject) for note, m in pins] == [("Start here", "Welcome to Unseenet - start here")]
+    assert "unseenet" not in (pins[0][1].tags or ())        # no tag from the Matrix room
+    (note, line), = await pinned("unseenet.chat")
+    assert note == "Welcome" and line.kind == "chat"
+
+    await wp.run(False, None, nodes=[addr])                  # nothing changed: nothing sent
+    assert capsys.readouterr().out.count("up to date") == len(wp.WELCOME)
+
+    first = pins[0][1].message_id
+    wp.WELCOME["unseenet"]["body"] += "\n\nOne more line."
+    await wp.run(False, ["unseenet"], nodes=[addr])
+    assert "withdrew 1 earlier" in capsys.readouterr().out
+    (note, now), = await pinned("unseenet")
+    assert note == "Start here" and now.message_id != first and now.body.rstrip().endswith("One more line.")
