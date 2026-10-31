@@ -99,6 +99,10 @@ class CouncilMixin:
                 until = day.replace(year=day.year + founding_years, day=28)
             founding = cn.Founding(crypto.key_from_text(founder) if founder else keys[0],
                                    until, founding_size)
+            if founding.founder not in keys:      # so that nodes take its ``admit`` (19)
+                fields = dict(fields or {})
+                fields["posters"] = sorted({*fields.get("posters", []),
+                                            crypto.key_to_text(founding.founder)})
         body = cn.council_body(name, gtype, seq=1, date=day,
                                members=[cn.Member(k, day, True) for k in keys],
                                min_level=min_level, sponsors=sponsors, founding=founding,
@@ -138,3 +142,47 @@ class CouncilMixin:
         art = new_article(group_id, None, body.rstrip("\n").rstrip("\r"),
                           extra=[("Control", "manifest"), ("Content-Type", "application/json")])
         return await self.post_article(art, node, sign_with=self.identity())
+
+    # --- what members, the founder and anybody post (UN-RFC 0054 sections 11.1, 13.1, 19, 20)
+    COUNCIL_ACTS = {"admit": "council", "renounce": "council", "resign": "council",
+                    "sponsor": "claims", "unsponsor": "claims", "object": "claims"}
+
+    async def council_act(self, group_id: str, act: str, key: str | None = None,
+                          reason: str = "") -> str:
+        """Post one of the articles a council's replicas read: the founder's ``admit
+        <key>`` or ``renounce``, a member's ``resign`` (in the council group), a full
+        member's ``sponsor``/``unsponsor <key>``, or anybody's ``object <key>`` with a
+        reason (in its claims group, or the council group if it has none). Checks
+        first that this identity may, and says why not in plain words."""
+        if act not in self.COUNCIL_ACTS:
+            raise SessionError(f"unknown council act {act!r}")
+        chain = await self.council_chain(group_id)
+        cur = chain.current
+        if cur is None:
+            raise SessionError("that council does not count yet")
+        me = self.identity().public_key
+        if act in ("admit", "renounce"):
+            if cur.founding is None or cur.founding.founder != me:
+                raise SessionError("only the council's founder can do that")
+            if cur.founding.renounced:
+                raise SessionError("the founding period was renounced")
+        if act == "resign" and cur.member(me) is None:
+            raise SessionError("you are not a member of this council")
+        if act in ("sponsor", "unsponsor") and me not in cur.full:
+            raise SessionError("only full members sponsor")
+        if act in ("admit", "sponsor", "unsponsor", "object"):
+            if not key:
+                raise SessionError(f"{act} needs the key it is about")
+            crypto.key_from_text(key)
+        where = group_id
+        if self.COUNCIL_ACTS[act] == "claims":
+            where = cur.data.get("claims") or group_id
+        subject = f"{act} {key}" if key else act
+        if act == "object":
+            if not reason.strip():
+                raise SessionError("say why you object: replicas show it to the operators")
+            return await self.post(where, subject, reason.strip() + "\n")
+        from ...core.groups import canonical_json
+        body = "{}\n" if act in ("admit", "renounce", "resign") else \
+            canonical_json({"sponsor": key, "v": 1}) + "\n"
+        return await self.post(where, subject, body, content_type="application/json")

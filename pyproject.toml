@@ -50,6 +50,7 @@ unseenet = "unseenet.cli:client_main"
 unseenet-node = "unseenet.cli:node_main"
 unseenet-monitor = "unseenet.monitor:main"
 unseenet-registrar = "unseenet.registrar:main"
+unseenet-replica = "unseenet.replica.cli:entry"
 
 [project.urls]
 Homepage = "https://github.com/unseenet/unseenet"

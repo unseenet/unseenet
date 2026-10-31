@@ -13,6 +13,12 @@ Keys, in the replica's vault:
   the group's manifest lists it as a poster;
 - the **inbox key**: owns the claim inbox and opens claims; shared by all
   replicas; never signs certificates.
+
+A **council registrar** (UN-RFC 0054 Part II) has neither owner nor inbox key: its
+registrar keys are the members of its current council manifest, and claims are public,
+committed and then revealed in its claims group (section 8). The same ``Registrar``
+decides them; ``unseenet-replica`` (``replica/``) runs it with the council's duties
+around it, and as a **shadow** (section 10) it decides without issuing anything.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ from .client import naming
 from .client.session import Message, Session, SessionError
 from .core import crypto
 from .core.article import new_article
-from .core.groups import personal_inbox_id, split_group_id
+from .core.groups import canonical_json, personal_inbox_id, split_group_id
 
 log = logging.getLogger("unseenet.registrar")
 
@@ -41,6 +47,7 @@ FROM = "Unseenet registrar"
 IANA_TLDS = "https://data.iana.org/TLD/tlds-alpha-by-domain.txt"
 RESOLVERS = ("1.1.1.1", "8.8.8.8")
 MAX_HANDLED = 20000
+MAX_DECISIONS = 50000
 
 
 @dataclass
@@ -104,8 +111,11 @@ class Registrar:
                  tlds: Callable[[], set[str] | None] | None = None,
                  dns_txt: Callable[[str], list[str]] = dig_txt,
                  now: Callable[[], datetime] | None = None,
-                 root: dict[str, hz.Hierarchy] | None = None):
+                 root: dict[str, hz.Hierarchy] | None = None,
+                 shadow: bool = False):
         self.s = session
+        self.shadow = shadow                # decides, issues nothing (UN-RFC 0054, 10)
+        self.chain = None                   # a council registrar's counted chain (0054)
         # The root list of hierarchies (section 4.1 item 3): given, or read from the
         # project's group on each pass, with the list that ships as the fallback.
         self.fixed_root = root is not None
@@ -113,7 +123,8 @@ class Registrar:
         self.group = group
         self.me = session.identity()                        # the registrar key
         st = session.data.setdefault("registrar", {})
-        for key, empty in (("seen", {}), ("handled", []), ("revoked", []), ("tld_cache", {})):
+        for key, empty in (("seen", {}), ("handled", []), ("revoked", []), ("tld_cache", {}),
+                           ("decisions", []), ("virtual", [])):
             st.setdefault(key, empty)
         self.st = st
         self.tlds = tlds or IanaTlds(st["tld_cache"])
@@ -127,14 +138,30 @@ class Registrar:
 
     # --- reading the group ------------------------------------------------------------
 
+    @property
+    def council(self) -> bool:
+        """A council registrar: public claims, members as registrar keys (UN-RFC 0054)."""
+        return self.chain is not None
+
     async def read_group(self) -> None:
         msgs = await self.s.fetch_group(self.group)
+        self.messages = msgs
         manifest = self.s.manifest_data(self.group)
-        self.owner = manifest.get("owner")
-        self.trusted = {k for k in [self.owner, *manifest.get("posters", [])] if k}
+        if not manifest:                    # a council manifest counts only through its chain
+            chain = await self.s.council_chain(self.group)
+            if chain.current is not None:
+                self.chain = chain
+                manifest = chain.current.data
+        if self.chain is not None:
+            self.owner = None
+            self.trusted = {crypto.key_to_text(k) for k in self.chain.current.keys}
+        else:
+            self.owner = manifest.get("owner")
+            self.trusted = {k for k in [self.owner, *manifest.get("posters", [])] if k}
         self.claims_group = manifest.get("claims")
-        self._own_claims_inbox()
-        if self.me.key_text not in self.trusted:
+        if not self.council:
+            self._own_claims_inbox()
+        if self.me.key_text not in self.trusted and not self.shadow:
             raise SessionError(f"this registrar key is not a poster in {self.group}")
         if not self.fixed_root:
             try:
@@ -161,6 +188,12 @@ class Registrar:
                 if m.author_key not in newest or m.date >= newest[m.author_key][0]:
                     newest[m.author_key] = (m.date, revoked)
         self.certs = list(certs.values())
+        if self.shadow:                     # what it would have issued (UN-RFC 0054, 10)
+            for text in self.st["virtual"]:
+                try:
+                    self.certs.append(nm.parse_certificate(text))
+                except nm.NameProblem:
+                    continue
         self.revoked = set().union(*(r for _, r in newest.values())) if newest else set()
         self.revoked |= {tuple(x) for x in self.st["revoked"]}
 
@@ -239,17 +272,23 @@ class Registrar:
 
     # --- acting ---------------------------------------------------------------------------
 
-    async def _post_json(self, subject: str, body: str) -> None:
+    async def _post_json(self, subject: str, body: str, group: str | None = None) -> None:
+        group = group or self.group
+
         def build(bits):
-            art = new_article(self.group, subject, body, from_name=FROM,
+            art = new_article(group, subject, body, from_name=FROM,
                               extra=[("Content-Type", "application/json")])
             return art.finalize(self.me, bits)
-        await self.s._post_with_postage(self.group, build)
+        await self.s._post_with_postage(group, build)
 
     async def issue(self, name: str, key: str, serial: int, *, claim: str | None,
                     claimed: datetime | None, when: datetime | None = None) -> nm.Certificate:
         cert = nm.make_certificate(self.me, name, key, serial, when, claim=claim, claimed=claimed)
         if any(c.to_json() == cert.to_json() for c in self.certs):
+            return cert
+        if self.shadow:
+            self.st["virtual"].append(cert.to_json())
+            self.certs.append(cert)
             return cert
         await self._post_json(nm.certificate_subject(name), cert.to_json() + "\n")
         self.certs.append(cert)
@@ -263,6 +302,8 @@ class Registrar:
         self.st["revoked"].append(entry)
         self.revoked.add((name, serial))
         self._drop_expired_revocations()
+        if self.shadow:
+            return
         await self._post_json(nm.REVOKED_SUBJECT,
                               nm.make_revocations({tuple(x) for x in self.st["revoked"]}))
         log.info("revoked %s serial %d", name, serial)
@@ -273,7 +314,7 @@ class Registrar:
         self.st["revoked"] = [x for x in self.st["revoked"] if tuple(x) in live]
 
     async def reply(self, c: Claim, subject: str, body: str, json_body: bool = False) -> None:
-        if self.now() - c.date > REPLY_WITHIN:
+        if self.shadow or self.now() - c.date > REPLY_WITHIN:
             return
         try:
             await self.s.send_private(c.reply_inbox, subject, body,
@@ -317,8 +358,89 @@ class Registrar:
             seen["-"] = nm.rfc3339(now)             # remember that we have started
         return sorted(claims, key=lambda c: (c.date, c.id))
 
+    async def read_public(self) -> list[nm.Post]:
+        """The articles of a council registrar's claims group (UN-RFC 0054 section 8)."""
+        if not self.claims_group:
+            raise SessionError(f"{self.group} names no claims group")
+        msgs: list[Message] = await self.s.fetch_group(self.claims_group)
+        return [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
+                for m in msgs if m.readable and m.author_key and m.date]
+
+    def outcome(self, name: str | None, c: Claim, out: Outcome) -> dict:
+        """The outcome of a decision as UN-RFC 0054 section 10 hashes it."""
+        from .replica import rules
+        if out.issue_to and name:
+            serial = self.next_serial(name, c.date, c.id)
+            issued = c.date.replace(microsecond=0)
+            return rules.outcome((name, out.issue_to, serial, issued + nm.LIFETIME[nm.kind_of(name)]))
+        if out.revoke is not None and not out.refuse:
+            return rules.outcome(revoke=out.revoke)
+        return rules.outcome()
+
+    def _record(self, c: Claim, name: str | None, out: Outcome, own: bool = False) -> None:
+        """Keep the decision for the shadow reports and for judging shadows and members
+        (UN-RFC 0054 sections 10-12): commit, day, outcome hash, whether it depends on
+        DNS, and the outcome itself."""
+        from .replica import rules
+        o = self.outcome(name, c, out)
+        # a decision that depends on DNS - or on when this replica saw the commit (late,
+        # ``own``) - is not held against anybody (UN-RFC 0054 sections 11, 12)
+        dns = own or (bool(name) and nm.kind_of(name) == "domain")
+        self.st["decisions"].append([c.id, rules.day_text(rules.day_of(c.date)),
+                                     nm.outcome_hash(o), dns, canonical_json(o)])
+        del self.st["decisions"][:-MAX_DECISIONS]
+
+    async def run_public(self) -> None:
+        """One round for a council registrar: the claims that are ready, in the order
+        of UN-RFC 0054 section 8; late commits refused."""
+        now = self.now()
+        handled, seen = self.st["handled"], self.st["seen"]
+        posts = await self.read_public()
+        fresh = not seen
+        for p in posts:
+            if p.subject == nm.COMMIT_SUBJECT:
+                seen.setdefault(p.message_id, nm.rfc3339(p.date if fresh else now))
+        if not seen:
+            seen["-"] = nm.rfc3339(now)
+        ready, _gone = nm.ready_claims(nm.read_public_claims(posts), now)
+        for pc in ready:
+            if pc.id in handled:
+                continue
+            handled.append(pc.id)
+            c = Claim(pc.id, pc.date, pc.sender, pc.reply_inbox, pc.claim_body)
+            if nm.parse_rfc3339(seen.get(pc.id, nm.rfc3339(pc.date))) - pc.date > nm.LATE_COMMIT:
+                name = nm.parse_claim(pc.claim_body)["name"]
+                self._record(c, name, Outcome(refuse="late"), own=True)
+                await self.reply(c, f"name {name}: refused",
+                                 "Your claim's first step arrived late; claim again.\n")
+                continue
+            name, out = self.decide(c)
+            self._record(c, name, out)
+            await self.act(c, name, out)
+        del handled[:-MAX_HANDLED]
+
+    async def act(self, c: Claim, name: str | None, out: Outcome) -> None:
+        if out.refuse:
+            await self.reply(c, f"name {name or '?'}: refused", out.refuse + "\n")
+            return
+        if out.revoke is not None:
+            await self.revoke(name, out.revoke)
+        if out.issue_to:
+            cert = await self.issue(name, out.issue_to, self.next_serial(name, c.date, c.id),
+                                    claim=c.id, claimed=c.date)
+            await self.reply(c, f"name {name}: issued", cert.to_json() + "\n", json_body=True)
+        elif out.revoke is not None:
+            await self.reply(c, f"name {name}: released", "The name is free again.\n")
+
     async def run_once(self) -> None:
         await self.read_group()
+        if self.council:
+            await self.run_public()
+            if not self.shadow:
+                await self.converge()
+                await self.renew_domains()
+            self.s.save()
+            return
         now = self.now()
         handled = self.st["handled"]
         for c in await self.read_claims():

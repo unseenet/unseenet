@@ -83,6 +83,7 @@ nav:
       - Monitor: node/monitor.md
       - Docker: node/docker.md
       - Your responsibility: node/responsibility.md
+  - Running a replica: replica.md
   - Specification: spec/index.md
   - Developers:
       - Write a client: developers/index.md
