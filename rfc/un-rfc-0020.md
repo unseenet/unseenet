@@ -95,6 +95,7 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 | `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …}` |
 | `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
+| `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
 | `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
 | `import`  | string   | no   | Message-ID of the import (section 9); genesis only   |
 
@@ -211,8 +212,8 @@ release it serves matches a valid signed release (UN-RFC 0043 section
 A scribe keeps code alive where no company can delete it. It serves,
 over its onion service and plain HTTP:
 
-- `/scribe.json`: `{"v": 1, "key": …, "publishers": {<releases channel>:
-  [<version>, …]}, "git": [<repository>, …]}` - what it holds - with a
+- `/scribe.json`: `{"v": 1, "key": …, "software": …, "publishers":
+  {<releases channel>: [<version>, …]}, "git": [<repository>, …]}` - what it holds - with a
   detached signature by its key in `/scribe.json.sig`;
 - for each release it holds, under `/<releases channel>/<version>/`:
   `SHA256SUMS.txt`, `SHA256SUMS.txt.sig` and every file the checksums
@@ -249,7 +250,28 @@ UN-RFC 0043 section 8.1.
 The list says who keeps the code, not who is honest: a client uses only
 what matches the signatures, whoever served it.
 
-## 6.5 What Only a Hearing Can Change
+## 6.5 Minimum Versions
+
+Nodes (UN-RFC 0011), entrances (UN-RFC 0043 section 4.3, in a field
+`software` this document adds) and scribes (section 6.4) state their
+software as `"<implementation> <version>"`. An
+entry whose implementation is named in the council's `min_software`,
+and whose version is lower, is not on the list, whatever else holds; it
+comes back by itself when it is updated. An implementation the field
+does not name is not affected.
+
+The council sets `min_software` by proposal (UN-RFC 0061), when a
+version has a known flaw that harms the network or its users - not to
+favour one implementation. The field says nothing about servers that
+are not listed, and nobody is cut off by it: a server below the minimum
+still works, but is no longer recommended to new clients. Clients
+SHOULD warn their user when the node they use is below the minimum.
+
+A version is self-declared. The rule does not stop a server that lies;
+it catches the honest one that nobody updates any more, which is the
+common case (UN-RFC 0062 section 6.1).
+
+## 6.6 What Only a Hearing Can Change
 
 A replica never removes an entry, adds a reserved name or changes a
 number in this section on its own judgement. Those are proposals with a
@@ -410,6 +432,8 @@ it.
   themselves (section 5.1).
 - UN-RFC 0055 section 8: the rules left to this document are those of
   section 6.
+- UN-RFC 0043 section 4.3: the entrance information gains `software`,
+  as in UN-RFC 0011 (section 6.5).
 - UN-RFC 0055 section 4: `unseenet.entrances.announce`,
   `unseenet.scribes.announce` and `unseenet.scribes` are infrastructure
   groups.

@@ -198,6 +198,8 @@ Only the replicas post in the log, and only what they did or saw:
 - the founding period: its end date, how many full members are still
   missing, a renunciation, an extension;
 - forks (UN-RFC 0054 section 5) and gaps in a ledger (UN-RFC 0020);
+- replicas whose software is below the council's minimum (UN-RFC 0054
+  section 9);
 - members who will stop being active within 14 days, so that they can
   say something in the talk group if they are still there.
 

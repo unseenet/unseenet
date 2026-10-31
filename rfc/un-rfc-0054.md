@@ -244,7 +244,11 @@ section 6.1, signing with its member key. There is no inbox key.
 
 Each member's replica posts in the registrar's group, at a random time
 at least once in every 30 days, an article with `Subject: alive <date>`
-and an empty JSON object. It shows the council that the replica runs.
+and a JSON object `{"software": "<implementation> <version>"}`. It
+shows the council that the replica runs, and with what. A replica whose
+version is below a minimum the council has set (UN-RFC 0020 section
+6.5) is named in the log (UN-RFC 0061 section 8); nothing else follows
+from it.
 
 # 10. Shadows
 

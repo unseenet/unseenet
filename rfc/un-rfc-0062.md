@@ -123,6 +123,15 @@ Two of three means that one stolen key sends nothing, and one lost key
 does not stop releases: the two others can sign, and can post a new key
 list without it.
 
+## 5.1 What Is Signed
+
+Everything a publisher releases is signed this way, not only the core
+and the bundles: each client and each service that runs as a server -
+a node, a council replica, a gateway, an entrance, a scribe, a bot - is
+a release of its own, with its own `SHA256SUMS.txt` naming its packages
+and its source bundle. A program that updates itself trusts nothing
+else.
+
 # 6. Choosing Publishers
 
 A client keeps a list of the publishers it takes updates from, each as
@@ -141,6 +150,32 @@ user's data (`data/`). A client MUST show which publisher it follows.
 
 Where the files come from does not matter: GitHub, a web entrance, any
 mirror (UN-RFC 0043), a scribe (UN-RFC 0020 section 6.4). Only files matching the signed checksums are used.
+
+## 6.1 Updating Servers
+
+A server that nobody looks after is fine as long as it stays up to date.
+A program that runs unattended as a service SHOULD therefore update
+itself:
+
+1. **On by default.** The publisher's installer turns self-updating on
+   unless the operator says no; the operator MAY turn it off at any time.
+   For an entrance this is the operator's consent of UN-RFC 0043
+   section 7.
+2. **Only signed.** At least once a day it looks for a newer stable
+   release of its own package from the publisher it follows, valid as
+   section 4 says, and installs only files that match the signed
+   checksums.
+3. **Never older,** as section 11 says for clients.
+4. **Not all at once.** It waits a random time of up to 48 hours after a
+   release appears, so that a faulty release reaches a few servers
+   first and can be followed by a fix before it reaches all.
+5. **Back if broken.** If the service does not come up and answer within
+   10 minutes after an update, it goes back to the version it ran,
+   tells its operator, and does not try that version again.
+
+A server with self-updating turned off SHOULD tell its operator when a
+newer release has existed for 30 days, and at once when its version is
+below a council's minimum (UN-RFC 0020 section 6.5).
 
 # 7. Building One's Own
 
@@ -197,6 +232,8 @@ section 8 is the next step.
 # 13. Changes to Other Documents
 
 - UN-RFC 0003 section 3: the label `UNSEENET-RELEASE-KEYS-1` is added.
+- UN-RFC 0043 section 7: an entrance's installer asks its operator to
+  turn on self-updating of the server software (section 6.1).
 - UN-RFC 0043: a release in a releases channel is valid with the
   signatures of section 4; the channel carries the key list of
   section 3.
