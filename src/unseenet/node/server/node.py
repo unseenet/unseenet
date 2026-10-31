@@ -91,7 +91,7 @@ class NodeBase:
         cfg = self.config
         b = cfg.blobs
         policy = {"new_groups": cfg.new_groups, "trusted_owners": sorted(cfg.trusted_owners),
-                  "excludes": cfg.excludes, "profiles": cfg.profiles, "avatars": cfg.avatars,
+                  "excludes": cfg.excludes, "carries": list(cfg.carries), "profiles": cfg.profiles, "avatars": cfg.avatars,
                   "sites": cfg.sites, "emoji": cfg.emoji,
                   "blobs": None if b is None else {"groups": b.get("groups", "*"),
                                                    "encrypted": bool(b.get("encrypted", False)),
@@ -123,6 +123,7 @@ class NodeBase:
         op = cfg.operator or {}
         info = {"v": 1, "name": cfg.name, "software": f"unseenet {__version__}",
                 "node_key": self.key.key_text,
+                "carries": self.carries_info(),                  # UN-RFC 0055 section 3.1
                 "policy": {"new_groups": cfg.new_groups, "min_pow": cfg.min_pow,
                            "min_ripe": "-" if cfg.min_ripe is None else cfg.min_ripe,
                            "retention_days": cfg.retention_days, "max_size": cfg.max_size,

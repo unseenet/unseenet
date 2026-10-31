@@ -189,9 +189,14 @@ class Accepting:
             limit = KEY_BOUND_MANIFEST_MAX.get(art.group.split("@")[0])
             if limit is not None and len(raw) > limit:     # UN-RFC 0040 section 9
                 raise ArticleError("size", f"key-bound manifest larger than {limit} octets")
-        if self.config.excludes and wildmat(self.config.excludes, art.group):
+        if self.excluded(art.group):
             raise ArticleError("group", "excluded by this node")
+        if not self.carries_group(art.group, local=is_manifest and not from_peer
+                                  and _local_manifest(art)):
+            raise ArticleError("group", "this node does not carry this group (UN-RFC 0055)")
         removed = self.store.tombstone(art.group)
+        if removed == "operator" and art.group in self.network_groups():
+            removed = None                   # the network's own: never dropped (0055, 4)
         if removed:
             raise ArticleError("group", "group was removed by its owner" if removed == "owner"
                                else "group was dropped by this node")
@@ -271,3 +276,11 @@ class Accepting:
         self._notify_watchers(art)
         log.info("accepted %s in %s", art.message_id, art.group)
         return art
+
+
+def _local_manifest(art: Article) -> bool:
+    """Whether a manifest article makes a local group (UN-RFC 0009 section 4)."""
+    try:
+        return Manifest.from_article(art).local
+    except (ArticleError, ValueError, KeyError, TypeError):
+        return False

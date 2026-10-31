@@ -64,11 +64,22 @@ def load_node_config(path: Path | None):
                       sites=str(node.get("sites", "refuse")),
                       emoji=str(node.get("emoji", "refuse")),
                       excludes=str(node.get("excludes", "")),
+                      carries=_carries(path, node.get("carries", ["*"])),   # UN-RFC 0055
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
                       blobs=_blobs_config(path, data.get("blobs", {})),
                       **_refusals_config(path, data.get("refusals", {})),
                       peers=peers)
+
+
+def _carries(path: Path, value) -> list[str]:
+    """``carries`` in [node] (UN-RFC 0055 section 3.1): the hierarchies this node carries,
+    such as ``["alt.*", "dk.*", "!dk.politik.*"]``; ``["*"]`` (the default) is all."""
+    from ..core import carrying as ca
+    try:
+        return ca.check_patterns(value)
+    except ca.CarriesProblem as exc:
+        sys.exit(f"{path}: {exc}")
 
 
 def _follow_reports(path: Path, items) -> list[dict]:
@@ -298,6 +309,9 @@ def node_main(argv=None) -> None:
         from ..node.server import Node
         node = Node(Store(Path(args.data) / "articles.sqlite"))
         if args.drop_group:
+            if args.drop_group in node.network_groups():
+                sys.exit(f"{args.drop_group} is one of the network's own groups, which every "
+                         "node carries (UN-RFC 0055 section 4); it cannot be dropped.")
             n = node.drop_group(args.drop_group)
             print(f"Dropped {args.drop_group} from this node ({n} posts deleted). "
                   "Peers are not told; it is your node's decision only.")

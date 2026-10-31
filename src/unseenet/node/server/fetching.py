@@ -42,7 +42,7 @@ class Fetching:
         others, and it is off for groups the node excludes on purpose."""
         if not self.config.fetch:
             return False
-        return not (self.config.excludes and wildmat(self.config.excludes, group_id))
+        return not self.excluded(group_id)
 
     def held_target(self, message_id: str, group_id: str) -> tuple[int, bytes | None] | None:
         """Step 1-2: the target or its newest version if held (220), 430 if a cancel

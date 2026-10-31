@@ -9,6 +9,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A node carries the hierarchies its operator chooses, and always the network's own
+  groups** (UN-RFC 0055, #700, #821). `carries = ["alt.*", "dk.*", "!dk.politik.*"]` in
+  `[node]` (default `["*"]`, everything); the node says so in its node information
+  (`carries`). Every node carries the infrastructure groups and the groups of `unseenet.*`
+  that the hierarchy list for `unseenet` endorses, whatever `carries` says; `excludes`
+  and `--drop-group` cannot leave them out. Only endorsed Group IDs count, so naming a
+  group `unseenet.something` makes nobody carry it. A node sends a peer only the groups
+  the peer carries, learned from the peer's node information when it connects and daily.
 - **Council proposals, hearings and objections** (UN-RFC 0061, #820). A proposal counts
   when a majority of the council's *active* members (those who spoke in its proposals or
   talk group in the last 90 days) post the same one within 7 days; it then stands in
