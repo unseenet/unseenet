@@ -165,6 +165,13 @@ A node is on the node list when
 4. it is connected in the sense of UN-RFC 0021, counted over the groups
    it carries.
 
+Its list entry takes `address` and `addresses` from the announcement
+(UN-RFC 0064 section 4). Replicas reach it on its `onion:` address: while
+`onion` is the only hiding transport, other addresses are listed as the
+node gives them but not measured, and a node whose `address` is not an
+`onion:` address is not listed. A `test:` address (UN-RFC 0064 section
+2.2) is never listed.
+
 It leaves the list when one of these stops holding, with one grace: a
 listed node is only taken off for item 3 when, for each of the last 10
 completed days, at least one replica reported on it and none reached it

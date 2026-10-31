@@ -4,7 +4,7 @@ UN-RFC: 0064                                              October 2026
 Category: Standards Track
 Status: Draft
 Implemented: -
-Updates: 0005, 0010
+Updates: 0005, 0010, 0020, 0055
 
                 Transport Addresses and Transport Bindings
 ```
@@ -156,6 +156,11 @@ SHOULD say this where the setting is turned on.
 - **UN-RFC 0010.** The `address` field takes a transport address
   (section 2); the `addresses` field is added (section 4); the remark
   about non-onion test addresses is replaced by the `test:` scheme.
+- **UN-RFC 0055.** A node announcement's `address` is a transport
+  address, and it may carry `addresses` (section 4).
+- **UN-RFC 0020.** The node list kept by a council takes `address` and
+  `addresses` from announcements; replicas measure the `onion:` address,
+  and `test:` addresses are never listed.
 - **UN-RFC 0001.** The sentence "Every node is a Tor onion service"
   stays true; a note says that other transports may be added by
   binding documents (this document).

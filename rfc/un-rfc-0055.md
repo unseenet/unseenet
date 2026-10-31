@@ -208,7 +208,8 @@ A node announces itself by posting an ordinary article with
 | Field     | Type       | Req. | Meaning                                        |
 |-----------|------------|------|------------------------------------------------|
 | `v`       | integer    | yes  | `1`                                            |
-| `address` | string     | yes  | The node's onion address, optionally `:port`   |
+| `address` | string     | yes  | The node's transport address (UN-RFC 0064 section 2); an `onion:` address while `onion` is the only hiding transport |
+| `addresses` | array of string | no | Further transport addresses of the same node, at most 8 (UN-RFC 0064 section 4) |
 | `name`    | string     | yes  | As in node information                         |
 | `carries` | object     | yes  | As in section 3.1                              |
 | `operator`| key string | no   | As in node information (UN-RFC 0011)           |
