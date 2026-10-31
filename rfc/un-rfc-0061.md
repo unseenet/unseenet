@@ -50,6 +50,11 @@ with many keys can do is delay.
 - **Objection:** a signed statement against a proposal, by any ripened
   key (section 6).
 - **Objector:** a key whose objection counts.
+- **Active member:** a full member whose key has posted an article in the
+  council's proposals group or talk group (section 3) in the last 90 days.
+  Heartbeats, the log and the room do not count: replicas post those by
+  themselves, so they show that a machine runs, not that a person is
+  there.
 
 Objections to a proposal differ from objections to a shadow or member
 (UN-RFC 0054 section 13.1): those change nothing the replicas compute and
@@ -116,9 +121,13 @@ and `id` is the first 16 characters of
 - `{"rfc": {...}}` - publishing, replacing or obsoleting a UN-RFC, for a
   council that keeps the series (UN-RFC 0063 section 5).
 
-A proposal **counts** when, within 7 days, at least *Q* different full
-members of the council (UN-RFC 0054 section 5) have each posted an
-article with exactly that body. A proposal whose `seq` is no longer the
+A proposal **counts** when, within 7 days, at least *Q* different active
+members have each posted an article with exactly that body, where *Q* is
+the larger of 2 and a majority of the active members on the day the
+proposal was first posted. Members who are not active remain members,
+and their replicas go on doing what UN-RFC 0054 and 0020 compute; they
+only do not count when people decide. Posting in the talk or proposals
+group makes a member active again at once. A proposal whose `seq` is no longer the
 current council manifest's when it would count does not count; it must
 be proposed again.
 
@@ -155,8 +164,8 @@ often it posts.
 
 When the hearing ends, each full member's replica waits 24 hours for
 late arrivals, then counts *O*, the keys whose objections count, and
-compares it with *F*, the full members of the council when the hearing
-began:
+compares it with *F*, the active members of the council when the
+hearing began:
 
 - *O* > *F*: the proposal **fails**.
 - *O* > *F* / 2: the hearing is **extended** once, by its `days` again;
@@ -171,7 +180,7 @@ the council's hierarchy list. Each replica posts
 `Subject: hearing <id> closed` in the log with *O*, *F* and the outcome.
 
 **Urgent proposals.** A proposal marked `urgent` that counts with at
-least two thirds of the full members has a hearing of 3 days and cannot
+least two thirds of the active members has a hearing of 3 days and cannot
 be extended. It is meant for removing an entry that harms people now. An
 urgent removal can be undone by an ordinary proposal like any other.
 
@@ -188,7 +197,9 @@ Only the replicas post in the log, and only what they did or saw:
   caused them (UN-RFC 0054 sections 11, 12, 19, 20);
 - the founding period: its end date, how many full members are still
   missing, a renunciation, an extension;
-- forks (UN-RFC 0054 section 5) and gaps in a ledger (UN-RFC 0020).
+- forks (UN-RFC 0054 section 5) and gaps in a ledger (UN-RFC 0020);
+- members who will stop being active within 14 days, so that they can
+  say something in the talk group if they are still there.
 
 Every full member's replica posts each entry; entries that say the same
 thing are shown once. Nobody has to write a report: the log is the
@@ -214,6 +225,14 @@ hashes a proposal body into its id (section 4).
   a council of three can be stopped by four people who care, one of
   sixteen by seventeen. It is deliberately low; the council can propose
   again with better reasons.
+- **Why active members?** Nobody can tell from the network whether a
+  person is still behind a replica that runs. A member who no longer
+  takes part would still count towards the quorum and never sign, and a
+  few of them could stop a council from deciding anything. Counting only
+  those who have spoken in 90 days needs no judgement about anybody: the
+  machine keeps working, and the people who are there decide. Ninety days
+  matches the silence after which a replica is removed (UN-RFC 0054
+  section 12, item 3).
 - **Why 14 days?** Long enough for people who do not read every day to
   notice, short enough for a council to act. Urgent removals get 3.
 - **Why the log?** A decision nobody hears of is not public. The replicas
