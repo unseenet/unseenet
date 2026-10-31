@@ -341,7 +341,15 @@ replica computes the same body:
    section 8 (UN-RFC 0019 section 6), or its `serial`, `issued` or
    `expires` is not the one the rules give. One such certificate is
    enough. A monthly renewal of a domain name, which has no `claim`,
-   depends on DNS and falls under item 2.
+   depends on DNS and falls under item 2. A replica that has not seen
+   the commit a certificate names judges it only once that commit would
+   surely have been handled: 8 days and an hour after the certificate's
+   `claimed`, the seven days of section 8, the hour a replica waits for a
+   late reveal, and a day for articles still on their way. Until then its
+   node may simply lag. The removal is still dated by the certificate,
+   so every replica posts the same body. A refusal a replica gave only
+   because it saw a commit late is its own, and is held against nobody,
+   like a decision that depends on DNS.
 2. **Repeatedly on its own.** At least 3 certificates by *M* in 30 days,
    on decisions that depend on DNS, lost under UN-RFC 0019 section 5.3,
    and *M* did not sign the winning decision within 48 hours (UN-RFC 0019
@@ -477,10 +485,11 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   council group. Until the move (section 14) the old registrar is as
   before.
 - **Stolen member key.** The thief can sign certificates until the
-  others remove the key; a certificate no claim explains removes it within
-  a day of being seen (section 12). A client that requires two registrar
-  keys (UN-RFC 0019 section 5.3) is not fooled even for that day. The
-  thief cannot change the council alone.
+  others remove the key; a certificate no claim explains removes it about
+  eight days after its claim's date (section 12) - the price of not
+  removing an honest member because a replica's node lags. A client that
+  requires two registrar keys (UN-RFC 0019 section 5.3) is not fooled
+  even for those days. The thief cannot change the council alone.
 - **A stolen quorum** can do anything a group owner can today. If it
   signs a second history, the fork shows (section 5). Spreading members
   over different people and infrastructure is the only defence; a
@@ -508,8 +517,10 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   (at most a year) and users claim names from another registrar. There
   is no owner to restart it; that is the point.
 - **Withholding.** A node can hide articles from a replica, so that it
-  sees a member as silent or a shadow as missing. Replicas SHOULD read
-  through several nodes, and the 90-day silence rule is long on purpose.
+  sees a member as silent or a shadow as missing, or a commit as never
+  made. Replicas SHOULD read through several nodes; the 90-day silence
+  rule is long on purpose, and a certificate is judged only once its
+  commit would surely have been seen (section 12, item 1).
 - **Claims are public.** Anybody can now see which key claimed which
   name, including claims that were refused or lapsed. Clients MUST say so
   before sending a claim.
