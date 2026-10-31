@@ -23,6 +23,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   a node that catches up counts the chain as it goes; a copy ahead of the chain is asked
   again later. A new council group follows `new_groups`, with `trusted` meaning one of
   its founding members is a trusted owner.
+- **Clients count the chain themselves, and `unseenet council`** (UN-RFC 0054 Part I, #688):
+  a client no longer takes a council group's manifest on the node's word - it reads every
+  member's copy, checks each signature and counts the chain. `unseenet council create`
+  writes a new council's genesis to a draft file for the other members, `council sign`
+  shows in plain words what you are about to sign (and why it would not count, if it
+  would not) and posts your copy, and `council show` lists the members - and, until the
+  genesis counts, who has still to sign. A node now lets you select such a group before
+  its genesis counts, so that can be seen.
 
 ## [0.6.8] - 2026-10-31
 

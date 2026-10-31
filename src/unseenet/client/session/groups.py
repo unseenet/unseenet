@@ -697,6 +697,14 @@ class GroupsMixin:
             return None
         return m if m.group_id == group_id and not m.expired() else None
 
+    @staticmethod
+    def _is_council_raw(raw: bytes | None) -> bool:
+        from ...core.council import is_council_manifest
+        try:
+            return bool(raw) and is_council_manifest(Article.from_bytes(strip_reader_headers(raw)))
+        except (ArticleError, ValueError, TypeError):
+            return False
+
     async def _manifest_by_group(self, c: Client, group_id: str):
         """The newest valid manifest in a small group of manifests only (profile@,
         avatar@), read with GROUP, HDR Control and ARTICLE: for nodes without
@@ -712,7 +720,10 @@ class GroupsMixin:
             number, _, value = line.partition(" ")
             if value.strip().lower() != "manifest":
                 continue
-            m = self._checked_manifest(await c.article(number), group_id)
+            raw = await c.article(number)
+            if self._is_council_raw(raw):           # counted from all its copies (0054)
+                return await self._council_current_on(c, group_id)
+            m = self._checked_manifest(raw, group_id)
             if m is not None and m.supersedes(best):
                 best = m
         return best
@@ -738,8 +749,12 @@ class GroupsMixin:
                         return {g: None for g in gids}
                     return {g: await self._manifest_by_group(c, g) for g in gids}
                 answers = await c.manifests_all([(g, None) for g in gids])
-                return {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
-                        for g in gids}
+                got = {g: self._checked_manifest(answers[g].raw, g) if g in answers else None
+                       for g in gids}
+                for g in gids:      # a council group: counted here from its copies (0054)
+                    if got[g] is None and g in answers and self._is_council_raw(answers[g].raw):
+                        got[g] = await self._council_current_on(c, g)
+                return got
             # a node that cannot be reached: ask your others, unless one was named
             tries = [address] + ([] if node else [n for n in self.nodes if n != address])
             for i, at in enumerate(tries):

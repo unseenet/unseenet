@@ -18,7 +18,10 @@ class ReadingCommands:
             self.send("411 no such group (removed by its owner)" if removed == "owner"
                       else "411 no such group (dropped by this node)")
             return
-        if not args or self.node.store.manifest(args[0]) is None:
+        # a council group whose genesis does not count yet can be read, so that its
+        # members can see who has still to sign (UN-RFC 0054 section 6)
+        if not args or (self.node.store.manifest(args[0]) is None
+                        and not self.node.store.has_council_copies(args[0])):
             self.send("411 no such group")
             return
         self.group = args[0]

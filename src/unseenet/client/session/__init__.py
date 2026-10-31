@@ -503,9 +503,10 @@ from .content_labels import ContentLabelsMixin  # noqa: E402
 from .teams import TeamsMixin  # noqa: E402
 from .group_emoji import GroupEmojiMixin  # noqa: E402
 from .cards import CardsMixin, CardDraft, fetch_card  # noqa: E402,F401
+from .council import CouncilMixin  # noqa: E402
 
 
-class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, SharesMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin):
+class Session(BaseMixin, RipeningMixin, NodesMixin, LabelsMixin, GroupsMixin, PrivateMixin, ProfilesMixin, PeopleMixin, ReadingMixin, PostingMixin, AttachmentsMixin, KeptMixin, PersonalMixin, FollowingMixin, StateMixin, ReactionsMixin, SharesMixin, RecoveryMixin, CopyingMixin, QueueMixin, NotifyMixin, ExportMixin, RulesMixin, ReportsMixin, TeamsMixin, ContentLabelsMixin, GroupEmojiMixin, CardsMixin, CouncilMixin):
     """One person's (or one service's) client: the vault, the network, groups,
     posting. Split into parts by area (client/session/*.py, #390); clients use
     this one class as before."""

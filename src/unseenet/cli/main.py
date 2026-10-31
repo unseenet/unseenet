@@ -22,6 +22,7 @@ from .reports import *  # noqa: F403
 from .content_labels import *  # noqa: F403
 from .foryou import *  # noqa: F403
 from .teams import *  # noqa: F403
+from .council import *  # noqa: F403
 
 
 COMMANDS = {
@@ -37,7 +38,7 @@ COMMANDS = {
     "timeline": c_timeline, "rules": c_rules, "thread": c_thread, "address": c_address, "open": c_open,
     "names": c_names, "name-claim": c_name_claim, "name-give": c_name_give,
     "name-revoke": c_name_revoke, "name-primary": c_name_primary, "name-requests": c_name_requests,
-    "reports": c_reports, "team": c_team, "labels": c_labels, "foryou": c_foryou,
+    "reports": c_reports, "team": c_team, "council": c_council, "labels": c_labels, "foryou": c_foryou,
 }
 
 
@@ -294,6 +295,7 @@ def client_main(argv=None) -> None:
     labels_parsers(sub)
     foryou_parsers(sub)
     teams_parsers(sub)
+    council_parsers(sub)
     s = sub.add_parser("read", help="read a group")
     s.add_argument("group")
     s.add_argument("--all", action="store_true",
