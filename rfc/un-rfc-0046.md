@@ -518,7 +518,11 @@ not (you do not own or moderate the group).
 - `POST /api/profile/hide` `{"key": "...", "hidden": true | false}`: hide
   or show someone's profile, for you alone; answers `{"key", "hidden"}`.
 - `GET /api/names` lists your names, waiting claims and the names you give
-  under yours (UN-RFC 0019); `POST /api/names` `{"action": "claim" |
+  under yours (UN-RFC 0019). Where the registrar is a council (UN-RFC 0054
+  section 8), it also answers `"public_claims": true`, a `public_notice` that
+  clients show before a claim is sent, and `commits`: your public claims, each
+  with its `state` - `waiting` (the reveal goes out once the commit is an hour
+  old), `revealed`, `answered` (with the first `answer`) or `lapsed`. `POST /api/names` `{"action": "claim" |
   "renew" | "give" | "revoke" | "approve" | "refuse", ...}` answers
   `{"text": "<what happened, for people>"}`.
 - `GET /api/settings` and `POST /api/settings` with any of:

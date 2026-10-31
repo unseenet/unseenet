@@ -12,6 +12,7 @@ use the same rules.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,8 @@ from .. import hierarchies as hz
 from .. import known_nodes as kn
 from .. import names as nm
 from ..core import crypto
+from ..core.article import format_date, parse_date
+from ..core.encoding import b64, b64decode
 from ..core.groups import short_group_id, split_group_id
 
 if TYPE_CHECKING:
@@ -32,7 +35,7 @@ def _store(s: "Session") -> dict:
     st = s.data.setdefault("naming", {})
     for key, empty in (("lists", {}), ("names", {}), ("seen", {}), ("sent", {}), ("pending", []),
                        ("issued", []), ("my_revoked", []), ("issuer_revoked", {}),
-                       ("requests_done", [])):
+                       ("requests_done", []), ("commits", [])):
         st.setdefault(key, empty)
     return st
 
@@ -127,6 +130,11 @@ async def refresh(s: "Session") -> bool:
     st.pop("tried", None)
     await _read_names(s, st)
     take_certificates(s)
+    take_answers(s)
+    try:
+        await reveal_due(s)                     # public claims (UN-RFC 0054 section 8)
+    except Exception:  # noqa: BLE001  tried again at the next refresh
+        pass
     issuers = sorted({c.issuer for c in _all_certs(s) if c.kind == "sub"})[:20]
     for issuer in issuers:                     # their revocation lists (section 6.6)
         try:
@@ -179,6 +187,8 @@ async def keep_my_names(s: "Session") -> None:
         await s.fetch_group(s.my_inbox)
         take_certificates(s)
         await _read_names(s, st)
+        take_answers(s)
+        await reveal_due(s)
         await renew_held(s)
 
     try:
@@ -189,11 +199,45 @@ async def keep_my_names(s: "Session") -> None:
 
 
 async def _read_names(s: "Session", st: dict) -> None:
-    posts = await _read(s, nm.NAMES_GROUP, kn.PROJECT_KEY)
-    manifest = s.manifest_data(nm.NAMES_GROUP)
+    """The registrar's group: its certificates and revocations, and who may sign them.
+
+    An owned registrar group (UN-RFC 0019 section 7.1) trusts its owner and posters.
+    A council registrar (UN-RFC 0054 section 7) trusts the members of its current
+    council manifest, full or on probation - counted here from the members' copies,
+    never on a node's word - and takes claims in the open (section 8)."""
+    from .session import SessionError
+    gid = nm.NAMES_GROUP
+    subscribed = gid in s.data["subscribed"]
+    try:
+        messages = await s.fetch_group(gid)
+    except SessionError:
+        return
+    finally:
+        if not subscribed:
+            s.cache.pop(gid, None)
+            s._raw.pop(gid, None)
+            s._high.pop(gid, None)
+    manifest = s.manifest_data(gid)
+    if not manifest:
+        # a council manifest counts only through its chain, which reading the group
+        # does not count; the client counts it here (UN-RFC 0054 section 5)
+        try:
+            m = await s.fetch_manifest(gid)
+        except (SessionError, OSError, ConnectionError):
+            m = None
+        manifest = dict(m.raw) if m is not None and m.is_council else {}
     if not manifest:
         return
-    registrars = sorted({kn.PROJECT_KEY, *manifest.get("posters", [])})
+    council = "council" in manifest and "owner" not in manifest
+    if council:
+        registrars = sorted(m["key"] for m in manifest["council"].get("members", [])
+                            if isinstance(m, dict) and isinstance(m.get("key"), str))
+    elif manifest.get("owner") == kn.PROJECT_KEY:
+        registrars = sorted({kn.PROJECT_KEY, *manifest.get("posters", [])})
+    else:
+        return
+    allowed = set(registrars)
+    posts = [(m, m.author_key) for m in messages if m.readable and m.author_key in allowed]
     certs: dict[str, str] = {}
     newest: dict[str, tuple] = {}
     for m, author in posts:
@@ -213,6 +257,7 @@ async def _read_names(s: "Session", st: dict) -> None:
                 newest[author] = (m.date, revoked)
     revoked = set().union(*(r for _, r in newest.values())) if newest else set()
     st["names"] = {"registrars": registrars, "claims": manifest.get("claims"),
+                   "public": council,
                    "certs": sorted(certs), "revoked": sorted([n, v] for n, v in revoked)}
 
 
@@ -525,9 +570,16 @@ PENDING_FOR = timedelta(days=3)
 
 
 def pending(s: "Session") -> list[list[str]]:
-    """Claims sent in the last few days: (name, action, when sent)."""
+    """Claims sent in the last few days: (name, action, when sent). A public claim
+    (UN-RFC 0054 section 8) is on its way until it is answered or has lapsed."""
     now = datetime.now(timezone.utc)
-    return [p for p in _store(s)["pending"] if now - nm.parse_rfc3339(p[2]) < PENDING_FOR]
+    st = _store(s)
+    waiting = {(c["name"], c["sent"]) for c in st["commits"]
+               if commit_state(c, now) in ("waiting", "revealed")}
+    closed = {(c["name"], c["sent"]) for c in st["commits"]}
+    return [p for p in st["pending"]
+            if (p[0], p[2]) in waiting
+            or ((p[0], p[2]) not in closed and now - nm.parse_rfc3339(p[2]) < PENDING_FOR)]
 
 
 def my_names(s: "Session") -> list[nm.Certificate]:
@@ -776,11 +828,27 @@ def sent_header(s: "Session", group_id: str, now: datetime | None = None) -> Non
     _store(s)["sent"][group_id] = nm.rfc3339(now or datetime.now(timezone.utc))
 
 
+PUBLIC_NOTICE = ("Claims are public: anybody can see which key claimed which name, also when "
+                 "the claim is refused or never completed (UN-RFC 0054 section 8).")
+
+
+def claims_are_public(s: "Session") -> bool:
+    """Whether the registrar takes claims in the open (a council registrar). Clients
+    say so before a claim is sent (UN-RFC 0054 section 17)."""
+    return bool(_store(s)["names"].get("public"))
+
+
 async def claim(s: "Session", name: str, action: str = "claim", to: str | None = None) -> str:
     """Send a claim (or renew, transfer, release) to the registrar (section 6.1).
 
     The answer comes to your inbox; the certificate also appears in the
     registrar's group, which ``refresh`` reads.
+
+    A council registrar takes claims in the open, in two steps (UN-RFC 0054 section
+    8): this posts the **commit** in its claims group and keeps the claim and its
+    nonce here, in the vault; ``reveal_due`` posts the reveal once the commit is an
+    hour old - at the next ``refresh``, so also when the client is only opened again
+    later, up to seven days on. Returns the Message-ID of the claim or the commit.
     """
     body = nm.make_claim(action, name, to)
     st = _store(s)
@@ -791,8 +859,100 @@ async def claim(s: "Session", name: str, action: str = "claim", to: str | None =
         from .session import SessionError
         raise SessionError("the registrar is not set up yet: its group names no claim inbox")
     await s.ensure_inbox()                         # the answer comes there
-    msgid = await s.send_private(claims, f"{action} {name}", body, content_type="application/json")
+    now = datetime.now(timezone.utc)
+    if st["names"].get("public"):
+        commit, nonce = nm.make_commit(body)
+        msgid = await s.post(claims, nm.COMMIT_SUBJECT, commit, content_type="application/json")
+        st["commits"] = [c for c in st["commits"] if not _done(c, now)][-20:] + [{
+            "name": name, "action": action, "claim": body, "nonce": b64(nonce),
+            "commit": msgid, "group": claims,
+            # the commit's Date, as the article has it: rounded down to 10 minutes
+            "date": nm.rfc3339(parse_date(format_date(now))), "sent": nm.rfc3339(now)}]
+    else:
+        msgid = await s.send_private(claims, f"{action} {name}", body,
+                                     content_type="application/json")
     st["pending"] = [p for p in st["pending"] if p[0] != name][-20:] + [
-        [name, action, nm.rfc3339(datetime.now(timezone.utc))]]
+        [name, action, nm.rfc3339(now)]]
     s.save()
     return msgid
+
+
+# --- public claims: the reveal and the answer (UN-RFC 0054 section 8) ---------------------
+
+def _done(c: dict, now: datetime) -> bool:
+    """A commit that needs nothing more: answered, or lapsed long ago."""
+    return bool(c.get("answer")) or now - nm.parse_rfc3339(c["date"]) > nm.REVEAL_WITHIN + PENDING_FOR
+
+
+def commit_state(c: dict, now: datetime | None = None) -> str:
+    """``waiting`` (the reveal goes once the commit is an hour old), ``revealed``
+    (the registrar decides), ``answered`` or ``lapsed`` (no reveal within seven days:
+    the claim is void, send it again)."""
+    now = now or datetime.now(timezone.utc)
+    if c.get("answer"):
+        return "answered"
+    if c.get("revealed"):
+        return "revealed"
+    if now > nm.parse_rfc3339(c["date"]) + nm.REVEAL_WITHIN:
+        return "lapsed"
+    return "waiting"
+
+
+def commits(s: "Session") -> list[dict]:
+    """Your public claims of the last weeks, newest last, each with its ``state``
+    (``commit_state``) - for the clients to show, lapsed ones as lapsed."""
+    now = datetime.now(timezone.utc)
+    return [{**{k: v for k, v in c.items() if k != "nonce"}, "state": commit_state(c, now)}
+            for c in _store(s)["commits"]]
+
+
+async def reveal_due(s: "Session", now: datetime | None = None) -> list[str]:
+    """Post the reveal of every commit that is an hour old and not yet seven days
+    (section 8, step 2). Returns the names revealed. A reveal that fails is tried
+    again at the next call."""
+    now = now or datetime.now(timezone.utc)
+    st = _store(s)
+    done = []
+    for c in st["commits"]:
+        if c.get("revealed") or c.get("answer"):
+            continue
+        date = nm.parse_rfc3339(c["date"])
+        if not date + nm.REVEAL_AFTER <= now <= date + nm.REVEAL_WITHIN:
+            continue
+        await s.ensure_inbox()
+        body = nm.make_reveal(c["claim"], b64decode(c["nonce"]), s.my_inbox)
+        await s.post(c["group"], nm.reveal_subject(c["commit"]), body,
+                     content_type="application/json")
+        c["revealed"] = nm.rfc3339(now)
+        done.append(c["name"])
+    if done:
+        s.save()
+    return done
+
+
+ANSWER_SUBJECT = re.compile(r"^name (\S+): (issued|refused|released)$")
+
+
+def take_answers(s: "Session") -> int:
+    """Match the registrar's answers in your inbox to your public claims. Every replica
+    answers, so the same answer comes several times: the first that a registrar key
+    signed is kept, the rest are left (UN-RFC 0054 section 8). Returns how many new."""
+    st = _store(s)
+    registrars = _registrars(s)
+    open_ = [c for c in st["commits"] if c.get("revealed") and not c.get("answer")]
+    if not open_:
+        return 0
+    n = 0
+    for m in sorted(s.private_messages(), key=lambda m: (m.date or datetime.min.replace(
+            tzinfo=timezone.utc), m.message_id)):
+        hit = ANSWER_SUBJECT.match(m.subject or "")
+        if not hit or m.sender_key not in registrars or not m.date:
+            continue
+        for c in open_:
+            if (not c.get("answer") and c["name"] == hit.group(1)
+                    and m.date >= nm.parse_rfc3339(c["date"])):
+                c["answer"] = {"outcome": hit.group(2), "text": m.body.strip()[:500],
+                               "from": m.sender_key, "date": nm.rfc3339(m.date)}
+                n += 1
+                break
+    return n

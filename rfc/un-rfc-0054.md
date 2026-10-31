@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0054                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - Part I and the rules of section 19; Part II (#689, #690), sections 20-21 (#819)
+Implemented: unseenet main (unreleased); partly - Part I, the claims of section 8 and the rules of section 19; the replica (#690), sections 20-21 (#819)
 Updates: 0003, 0004, 0015, 0019
 
         Unseenet: Councils, and a Registrar Without an Owner
