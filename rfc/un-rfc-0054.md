@@ -96,6 +96,9 @@ changes:
 | `date`      | date             | yes           | RFC 3339 UTC; not earlier than the previous `date` |
 | `members`   | array of objects | yes           | At most 16; see below                             |
 | `min_level` | integer          | no            | Ripening level a candidate's key needs (UN-RFC 0025); default `4` |
+| `max_probation` | integer      | no            | How many members may be on probation at once; default `1` |
+| `sponsors`  | integer          | no            | How many full members must sponsor a candidate (section 11.1); default `0` |
+| `succeeds`  | object           | no            | Genesis only: the council this one leaves (section 13.2) |
 
 Each member is an object:
 
@@ -125,7 +128,9 @@ ID.
    other fields of each member unchanged:
    - **admission:** one new member with `full` false and `joined` equal
      to *M*'s `date`, at least 30 days after the `date` of the last
-     admission (or of the genesis, if there was none);
+     admission (or of the genesis, if there was none), and only if
+     manifest *n* - 1 has fewer members on probation than its
+     `max_probation`;
    - **promotion:** one member's `full` becomes `true`, at least 180
      days after its `joined`;
    - **removal:** one member is left out;
@@ -271,6 +276,22 @@ once a quorum of replicas has computed and posted the same body.
 Removals (section 12) come before admissions and promotions: a replica
 that has a removal to post posts that first.
 
+## 11.1. Sponsors
+
+If the council's `sponsors` is more than 0, a shadow is eligible only
+if, in addition, that many full members have each posted in the claims
+group an article with `Subject: sponsor <shadow key>` and the body
+`{"sponsor": key, "v": 1}`, and none of them has withdrawn it
+(`Subject: unsponsor <shadow key>`). A full member's sponsorship counts
+only if it is the only one that member has posted in the last 180 days
+for a shadow that is not yet a member. Sponsorships are public, so
+anybody can see who let a member in.
+
+Sponsoring is a promise, not a vote: it does not admit anybody by
+itself, and a stolen member key can sponsor at most one candidate in
+180 days. A council that wants anybody to be able to join leaves
+`sponsors` at 0.
+
 A member on probation is a registrar key from the moment the manifest
 counts. After 180 days, if it is not to be removed (section 12), each
 full member's replica posts the manifest that makes it full, with
@@ -314,6 +335,42 @@ agrees. Holding is the only human safeguard; it never needs anybody
 else's approval, and with fewer full members posting, the quorum
 decides. Replicas SHOULD post by default, so that the registrar runs by
 itself.
+
+## 13.1. Objections
+
+A hold is silent; an objection is not. Anybody MAY post in the claims
+group an article with `Subject: object <key>` and a plain-text reason,
+where `<key>` is a shadow or a member. Objections change nothing that
+replicas compute. Replicas SHOULD tell their operator about every
+objection by a full member, and clients SHOULD show the objections to
+a candidate next to it, so that an operator who might hold has the
+reason in front of them.
+
+## 13.2. Leaving a Captured Council
+
+Rules can slow a takeover but not stop one: a quorum that is captured
+is the council (section 17). What remains is to leave it. Any 2 or more
+keys MAY found a new council whose genesis has
+
+```
+"succeeds": {"group": <group-id of the old council>, "seq": <n>}
+```
+
+where *n* is the last manifest of the old council they accept. The new
+council re-issues every certificate that was valid in the old one at
+that manifest's `date`, as in section 14 step 2.
+
+A council that succeeds another gets no power from it. Nodes and clients
+MUST NOT follow it by themselves. Clients SHOULD show that a successor
+exists, who founded it, and the objections (section 13.1) that came
+before it, and let the user, or the node operator for what a node
+carries, choose which council to follow. Which councils a release of a
+client or node follows by default is decided by whoever publishes that
+release.
+
+This is the same right a Usenet administrator always had: to ignore a
+control message from somebody they no longer trust. A council has power
+only because nodes and clients choose to follow it.
 
 # 14. Founding the Project's Council Registrar (Informative)
 
@@ -369,6 +426,18 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   make taking over the council take most of a year (section 17), long
   enough for people to notice and hold. A registrar has no reason to
   grow fast.
+- **Why one member on probation at a time?** It ties the pace of
+  admissions to the length of probation, so a takeover cannot be
+  pipelined: an attacker cannot have several keys maturing at once.
+  A council that has a reason to grow faster can raise `max_probation`
+  through a council manifest, which needs the quorum.
+- **Why are sponsors optional?** Sponsors make membership less open, and
+  an open council is a goal. They are there for a council that finds
+  itself flooded by shadows; it can turn them on with one manifest.
+- **Why is leaving not automatic?** Any rule that let a successor take
+  over by itself would be a rule an attacker could meet too. Choosing
+  which council to follow is the one decision that has to stay with
+  people.
 - **Why nodes check only the counting?** Nodes must agree on who may post
   without running the registrar. The reasons for a change are the
   members' business; a quorum is needed exactly because one member's
@@ -389,12 +458,22 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   over different people and infrastructure is the only defence; a
   council of two run by one person gains nothing over an owner key.
 - **A patient attacker** can run perfect shadows to win a majority. With
-  *h* honest full members it needs *h* + 1 full members of its own:
-  admissions at least 30 days apart, the last one 180 days on probation,
-  so at least 30*h* + 180 days, each key ripened to `min_level`, while
-  honest candidates compete for the same admissions. Operators who
-  watch the council can hold. Raising `min_level` makes each shadow
-  dearer.
+  *h* honest full members it needs *h* + 1 full members of its own.
+  With one member on probation at a time (`max_probation` 1), each
+  admission waits for the previous member's 180 days, so a takeover
+  takes at least 180(*h* + 1) days - two years against a council of
+  three - while honest candidates compete for the same admissions.
+- **Many shadows are cheap.** A shadow only repeats public work, and
+  ripening (UN-RFC 0025) can run for many keys at once on many
+  machines, so neither stops one operator from running dozens of
+  shadows. What they cost is time, not money. Because admission is by
+  the oldest first report, shadows started early - even before the
+  council is founded - hold the front of the queue. The defences
+  against this are, in order: the pace of admissions, sponsors (section
+  11.1) where a council uses them, operators who see objections and
+  hold (section 13), and, if all of these fail, leaving the council
+  (section 13.2). Raising `min_level` makes each shadow dearer but does
+  not change this.
 - **A council that dies.** If too few members remain to reach a quorum,
   the council cannot change: its members keep issuing certificates, but
   nobody can be admitted or removed. If all stop, certificates expire
