@@ -139,6 +139,38 @@ Anybody can post an **objection** to a shadow or a member; `status` shows the
 objections made by full members, so that you have the reason in front of you.
 `sudo unseenet-replica hold none` lets everything go ahead again.
 
+## Proposals and hearings
+
+Some things no rule can decide: changing the council's own settings, or making
+its founding period longer. For those the members make a **proposal**, which
+stands in public for a **hearing** of at least 14 days. Anybody whose key has
+ripened may object; if more people object than there are active members, it
+fails. Otherwise the replicas apply it themselves on the same day.
+
+Your replica's key *is* your member: you speak with it through the replica, which
+posts what you queue at its next round.
+
+```bash
+sudo unseenet-replica talk "Hello" "Still here, and the replica runs fine"
+sudo unseenet-replica propose --set min_level=3 --reason "Level 4 takes too long on small machines"
+sudo unseenet-replica second <id>          # join a proposal another member made
+sudo unseenet-replica object <id> "why"    # object to one
+```
+
+`status` shows open hearings and proposals waiting for more members. Only
+**active** members - those who said something in the council's talk or proposals
+group in the last 90 days - count when people decide; the replica keeps working
+either way, and the council's log warns two weeks before a member stops being
+active. To agree to each applied proposal yourself, `sudo unseenet-replica hold
+proposal`.
+
+Anybody, member or not, can follow the hearings with the ordinary client:
+
+```bash
+unseenet council hearings unseenet.names@...
+unseenet council object unseenet.names@... <id> "why"
+```
+
 ## The council's room
 
 A council can have a closed **room** where the members talk. Nobody hands its key

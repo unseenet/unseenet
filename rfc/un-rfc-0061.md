@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0061                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: -
+Implemented: unseenet main (unreleased); partly - `list`, `endorse`, `retire` and `rfc` changes are heard but not yet applied (#56, #826), and the log does not yet name replicas below a minimum version (#56)
 Updates: 0054, 0055
 
        Unseenet: Council Proposals, Hearings and Objections
@@ -108,10 +108,15 @@ and `id` is the first 16 characters of
 
 `change` is one of:
 
-- `{"manifest": {...}}` - the next council manifest body, for changes
-  UN-RFC 0054 leaves to the council: its parameters (`min_level`,
-  `posters`, the groups of section 3), and an extension of the founding
-  period (UN-RFC 0054 section 19);
+- `{"manifest": {"fields": {...}, "council": {...}}}` - for changes
+  UN-RFC 0054 leaves to the council: in `fields`, manifest fields to set
+  (`title`, `posters`, the groups of section 3, ...; never `v`, `name`,
+  `type`, `serial`, `owner` or `council`), and in `council`, the
+  parameters `min_level`, `max_probation` and `sponsors`, or `until` to
+  extend the founding period (UN-RFC 0054 section 19). The proposal names
+  the changes, not the manifest: its `date` and `prev` are known only when
+  the hearing ends, and the rules may change the council meanwhile. Members
+  are never changed by a proposal;
 - `{"list": {...}}` - a decision on a list the council keeps (UN-RFC
   0020), such as removing an entry for abuse or changing a rule's
   parameter;
@@ -174,7 +179,8 @@ hearing began:
 
 A passed proposal is applied by every replica, dated 00:00 UTC of the day
 after the hearing ended (with the 24 hours): a `manifest` change by
-posting that manifest, which counts as UN-RFC 0054 section 5 says; a
+posting the manifest that follows the current one with those changes and
+that date, which counts as UN-RFC 0054 section 5 says; a
 `list` change as a decision of UN-RFC 0020; `endorse` and `retire` in
 the council's hierarchy list. Each replica posts
 `Subject: hearing <id> closed` in the log with *O*, *F* and the outcome.

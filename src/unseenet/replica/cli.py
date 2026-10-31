@@ -8,12 +8,18 @@ sets everything up, one tells in plain words how the replica is doing.
     sudo unseenet-replica agree removal:ed25519:...           agree to a held change
     sudo unseenet-replica hold admission,removal              what to agree to first
     sudo unseenet-replica resign                              step down (UN-RFC 0054, 20)
+    sudo unseenet-replica propose --set min_level=3 --reason ...   a proposal (UN-RFC 0061)
+    sudo unseenet-replica second ID                           post the same proposal too
+    sudo unseenet-replica talk "subject" "text"               say something as the member
+    sudo unseenet-replica object ID "reason"                  object to a proposal
     unseenet-replica run --dir DIR                            what the service runs
     sudo unseenet-replica update                              what the update timer runs
 
 Everything lives in one folder (``--dir``, by default ``/var/lib/unseenet-replica``):
 the vault with the replica's key, ``config.json`` (the operator's choices) and
-``status.json`` (written after every round; no secrets). The vault's passphrase is
+``status.json`` (written after every round; no secrets) and ``outbox/``, where the
+operator's posts wait for the service to post them with the member key. The vault's
+passphrase is
 made at random and kept in ``/etc/unseenet-replica/passphrase``, readable by root
 only; systemd hands it to the service. ``agree``, ``hold`` and ``resign`` only write
 ``config.json``: the running service reads it at its next round, so the vault never
@@ -134,6 +140,16 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
     for o in st.get("objections") or []:
         if o.get("by_full_member"):
             out.append(f"A full member objects to {o['about']}: {o['why'][:200]}")
+    for h in st.get("hearings") or []:
+        if h["state"] in ("open", "extended"):
+            out.append(f"Hearing {h['id']} ({h['kind']}{', urgent' if h.get('urgent') else ''}): "
+                       f"{h['objections']} objection(s), {h['active']} active members; "
+                       f"closes {_date(h['closes'])}. Reason: {h['reason'][:120]}")
+    for pid, p in (st.get("proposals_pending") or {}).items():
+        mine = st.get("key") in p.get("by", [])
+        out.append(f"Proposal {pid} waits for more members to post it ({len(p.get('by', []))} "
+                   f"so far{', you did' if mine else ''}). To join:  "
+                   f"sudo unseenet-replica second {pid}")
     if cfg.get("hold"):
         out.append(f"You hold: {', '.join(cfg['hold'])} (they wait for you to agree).")
     if cfg.get("resign"):
@@ -377,6 +393,123 @@ def resign(args) -> int:
     return 0
 
 
+# --- speaking with the member key (UN-RFC 0061) -------------------------------------------------
+
+def _queue(d: Path, item: dict) -> Path:
+    """Put a post in the outbox; the service posts it at its next round."""
+    box = d / "outbox"
+    box.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    path = box / f"{stamp}.json"
+    path.write_text(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
+    if getattr(os, "geteuid", lambda: -1)() == 0 and _has_user():
+        for p in (box, path):                   # the service deletes what it posted
+            shutil.chown(p, USER, USER)
+    return path
+
+
+def _has_user() -> bool:
+    try:
+        import pwd
+        pwd.getpwnam(USER)
+        return True
+    except (ImportError, KeyError):
+        return False
+
+
+def _groups(d: Path) -> tuple[dict, dict]:
+    st = read_status(d)
+    if not st.get("groups", {}).get("proposals"):
+        raise SystemExit("This council has no proposals group, or the replica has not "
+                         "finished a round yet (unseenet-replica status).")
+    return st, st["groups"]
+
+
+def _parse_value(text: str):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def propose(args) -> int:
+    from ..core import proposals as pr
+    d = Path(args.dir)
+    st, groups = _groups(d)
+    if args.change_file:
+        change = json.loads(Path(args.change_file).read_text())
+    else:
+        fields, council = {}, {}
+        for item in args.set or []:
+            k, _, v = item.partition("=")
+            (council if k in (*pr.COUNCIL_PARAMS, "until") else fields)[k] = _parse_value(v)
+        if args.extend_founding:
+            council["until"] = args.extend_founding + "T00:00:00Z"
+        m = {}
+        if fields:
+            m["fields"] = fields
+        if council:
+            m["council"] = council
+        change = {"manifest": m}
+    try:
+        pid, body = pr.make_proposal(st["group"], st["seq"], change, args.reason,
+                                     days=args.days, urgent=args.urgent)
+    except pr.ProposalProblem as exc:
+        raise SystemExit(f"Not a proposal: {exc}")
+    print(f"Proposal {pid}:")
+    print(f"  change  {json.dumps(change, sort_keys=True)}")
+    print(f"  reason  {args.reason}")
+    print("It counts when a majority of the active members have posted exactly this, within")
+    print("7 days; then it stands in public for its hearing, and anybody with a ripened key")
+    print(f"may object. The others join with:  sudo unseenet-replica second {pid}")
+    _queue(d, {"group": groups["proposals"], "subject": f"{pr.PROPOSAL} {pid}", "body": body,
+               "content_type": "application/json"})
+    print("Queued: the replica posts it at its next round.")
+    return 0
+
+
+def second(args) -> int:
+    from ..core import proposals as pr
+    d = Path(args.dir)
+    st, groups = _groups(d)
+    p = (st.get("proposals_pending") or {}).get(args.id)
+    if p is None:
+        raise SystemExit("No such proposal is waiting. See: unseenet-replica status")
+    shown = pr.parse_proposal(p["body"])
+    print(f"Proposal {args.id}: {json.dumps(shown.change, sort_keys=True)}")
+    print(f"Reason: {shown.reason}")
+    if not args.yes and (not sys.stdin.isatty() or
+                         input("Post it as this member? [y/N] ").strip().lower() not in ("y", "yes")):
+        print("Not done.")
+        return 1
+    _queue(d, {"group": groups["proposals"], "subject": f"{pr.PROPOSAL} {args.id}",
+               "body": p["body"], "content_type": "application/json"})
+    print("Queued: the replica posts it at its next round.")
+    return 0
+
+
+def talk(args) -> int:
+    d = Path(args.dir)
+    _, groups = _groups(d)
+    if not groups.get("talk"):
+        raise SystemExit("This council has no talk group.")
+    _queue(d, {"group": groups["talk"], "subject": args.subject, "body": args.text + "\n"})
+    print("Queued: the replica posts it at its next round. It also keeps this member active "
+          "(UN-RFC 0061 section 2).")
+    return 0
+
+
+def object_(args) -> int:
+    from ..core import proposals as pr
+    d = Path(args.dir)
+    _, groups = _groups(d)
+    body = pr.objection_body(args.id, args.reason or "", withdrawn=args.withdraw)
+    _queue(d, {"group": groups["proposals"], "subject": f"{pr.OBJECTION} {args.id}",
+               "body": body, "content_type": "application/json"})
+    print("Queued. Objections are public: anybody can see which key objected, and why.")
+    return 0
+
+
 def update(args) -> int:
     """Upgrade the package from the configured channel and restart the service if the
     version changed. Run by the daily timer."""
@@ -426,7 +559,7 @@ def main(argv=None) -> int:
     s.add_argument("--node", action="append", default=[],
                    help="a node to use (repeat; default: the known nodes)")
     s.add_argument("--hold", default="", help="changes to agree to first: admission, "
-                                              "promotion, removal, or all")
+                                              "promotion, removal, proposal, or all")
     s.add_argument("--channel", choices=("stable", "main", "off"), default="stable",
                    help="where updates come from (default: stable releases)")
     s.add_argument("--interval", type=int, default=300, help="seconds between rounds")
@@ -442,16 +575,37 @@ def main(argv=None) -> int:
     s = sub.add_parser("agree", help="let a held change go ahead")
     s.add_argument("label", help="as status shows it, e.g. removal:ed25519:...")
     s.add_argument("--force", action="store_true", help="also if it is not held now")
-    s = sub.add_parser("hold", help="which changes wait for you: admission,promotion,removal, "
-                                    "all or none")
+    s = sub.add_parser("hold", help="which changes wait for you: admission,promotion,removal,"
+                                    "proposal, all or none")
     s.add_argument("kinds")
     s = sub.add_parser("resign", help="step down from the council (UN-RFC 0054 section 20)")
     s.add_argument("--yes", action="store_true")
     sub.add_parser("update", help="update the software (what the daily timer runs)")
+    s = sub.add_parser("propose", help="as a member: propose a change (UN-RFC 0061)")
+    s.add_argument("--set", action="append", metavar="FIELD=VALUE",
+                   help="a manifest field (title, posters, ...) or min_level, max_probation, "
+                        "sponsors; repeat")
+    s.add_argument("--extend-founding", metavar="YYYY-MM-DD",
+                   help="extend the founding period to this day (once it is over)")
+    s.add_argument("--change-file", help="the change as JSON, for list, endorse, retire or rfc")
+    s.add_argument("--reason", required=True, help="why - everybody sees it")
+    s.add_argument("--days", type=int, default=None, help="the hearing, 14 to 60 days")
+    s.add_argument("--urgent", action="store_true", help="a 3-day hearing; needs two thirds")
+    s = sub.add_parser("second", help="as a member: post a waiting proposal too")
+    s.add_argument("id")
+    s.add_argument("--yes", action="store_true")
+    s = sub.add_parser("talk", help="as a member: post in the council's talk group")
+    s.add_argument("subject")
+    s.add_argument("text")
+    s = sub.add_parser("object", help="as a member: object to a proposal")
+    s.add_argument("id")
+    s.add_argument("reason", nargs="?", default="")
+    s.add_argument("--withdraw", action="store_true", help="take an objection back")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return {"setup": setup, "run": run_service, "status": status, "agree": agree,
-            "hold": hold, "resign": resign, "update": update}[args.cmd](args)
+            "hold": hold, "resign": resign, "update": update, "propose": propose,
+            "second": second, "talk": talk, "object": object_}[args.cmd](args)
 
 
 def entry() -> None:
