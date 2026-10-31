@@ -13,6 +13,7 @@ Part of ``Replica`` (see run.py)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -66,7 +67,8 @@ class PublicDuties:
 
     # --- the council's open groups (sections 3-8) -------------------------------------------
 
-    async def _public(self, chain: cn.Chain, now: datetime, agreed: set[str]) -> None:
+    async def _public(self, chain: cn.Chain, now: datetime, agreed: set[str],
+                      busy: bool = False) -> None:
         cur = chain.current
         groups = {k: cur.data.get(k) for k in GROUPS}
         for g in groups.values():
@@ -77,19 +79,31 @@ class PublicDuties:
             return
         proposals = items_of(await self.s.fetch_group(groups["proposals"]))
         talk = items_of(await self.s.fetch_group(groups["talk"])) if groups["talk"] else []
-        await self._hearings(chain, proposals, talk, groups.get("log"), now, agreed)
+        await self._hearings(chain, proposals, talk, groups.get("log"), now, agreed, busy)
         if groups.get("log") and self.role(cur) == "full member":
             await self._log_changes(chain, proposals + talk, groups["log"], now)
 
     async def _hearings(self, chain: cn.Chain, proposals: list[pr.Item], talk: list[pr.Item],
-                        logbook: str | None, now: datetime, agreed: set[str]) -> None:
+                        logbook: str | None, now: datetime, agreed: set[str],
+                        busy: bool = False) -> None:
+        """Follow every hearing; apply what passed. One change per manifest (UN-RFC 0061
+        section 4): a change of UN-RFC 0054 that is due goes first (``busy``), passed
+        proposals follow one at a time, by the day they apply and then their id, each
+        only once the manifest before it counts."""
         cur = chain.current
+        applying = self.st.get("applying")
+        if applying and cur.seq >= applying["seq"]:
+            took = chain.counted[applying["seq"] - 1]
+            if hashlib.sha256(took.body.encode()).hexdigest() == applying["body"]:   # it counts
+                self.st["hearings_done"] = (self.st.get("hearings_done", [])
+                                            + [applying["id"]])[-500:]
+            self.st["applying"] = applying = None         # else overtaken: made anew
         full = self.role(cur) == "full member"
         hs = pr.hearings(chain, proposals, talk)
         objections = [i for i in proposals if i.subject.startswith(pr.OBJECTION + " ")]
         await self.refresh_levels({i.author for i in objections})
         level = {i.author: self.level_of(i.author) for i in objections}
-        shown, done = [], set(self.st.setdefault("hearings_done", []))
+        shown, done, due = [], set(self.st.setdefault("hearings_done", [])), []
         counted = {h.proposal.id for h in hs}
         for h in hs:
             p = h.proposal
@@ -98,7 +112,7 @@ class PublicDuties:
                           "state": out.state, "objections": out.objections,
                           "active": out.active, "closes": nm.rfc3339(out.closes),
                           "urgent": p.urgent})
-            if not full or not logbook:
+            if not full:
                 continue
             await self._log(logbook, f"hearing {p.id} open",
                             f"A proposal of the council stands in public until "
@@ -122,30 +136,11 @@ class PublicDuties:
             if out.state == "failed" or p.kind not in pr.APPLIED_KINDS:
                 self.st["hearings_done"] = (self.st["hearings_done"] + [p.id])[-500:]
                 continue
-            if out.applies > now:
-                continue
-            label = f"proposal:{p.id}"
-            if "proposal" in self.hold and label not in agreed:
-                self.st["held"] = {label: {"kind": "proposal", "key": None,
-                                           "date": nm.rfc3339(out.applies),
-                                           "why": f"passed its hearing: {p.reason[:200]}"}}
-                continue
-            try:
-                body = pr.applied_body(cur, p, out.applies)
-                m = cn.CouncilManifest.from_body(cur.group_id, body)
-                why = cn.change_ok(cur, m, chain.last_admission or chain.counted[0].date)
-            except (pr.ProposalProblem, ValueError) as exc:
-                why = str(exc)
-            if why:
-                log.warning("proposal %s passed but cannot be applied: %s", p.id, why)
-                await self._log(logbook, f"proposal {p.id} not applied",
-                                f"It passed, but the manifest it makes would not count: {why}.\n")
-            elif body not in self.st["signed"]:
-                await self._post_manifest(cur.group_id, body)
-                self.st["signed"] = (self.st["signed"] + [body])[-50:]
-                log.info("applied proposal %s", p.id)
-            self.st["hearings_done"] = (self.st["hearings_done"] + [p.id])[-500:]
+            if out.applies <= now:
+                due.append((out.applies, p.id, p))
         self.status["hearings"] = shown
+        if full and due and not busy and not chain.disputed:
+            await self._apply(chain, min(due, key=lambda d: d[:2]), agreed, logbook, applying)
         # proposals posted but not counting yet: what a member may second
         pending = {}
         for i in proposals:
@@ -156,10 +151,45 @@ class PublicDuties:
                     pending[pid]["by"].append(i.author)
         self.status["proposals_pending"] = pending
 
+    async def _apply(self, chain: cn.Chain, due, agreed: set[str], logbook: str | None,
+                     applying: dict | None) -> None:
+        """Sign the next manifest that a passed proposal makes (section 7)."""
+        cur = chain.current
+        when, pid, p = due
+        if applying and applying["id"] != pid:
+            return                                       # another one is still on its way
+        label = f"proposal:{p.id}"
+        if "proposal" in self.hold and label not in agreed:
+            self.st["held"] = {label: {"kind": "proposal", "key": None,
+                                       "date": nm.rfc3339(when),
+                                       "why": f"passed its hearing: {p.reason[:200]}"}}
+            return
+        try:
+            body = pr.applied_body(cur, p, when)
+            m = cn.CouncilManifest.from_body(cur.group_id, body)
+            why = cn.change_ok(cur, m, chain.last_admission or chain.counted[0].date)
+        except (pr.ProposalProblem, ValueError) as exc:
+            why = str(exc)
+        if why:
+            log.warning("proposal %s passed but cannot be applied: %s", p.id, why)
+            await self._log(logbook, f"proposal {p.id} not applied",
+                            f"It passed, but the manifest it makes would not count: {why}.\n")
+            self.st["hearings_done"] = (self.st["hearings_done"] + [p.id])[-500:]
+            self.st["applying"] = None
+            return
+        if body not in self.st["signed"]:
+            await self._post_manifest(cur.group_id, body)
+            self.st["signed"] = (self.st["signed"] + [body])[-50:]
+            log.info("applied proposal %s", p.id)
+        self.st["applying"] = {"id": p.id, "seq": m.seq,
+                               "body": hashlib.sha256(body.encode()).hexdigest()}
+
     # --- the log (section 8) ------------------------------------------------------------------
 
-    async def _log(self, logbook: str, subject: str, text: str) -> None:
-        """Post one log entry, once from this replica."""
+    async def _log(self, logbook: str | None, subject: str, text: str) -> None:
+        """Post one log entry, once from this replica (none without a log group)."""
+        if not logbook:
+            return
         logged = self.st.setdefault("logged", [])
         if subject in logged:
             return

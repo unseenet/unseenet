@@ -185,6 +185,15 @@ that date, which counts as UN-RFC 0054 section 5 says; a
 the council's hierarchy list. Each replica posts
 `Subject: hearing <id> closed` in the log with *O*, *F* and the outcome.
 
+**One change per manifest.** Each council manifest carries one change.
+A change of UN-RFC 0054 that is due (admission, promotion, removal) goes
+first. Passed `manifest` proposals follow one at a time, ordered by the
+day they apply and then by their id, and a replica posts the next only
+once the manifest of the one before counts. If another manifest takes the
+number first, the proposal is applied to that manifest instead. So two
+replicas never post different manifests with one number for a reason
+this document gives (a fork, UN-RFC 0054 section 5).
+
 **Urgent proposals.** A proposal marked `urgent` that counts with at
 least two thirds of the active members has a hearing of 3 days and cannot
 be extended. It is meant for removing an entry that harms people now. An

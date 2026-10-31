@@ -474,3 +474,40 @@ async def test_a_proposal_with_a_hearing(net, monkeypatch, tmp_path):
     assert (await a.council_chain(group)).current.seq == 2
     closed = next(m.body for m in await a.fetch_group(logbook) if m.subject == f"hearing {pid2} closed")
     assert "failed" in closed and "3 objections" in closed
+
+
+async def test_two_passed_proposals_one_manifest_each(net, monkeypatch, tmp_path):
+    """Two proposals that pass on the same day are applied one after the other, each in
+    its own manifest, never as two manifests with one number (UN-RFC 0061 section 4)."""
+    from unseenet.replica import cli
+    a, b, c = net.session("a"), net.session("b"), net.session("c")
+    group, _ = await net.found([a, b, c], groups=True)
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    dirs = {s: tmp_path / s.identity().key_text[8:16] for s in (a, b, c)}
+    for d in dirs.values():
+        d.mkdir()
+    reps = [net.replica(s, group, state_dir=dirs[s], config=lambda d=dirs[s]: cli.read_config(d))
+            for s in (a, b, c)]
+    for r in reps:
+        await r.run_once()
+    assert cli.main(["--dir", str(dirs[b]), "talk", "Hej", "Jeg er her"]) == 0
+    for change in (["min_level=3"], ["title=Navne"]):
+        assert cli.main(["--dir", str(dirs[a]), "propose", "--set", *change,
+                         "--reason", "To ting"]) == 0
+    for r in reps:
+        await r.run_once()
+    pending = cli.read_status(dirs[b])["proposals_pending"]
+    assert len(pending) == 2
+    for pid in pending:
+        assert cli.main(["--dir", str(dirs[b]), "second", pid, "--yes"]) == 0
+    for r in reps:
+        await r.run_once()
+    assert len(await a.council_hearings(group, now=net.clock)) == 2
+    net.clock += timedelta(days=15, hours=1)
+    for _ in range(3):
+        for r in reps:
+            await r.run_once()
+    chain = await a.council_chain(group)
+    assert not chain.disputed
+    assert chain.current.seq == 3
+    assert chain.current.min_level == 3 and chain.current.data["title"] == "Navne"

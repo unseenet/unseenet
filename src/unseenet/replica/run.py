@@ -144,7 +144,7 @@ class Replica(PublicDuties):
         await self._keep_in_step(chain, self.reg.claims_group)
         await self._keep_in_step(chain, cur.room)
         await self._room_keys(chain, now)
-        await self._public(chain, now, self.agreed(cfg))     # UN-RFC 0061
+        await self._public(chain, now, self.agreed(cfg), busy=change is not None)  # UN-RFC 0061
         self.status["held"] = dict(self.st["held"])
         self.s.save()
         self._write_status()
