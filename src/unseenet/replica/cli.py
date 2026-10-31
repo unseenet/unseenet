@@ -93,7 +93,10 @@ def _ago(text: str | None, now: datetime) -> str:
 
 
 def _date(text: str | None) -> str:
-    return nm.parse_rfc3339(text).strftime("%-d %B %Y") if text else "?"
+    if not text:
+        return "?"
+    d = nm.parse_rfc3339(text)
+    return f"{d.day} {d:%B %Y}"                    # %-d is not on Windows
 
 
 def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
