@@ -70,10 +70,14 @@ class CouncilMixin:
     @staticmethod
     def council_genesis(name: str, gtype: str, members: list[str], *,
                         fields: dict | None = None, min_level: int | None = None,
-                        sponsors: int | None = None, date: datetime | None = None) -> tuple[str, str]:
+                        sponsors: int | None = None, date: datetime | None = None,
+                        founding_years: int | None = None, founding_size: int = 9,
+                        founder: str | None = None) -> tuple[str, str]:
         """(group ID, body) of a new council's genesis: ``members`` as key texts, all
         full, joined on ``date`` (today, 00:00 UTC, by default). Nothing is posted:
-        every member posts the same body with ``council_sign``."""
+        every member posts the same body with ``council_sign``. ``founding_years``: a
+        founding period (UN-RFC 0054 section 19) of that many years, at most 3, whose
+        founder is ``founder`` - the first member by default."""
         keys = []
         for k in members:
             pk = crypto.key_from_text(k)
@@ -85,9 +89,20 @@ class CouncilMixin:
             raise SessionError("a council group is open or a channel")
         day = (date or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0)
+        founding = None
+        if founding_years:
+            if not 0 < founding_years <= 3:
+                raise SessionError("a founding period lasts 1 to 3 years")
+            try:
+                until = day.replace(year=day.year + founding_years)
+            except ValueError:                         # 29 February
+                until = day.replace(year=day.year + founding_years, day=28)
+            founding = cn.Founding(crypto.key_from_text(founder) if founder else keys[0],
+                                   until, founding_size)
         body = cn.council_body(name, gtype, seq=1, date=day,
                                members=[cn.Member(k, day, True) for k in keys],
-                               min_level=min_level, sponsors=sponsors, fields=fields)
+                               min_level=min_level, sponsors=sponsors, founding=founding,
+                               fields=fields)
         return cn.make_council_group_id(name, body), body
 
     async def council_check(self, group_id: str, body: str, node: str | None = None) -> tuple[cn.CouncilManifest, cn.Chain]:

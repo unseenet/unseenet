@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0054                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - Part I; Part II (#689, #690), Part II (#689, #690)
+Implemented: unseenet main (unreleased); partly - Part I and the rules of section 19; Part II (#689, #690), sections 20-21 (#819)
 Updates: 0003, 0004, 0015, 0019
 
         Unseenet: Councils, and a Registrar Without an Owner
@@ -103,7 +103,7 @@ changes:
 | `max_probation` | integer      | no            | How many members may be on probation at once; default `1` |
 | `sponsors`  | integer          | no            | How many full members must sponsor a candidate (section 11.1); default `0` |
 | `succeeds`  | object           | no            | Genesis only: the council this one leaves (section 13.2) |
-| `founding`  | object           | no            | Genesis only: the founding period (section 19)    |
+| `founding`  | object           | no            | Set by the genesis and carried on; the founding period (section 19) |
 | `room`      | Group ID         | no            | The council's closed room (section 21)            |
 
 Each member is an object:

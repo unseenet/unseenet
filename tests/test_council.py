@@ -168,3 +168,90 @@ def test_other_fields_change_through_the_council():
     b2 = next_body(g, date=T0 + timedelta(days=1), min_pow=22, min_level=5)
     m = count_chain(gid, copies + signed(ids, b2)).current
     assert m.data["min_pow"] == 22 and m.min_level == 5 and m.data["title"] == "Lists"
+
+
+# --- the founding period (section 19) ---------------------------------------
+
+from unseenet.core.council import FOUNDER, Founding  # noqa: E402
+
+
+def founded(n=2, size=9, years=3, **kw):
+    ids = keys(n)
+    founder = ids[0]
+    f = Founding(founder.public_key, T0 + timedelta(days=365 * years), size, **kw)
+    gid, body = genesis(ids, founding=f)
+    copies = signed(ids, body)
+    return ids, gid, copies, count_chain(gid, copies).current
+
+
+def admit(prev, key, date, by=FOUNDER):
+    return next_body(prev, date=date, members=prev.members + [Member(key, date, False, by)])
+
+
+def test_a_founder_admission_after_7_days_and_30_days_on_probation():
+    ids, gid, copies, g = founded()
+    new = crypto.Identity.generate()
+    early = T0 + timedelta(days=6)
+    assert count_chain(gid, copies + signed(ids, admit(g, new.public_key, early))).current.seq == 1
+    d = T0 + timedelta(days=7)
+    copies += signed(ids, admit(g, new.public_key, d))
+    m2 = count_chain(gid, copies).current
+    assert m2.seq == 2 and m2.member(new.public_key).by == FOUNDER
+    promoted = [x if x.key != new.public_key else Member(x.key, d, True, FOUNDER) for x in m2.members]
+    too_soon = next_body(m2, date=d + timedelta(days=29), members=promoted)
+    assert count_chain(gid, copies + signed(ids, too_soon)).current.seq == 2
+    copies += signed(ids, next_body(m2, date=d + timedelta(days=30), members=promoted))
+    assert len(count_chain(gid, copies).current.full) == 3
+
+
+def test_two_founder_admissions_on_probation_at_once_not_three():
+    ids, gid, copies, g = founded()
+    a, b, c = keys(3)
+    copies += signed(ids, admit(g, a.public_key, T0 + timedelta(days=7)))
+    m = count_chain(gid, copies).current
+    copies += signed(ids, admit(m, b.public_key, T0 + timedelta(days=14)))
+    m = count_chain(gid, copies).current
+    assert m.seq == 3 and len(m.on_probation) == 2
+    assert count_chain(gid, copies + signed(ids, admit(m, c.public_key, T0 + timedelta(days=21)))).current.seq == 3
+
+
+def test_no_founder_admission_after_the_period_or_at_size():
+    ids, gid, copies, g = founded(years=1)
+    late = T0 + timedelta(days=366)
+    assert count_chain(gid, copies + signed(ids, admit(g, keys(1)[0].public_key, late))).current.seq == 1
+    ids, gid, copies, g = founded(size=2)                        # 2 full already
+    d = T0 + timedelta(days=7)
+    assert count_chain(gid, copies + signed(ids, admit(g, keys(1)[0].public_key, d))).current.seq == 1
+
+
+def test_no_founding_period_no_founder_admission():
+    ids, gid, copies, g = chain_of(3)
+    d = T0 + timedelta(days=30)
+    assert count_chain(gid, copies + signed(ids, admit(g, keys(1)[0].public_key, d))).current.seq == 1
+
+
+def test_the_genesis_founding_period_is_at_most_3_years():
+    ids = keys(2)
+    f = Founding(ids[0].public_key, T0 + timedelta(days=365 * 4), 9)
+    gid, body = genesis(ids, founding=f)
+    assert count_chain(gid, signed(ids, body)).current is None
+
+
+def test_renouncing_and_extending():
+    from dataclasses import replace
+    ids, gid, copies, g = founded(years=1)
+    d = T0 + timedelta(days=10)
+    renounced = next_body(g, date=d, founding=replace(g.founding, renounced=True))
+    m = count_chain(gid, copies + signed(ids, renounced)).current
+    assert m.seq == 2 and m.founding.renounced and not m.founding_lasts(d)
+    back = next_body(m, date=d, founding=replace(m.founding, renounced=False))
+    assert count_chain(gid, copies + signed(ids, renounced) + signed(ids, back)).current.seq == 2
+
+    # extending: only once over, at most a year ahead
+    while_on = next_body(g, date=d, founding=replace(g.founding, until=g.founding.until + timedelta(days=30)))
+    assert count_chain(gid, copies + signed(ids, while_on)).current.seq == 1
+    over = g.founding.until + timedelta(days=1)
+    ext = next_body(g, date=over, founding=replace(g.founding, until=over + timedelta(days=365)))
+    assert count_chain(gid, copies + signed(ids, ext)).current.seq == 2
+    too_far = next_body(g, date=over, founding=replace(g.founding, until=over + timedelta(days=400)))
+    assert count_chain(gid, copies + signed(ids, too_far)).current.seq == 1
