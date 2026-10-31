@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .core import crypto
-from .core.encoding import b64, b64decode
+from .core.encoding import DS, H, b64, b64decode
 from .core.groups import canonical_json, parse_canonical_json
 
 NAMES_GROUP = "unseenet.names@ph5fc5hop5232qsz"      # the project's registrar (section 7.2)
@@ -391,3 +391,180 @@ def certificate_subject(name: str) -> str:
 
 
 REVOKED_SUBJECT = "revoked"
+
+
+# --- public claims: commit, then reveal (UN-RFC 0054 section 8) -----------------------
+#
+# A council registrar takes claims in the open: first a commit that hides the claim,
+# then, between one hour and seven days later, the reveal. Nobody can read a claim
+# before its commit is an hour old, and a commit older than an hour is refused, so
+# nobody can see a claim and get in ahead of it. Pure functions: the client makes the
+# two articles, and every replica and shadow reads them back the same way.
+
+DS_COMMIT = "UNSEENET-NAME-COMMIT-1"
+DS_OUTCOME = "UNSEENET-NAME-OUTCOME-1"     # section 10, the outcome hash of a decision
+COMMIT_SUBJECT = "commit"
+REVEAL_PREFIX = "reveal "
+NONCE_SIZE = 32
+REVEAL_AFTER = timedelta(hours=1)          # a reveal counts from an hour after the commit
+REVEAL_WITHIN = timedelta(days=7)          # ... until seven days after it
+LATE_COMMIT = timedelta(hours=1)           # a commit seen when its Date is older is refused
+LAPSE_SETTLE = timedelta(hours=1)          # wait this long after the 7 days for a late reveal
+
+
+def commit_value(nonce: bytes, claim_body: str) -> str:
+    """``c = b64(H(DS || nonce || claim))``; ``claim`` is the canonical JSON of the claim
+    body (UN-RFC 0019 section 6.1), without a line end."""
+    if len(nonce) != NONCE_SIZE:
+        raise NameProblem("a commit's nonce is 32 octets")
+    claim = canonical_json(parse_claim(claim_body))
+    return b64(H(DS(DS_COMMIT) + nonce + claim.encode("utf-8")))
+
+
+def make_commit(claim_body: str, nonce: bytes | None = None) -> tuple[str, bytes]:
+    """The body of a commit for ``claim_body``, and the nonce to keep for the reveal."""
+    import secrets
+    nonce = nonce if nonce is not None else secrets.token_bytes(NONCE_SIZE)
+    return canonical_json({"commit": commit_value(nonce, claim_body), "v": 1}) + "\n", nonce
+
+
+def make_reveal(claim_body: str, nonce: bytes, reply_inbox: str) -> str:
+    return canonical_json({"claim": parse_claim(claim_body), "nonce": b64(nonce),
+                           "reply_inbox": reply_inbox, "v": 1}) + "\n"
+
+
+def reveal_subject(commit_id: str) -> str:
+    return REVEAL_PREFIX + commit_id
+
+
+def parse_commit(body: str) -> str:
+    """The ``c`` of a commit body."""
+    try:
+        data = parse_canonical_json(body if body.endswith("\n") else body + "\n")
+    except ValueError as exc:
+        raise NameProblem("the commit is not canonical JSON") from exc
+    if data.get("v") != 1 or not isinstance(data.get("commit"), str) or set(data) != {"commit", "v"}:
+        raise NameProblem("not a version 1 commit")
+    return data["commit"]
+
+
+@dataclass(frozen=True)
+class Reveal:
+    claim_body: str                       # the claim, as make_claim writes it
+    nonce: bytes
+    reply_inbox: str
+
+
+def parse_reveal(body: str) -> Reveal:
+    try:
+        data = parse_canonical_json(body if body.endswith("\n") else body + "\n")
+    except ValueError as exc:
+        raise NameProblem("the reveal is not canonical JSON") from exc
+    if (data.get("v") != 1 or not isinstance(data.get("claim"), dict)
+            or not isinstance(data.get("nonce"), str) or not isinstance(data.get("reply_inbox"), str)):
+        raise NameProblem("not a version 1 reveal")
+    try:
+        nonce = b64decode(data["nonce"])
+    except ValueError as exc:
+        raise NameProblem("the reveal's nonce is not base64") from exc
+    claim = canonical_json(data["claim"]) + "\n"
+    parse_claim(claim)
+    from .core.groups import split_group_id
+    try:
+        split_group_id(data["reply_inbox"])
+    except ValueError as exc:
+        raise NameProblem("the reveal's reply_inbox is not a Group ID") from exc
+    return Reveal(claim, nonce, data["reply_inbox"])
+
+
+@dataclass(frozen=True)
+class Post:
+    """What the claim rules read of an article in the claims group."""
+    message_id: str
+    subject: str
+    author: str                          # Author-Key
+    date: datetime
+    body: str
+
+
+@dataclass
+class PublicClaim:
+    """A commit, and the reveal that counts for it if one has come."""
+    id: str                              # the commit's Message-ID
+    date: datetime                       # the commit's Date
+    sender: str                          # its Author-Key
+    commit: str
+    claim_body: str | None = None
+    reply_inbox: str | None = None
+    revealed: datetime | None = None     # the counting reveal's Date
+
+    @property
+    def order(self) -> tuple:
+        return (self.date, self.id)
+
+
+def reveal_counts(commit: PublicClaim, reveal: Post) -> Reveal | None:
+    """Section 8 step 2: the reveal counts if its author is the commit's, it is posted
+    no earlier than an hour and no later than seven days after the commit's Date, and
+    its claim and nonce give the commit's ``c``."""
+    if reveal.author != commit.sender or reveal.subject != reveal_subject(commit.id):
+        return None
+    if not commit.date + REVEAL_AFTER <= reveal.date <= commit.date + REVEAL_WITHIN:
+        return None
+    try:
+        r = parse_reveal(reveal.body)
+        if commit_value(r.nonce, r.claim_body) != commit.commit:
+            return None
+    except NameProblem:
+        return None
+    return r
+
+
+def read_public_claims(posts: list[Post]) -> list[PublicClaim]:
+    """Every commit in the claims group, in the order of section 8 (by Date, then
+    Message-ID), each with the first reveal that counts for it (by its Date, then
+    Message-ID)."""
+    commits: dict[str, PublicClaim] = {}
+    for p in posts:
+        if p.subject == COMMIT_SUBJECT:
+            try:
+                commits[p.message_id] = PublicClaim(p.message_id, p.date, p.author,
+                                                    parse_commit(p.body))
+            except NameProblem:
+                continue
+    for p in sorted((p for p in posts if p.subject.startswith(REVEAL_PREFIX)),
+                    key=lambda p: (p.date, p.message_id)):
+        c = commits.get(p.subject[len(REVEAL_PREFIX):].strip())
+        if c is None or c.revealed is not None:
+            continue
+        r = reveal_counts(c, p)
+        if r is not None:
+            c.claim_body, c.reply_inbox, c.revealed = r.claim_body, r.reply_inbox, p.date
+    return sorted(commits.values(), key=lambda c: c.order)
+
+
+def lapsed(c: PublicClaim, now: datetime) -> bool:
+    """A commit without a counting reveal within seven days lapses. A replica waits
+    ``LAPSE_SETTLE`` more for a reveal posted in time that is still on its way."""
+    return c.revealed is None and now >= c.date + REVEAL_WITHIN + LAPSE_SETTLE
+
+
+def ready_claims(claims: list[PublicClaim], now: datetime) -> tuple[list[PublicClaim], list[PublicClaim]]:
+    """Section 8, order: the claims a replica may handle now, in order - each one
+    revealed, with every earlier commit revealed or lapsed - and the commits that
+    lapsed on the way. Stops at the first commit still waiting for its reveal."""
+    ready, gone = [], []
+    for c in claims:
+        if c.revealed is not None:
+            ready.append(c)
+        elif lapsed(c, now):
+            gone.append(c)
+        else:
+            break
+    return ready, gone
+
+
+def outcome_hash(outcome: dict) -> str:
+    """Section 10: ``b64(H(DS || outcome))``, ``outcome`` being ``{"issue": [name, key,
+    serial, expires]}``, ``{"revoke": serial}`` or ``{"refuse": true}``."""
+    return b64(H(DS(DS_OUTCOME) + canonical_json(outcome).encode("utf-8")))

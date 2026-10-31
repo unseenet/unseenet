@@ -9,6 +9,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Public name claims, commit then reveal** (UN-RFC 0054 section 8, #689): where the
+  registrar is a council, a claim goes out in the open in two steps. Claiming posts a
+  commit in the registrar's claims group and keeps the claim and its nonce in the vault;
+  the reveal goes out by itself once the commit is an hour old, whenever the client
+  refreshes in the next seven days. A commit not revealed in time is shown as lapsed.
+  The client trusts the members of the registrar's current council as registrar keys
+  (UN-RFC 0019 section 7.1 as changed), keeps the first answer a registrar key sends,
+  and says plainly before a claim is sent that claims are public. `unseenet names` shows
+  each public claim's state, `name-claim` asks first (`--yes` to skip), and `GET
+  /api/names` answers `public_claims`, `public_notice` and `commits` (UN-RFC 0046).
+  The formats and the order replicas read them in are in `unseenet.names`.
 - **Council groups, the rules** (UN-RFC 0054 Part I, #688): `unseenet.core.council` reads
   council manifests - groups owned by a council of keys instead of one owner - and counts
   their chain from the identical copies the members posted: the genesis, the quorum (the

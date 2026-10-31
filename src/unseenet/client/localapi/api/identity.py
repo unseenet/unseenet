@@ -183,6 +183,11 @@ class Identity:
                      for c in mine],
             "pending": [{"name": n, "action": a, "sent": when}
                         for n, a, when in naming.pending(s) if n not in held],
+            # a council registrar takes claims in the open (UN-RFC 0054 section 8): say so
+            # before a claim is sent, and show each claim's state
+            "public_claims": naming.claims_are_public(s),
+            "public_notice": naming.PUBLIC_NOTICE if naming.claims_are_public(s) else "",
+            "commits": naming.commits(s),
             "parents": naming.parents_i_hold(s),
             "given": [{"name": c.name, "key": c.key, "who": s.label_of(c.key),
                        "expires": c.expires.isoformat()} for c in naming.names_given(s)],
@@ -203,7 +208,12 @@ class Identity:
                 if to == s.identity().key_text:
                     raise SessionError("that is your own key")
             await naming.claim(s, name, action, to)
-            text = f"Sent your {action} of @{name} to the registrar. It decides after about an hour."
+            if naming.claims_are_public(s):
+                text = (f"Your {action} of @{name} is committed. The claim goes out by itself "
+                        "when it is an hour old, while Unseenet is open. "
+                        + naming.PUBLIC_NOTICE)
+            else:
+                text = f"Sent your {action} of @{name} to the registrar. It decides after about an hour."
         elif action == "primary":
             naming.set_primary(s, name)
             text = f"Your posts show {naming.name_text(name)}"

@@ -46,10 +46,28 @@ async def c_names(app: App, args) -> None:
                                           for c in given]
     if pending:
         lines += ["", "On their way:"] + [f"  {a} {n} (sent {w})" for n, a, w in pending]
+    public = naming.commits(s)
+    if public:
+        lines += ["", "Public claims:"] + [f"  {c['action']} {c['name']}: {_state_text(c)}"
+                                           for c in public]
     emit(args, "\n".join(lines), {"names": [_row(c) for c in mine], "shown": shown,
                                   "given": [_row(c) for c in given],
                                   "pending": [{"name": n, "action": a, "sent": w}
-                                              for n, a, w in pending]})
+                                              for n, a, w in pending],
+                                  "public_claims": public})
+
+
+def _state_text(c: dict) -> str:
+    """A public claim's state in plain words (UN-RFC 0054 section 8)."""
+    state = c["state"]
+    if state == "waiting":
+        return "committed; the claim goes out when it is an hour old"
+    if state == "revealed":
+        return "sent; the registrar decides once earlier claims are settled"
+    if state == "lapsed":
+        return "lapsed - it was not sent within seven days; claim again"
+    a = c.get("answer") or {}
+    return f"{a.get('outcome', 'answered')}" + (f": {a['text']}" if a.get("outcome") == "refused" else "")
 
 
 async def c_name_claim(app: App, args) -> None:
@@ -59,13 +77,24 @@ async def c_name_claim(app: App, args) -> None:
     from ..client.session import SessionError
     name = args.name.lstrip("@")
     s = await _named(app, args)
+    public = naming.claims_are_public(s)
+    if public and not getattr(args, "json", False):
+        print(naming.PUBLIC_NOTICE)
+        if not getattr(args, "yes", False) and sys.stdin.isatty():
+            if input("Send it? [y/N] ").strip().lower() not in ("y", "yes", "j", "ja"):
+                sys.exit("Not sent.")
     try:
         await naming.claim(s, name, args.action, args.to)
     except (SessionError, ValueError) as exc:
         sys.exit(f"Not sent: {exc}")
-    emit(args, f"{args.action} {naming.name_text(name)} sent to the registrar; "
-               "the answer comes to your inbox within a few hours.",
-         {"name": name, "action": args.action, "sent": True})
+    if public:
+        text = (f"{args.action} {naming.name_text(name)}: the first step is posted. The claim "
+                "itself goes out by itself when it is an hour old - whenever you use Unseenet "
+                "in the next seven days (or run: unseenet names). The answer comes to your inbox.")
+    else:
+        text = (f"{args.action} {naming.name_text(name)} sent to the registrar; "
+                "the answer comes to your inbox within a few hours.")
+    emit(args, text, {"name": name, "action": args.action, "sent": True, "public": public})
 
 
 async def c_name_give(app: App, args) -> None:
@@ -136,6 +165,8 @@ def names_parsers(sub) -> None:
     s.add_argument("name", help="e.g. lorensen or lorensen.dk")
     s.add_argument("--action", choices=["claim", "renew", "release", "transfer"], default="claim")
     s.add_argument("--to", help="for transfer: the new key")
+    s.add_argument("--yes", action="store_true",
+                   help="do not ask, also where claims are public (UN-RFC 0054 section 8)")
     s = sub.add_parser("name-give", help="give a name under yours to a key (sonia@lorensen)")
     s.add_argument("name", help="e.g. sonia@lorensen")
     s.add_argument("key", help="the key it goes to (ed25519:...)")
