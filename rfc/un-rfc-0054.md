@@ -203,7 +203,10 @@ Each replica MUST have a member key of its own, used by no other replica,
 node or person. Two replicas with one key are not two votes but one key
 that may sign two different council manifests with one number when the
 replicas see the world a little differently - which section 5 treats as
-a stolen key, stopping the council at that number.
+a stolen key, stopping the council at that number. A replica that finds
+an article signed with its member key that it did not send itself SHOULD
+stop signing anything and tell its operator, until the operator says the
+other user of the key is gone.
 
 # 8. Public Claims
 

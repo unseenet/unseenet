@@ -38,6 +38,7 @@ log = logging.getLogger("unseenet.replica")
 
 SOFTWARE = f"unseenet-replica {__version__}"
 ALIVE_EVERY = (timedelta(days=7), timedelta(days=29))   # a random time within, section 9
+TWIN_WINDOW = timedelta(days=30)        # articles looked at for another user of the key
 HOLDABLE = ("admission", "promotion", "removal", "proposal")   # section 13 (0061: proposals)
 
 
@@ -63,14 +64,58 @@ class Replica(PublicDuties):
         st = session.data.setdefault("replica", {})
         for key, empty in (("started", None), ("reported", []), ("report_at", {}),
                            ("alive_next", None), ("signed", []), ("held", {}),
-                           ("agreed", []), ("objections_seen", [])):
+                           ("agreed", []), ("objections_seen", []), ("mine", {}),
+                           ("mine_since", None), ("twin", None)):
             st.setdefault(key, empty)
         self.st = st
+        self._watch_own_posts()
         self._levels = levels
         self._level_cache: dict[str, tuple[int, int | None]] = {}
         self.ripen = ripen
         self.config = config
         self.status: dict = {}
+
+    # --- one key, one replica (section 7) ---------------------------------------------------
+
+    def _watch_own_posts(self) -> None:
+        """Note the Message-ID of every article this replica sends with its key, so that
+        one it did not send stands out."""
+        send = self.s._send_article
+        me = self.me.key_text
+
+        async def sending(art, *args, **kw):
+            if art.get("Author-Key") == me:
+                self.st["mine"][art.message_id] = nm.rfc3339(self.now())
+            return await send(art, *args, **kw)
+        self.s._send_article = sending
+
+    def _find_twin(self, posts: list[nm.Post], now: datetime) -> dict | None:
+        """An article signed with this replica's key that it did not send: another
+        replica (or anybody) uses the key (section 7). Only articles dated since the
+        replica began noting its own count."""
+        since = nm.parse_rfc3339(self.st["mine_since"])
+        keep = now - TWIN_WINDOW
+        self.st["mine"] = {m: d for m, d in self.st["mine"].items()
+                           if nm.parse_rfc3339(d) >= keep - TWIN_WINDOW}
+        for p in posts:
+            if (p.author == self.me.key_text and p.date >= max(since, keep)
+                    and p.message_id not in self.st["mine"]):
+                return {"message_id": p.message_id, "subject": p.subject[:120],
+                        "date": nm.rfc3339(p.date)}
+        return None
+
+    def _twin_stops(self, cfg: dict) -> bool:
+        """Whether another user of the key stops this round. The operator clears it with
+        ``unseenet-replica twin-gone`` once the other one is stopped."""
+        twin = self.st.get("twin")
+        if twin and twin["message_id"] in cfg.get("twin_gone", []):
+            self.st["mine"][twin["message_id"]] = twin["date"]     # dealt with: not again
+            self.st["twin"] = twin = None
+        if twin:
+            self.status["twin"] = twin
+            self.status["note"] = ("another replica uses this key: this one signs nothing "
+                                   "until you stop the other (UN-RFC 0054 section 7)")
+        return twin is not None
 
     # --- what the replica is -----------------------------------------------------------
 
@@ -100,12 +145,18 @@ class Replica(PublicDuties):
         cfg = self._read_config()
         if not self.st["started"]:
             self.st["started"] = nm.rfc3339(now)
+        if not self.st["mine_since"]:
+            self.st["mine_since"] = nm.rfc3339(now)
         chain = await self.s.council_chain(self.group)
         cur = chain.current
         role = self.role(cur)
         self.status = {"time": nm.rfc3339(now), "software": SOFTWARE, "group": self.group,
                        "key": self.me.key_text, "role": role,
                        "level": self._own_level(), "disputed": chain.disputed}
+        if self._twin_stops(cfg):
+            self.s.save()
+            self._write_status()
+            return self.status
         if cur is None:
             self.status["note"] = "the council does not count yet (its genesis is not signed by all)"
             self._write_status()
@@ -116,6 +167,16 @@ class Replica(PublicDuties):
         posts = await self.reg.read_public()
         council_posts = [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
                          for m in getattr(self.reg, "messages", []) if m.author_key and m.date]
+        twin = self._find_twin(posts + council_posts, now)
+        if twin is not None:
+            log.error("an article signed with this replica's key that it did not send: %s %r. "
+                      "Another replica uses the key; this one stops signing.",
+                      twin["message_id"], twin["subject"])
+            self.st["twin"] = twin
+            self._twin_stops(cfg)
+            self.s.save()
+            self._write_status()
+            return self.status
         decisions = [rules.Decision(x[0], datetime.strptime(x[1], "%Y-%m-%d").replace(
             tzinfo=timezone.utc), x[2], bool(x[3])) for x in self.reg.st["decisions"]]
         members = {crypto.key_to_text(k) for k in cur.keys}
