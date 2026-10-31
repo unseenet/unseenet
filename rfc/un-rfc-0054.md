@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0054                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the room of section 21 (#819)
+Implemented: unseenet main (unreleased)
 Updates: 0003, 0004, 0015, 0019
 
         Unseenet: Councils, and a Registrar Without an Owner
@@ -90,7 +90,8 @@ A council manifest is a manifest of UN-RFC 0004 section 3 with these
 changes:
 
 - it has no `owner` field; its `Author-Key` is the member who posted it;
-- `type` is `open` or `channel`;
+- `type` is `open` or `channel`, or `closed` for a council's room
+  (section 21);
 - it has a field `council`:
 
 | Field       | Type             | Req.          | Meaning                                           |
@@ -647,6 +648,13 @@ current manifest and refuse later ones for the same epoch:
 - **on removal or stepping down**, it posts a `key-update` with
   `closes_previous` set to `true` and envelopes for the remaining
   members (UN-RFC 0004 section 6.2).
+
+Every replica can see what is needed from public articles alone: an
+envelope's tag (UN-RFC 0004 section 6) names the key it was sealed to, so
+a member without an envelope of the current epoch needs a grant, and a key
+that is no longer a member's but holds one needs a new epoch. A grant is
+made only by a member that holds that epoch's key; nodes refuse a grant
+for an epoch they have no key update for.
 
 Nobody hands keys over by hand. A member reads and writes the room with
 the same key its replica uses. The council's open groups - proposals,

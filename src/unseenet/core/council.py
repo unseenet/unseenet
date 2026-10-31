@@ -21,7 +21,7 @@ from .groups import (_NAME_RE, canonical_json, format_expires, parse_canonical_j
                      parse_expires, split_group_id)
 
 DS_COUNCIL = "UNSEENET-COUNCIL-1"
-COUNCIL_TYPES = ("open", "channel")       # section 4
+COUNCIL_TYPES = ("open", "channel", "closed")   # section 4; closed: the room (section 21)
 MAX_MEMBERS = 16                          # section 4
 DEFAULT_MIN_LEVEL = 4
 DEFAULT_MAX_PROBATION = 1

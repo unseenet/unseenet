@@ -64,9 +64,11 @@ def test_a_council_manifest_is_not_an_owners():
     assert is_council_manifest(art)
     m = CouncilManifest.from_article(art)
     assert m.seq == 1 and m.full == [i.public_key for i in ids]
-    bad = body.replace('"type":"channel"', '"type":"closed"')
+    bad = body.replace('"type":"channel"', '"type":"inbox"')
     with pytest.raises(ArticleError):
         CouncilManifest.from_body(gid, bad)
+    # closed is the council's room (UN-RFC 0054 section 21)
+    assert CouncilManifest.from_body(gid, body.replace('"type":"channel"', '"type":"closed"')).type == "closed"
 
 
 def chain_of(n_members, **kw):
