@@ -213,6 +213,7 @@ The protocol is designed to be extended without breaking old software:
 | 0057 | A People Directory                           | Standards Track |
 | 0058 | Finding Groups                               | Standards Track |
 | 0059 | Link Cards                                   | Standards Track |
+| 0064 | Transport Addresses and Transport Bindings   | Standards Track |
 | 0060 | Sharing                                      | Standards Track |
 | 0061 | Council Proposals, Hearings and Objections   | Standards Track |
 | 0062 | Update Channels                              | Standards Track |
