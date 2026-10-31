@@ -26,6 +26,8 @@ from importlib import resources
 # ph5fc5hop5232qsz is part of their IDs.
 PROJECT_KEY = "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya"
 NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
+# Nodes' own announcements (UN-RFC 0055 section 5), signed with their node keys.
+NODES_ANNOUNCE_GROUP = "unseenet.nodes.announce@ph5fc5hop5232qsz"
 # Known web entrances (UN-RFC 0043 section 8.1), for web clients and the jump page.
 ENTRANCES_GROUP = "unseenet.entrances@ph5fc5hop5232qsz"
 ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
@@ -38,6 +40,7 @@ CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
 # has read the manifests.
 DATA_GROUPS = frozenset({
     NODES_GROUP,
+    NODES_ANNOUNCE_GROUP,
     ENTRANCES_GROUP,
     RELEASES_GROUP,
     CANARY_GROUP,

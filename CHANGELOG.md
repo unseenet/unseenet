@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Nodes announce themselves** (UN-RFC 0055 section 5, #700). A node with Tor ripens its
+  own node key in the background (to level 1 by default, `ripen_to`), then posts its
+  onion address, name and `carries` in `unseenet.nodes.announce`, signed with that key:
+  at the start, when what it says changes, and every 20 days. Every node checks an
+  announcement when it takes it - the format, its Date, one per node a day - and keeps
+  only the newest per node. `announce = false` keeps a node unannounced. The group is
+  endorsed in the project's list for `unseenet` and made by `tools/project/create_groups.py`.
 - **A replica stops when its key is used elsewhere** (UN-RFC 0054 section 7). It notes
   every article it sends with its member key; one it did not send - a copy of the replica
   still running on the old machine - makes it stop signing anything, since two replicas

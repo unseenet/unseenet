@@ -86,7 +86,7 @@ def hierarchy_list(hierarchy, groups, sub=()):
 
 def test_project_checkgroups_endorse_the_project_groups():
     lst = hz.builtin_checkgroups()
-    assert lst.hierarchy == "unseenet" and len(lst.groups) == 15
+    assert lst.hierarchy == "unseenet" and len(lst.groups) == 16
     # UN-RFC 0055 4.1: every node carries these, so test and the demo moved out (#821)
     assert not any(n.startswith(("unseenet.test", "unseenet.demo")) for n in lst.groups)
     assert all(g.endswith("@ph5fc5hop5232qsz") for g in lst.groups.values())

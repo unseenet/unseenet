@@ -91,6 +91,11 @@ section 7), and complaints about names used to impersonate someone (UN-RFC
 0019 section 6.7). Decisions are made in public, here or on GitHub. General
 talk about Unseenet belongs in unseenet@""" + FP + "."
 
+NODES_ANNOUNCE = """Nodes announce themselves here (UN-RFC 0055 section 5): each post is one
+node's own word - its address, its name and what it carries - signed with its node
+key. Nobody needs anybody's approval to be found. Clients check a node before they
+use it. Every node carries this group; the newest announcement per node counts."""
+
 CANARY = """Connection checks for the known nodes (UN-RFC 0021). Every day the project's
 checker posts one small canary to each listed node and looks the next day
 where it arrived. Only the checker posts here; there is nothing to read."""
@@ -178,6 +183,9 @@ GROUPS = (
     ("unseenet.names", "channel", "data", "Names: the project's registrar",
      "Name certificates and revocations for identities (UN-RFC 0019).", NAMES,
      "registrar_poster", 20),
+    ("unseenet.nodes.announce", "open", "data", "Nodes announce themselves",
+     "Every node may say here where it is and what it carries (UN-RFC 0055 section 5).",
+     NODES_ANNOUNCE, None, 22),
     ("unseenet.canary", "channel", "data", "Connection checks for known nodes",
      "Daily canary posts that show listed nodes are connected (UN-RFC 0021).", CANARY,
      "github_poster", 20),

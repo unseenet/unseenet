@@ -95,7 +95,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     await run("create_groups")
     v = Vault.open(setup["vault"], "pw")
     owned = {g for g, e in v.data["groups"].items() if e.get("owner")}
-    assert setup["names_group"] in owned and len(owned) == 45     # + 23 news bot channels
+    assert setup["names_group"] in owned and len(owned) == 46     # + 23 news bot channels
     news = v.data["groups"][f"alt.news.wikipedia@{setup['project'].fingerprint}"]["manifest"]
     assert (news["type"], news["comments"], news["comment_days"]) == ("channel", "open", 14)
     assert news["posters"] == ["ed25519:2xx732vxtge5ficz7ihbi75uctegsmyzc5bmllwett62etjtfuza"]
@@ -110,7 +110,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert "portals" not in v.data["groups"][talk]["manifest"]        # none, left out
     await run("create_groups")
     assert len({g for g, e in Vault.open(setup["vault"], "pw").data["groups"].items()
-                if e.get("owner")}) == 45
+                if e.get("owner")}) == 46
 
     async def as_published_before(gid, change):
         """Put a newer manifest on the node, as an older script would have made it."""

@@ -45,6 +45,8 @@ groups = "*"
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
 | `carries` | `["*"]` | The hierarchies this node carries, such as `["alt.*", "dk.*"]`, see [below](#carries-the-hierarchies-you-carry). The network's own groups are always carried. |
+| `announce` | `true` | Announce the node in the network, so people can find it, see [below](#announce-being-found). |
+| `ripen_to` | `1` | How far the node ripens its own key before it announces itself. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
@@ -153,6 +155,27 @@ Profiles, pictures and other groups that belong to one key (`profile@...`,
 The node says what it carries in its node information, so clients and peers
 can see it. A peer sends you only the groups you both carry, and you send a
 peer only what it carries; it learns that when it connects, and again daily.
+
+### `announce`: being found
+
+A node tells the network where it is and what it carries: its onion address, its
+name and its `carries`, in the group `unseenet.nodes.announce` that every node
+carries ([UN-RFC 0055](../spec/un-rfc-0055.md) section 5). It signs this with its
+node key, so nobody else can announce in its name, and nobody has to approve it.
+It announces itself when it starts, when what it says changes, and every few
+weeks. Clients check a node before they use it.
+
+Before its first announcement the node **ripens its key**
+([UN-RFC 0025](../spec/un-rfc-0025.md)), like any key that posts: a few minutes of
+one core for level 0, a few hours for level 1 (`ripen_to`). It runs in the
+background at low priority, also on a Raspberry Pi, and only once.
+
+A node only for a few friends can stay unannounced: `announce = false`. It still
+carries the network's own groups.
+
+**One key per node.** Never run two nodes with the same node key (a copied data
+folder): their announcements would hide each other, and the network would count
+them as one node.
 
 ### `new_groups`: which groups the node carries
 

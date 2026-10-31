@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0055                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - `carries`, the network's own groups and peering by what both carry (sections 2-4, 6); announcements, clients and the council's node list follow (#700, #56)
+Implemented: unseenet main (unreleased); partly - `carries`, the network's own groups, peering by what both carry and nodes' announcements (sections 2-6); clients and the council's node list follow (#700, #56)
 Updates: 0001, 0005, 0010, 0011, 0018, 0021
 
                Unseenet: What a Node Carries
@@ -229,6 +229,12 @@ announcement per key (section 5.4), so two nodes with one key would hide
 each other, connection checks and coverage would count them as one, and
 a key stolen from one machine would speak for all of them. `addresses`
 is for further ways to reach the same node, not for other nodes.
+
+The node key ripens (UN-RFC 0025) like any other key, and an announcement
+pays postage like any other article: announcing costs the same as posting,
+so making many "nodes" costs as much as posting as many people. A node
+announces itself once its key meets the minimum level of the nodes it
+posts to.
 
 A node MUST announce itself when it starts carrying, when `carries`
 changes, and at least every 30 days. An announcement nobody has renewed

@@ -252,8 +252,11 @@ class Accepting:
                                        "already; a change names it in Supersedes")
             self._check_blocked(art)
             self._check_reported(art)                       # UN-RFC 0045 section 6
+            older = self._check_announcement(art)           # UN-RFC 0055 section 5
             carried = self._blobs_for(art, blobs, from_peer, staged)
             self.store.add(art, raw)
+            for mid in older:                               # the newest per node (5.4)
+                self.store.delete(mid)
             if page:
                 self.store.add_page(art, *page)
             for bid in carried:                         # staged on this connection: now kept
