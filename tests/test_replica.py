@@ -46,10 +46,16 @@ class Net:
         return Replica(s, group, tlds=lambda: TLDS, dns_txt=lambda n: [], now=lambda: self.clock,
                        levels=lambda k: 4, **kw)
 
-    async def found(self, members, founder=None):
+    async def found(self, members, founder=None, room=False):
         keys = [m.identity().key_text for m in members]
         a = members[0]
         fk = dict(founding_years=1, founder=founder.identity().key_text) if founder else {}
+        room_id = None
+        if room:
+            room_id, body = a.council_genesis("unseenet.names.room", "closed", keys,
+                                              date=self.clock, **fk)
+            for m in members:
+                await m.council_sign(room_id, body)
         claims, body = a.council_genesis("unseenet.names.claims", "open", keys,
                                          fields={"min_pow": 8, "retention_days": 365},
                                          date=self.clock, **fk)
@@ -57,10 +63,11 @@ class Net:
             await m.council_sign(claims, body)
         group, body = a.council_genesis("unseenet.names", "channel", keys,
                                         fields={"min_pow": 0, "retention_days": 365,
-                                                "claims": claims}, date=self.clock, **fk)
+                                                "claims": claims}, date=self.clock,
+                                        room=room_id, **fk)
         for m in members:
             await m.council_sign(group, body)
-        return group, claims
+        return (group, claims, room_id) if room else (group, claims)
 
 
 @pytest.fixture
