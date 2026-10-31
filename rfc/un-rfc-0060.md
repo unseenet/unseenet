@@ -554,7 +554,8 @@ card.
 - UN-RFC 0045: issuers may count shares across groups (section 7.3).
 - UN-RFC 0046: the local API gains a call to fetch a target, answering
   `503 later` while the node fetches, and calls to share and to undo a
-  share.
+  share; posting a post or a private post takes `share`, the post it
+  shares, so a share with a comment is written like any post.
 - UN-RFC 0055 section 7: clients go to another node for a target the
   way they do for a group.
 - UN-RFC 0059 section 9: a shared target is shown with a card for an

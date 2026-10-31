@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **A share written like any post** (UN-RFC 0060, unseenet-gui): `POST /api/groups/{gid}/post`
+  and `POST /api/private` take `share` (`{"group", "id"}` of the post being shared), so a
+  share with a comment - into your feed, into a group, or to one person - has everything a
+  post has: a subject of its own or none (the core makes one), files, a link card, tags,
+  languages and comment days. The same checks as `.../share`; `share_notice: false` sends
+  the author no notice.
+
 ## [0.6.7] - 2026-10-31
 
 ### Fixed

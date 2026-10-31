@@ -44,6 +44,22 @@ class Writing:
         if warning:
             s.accept_portals(gid)
 
+    def _shared(self, s: Session, data: dict, refs=None) -> Message | None:
+        """The post a ``share`` ``{"group", "id"}`` names (UN-RFC 0060): this post or
+        private post then shares it, with all a post has - None without one."""
+        share = data.get("share")
+        if not share:
+            return None
+        if not isinstance(share, dict) or not share.get("group") or not share.get("id"):
+            raise SessionError("share is {group, id}: the post being shared")
+        if refs:
+            raise SessionError("a share is a new thread, not a reply")
+        m = self._find(s, str(share["group"]), str(share["id"]))
+        allowed = s.share_permission(m)
+        if not allowed:
+            raise SessionError(allowed.reason)
+        return m
+
     def post(self, gid: str, data: dict) -> dict:
         """``POST /api/groups/{gid}/post`` (section 4.4): a post or a chat line, as a job whose
         progress (ripening, postage) comes as events. To a contact's pseudo-group it is a
@@ -64,7 +80,12 @@ class Writing:
         if kind not in s.group_kinds(gid):
             raise SessionError("this group takes " + ("posts with a subject only"
                                                        if kind == KIND_CHAT else "chat lines only"))
-        if kind == KIND_POST and not subject:
+        shared = self._shared(s, data, refs)                 # a share with words (0060)
+        if shared is not None:
+            ok = s.share_into_permission(gid, plain=False)
+            if not ok:
+                raise SessionError(ok.reason)
+        if kind == KIND_POST and not subject and shared is None:   # a share: its own, or one made
             raise SessionError("a post needs a subject")
         self._portals(s, gid, bool(data.get("publish_outside_tor")))
         if kind == KIND_POST and data.get("signature", True):
@@ -100,6 +121,11 @@ class Writing:
             s._comment_days_header(gid, days, refs)         # refused now, not in the job
 
         async def send() -> str:
+            if shared is not None:
+                feed = s.personal_group("feed")
+                return await s.share(shared, body, into=None if gid == feed else gid,
+                                     subject=subject, kind=kind, files=files or None, card=card,
+                                     tags=tags or None, languages=languages, comment_days=days)
             if kind == KIND_CHAT and not refs and not files and not origin and not tags \
                     and not languages and days is None:
                 return await s.send_chat(gid, body, card=card)
@@ -110,6 +136,11 @@ class Writing:
         async def after(msgid: str) -> None:
             if keys:            # for a post sent to the moderators, the core waits for approval
                 self.spawn(s.send_mention_notices(gid, msgid, subject, kind, keys))
+            if shared is not None:                      # the author is told (0060 section 8)
+                if data.get("share_notice", True) is not False:
+                    self.spawn(s.send_share_notice(msgid))
+                else:
+                    s.data.get("share_notices_to_send", {}).pop(msgid, None)
             await s.fetch_group(gid)
         return {"job": self._new_job(gid, send, after)}
 
@@ -149,7 +180,7 @@ class Writing:
         kind = _kind(data)
         body = str(data.get("body", "")).strip("\n")
         subject = "" if kind == KIND_CHAT else str(data.get("subject", "")).strip()
-        if kind == KIND_POST and not subject:
+        if kind == KIND_POST and not subject and not data.get("share"):
             raise SessionError("a post needs a subject")
         owner = crypto.key_from_text(key)
         # encrypted with it (UN-RFC 0027 3.3, #497); checked against their inbox when sent
@@ -167,6 +198,7 @@ class Writing:
             if msg is not None:
                 inbox = s.reply_target(msg) or inbox
                 refs = msg.references + [msg.message_id]
+        shared = self._shared(s, data, refs)                 # sent to one person (0060 7.4)
         group = CONTACT + key if kind == KIND_CHAT else s.my_inbox
 
         as_team = str(data.get("as_team") or "") or None     # on a team inbox's behalf (0047)
@@ -174,6 +206,9 @@ class Writing:
             raise SessionError("you hold no team key for that inbox")
 
         async def send() -> str:
+            if shared is not None:
+                return await s.send_share(shared, key, body, chat=kind == KIND_CHAT,
+                                          subject=subject, files=files or None, card=card)
             if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner) and not as_team:
                 return await s.send_chat(CONTACT + key, body, files=files or None, card=card)
             return await s.send_private(inbox, subject, body, owner_key=owner,

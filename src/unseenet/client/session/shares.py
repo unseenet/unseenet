@@ -120,7 +120,8 @@ class SharesMixin:
 
     # --- sharing (sections 4.3, 4.5, 7) --------------------------------------------
     async def share(self, msg: Message, comment: str = "", *, into: str | None = None,
-                    subject: str = "", kind: str | None = None, files=None, card=None) -> str:
+                    subject: str = "", kind: str | None = None, files=None, card=None,
+                    tags=None, languages=None, comment_days: int | None = None) -> str:
         """Share ``msg`` - into your feed, or ``into`` another group - plainly, or with
         ``comment`` (a chat line, or a post when ``subject`` is given or the group takes
         posts only). A plain share of a plain share shares its original (section 4.2);
@@ -171,7 +172,8 @@ class SharesMixin:
                 subject = (msg.subject or "").strip() or "Shared"
             new_id = await self.post(dest, subject if kind == KIND_POST else "", comment + "\n",
                                      kind=kind, extra=sh.headers(tgt_id, tgt_group),
-                                     files=files, card=card)
+                                     files=files, card=card, tags=tags, languages=languages,
+                                     comment_days=comment_days)
         self.data.setdefault("shares", {}).setdefault(tgt_id, {})[dest] = new_id
         kinds_of[new_id] = "plain" if plain else "comment"
         if earlier:
@@ -221,9 +223,11 @@ class SharesMixin:
         return done
 
     async def send_share(self, msg: Message, to: str, comment: str = "",
-                         chat: bool = True) -> str:
-        """Send ``msg`` to one person (section 7.4): a private chat line (or post) with
-        ``Share-Of``/``Share-Group`` inside the encryption. No notice, no limit."""
+                         chat: bool = True, *, subject: str = "", files=None,
+                         card=None) -> str:
+        """Send ``msg`` to one person (section 7.4): a private chat line (or post, with
+        ``subject``, ``files`` and ``card`` as any private post) with ``Share-Of``/
+        ``Share-Group`` inside the encryption. No notice, no limit."""
         allowed = self.share_permission(msg)
         if not allowed:
             raise SessionError(allowed.reason)
@@ -233,10 +237,11 @@ class SharesMixin:
         except crypto.CryptoError:
             raise SessionError("send to whom? a key, like ed25519:...") from None
         body = (comment or "").strip() or sh.address(tgt_group, tgt_id)
+        subject = "" if chat else (subject.strip() or msg.subject or "Shared")
         return await self.send_private(
-            personal_inbox_id(owner), "" if chat else (msg.subject or "Shared"), body + "\n",
+            personal_inbox_id(owner), subject, body + "\n",
             owner_key=owner, kind=KIND_CHAT if chat else KIND_POST,
-            extra=sh.headers(tgt_id, tgt_group))
+            extra=sh.headers(tgt_id, tgt_group), files=files, card=card)
 
     # --- fetching the original (section 6.3) ---------------------------------------
     def _share_cache(self) -> dict:
