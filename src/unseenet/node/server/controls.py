@@ -28,6 +28,8 @@ class Controls:
                 if parse_canonical_json(art.body).get("closes_previous") is True:
                     self.store.close_previous(art.group, epoch)
         elif ctl[0] == "cancel" and len(ctl) == 2:
+            if manifest.is_council:                       # UN-RFC 0054 section 6
+                raise ArticleError("permission", "cancels are not defined for council groups")
             target = ctl[1]
             meta = self.store.get_meta(target)
             privileged = author == manifest.owner or author in manifest.moderators

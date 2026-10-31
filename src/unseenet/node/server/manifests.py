@@ -42,8 +42,65 @@ class Manifests:
         self.store.add_tombstone(group_id, "operator")
         return self.store.remove_group(group_id)
 
+    def _accept_council_manifest(self, art: Article, current: Manifest | None, raw: bytes,
+                                 from_peer: bool) -> None:
+        """UN-RFC 0054 sections 5 and 6: a member's copy of a council manifest. It is
+        carried before it counts, so that the identical copies can come together; the
+        group's manifest changes only when the chain counts a new one."""
+        from ...core import council as cn
+        cm = cn.CouncilManifest.from_article(art)
+        if is_key_bound(art.group):
+            raise ArticleError("syntax", "a key-bound name is never a council group")
+        if current is not None and not current.is_council:
+            raise ArticleError("permission", "manifest may not change type, owner or locality")
+        if current is not None and cm.type != current.type:
+            raise ArticleError("permission", "manifest may not change type, owner or locality")
+        author = art.author_key
+        chain = self.store.council_chain(art.group)
+        if cm.seq == 1:
+            if cn.council_fingerprint(cm.body) != split_group_id(art.group)[1]:
+                raise ArticleError("permission", "not this council group's genesis")
+            if author not in cm.keys:
+                raise ArticleError("permission", "a genesis is posted by its members")
+            if not chain.counted and not self.store.known_group(art.group) \
+                    and not self._allow_new_council(cm):
+                raise ArticleError("group", "node does not accept this new group")
+        else:
+            if chain.disputed and cm.seq >= (chain.fork_seq or 0):
+                raise ArticleError("group", "this council's chain is disputed (UN-RFC 0054, 5)")
+            if cm.seq > len(chain.counted) + 1:
+                raise ArticleError("later", "the council manifest before it has not counted yet")
+            before = chain.counted[cm.seq - 2]
+            if author not in before.keys:
+                raise ArticleError("permission", "council manifests come from the members "
+                                                 "of the manifest before them")
+        self.store.add(art, raw)
+        self.store.add_council_copy(art, cm.seq)
+        chain = self.store.council_chain(art.group)
+        now = chain.current
+        if now is not None and (current is None or current.serial != now.seq):
+            copy = next(mid for a, b, mid in self.store.council_copies(art.group)
+                        if a in chain.signers[-1] and b.rstrip("\n").rstrip("\r") == now.body)
+            m = Manifest.from_article(Article.from_bytes(self.store.get(copy)), council_ok=True)
+            self.store.set_manifest(m)
+            log.info("council %s: manifest %d counts", art.group, now.seq)
+
+    def _allow_new_council(self, cm) -> bool:
+        """A new council group: as any new group, with ``trusted`` meaning that one of
+        its founding members is a trusted owner."""
+        if self.config.new_groups == "accept":
+            return True
+        if self.config.new_groups == "trusted":
+            return any(crypto.key_to_text(k) in self.config.trusted_owners for k in cm.keys)
+        return False
+
     def _accept_manifest(self, art: Article, current: Manifest | None, raw: bytes,
                          from_peer: bool = False) -> None:
+        from ...core.council import is_council_manifest
+        if is_council_manifest(art):
+            return self._accept_council_manifest(art, current, raw, from_peer)
+        if current is not None and current.is_council:
+            raise ArticleError("permission", "manifest may not change type, owner or locality")
         m = Manifest.from_article(art)
         if m.local and from_peer:
             raise ArticleError("group", "local group: never accepted from peers")

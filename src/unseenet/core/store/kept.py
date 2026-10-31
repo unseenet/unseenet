@@ -92,6 +92,41 @@ class Kept:
                            moderators=[crypto.key_to_text(k) for k in m.moderators],
                            limit=limit, withdrawn=self.withdrawn(group_id))
 
+    # --- council groups (UN-RFC 0054 section 6): the copies that make the chain ---
+    def add_council_copy(self, art: Article, seq: int) -> None:
+        """Remember a member's copy of a council manifest, for counting the chain."""
+        self.db.execute("INSERT OR IGNORE INTO council_copies VALUES (?, ?, ?, ?)",
+                        (art.message_id, art.group, seq, art["Author-Key"]))
+        self.db.commit()
+
+    def council_copies(self, group_id: str) -> list[tuple[bytes, str, str]]:
+        """(author key, body, Message-ID) of every council manifest copy held, by seq."""
+        out = []
+        for mid, author in list(self.db.execute(
+                "SELECT message_id, author_key FROM council_copies WHERE group_id=? "
+                "ORDER BY seq, message_id", (group_id,))):
+            raw = self.get(mid)
+            if raw is not None:
+                out.append((crypto.key_from_text(author), Article.from_bytes(raw).body, mid))
+        return out
+
+    def council_chain(self, group_id: str):
+        """The counted chain of a council group (core.council.count_chain)."""
+        from ..council import count_chain
+        return count_chain(group_id, [(a, b) for a, b, _ in self.council_copies(group_id)])
+
+    def council_kept(self, group_id: str) -> list[str]:
+        """Section 6: enough identical copies of every counted manifest to make it
+        count, kept whatever the retention - oldest first, so a node catching up
+        can count the chain as it goes."""
+        if self.db.execute("SELECT 1 FROM council_copies WHERE group_id=? LIMIT 1",
+                           (group_id,)).fetchone() is None:
+            return []
+        from ..council import copies_to_keep
+        copies = self.council_copies(group_id)
+        keep = copies_to_keep(self.council_chain(group_id), copies)
+        return [mid for _, _, mid in copies if mid in keep]
+
     def kept_ids(self, group_id: str, *, window_days: int | None = None,
                  now: float | None = None) -> list[str]:
         """The group's kept articles in listing order (UN-RFC 0017 sections 2.1, 3):
@@ -101,8 +136,9 @@ class Kept:
                                       (group_id,)).fetchone() is not None
         has_pages = self.db.execute("SELECT 1 FROM pages WHERE group_id=? LIMIT 1",
                                     (group_id,)).fetchone() is not None
+        council = self.council_kept(group_id)
         if not has_markers and not has_pages:
-            return []                    # most groups: nothing kept, nothing to work out
+            return council               # most groups: nothing kept, nothing to work out
         m = self.manifest(group_id)
         if m is None:
             return []
@@ -110,7 +146,7 @@ class Kept:
         since = (now or time.time()) - days * 86400
         site = self.site_kept(group_id, m, since) if has_pages else []
         if not has_markers:
-            return site
+            return council + site
         pins = self.pins_in_force(group_id, m)
         allowed = {crypto.key_to_text(m.owner), *(crypto.key_to_text(k) for k in m.moderators)}
         unpins = sorted((u for u in pn.current(self.markers(group_id), allowed).values()
@@ -118,7 +154,7 @@ class Kept:
                         key=lambda u: u.newest_first)
         # an edited post is kept as its current version (UN-RFC 0033 section 5.1)
         targets = [self.current_version(p.target) for p in pins][:pn.KEPT_PER_GROUP]
-        out = [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
+        out = council + [p.message_id for p in pins] + [u.message_id for u in unpins] + targets
         return out + [s for s in site if s not in out][:max(0, pn.KEPT_PER_GROUP - len(targets))]
 
     # --- sites (UN-RFC 0035): page versions as kept articles ---
