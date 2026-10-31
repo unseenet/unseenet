@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **Council groups, the rules** (UN-RFC 0054 Part I, #688): `unseenet.core.council` reads
+  council manifests - groups owned by a council of keys instead of one owner - and counts
+  their chain from the identical copies the members posted: the genesis, the quorum (the
+  larger of 2 and a majority of the full members that remain), one change of members at a
+  time (admission after 30 days, promotion after 180, removal), at least 2 full members
+  left, and forks, which freeze the chain before them. Nodes and clients do not use it yet.
+
 ## [0.6.8] - 2026-10-31
 
 For the graphical client's new share flow; nodes need no update.
