@@ -205,6 +205,13 @@ replica that is simply switched off is removed after 90 days of silence;
 can move to another machine (install, stop the service, put both files back,
 start it). Without them a new replica starts from the beginning.
 
+**One key, one replica.** Never run two copies of the same replica - for example
+the old machine still running after you moved it. Two replicas with one key can
+sign two different versions of the council, and the council then stops. If a
+replica sees a post with its key that it did not send, it stops signing and
+`status` says so. Stop the other copy (or set this one up again with a new key),
+then run the `twin-gone` command that `status` shows.
+
 ## Privacy
 
 - The replica reaches the network only over Tor. Nobody learns from the network

@@ -108,6 +108,15 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
     group = st.get("group", cfg.get("group", "?"))
     out.append(f"This replica works for the council registrar {group}.")
     out.append(f"Its key: {st.get('key', '?')}")
+    twin = st.get("twin")
+    if twin:
+        out.append("STOPPED: something else posts with this replica's key - most likely a copy")
+        out.append("of this replica running on another machine. Two replicas with one key can")
+        out.append("split the council, so this one signs nothing until you act.")
+        out.append(f"  The article it did not send: {twin['subject']!r} on {_date(twin['date'])}")
+        out.append("  Stop the other copy, or set this replica up again with a new key")
+        out.append("  (sudo unseenet-replica setup ... in an empty folder). When the other is gone:")
+        out.append(f"  sudo unseenet-replica twin-gone {twin['message_id']}")
     if role == "waiting":
         out.append("The council does not exist yet: its first manifest is not signed by every")
         out.append("founding member. The replica checks again every few minutes.")
@@ -362,6 +371,21 @@ def agree(args) -> int:
     return 0
 
 
+def twin_gone(args) -> int:
+    """The operator stopped the other user of the key: the replica may sign again."""
+    d = Path(args.dir)
+    twin = read_status(d).get("twin")
+    if not twin or (args.message_id and args.message_id != twin["message_id"]):
+        print("The replica is not stopped for another user of its key.")
+        return 1
+    cfg = read_config(d)
+    cfg["twin_gone"] = (cfg.get("twin_gone", []) + [twin["message_id"]])[-20:]
+    write_config(d, cfg)
+    print("Noted. The replica signs again from its next round. If it stops again, the")
+    print("other copy is still running.")
+    return 0
+
+
 def hold(args) -> int:
     d = Path(args.dir)
     cfg = read_config(d)
@@ -575,6 +599,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("agree", help="let a held change go ahead")
     s.add_argument("label", help="as status shows it, e.g. removal:ed25519:...")
     s.add_argument("--force", action="store_true", help="also if it is not held now")
+    s = sub.add_parser("twin-gone", help="the other user of this replica's key is stopped")
+    s.add_argument("message_id", nargs="?", default=None)
     s = sub.add_parser("hold", help="which changes wait for you: admission,promotion,removal,"
                                     "proposal, all or none")
     s.add_argument("kinds")
@@ -605,7 +631,8 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return {"setup": setup, "run": run_service, "status": status, "agree": agree,
             "hold": hold, "resign": resign, "update": update, "propose": propose,
-            "second": second, "talk": talk, "object": object_}[args.cmd](args)
+            "second": second, "talk": talk, "object": object_,
+            "twin-gone": twin_gone}[args.cmd](args)
 
 
 def entry() -> None:

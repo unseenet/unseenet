@@ -511,3 +511,34 @@ async def test_two_passed_proposals_one_manifest_each(net, monkeypatch, tmp_path
     assert not chain.disputed
     assert chain.current.seq == 3
     assert chain.current.min_level == 3 and chain.current.data["title"] == "Navne"
+
+
+async def test_a_copy_of_a_replica_stops_signing(net, monkeypatch, tmp_path):
+    """UN-RFC 0054 section 7: two replicas with one key could split the council. The one
+    that finds a post with its key that it did not send stops, until the operator says
+    the other is gone."""
+    import shutil
+    from unseenet.replica import cli
+    a, b, c = net.session("a"), net.session("b"), net.session("c")
+    group, _ = await net.found([a, b, c])
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    a.save()
+    shutil.copy(net.tmp / "a.vault", net.tmp / "a-copy.vault")      # the old machine, still running
+    copy = Session(Vault.open(net.tmp / "a-copy.vault", "pw", **KDF), status=lambda *_: None)
+    d1, d2 = tmp_path / "one", tmp_path / "two"
+    d1.mkdir(), d2.mkdir()
+    one = net.replica(a, group, state_dir=d1, config=lambda: cli.read_config(d1))
+    two = net.replica(copy, group, state_dir=d2, config=lambda: cli.read_config(d2))
+    st = await one.run_once()                     # posts its heartbeat
+    assert "twin" not in st
+    st = await two.run_once()
+    assert st["twin"]["subject"].startswith(rules.ALIVE)
+    assert "STOPPED" in "\n".join(cli.explain(cli.read_status(d2), {}))
+    signed = list(copy.data["replica"]["mine"])
+    net.clock += timedelta(hours=1)
+    assert (await two.run_once())["twin"]                          # still stopped
+    assert list(copy.data["replica"]["mine"]) == signed            # and sent nothing
+    assert "twin" not in await one.run_once()                     # the other sent nothing
+    assert cli.main(["--dir", str(d2), "twin-gone"]) == 0
+    net.clock += timedelta(hours=1)
+    assert "twin" not in await two.run_once()

@@ -9,6 +9,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A replica stops when its key is used elsewhere** (UN-RFC 0054 section 7). It notes
+  every article it sends with its member key; one it did not send - a copy of the replica
+  still running on the old machine - makes it stop signing anything, since two replicas
+  with one key can split the council. `unseenet-replica status` says so in plain words,
+  and `unseenet-replica twin-gone` lets it go on once the other copy is stopped.
 - **Testing and the demo moved out of `unseenet.*`** (UN-RFC 0055 section 4.1, #821). Every
   node carries the endorsed groups of `unseenet.*`, so groups where anything may be posted
   live elsewhere: `test.unseenet` replaces `unseenet.test`, and the demo village moves to
