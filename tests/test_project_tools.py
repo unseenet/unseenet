@@ -151,7 +151,7 @@ async def test_owner_scripts_set_up_a_working_registrar(setup, tmp_path):
     assert v.data["groups"][nodes]["manifest"]["serial"] == 3
 
     # the nodes, not the vault, say what a group's manifest is now
-    test = f"unseenet.test@{setup['project'].fingerprint}"
+    test = f"test.unseenet@{setup['project'].fingerprint}"
     del v.data["groups"][test]["manifest"]                    # never kept by the vault
     stale = dict(v.data["groups"][talk]["manifest"], serial=1)
     stale.pop("charter")

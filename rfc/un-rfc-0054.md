@@ -199,6 +199,12 @@ replica needs to decide - claims, certificates, revocations, the
 council - is public, so a replica holds no secret but its own key, and
 anybody can repeat its work.
 
+Each replica MUST have a member key of its own, used by no other replica,
+node or person. Two replicas with one key are not two votes but one key
+that may sign two different council manifests with one number when the
+replicas see the world a little differently - which section 5 treats as
+a stolen key, stopping the council at that number.
+
 # 8. Public Claims
 
 The council manifest names, in the field `claims`, an **open** council

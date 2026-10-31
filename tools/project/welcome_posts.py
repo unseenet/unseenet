@@ -53,11 +53,11 @@ sites and private posts, on nodes anyone can run. No accounts - you are your key
 - !unseenet.help@{FP} - stuck or unsure? Ask here; people and the help bot answer.
 - !unseenet.chat@{FP} - quick chat, also
   [the project's Matrix room](https://matrix.to/#/#unseenet:unseenet.org) (outside Tor).
-- !unseenet.test@{FP} - try posting, replies and pictures. Anything goes.
+- !test.unseenet@{FP} - try posting, replies and pictures. Anything goes.
 - !unseenet.help.guide@{FP} - the user guide, as a site in the network.
 - !unseenet.help.news@{FP} - what's new, in plain words.
 - !unseenet.announce@{FP} - the official release notes.
-- !unseenet.demo - a small demo village with feeds, a site and photos.
+- !demo.unseenet - a small demo village with feeds, a site and photos.
 
 ### Read more
 
@@ -136,7 +136,7 @@ WELCOME = {
                  "old": ["<udvnfvinwimo4hucucvojtxe7sekox5w@unseenet>"]},
     "unseenet.help": {"kind": "post", "subject": "How to ask - and where answers may already be",
                       "body": HELP, "note": "Read this first", "old": []},
-    "unseenet.test": {"kind": "post", "subject": "Welcome to the test group",
+    "test.unseenet": {"kind": "post", "subject": "Welcome to the test group",
                       "body": TEST, "note": "Start here",
                       "old": ["<c7jf4sm3unidzn3ra5ddd6iwcuw5ogra@unseenet>"]},
     "unseenet.announce": {"kind": "post", "subject": "About this channel",
