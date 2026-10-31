@@ -128,6 +128,8 @@ article in them for any reason other than the general limits (UN-RFC
 | `unseenet.nodes.announce` (section 5)   | Nodes' own announcements               | this      |
 | `unseenet.nodes` and its council successor (section 8) | The project's list of known nodes | 0010 |
 | `unseenet.entrances`                    | The list of web entrances              | 0043      |
+| `unseenet.entrances.announce`           | Entrances' own announcements           | 0020      |
+| `unseenet.scribes`, `unseenet.scribes.announce` | The list of scribes, and their own announcements | 0020 |
 | `unseenet.gateways`                     | The directory of gateways              | 0038      |
 | `unseenet.hierarchies`                  | The root list of hierarchies           | 0018      |
 | `unseenet.names`, `unseenet.names.claims` and their council successors | Names and claims | 0019, 0054 |
@@ -159,7 +161,8 @@ and its hierarchy list states these limits, which nodes MAY enforce:
 
 - **text only:** no blobs (UN-RFC 0027), no sites (UN-RFC 0035);
 - **retention** of at most 365 days, except the chains UN-RFC 0054
-  section 6 says to keep;
+  section 6 says to keep and the published texts of the UN-RFC series
+  (UN-RFC 0063 section 6);
 - **at most 64** endorsed groups.
 
 Endorsing or retiring a group is a proposal with a hearing (UN-RFC 0061),

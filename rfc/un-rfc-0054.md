@@ -426,7 +426,7 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   schemes for Ed25519 need the signers to talk to each other in rounds.
   Replicas never talk to each other (UN-RFC 0019 section 6.8); each one
   posting the body it computed itself keeps that, and the same pattern
-  already counts ledger decisions (UN-RFC 0020 section 7.2).
+  is how list councils publish their lists (UN-RFC 0020 section 8).
 - **Why public claims?** A shadow cannot prove it decides like the
   council without seeing the claims, and nobody outside could check the
   council's work. A claim says little that the certificate does not

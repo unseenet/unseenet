@@ -110,6 +110,15 @@ The project publishes the reference client and bundles in
 - `channels`: `{"dev": 1}`, with the CI key that signs development
   builds added for that channel only (section 3, `channels`).
 
+Every release of the project names, in its `SHA256SUMS.txt`, a source
+bundle `unseenet-source-<version>.tar.gz`: the source, at the release's
+tags, of every repository the release is built from, of every Python
+package it installs, and of the Tor it ships, each with its licence.
+Systems a bundle is built on but does not write itself (the operating
+system of a bootable image) are named by version, not included. The
+bundle is what scribes keep (UN-RFC 0020 section 6.4): with it, anybody
+can rebuild the release, and continue it, without the project.
+
 Two of three means that one stolen key sends nothing, and one lost key
 does not stop releases: the two others can sign, and can post a new key
 list without it.
@@ -131,7 +140,7 @@ Switching publishers is an update like any other: it never touches the
 user's data (`data/`). A client MUST show which publisher it follows.
 
 Where the files come from does not matter: GitHub, a web entrance, any
-mirror (UN-RFC 0043). Only files matching the signed checksums are used.
+mirror (UN-RFC 0043), a scribe (UN-RFC 0020 section 6.4). Only files matching the signed checksums are used.
 
 # 7. Building One's Own
 

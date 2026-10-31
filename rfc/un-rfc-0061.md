@@ -112,7 +112,9 @@ and `id` is the first 16 characters of
   parameter;
 - `{"endorse": {...}}` or `{"retire": {...}}` - a group in a hierarchy
   the council maintains, as a hierarchy list entry (UN-RFC 0018
-  section 5).
+  section 5);
+- `{"rfc": {...}}` - publishing, replacing or obsoleting a UN-RFC, for a
+  council that keeps the series (UN-RFC 0063 section 5).
 
 A proposal **counts** when, within 7 days, at least *Q* different full
 members of the council (UN-RFC 0054 section 5) have each posted an

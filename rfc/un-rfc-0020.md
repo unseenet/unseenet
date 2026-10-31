@@ -13,7 +13,8 @@ Updates: 0010, 0018, 0043, 0055
 
 The network has lists that tell clients where to start: the known nodes
 (UN-RFC 0010), the root list of hierarchies (UN-RFC 0018) and the known
-web entrances (UN-RFC 0043). Today one key - the project's - decides
+web entrances (UN-RFC 0043) - and, new here, the known scribes, which
+keep the network's source code. Today one key - the project's - decides
 what is on them, through a process that runs on GitHub. This document
 gives the lists to a **council** (UN-RFC 0054) whose replicas compute
 them from public data by rules anybody can check:
@@ -22,7 +23,9 @@ them from public data by rules anybody can check:
   measured as connected;
 - a free top-level hierarchy goes to the first claim, and one named
   after a domain or a country code only to whoever proves it in DNS;
-- an entrance is listed like a node.
+- an entrance is listed like a node;
+- a scribe is listed when it serves the source of the current signed
+  releases (section 6.4).
 
 What no rule can decide - removing an entry for abuse, changing a rule's
 parameter - goes through a proposal with a public hearing (UN-RFC 0061).
@@ -51,7 +54,11 @@ only the rest to people, in public.
 # 2. Terms
 
 - **List council:** the council (UN-RFC 0054) that keeps a set of lists.
-- **Entry:** one item of a list: a node, a hierarchy, an entrance.
+- **Entry:** one item of a list: a node, a hierarchy, an entrance, a
+  scribe.
+- **Scribe:** a service, reached over Tor, that keeps the releases of
+  one or more publishers (UN-RFC 0062) together with all the source code
+  they are built from, and serves them to anyone (section 6.4).
 - **Announcement:** an article in which a node or entrance describes
   itself, signed with its own key.
 - **Hierarchy claim:** a commit and reveal (UN-RFC 0054 section 8) that
@@ -85,9 +92,10 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 
 | Field     | Type     | Req. | Meaning                                              |
 |-----------|----------|------|------------------------------------------------------|
-| `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …}` |
+| `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …}` |
 | `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
+| `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
 | `import`  | string   | no   | Message-ID of the import (section 9); genesis only   |
 
 Each list group is a `channel` council group with the same council, so
@@ -106,8 +114,11 @@ their node key, in `unseenet.nodes.announce`. Entrances announce
 themselves the same way in `unseenet.entrances.announce`, with the
 entrance's information (UN-RFC 0043 section 4.3), its open-web and onion
 addresses and its operator's promise of UN-RFC 0043 section 5, signed
-with the entrance's key. An announcement is current for 30 days; an
-entry renews it by announcing again.
+with the entrance's key. Scribes announce themselves in
+`unseenet.scribes.announce` with their onion address, the publishers
+they keep and, optionally, `name`, `operator` and `contact` as for
+entrances, signed with the scribe's key. An announcement is current for
+30 days; an entry renews it by announcing again.
 
 ## 5.2 Hierarchy Claims
 
@@ -130,8 +141,8 @@ The claiming key MUST be ripened to the council's `min_level` (UN-RFC
 
 ## 5.3 Measurements
 
-Each replica tries to reach every announced node and entrance at least
-once a day and posts its findings (section 7).
+Each replica tries to reach every announced node, entrance and scribe at
+least once a day and posts its findings (section 7).
 
 ## 5.4 Passed Proposals
 
@@ -195,7 +206,50 @@ An entrance is on the entrance list under the rules of section 6.1, with
 release it serves matches a valid signed release (UN-RFC 0043 section
 7.6, UN-RFC 0062).
 
-## 6.4 What Only a Hearing Can Change
+## 6.4 Scribes
+
+A scribe keeps code alive where no company can delete it. It serves,
+over its onion service and plain HTTP:
+
+- `/scribe.json`: `{"v": 1, "key": …, "publishers": {<releases channel>:
+  [<version>, …]}, "git": [<repository>, …]}` - what it holds - with a
+  detached signature by its key in `/scribe.json.sig`;
+- for each release it holds, under `/<releases channel>/<version>/`:
+  `SHA256SUMS.txt`, `SHA256SUMS.txt.sig` and every file the checksums
+  name, the release's source bundle (UN-RFC 0062 section 5) included;
+- MAY: full mirrors of the publisher's repositories under
+  `/git/<repository>.git`, so that `git clone` works over Tor.
+
+A scribe MUST NOT serve a file under a release unless it matches a
+valid signed release of that publisher (UN-RFC 0062 section 4). It MAY
+fetch releases from anywhere - the publisher, a web entrance, another
+scribe - since only the signatures count. It SHOULD keep at least the
+last 5 releases of each publisher it keeps.
+
+A scribe is on the scribe list when
+
+1. its announcement is current (section 5.1);
+2. its `/scribe.json` names every publisher of the council's
+   `publishers`, and holds the newest valid release of each within 7
+   days of that release appearing in its releases channel;
+3. at least one replica fetched its `/scribe.json` over Tor, with a
+   valid signature by the announced key, and the signed `SHA256SUMS.txt`
+   of each newest release, on at least 5 of the last 7 completed UTC
+   days; and
+4. in the last 7 days, at least one replica fetched one whole file of a
+   release the scribe holds, chosen at random, and it matched its
+   checksum.
+
+It leaves and comes back as a node does, with the same grace (section
+6.1). The scribe list is a JSON object `{"v": 1, "updated": "...",
+"scribes": [...]}`, at most 200 entries, each with `onion`, `key` and
+`publishers`, and `name`, `operator`, `contact` and `description` as in
+UN-RFC 0043 section 8.1.
+
+The list says who keeps the code, not who is honest: a client uses only
+what matches the signatures, whoever served it.
+
+## 6.5 What Only a Hearing Can Change
 
 A replica never removes an entry, adds a reserved name or changes a
 number in this section on its own judgement. Those are proposals with a
@@ -211,8 +265,9 @@ Each replica posts one `report <date>` article per UTC day in the
 |-----------|---------------|------|-------------------------------------------|
 | `v`       | integer       | yes  | `1`                                       |
 | `date`    | string        | yes  | The UTC day, `YYYY-MM-DD`                 |
-| `reached` | array of keys | yes  | Node and entrance keys that answered and authenticated |
+| `reached` | array of keys | yes  | Node, entrance and scribe keys that answered and authenticated |
 | `missed`  | array of keys | yes  | Those that did not                        |
+| `files`   | array         | no   | Whole files fetched from scribes: `{"scribe": key, "file": path, "ok": bool}` |
 
 Replicas see the network from different places and may disagree for a
 day. Rule 6.1 item 3 needs one replica to have reached a node, and the
@@ -260,7 +315,8 @@ client:
 
 - the council group `unseenet.lists@<fp>`;
 - the list groups that succeed `unseenet.nodes`, `unseenet.hierarchies`
-  and `unseenet.entrances`;
+  and `unseenet.entrances`, and a new list group `unseenet.scribes`,
+  whose `publishers` is the project's releases channel;
 - the claims group `unseenet.lists.claims@<fp>` and the reports group
   `unseenet.lists.reports@<fp>`;
 - its groups for proposals, talk, log and its room under
@@ -272,6 +328,11 @@ has no part in the lists. The files in the repository become snapshots,
 refreshed from the network before each release, so that a new client has
 somewhere to start before it reaches the network. Changes go through the
 rules, not pull requests.
+
+The project also runs a scribe of its own (`unseenet-scribe`, beside one
+of its nodes), so that the scribe list is not empty from the start. It
+is one scribe like the others; anybody can run one with the same
+software.
 
 A GitHub issue form may stay as a front door: a node operator pastes an
 announcement made by their own software, and a bridge posts it. The
@@ -315,6 +376,14 @@ bridge needs no key, since the announcement is already signed.
 - **Withholding.** A node can hide announcements or reports from a
   replica. Replicas read through several nodes; the grace of section 6.1
   is long on purpose.
+- **Scribes.** A scribe can serve altered code, or withhold it. Clients
+  and scribes use only files that match a valid signed release, so an
+  altered file is simply not used; withholding is answered by there
+  being many scribes. Git history is not signed: whoever clones a
+  scribe's git mirror SHOULD check the tree of a release's tag against
+  the release's signed source bundle. A replica's whole-file fetches
+  cost Tor bandwidth; one file per scribe a week is the minimum, not a
+  target.
 - **Privacy.** Announcements and claims are public; that is the point.
   They reveal no more than the entry they ask for.
 
@@ -341,6 +410,9 @@ it.
   themselves (section 5.1).
 - UN-RFC 0055 section 8: the rules left to this document are those of
   section 6.
+- UN-RFC 0055 section 4: `unseenet.entrances.announce`,
+  `unseenet.scribes.announce` and `unseenet.scribes` are infrastructure
+  groups.
 - UN-RFC 0000 section 6: the title of 0020 becomes "Lists Kept by
   Councils".
 
