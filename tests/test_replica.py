@@ -4,6 +4,7 @@ claims, the shadow is admitted after 60 days of agreeing, a member that signs a
 certificate no claim explains is removed, and one that resigns is removed too - each
 change one manifest that the replicas computed alike."""
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -294,7 +295,9 @@ def test_setup_without_systemd(tmp_path, monkeypatch, capsys):
                      "--group", "unseenet.names@abcdefghijklmnop"]) == 0
     out = capsys.readouterr().out
     assert "SHADOW" in out and "ed25519:" in out
-    assert (d / "replica.vault").exists() and (d / "passphrase").stat().st_mode & 0o077 == 0
+    assert (d / "replica.vault").exists() and (d / "passphrase").exists()
+    if os.name == "posix":                         # only the owner reads it
+        assert (d / "passphrase").stat().st_mode & 0o077 == 0
     cfg = _json.loads((d / "config.json").read_text())
     assert cfg["hold"] == ["removal"] and cfg["group"] == "unseenet.names@abcdefghijklmnop"
     assert cli.main(["--dir", str(d), "setup", "--no-systemd"]) == 1        # not twice
