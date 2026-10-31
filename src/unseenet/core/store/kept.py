@@ -99,6 +99,11 @@ class Kept:
                         (art.message_id, art.group, seq, art["Author-Key"]))
         self.db.commit()
 
+    def has_council_copies(self, group_id: str) -> bool:
+        """True when the node holds any council manifest copy of the group (UN-RFC 0054)."""
+        return self.db.execute("SELECT 1 FROM council_copies WHERE group_id=? LIMIT 1",
+                               (group_id,)).fetchone() is not None
+
     def council_copies(self, group_id: str) -> list[tuple[bytes, str, str]]:
         """(author key, body, Message-ID) of every council manifest copy held, by seq."""
         out = []

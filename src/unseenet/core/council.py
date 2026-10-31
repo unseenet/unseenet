@@ -263,6 +263,7 @@ class Chain:
     signers: list[set[bytes]] = field(default_factory=list)   # who made each one count
     disputed: bool = False          # a fork: two bodies counted for one seq
     fork_seq: int | None = None
+    last_admission: datetime | None = None   # for the 30 days of section 5, item 2
 
     @property
     def current(self) -> CouncilManifest | None:
@@ -291,7 +292,7 @@ def count_chain(group_id: str, copies: list[tuple[bytes, str]]) -> Chain:
     # the fingerprint pins the genesis body, so at most one can match
     chain.counted.append(genesis[0][0])
     chain.signers.append(genesis[0][1] & set(genesis[0][0].keys))
-    last_admission = genesis[0][0].date
+    last_admission = chain.last_admission = genesis[0][0].date
 
     seq = 2
     while seq in by_seq:
@@ -313,7 +314,7 @@ def count_chain(group_id: str, copies: list[tuple[bytes, str]]) -> Chain:
             break
         m, got = winners[0]
         if any(k not in prev.keys for k in m.keys):
-            last_admission = m.date
+            last_admission = chain.last_admission = m.date
         chain.counted.append(m)
         chain.signers.append(got)
         seq += 1
