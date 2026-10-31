@@ -65,6 +65,8 @@ def load_node_config(path: Path | None):
                       emoji=str(node.get("emoji", "refuse")),
                       excludes=str(node.get("excludes", "")),
                       carries=_carries(path, node.get("carries", ["*"])),   # UN-RFC 0055
+                      announce=bool(node.get("announce", True)),
+                      ripen_to=int(node.get("ripen_to", 1)),
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
                       blobs=_blobs_config(path, data.get("blobs", {})),
@@ -233,6 +235,10 @@ async def run_node(args) -> None:
     if (config.operator or {}).get("contact"):  # tell the operator of new messages (#135)
         from ..node.stats import contact_watch
         feeders.append(asyncio.create_task(contact_watch(node, data)))
+    if tor is not None and config.announce:    # UN-RFC 0055 section 5: say where it is
+        from ..node.announcing import Announcer
+        feeders.append(asyncio.create_task(
+            Announcer(node, data, f"onion:{onion}", ripen_to=config.ripen_to).run_forever()))
     if config.blobs is not None:               # blobs follow their article (UN-RFC 0027, 6.3)
         from ..node.blobfetch import BlobFollower
         feeders.append(asyncio.create_task(BlobFollower(node, socks_port).run_forever()))
