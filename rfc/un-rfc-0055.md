@@ -4,7 +4,7 @@ UN-RFC: 0055                                              October 2026
 Category: Standards Track
 Status: Draft
 Implemented: -
-Updates: 0001, 0005, 0010, 0011, 0021
+Updates: 0001, 0005, 0010, 0011, 0018, 0021
 
                Unseenet: What a Node Carries
 ```
@@ -15,10 +15,11 @@ A node does not have to carry every group. This document lets a node
 carry the hierarchies its operator chooses - only `alt.*`, only
 `palaestina.*`, only an association's `forening.*` - and say so, in a
 `carries` field of its node information and in **announcements** signed
-with its node key. A small set of **infrastructure groups**, the
-network's own lists of nodes, hierarchies and names, MUST be carried by
-every node, so that no node or group of nodes can hide which nodes carry
-what. Peers exchange what both carry, clients move a group only to a
+with its node key. The network's own hierarchy, the **endorsed groups of
+`unseenet.*`** - among them the **infrastructure groups**, the network's
+own lists of nodes, hierarchies and names - MUST be carried by every
+node, so that no node or group of nodes can hide which nodes carry what,
+or silence the network's own business. Peers exchange what both carry, clients move a group only to a
 node that carries it, and coverage is made visible instead of enforced.
 The project's list of known nodes moves to a council (UN-RFC 0054), so
 that no single key decides which nodes are listed.
@@ -99,8 +100,8 @@ A node MAY leave out single groups its patterns match, with the
 `excludes` field of UN-RFC 0021 section 3: a wildmat over Group IDs.
 Patterns are the main tool; `excludes` is for exceptions, such as one
 group an operator will not carry for legal reasons in its country.
-`excludes` never applies to an infrastructure group, even if it
-matches.
+`excludes` never applies to an infrastructure group or another endorsed
+group of `unseenet.*` (section 4.1), even if it matches.
 
 ## 3.3 Local Groups
 
@@ -138,12 +139,45 @@ client pins (UN-RFC 0010 section 6 and the documents named). A later
 document MAY add groups to this list; it MUST NOT remove one without
 saying where its job went.
 
+## 4.1 The Network's Own Hierarchy
+
+Every node MUST also carry, on the same terms, every group of
+`unseenet.*` that the hierarchy's maintainer endorses in its hierarchy
+list (UN-RFC 0018 section 5). That maintainer is a council (UN-RFC 0054,
+UN-RFC 0020), which also decides which groups the hierarchy has. The
+infrastructure groups above are endorsed groups of `unseenet.*`, so they
+are always included; the council's own groups (UN-RFC 0061 section 3)
+are too.
+
+Only **endorsed** groups count. A group somebody creates under a name in
+`unseenet.*` without the council's endorsement is an ordinary group,
+carried by those who choose to; nobody can make every node carry a
+group by naming it.
+
+Because every node carries them, the council keeps the hierarchy lean,
+and its hierarchy list states these limits, which nodes MAY enforce:
+
+- **text only:** no blobs (UN-RFC 0027), no sites (UN-RFC 0035);
+- **retention** of at most 365 days, except the chains UN-RFC 0054
+  section 6 says to keep;
+- **at most 64** endorsed groups.
+
+Endorsing or retiring a group is a proposal with a hearing (UN-RFC 0061),
+not a decision of one key.
+
+## 4.2 Why Every Node
+
 They are the network's telephone book. If a node could leave out the
 announcements of nodes that carry `palaestina.*`, or the hierarchy that
 grants it, it could make those groups hard to find without ever touching
 them. Carrying the books costs little: each of these groups is small and
 bounded (UN-RFC 0001 section 2, scale), and none grows with the number
 of identities.
+
+The rest of `unseenet.*` is where the network talks about itself - its
+help, its announcements, its councils' proposals and objections. A
+network whose own discussion can be dropped node by node can be quietly
+steered.
 
 A node that does not carry them does not conform to this document.
 Clients SHOULD NOT rely on such a node as their only source of lists,
@@ -277,7 +311,7 @@ default spam-report issuers). The direction for that revision
 # 9. Changes to Other Documents
 
 - **UN-RFC 0001** section 2 (scale) and section 4: a node carries the
-  infrastructure groups and the groups its pattern list matches; a full
+  endorsed groups of `unseenet.*` and the groups its pattern list matches; a full
   node is one whose list is `["*"]`. "A full node carries the text of
   every ordinary group" becomes a definition, not an expectation.
 - **UN-RFC 0005** section 5.1: the default set of groups to send and
@@ -286,6 +320,9 @@ default spam-report issuers). The direction for that revision
 - **UN-RFC 0010** section 6: the project's list moves to a council
   (section 8); section 5 gains announced nodes as a further source.
 - **UN-RFC 0011** section 3: new field `carries` (section 3.1).
+- **UN-RFC 0018** sections 4 and 5: the maintainer of `unseenet.*` is a
+  council, and its hierarchy list carries the limits of section 4.1;
+  every node carries the groups it endorses.
 - **UN-RFC 0021**: a listed node must carry the groups the other listed
   nodes carry *that match its own pattern list*; `excludes` is for
   single exceptions (section 3.2) and cannot name an infrastructure group.

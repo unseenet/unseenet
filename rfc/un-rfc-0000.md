@@ -169,7 +169,7 @@ The protocol is designed to be extended without breaking old software:
 | 0017 | Catching Up by Pull, and Group State          | Standards Track |
 | 0018 | Hierarchies and Authority over Group Names    | Standards Track |
 | 0019 | Names for Identities                          | Standards Track |
-| 0020 | Keeping Lists from Inside the Network         | Standards Track |
+| 0020 | Lists Kept by Councils                        | Standards Track |
 | 0021 | Listed Nodes Must Be Connected                | Standards Track |
 | 0022 | Profiles for Identities                       | Standards Track |
 | 0023 | Gateways to Other Networks                    | Standards Track |
@@ -209,6 +209,8 @@ The protocol is designed to be extended without breaking old software:
 | 0058 | Finding Groups                               | Standards Track |
 | 0059 | Link Cards                                   | Standards Track |
 | 0060 | Sharing                                      | Standards Track |
+| 0061 | Council Proposals, Hearings and Objections   | Standards Track |
+| 0062 | Update Channels                              | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.

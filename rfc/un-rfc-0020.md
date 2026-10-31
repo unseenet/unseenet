@@ -4,373 +4,345 @@ UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
 Implemented: -
-Updates: 0010, 0018
+Updates: 0010, 0018, 0043, 0055
 
-          Unseenet: Keeping Lists from Inside the Network
+               Unseenet: Lists Kept by Councils
 ```
 
 # Abstract
 
-Node lists (UN-RFC 0010) and root lists (UN-RFC 0018) already travel in
-the network as signed articles, and clients trust only the keys they
-have pinned. But the *process* behind the project's lists does not:
-requests are GitHub issues, checks run in GitHub Actions, the lists are
-files in a repository, and the key that posts them is a GitHub secret.
-This document moves that process into Unseenet. Requests are sent to an
-inbox and signed by the key they concern; replicas check them
-automatically; people with **approver keys** post signed, numbered
-**decisions** in a public **ledger**; and every replica computes the
-lists from the ledger and publishes the same result. The lists and the
-way clients read them do not change. Anybody can see who decided what,
-when, and why, without asking GitHub.
+The network has lists that tell clients where to start: the known nodes
+(UN-RFC 0010), the root list of hierarchies (UN-RFC 0018) and the known
+web entrances (UN-RFC 0043). Today one key - the project's - decides
+what is on them, through a process that runs on GitHub. This document
+gives the lists to a **council** (UN-RFC 0054) whose replicas compute
+them from public data by rules anybody can check:
+
+- a node is listed when it announces itself, carries what it must and is
+  measured as connected;
+- a free top-level hierarchy goes to the first claim, and one named
+  after a domain or a country code only to whoever proves it in DNS;
+- an entrance is listed like a node.
+
+What no rule can decide - removing an entry for abuse, changing a rule's
+parameter - goes through a proposal with a public hearing (UN-RFC 0061).
+No single key, the project's included, decides what is listed.
 
 # 1. Motivation
 
-The project's lists depend on one company's service in four ways:
+The project's lists depend on one key and one company:
 
-1. A node operator or a would-be hierarchy maintainer must have a GitHub
-   account, which links the request to a person outside the network.
-   UN-RFC 0018 section 7.1 offers the project's inbox as an alternative,
-   but nothing processes it.
-2. The checks (reaching a node over Tor, checking a signature over a
-   challenge) run only in GitHub Actions.
-3. The source of truth is `nodes.json` and `hierarchies.json` in the
-   repository. If the repository or the organization is lost, so is the
-   process, and the history of decisions lives in a place that can be
-   force-pushed.
-4. The key that posts the lists is stored by GitHub.
+1. the project key decides every entry, and whoever holds or steals it
+   can list or delist anything;
+2. requests are GitHub issues, checks run in GitHub Actions, and the
+   source of truth is files in a repository whose history can be
+   force-pushed;
+3. if the project or its account disappears, nobody can get a node
+   listed or a hierarchy granted.
 
-UN-RFC 0019 section 6.8 has shown that a service can run as replicas
-that need nothing but the network. This document uses the same pattern
-for the project's lists, and adds the one thing the registrar does not
-need: a person who decides, in public.
+An earlier draft of this document moved the process into the network
+but kept people with approver keys, chosen by the owner, deciding each
+request. That still leaves the lists one owner's. Nearly every decision
+is a fact that can be measured or a rule that can be applied: does the
+node answer, does it carry the network's groups, was this the first
+claim, does DNS say so. This document makes those the rules, and leaves
+only the rest to people, in public.
 
 # 2. Terms
 
-- **Steward:** the publisher of one or more lists (UN-RFC 0010 section 3)
-  whose content is computed from a ledger. The project is a steward.
-- **Ledger:** a channel group owned by the steward, holding decisions,
-  check results and health reports (section 4).
-- **Request:** a signed inbox article asking for a change (section 5).
-- **Replica:** a program with its own key that checks requests, reports
-  node health and publishes lists. Replica keys are posters of the
-  ledger and of the list groups.
-- **Approver:** a key that may post decisions (section 7). Approvers are
-  people; replicas are not approvers.
-- **Decision:** a numbered, signed statement that a request is accepted
-  or refused, or that something is changed or removed.
+- **List council:** the council (UN-RFC 0054) that keeps a set of lists.
+- **Entry:** one item of a list: a node, a hierarchy, an entrance.
+- **Announcement:** an article in which a node or entrance describes
+  itself, signed with its own key.
+- **Hierarchy claim:** a commit and reveal (UN-RFC 0054 section 8) that
+  asks for a top-level hierarchy.
+- **Measurement:** what a replica found when it tried to reach an entry.
+
+The key words "MUST", "SHOULD" and "MAY" are as in UN-RFC 0000
+section 2.
 
 # 3. What Does Not Change
 
 - The formats of node lists (UN-RFC 0010 section 2), root lists and
-  hierarchy lists (UN-RFC 0018 sections 4 and 5).
-- How clients and nodes read and pin lists (UN-RFC 0010 section 4,
-  UN-RFC 0018 section 6). **Clients need no change** for this document:
-  they still read the newest valid list from the pinned list group.
-- What a root list or an endorsement means, and what it cannot do
-  (UN-RFC 0018 section 3).
-- Hierarchy lists are still published by each hierarchy's maintainer,
-  not by the steward.
+  hierarchy lists (UN-RFC 0018 sections 4 and 5) and entrance lists
+  (UN-RFC 0043 section 8.1).
+- How clients read lists: the newest valid list from the pinned list
+  group. Clients pin the new list groups (section 10) instead of the
+  old ones; otherwise they need no change.
+- What an entry means and what it cannot do. The root list does not
+  decide whether a hierarchy exists or is carried (UN-RFC 0018
+  section 3); the node list says which nodes this council vouches for,
+  not which nodes exist (UN-RFC 0055 section 8).
+- Hierarchy lists are still published by each hierarchy's maintainer -
+  except `unseenet.*`, whose maintainer is the list council (section 6.2).
+- The directory of gateways (UN-RFC 0038 section 6) is already an open
+  group where gateways announce themselves; it stays as it is.
 
-# 4. The Ledger
+# 4. The List Council
 
-A steward has one ledger: a channel group (UN-RFC 0004) owned by the
-steward's owner key. Its manifest has, besides the usual fields:
+A list council is a `channel` council group (UN-RFC 0054 Part I). Its
+council manifest has, besides the fields of UN-RFC 0054 and 0061:
 
-| Field       | Type          | Req. | Meaning                                        |
-|-------------|---------------|------|------------------------------------------------|
-| `requests`  | Group ID      | yes  | The request inbox (section 5)                  |
-| `approvers` | array of keys | yes  | Keys that may post decisions (section 7)       |
-| `quorum`    | integer       | no   | Approvals needed for a decision; default `1`   |
-| `lists`     | object        | yes  | Which list group holds which list, e.g. `{"nodes": "unseenet.nodes@…", "root": "unseenet.hierarchies@…"}` |
+| Field     | Type     | Req. | Meaning                                              |
+|-----------|----------|------|------------------------------------------------------|
+| `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …}` |
+| `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
+| `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
+| `import`  | string   | no   | Message-ID of the import (section 9); genesis only   |
 
-The manifest's `posters` are the replica keys. Approvers are posters as
-well, so that nodes accept their decisions under the channel rule.
+Each list group is a `channel` council group with the same council, so
+that the members' replicas, and nobody else, post the lists. Everything
+the rules use is public: announcements, claims, measurements, passed
+proposals and the council itself. A replica holds no secret but its own
+key, and anybody can repeat its work - and, as a shadow, prove it can
+(UN-RFC 0054 section 10).
 
-Every article in the ledger has `Content-Type: application/json`, a
-canonical JSON body (UN-RFC 0003), and one of these subjects:
+# 5. Inputs
 
-| Subject             | Body                         | Posted by  | Section |
-|---------------------|------------------------------|------------|---------|
-| `decision <seq>`    | a decision                   | approver   | 7       |
-| `check <Message-ID>`| a check result for a request | replica    | 6       |
-| `health <date>`     | a health report for a day    | replica    | 9       |
+## 5.1 Announcements
 
-Articles with another subject, or by another author, are ignored.
+Nodes announce themselves as UN-RFC 0055 section 5 says, signed with
+their node key, in `unseenet.nodes.announce`. Entrances announce
+themselves the same way in `unseenet.entrances.announce`, with the
+entrance's information (UN-RFC 0043 section 4.3), its open-web and onion
+addresses and its operator's promise of UN-RFC 0043 section 5, signed
+with the entrance's key. An announcement is current for 30 days; an
+entry renews it by announcing again.
 
-The ledger's `retention_days` SHOULD be `0` (keep forever) on nodes that
-support it, and replicas SHOULD post the whole decision chain again,
-unchanged, when it would otherwise expire (section 7.3).
+## 5.2 Hierarchy Claims
 
-# 5. Requests
+A top-level hierarchy is claimed as names are (UN-RFC 0054 section 8): a
+commit and, between one hour and seven days later, a reveal, both in the
+council's claims group, by the claiming key. The claim body is
 
-## 5.1 Sending
+| Field     | Type     | Req. | Meaning                                        |
+|-----------|----------|------|------------------------------------------------|
+| `v`       | integer  | yes  | `1`                                            |
+| `action`  | string   | yes  | `claim`, `renew`, `change` or `release`        |
+| `name`    | string   | yes  | The top-level name, e.g. `games`               |
+| `list`    | Group ID | for `claim`, `change` | The hierarchy list group; its fingerprint is the claiming key's |
+| `title`   | string   | for `claim` | Up to 100 characters                     |
+| `charter` | string   | no   | Up to 2000 characters                          |
+| `maintainer` | key string | for `change` | A new maintainer key            |
 
-A request is an inbox article (UN-RFC 0009) to the group named in the
-ledger's `requests`, whose inner article has
-`Content-Type: application/json`, a `Sender-Key` and `Sender-Signature`,
-a `Reply-Inbox`, and a canonical JSON body with `v` = `1` and an
-`action`:
+The claiming key MUST be ripened to the council's `min_level` (UN-RFC
+0025), and a key holds at most 3 top-level hierarchies.
 
-| Action              | Further fields                              | `Sender-Key` MUST be |
-|---------------------|---------------------------------------------|----------------------|
-| `node-add`          | `address`, `name`, `description`, `operator` (optional) | the node key |
-| `node-change`       | as `node-add`; changes a listed node        | the node key         |
-| `node-remove`       | `node_key`                                  | the node key, or its listed operator |
-| `hierarchy-claim`   | `name`, `list`, `title`, `charter`, `existing` (optional) | the maintainer key |
-| `hierarchy-change`  | `name`, and the fields to change, or `maintainer` (a new key) | the current maintainer key |
-| `hierarchy-release` | `name`                                      | the current maintainer key |
-| `complaint`         | `about` (a name or key), `text`             | any key              |
+## 5.3 Measurements
 
-Field limits are those of the list entries the request would create
-(UN-RFC 0010 section 2, UN-RFC 0018 section 4.1). `charter` is at most
-2000 characters; its first 200 become the description.
+Each replica tries to reach every announced node and entrance at least
+once a day and posts its findings (section 7).
 
-Because the request is signed by the key it concerns, it replaces the
-challenges of UN-RFC 0010 section 6 and UN-RFC 0018 section 7.1: the
-`Sender-Signature` already shows that the request comes from whoever
-holds the key. A request whose `Date` is more than 7 days old when a
-replica first sees it is refused as stale.
+## 5.4 Passed Proposals
 
-The request inbox SHOULD have a `min_pow` of at least 20 (UN-RFC 0006).
+Proposals that passed their hearing (UN-RFC 0061) and change a list:
+removing an entry for abuse, adding a name to the reserved names, or
+changing a parameter of section 6.
 
-## 5.2 Front Doors (Informative)
+# 6. The Rules
 
-Any program can send a request. The reference node offers
-`unseenet-node --request-listing`, signing with the node key; the
-reference client offers hierarchy requests in its command palette.
+## 6.1 Nodes
 
-A web form, such as a GitHub issue form, can act as a front door: the
-user pastes a request made by their own software, and a bridge posts it
-to the inbox unchanged. The bridge needs no key, because the request is
-already signed and anybody may post to an inbox. A front door has no
-authority; it only carries requests.
+A node is on the node list when
 
-# 6. Checks
+1. its announcement is current (section 5.1);
+2. its `carries` (UN-RFC 0055 section 3.1) includes the infrastructure
+   groups and the endorsed groups of `unseenet.*` (UN-RFC 0055 section 4);
+3. at least one replica reached it and it authenticated with its node key
+   (UN-RFC 0016) on at least 5 of the last 7 completed UTC days; and
+4. it is connected in the sense of UN-RFC 0021, counted over the groups
+   it carries.
 
-Every replica checks each request it sees and posts the result as a
-`check` article:
+It leaves the list when one of these stops holding, with one grace: a
+listed node is only taken off for item 3 when, for each of the last 10
+completed days, at least one replica reported on it and none reached it
+(section 7). It comes back by itself when the rules hold again.
 
-| Field     | Type    | Req. | Meaning                                        |
-|-----------|---------|------|------------------------------------------------|
-| `v`       | integer | yes  | `1`                                            |
-| `request` | string  | yes  | The request's Message-ID                       |
-| `ok`      | boolean | yes  | Whether every check passed                     |
-| `notes`   | array of strings | yes | What was checked and found, for people  |
+## 6.2 Hierarchies
 
-A replica checks that the request is well-formed and signed by the right
-key (section 5.1), and:
+The root list follows from the claims, in the order of their commits:
 
-- **for nodes:** that the address answers over Tor as an Unseenet node
-  and authenticates with the node key (UN-RFC 0016);
-- **for hierarchies:** that the name is valid and not reserved as "never
-  granted" (UN-RFC 0018 section 9), that the fingerprint in `list` is the
-  maintainer's, and that the list group exists with that owner.
+- **Reserved names** are never granted by a claim: those of UN-RFC 0018
+  section 9 and any a passed proposal adds.
+- **`unseenet`** has the list council itself as maintainer. Its
+  hierarchy list is posted by the replicas, and endorsing or retiring a
+  group in it is a proposal with a hearing (UN-RFC 0061); every node
+  carries the endorsed groups (UN-RFC 0055 section 4.1).
+- **A name equal to a country-code top-level domain, or to a domain
+  name's first label where that domain is registered** (`dk`,
+  `torproject`) goes only to a claim whose key the domain names in DNS,
+  as UN-RFC 0019 section 6.4 proves a domain for a name. Such a grant is
+  renewed when the DNS record is checked again, monthly; it lapses when
+  the record is gone for 30 days.
+- **Any other free name** goes to the first counting claim. The grant
+  lasts one year from its commit and is renewed by a `renew` claim from
+  the maintainer; it lapses when it is not renewed, or when the
+  maintainer has not published a hierarchy list for 180 days (UN-RFC
+  0018 section 7.2).
+- **`change`** moves a hierarchy to a new maintainer key and must come
+  from the current maintainer; **`release`** gives it up.
+- **No maintainer:** a name without a grant is free, like `alt.*`: no
+  blocks across it, only each group owner's rules (UN-RFC 0018
+  section 8.3).
 
-A replica also replies to the request's `Reply-Inbox` saying that the
-request has been received and checked. Only the replica whose key sorts
-first among those that posted a check for the request sends this reply.
+Decisions that depend on DNS are handled as UN-RFC 0054 section 12,
+item 2, handles them for names.
 
-Checks inform the approvers; they decide nothing.
+## 6.3 Entrances
 
-# 7. Decisions
+An entrance is on the entrance list under the rules of section 6.1, with
+"reached" meaning that a replica fetched its page over Tor and the
+release it serves matches a valid signed release (UN-RFC 0043 section
+7.6, UN-RFC 0062).
 
-## 7.1 Format
+## 6.4 What Only a Hearing Can Change
 
-A decision is the body of a `decision <seq>` article:
+A replica never removes an entry, adds a reserved name or changes a
+number in this section on its own judgement. Those are proposals with a
+hearing (UN-RFC 0061). An urgent proposal (UN-RFC 0061 section 7) can
+take an entry off within three days when it harms people.
 
-| Field      | Type    | Req. | Meaning                                         |
-|------------|---------|------|-------------------------------------------------|
-| `v`        | integer | yes  | `1`                                             |
-| `seq`      | integer | yes  | 1 for the first decision, then one more each time |
-| `prev`     | string  | if `seq` > 1 | SHA-256, base32, of the canonical body of decision `seq - 1` |
-| `action`   | string  | yes  | `accept`, `refuse`, `set`, `remove` or `import` |
-| `request`  | string  | for `accept`, `refuse` | The request's Message-ID   |
-| `entry`    | object  | for `set` | A node or root list entry, as it shall be |
-| `key`      | string  | for `remove` | `node:<node key>` or `hierarchy:<name>` |
-| `lists`    | object  | for `import` | Complete lists to start from (section 10) |
-| `reason`   | string  | yes  | Why, at most 1000 characters, shown to everybody |
+# 7. Measurements
 
-- `accept` applies the request as it was sent.
-- `refuse` changes nothing; it records the answer and the reason.
-- `set` and `remove` let an approver correct or remove an entry without a
-  request, for example after a complaint or when a maintainer has not
-  published a list for 180 days (UN-RFC 0018 section 7.2).
+Each replica posts one `report <date>` article per UTC day in the
+`reports` group:
 
-## 7.2 Which Decisions Count
-
-A decision counts when:
-
-1. its author is in the ledger manifest's `approvers` at the decision's
-   `Date`;
-2. its `seq` is one more than the last counted decision, and its `prev`
-   is the hash of that decision (`seq` 1 has no `prev`); and
-3. if `quorum` is more than 1, at least `quorum` different approvers have
-   posted the same body for this `seq`.
-
-Two counting candidates with the same `seq` but different bodies are a
-**fork**. A reader that sees one MUST stop applying decisions from that
-`seq` on, and replicas MUST stop publishing new lists and post a notice
-to the steward's announcement channel. A fork means an approver key is
-stolen or misused; only the owner can resolve it, by removing the key
-from `approvers` and posting nothing that counts at that `seq` from the
-removed key.
-
-A gap (decision `seq + 1` seen, `seq` not) means a node is withholding
-or has lost a decision. Replicas MUST NOT skip it; they fetch from other
-nodes and wait.
-
-## 7.3 The Chain Is the History
-
-Because each decision names the hash of the one before, nobody can
-change or remove a decision without breaking every later one. Anybody
-who reads the ledger can see every grant, refusal and removal, by which
-approver key, and why. This is the public record that UN-RFC 0018
-section 7.2 asks for.
-
-Replicas SHOULD keep the whole chain and post any decision again,
-unchanged except for its `Date`, when the original would expire. A
-reposted decision counts as the same decision because its body is the
-same.
-
-# 8. Computing the Lists
-
-A list is a function of the counted decisions and the health reports:
-
-1. Start from the lists in the `import` decision (`seq` 1).
-2. Apply every later counted decision in order of `seq`.
-3. For the node list, leave out nodes that are **down** (section 9).
-
-Every replica computes the lists this way and posts each list to its list
-group when it changes, and again at least monthly (UN-RFC 0010 section
-3). The list's `updated` field is `ledger <seq>`, the last decision
-applied. Replicas that have seen the same ledger post identical lists,
-so it does not matter whose post is newest.
-
-A replica that finds a newer post in a list group that differs from its
-own result for the same ledger MUST post its own result again, and SHOULD
-warn in the steward's announcement channel: either the replicas have not
-yet seen the same ledger, or a replica key is misused.
-
-# 9. Node Health
-
-Each replica tries to reach every accepted node at least once a day and
-posts one `health <date>` article per UTC day:
-
-| Field     | Type    | Req. | Meaning                                    |
-|-----------|---------|------|--------------------------------------------|
-| `v`       | integer | yes  | `1`                                        |
-| `date`    | string  | yes  | The UTC day, `YYYY-MM-DD`                  |
-| `reached` | array of keys | yes | Node keys that answered and authenticated |
-| `missed`  | array of keys | yes | Node keys that did not                     |
-
-A node is **down** when, for each of the last 10 completed UTC days, at
-least one replica reported on it and none reported it reached. A node
-that has been down for 180 days in a row is treated as removed and must
-be requested again. A node that answers again before that is listed
-again without a new request.
-
-After 3 days with no replica reaching a node, the replica whose key
-sorts first among those reporting sends a notice to the inbox of the
-node's `operator`, if one is listed.
+| Field     | Type          | Req. | Meaning                                   |
+|-----------|---------------|------|-------------------------------------------|
+| `v`       | integer       | yes  | `1`                                       |
+| `date`    | string        | yes  | The UTC day, `YYYY-MM-DD`                 |
+| `reached` | array of keys | yes  | Node and entrance keys that answered and authenticated |
+| `missed`  | array of keys | yes  | Those that did not                        |
 
 Replicas see the network from different places and may disagree for a
-day. The rule above only lists a node as down when no replica has
-reached it, so one replica with a bad connection cannot take a node off
-the list.
+day. Rule 6.1 item 3 needs one replica to have reached a node, and the
+grace takes a node off only when none has, so one replica with a bad
+connection can neither keep a dead node on nor take a live one off.
 
-# 10. The Project's Steward
+After 3 days with no replica reaching a listed node, the replica whose
+key sorts first among those reporting sends a notice to the inbox of the
+node's operator, if its announcement names one.
 
-The project is the steward of the lists in UN-RFC 0010 section 6 and
-UN-RFC 0018 section 6.2:
+# 8. Computing and Publishing the Lists
 
-- ledger `unseenet.ledger@ph5fc5hop5232qsz`, owned by the project key;
-- request inbox: the Group ID in the ledger manifest's `requests`;
-- lists: `unseenet.nodes@ph5fc5hop5232qsz` and
-  `unseenet.hierarchies@ph5fc5hop5232qsz`, as before.
+Each list is a function of the inputs of section 5 up to the end of a
+UTC day. Every replica computes it once a day, and posts it to its list
+group when it changes and at least monthly (UN-RFC 0010 section 3). The
+list's `updated` field is `council <seq> day <date>`: the council
+manifest and the day it was computed from. Replicas that have seen the
+same inputs post identical lists, so it does not matter whose post is
+newest.
 
-The project starts the ledger with an `import` decision holding the
-current `nodes.json` and `hierarchies.json`. From then on, the files in
-the repository are snapshots, refreshed from the network before each
-release, so that a new client has something to start with before it
-can read the ledger. Changes go through decisions, not pull requests.
+A replica that finds a newer post in a list group that differs from its
+own result for the same day MUST post its own result again, and SHOULD
+post the difference in the council's log (UN-RFC 0061 section 8): either
+the replicas have not seen the same inputs yet, or a member key is
+misused - which the members' own rules then handle (UN-RFC 0054
+section 12).
 
-The project's replicas run as at least two programs on machines that are
-not the project's nodes, like the registrar's (UN-RFC 0019 section 7.2).
-The project's approver keys are held by people, offline, and are not the
-project's owner key. The project's discussion of requests stays public,
-in `unseenet.admin` or in a linked issue.
+# 9. Founding a List Council (Informative)
 
-The project's own `checkgroups` list and release announcements are not
-covered by this document.
+A list council starts from the lists as they are. The genesis manifest's
+`import` names an article in the council group holding the current lists
+(for the project: `nodes.json`, `hierarchies.json` and the entrance
+list), posted with identical bodies by the founding members.
 
-# 11. Signature Purposes
+An imported entry stays for 180 days without meeting the rules, so that
+operators and maintainers have time to announce and claim. After that
+only the rules count. An imported hierarchy is held by its maintainer as
+if claimed on the genesis date, and is renewed like any other.
 
-No new purposes. The purposes `UNSEENET-NODE-CLAIM-1` (UN-RFC 0010) and
-`UNSEENET-HIERARCHY-CLAIM-1` (UN-RFC 0018) are no longer needed by the
-project's process; they remain defined for other stewards.
+# 10. The Project's List Council
 
-# 12. Rationale
+The project founds one list council for its lists, with a founding
+period (UN-RFC 0054 section 19), and pins its groups in the reference
+client:
 
-- **Why keep a person in the loop?** Whether `games.*` should go to this
-  maintainer, or whether a charter is a real purpose (UN-RFC 0018
-  section 7.2), is a judgement. A replica can check facts; it should not
-  pretend to decide. Moving the process into the network changes where
-  decisions are made and recorded, not who makes them.
-- **Does anybody know who holds a hierarchy?** Yes, better than before.
-  The holder is the maintainer key in the root list, which is the only
-  definition of ownership that can be checked. The ledger shows who
-  granted it, when and why. Whether a person is behind the key is theirs
-  to say, for example with a registered name (UN-RFC 0019); pseudonymous
-  maintainers are allowed, as pseudonymous posters are.
-- **Why a hash chain?** A list says what is true now; the chain says how
-  it came to be, and makes rewriting history visible. A repository's
-  history can be force-pushed; a chain spread over many nodes cannot be
-  changed quietly.
-- **Why not let replicas post decisions?** Replicas run unattended and
-  their keys are online. Only offline keys held by people should be able
-  to change who is listed. Health is the exception, and it never removes
-  a node for good on the word of one replica (section 9).
-- **Why do clients not read the ledger?** They could, but they do not
-  need to: the lists are what they use, and keeping them unchanged means
-  this document can be adopted without a client release. A client MAY
-  read the ledger to show users why a hierarchy is held by whom.
+- the council group `unseenet.lists@<fp>`;
+- the list groups that succeed `unseenet.nodes`, `unseenet.hierarchies`
+  and `unseenet.entrances`;
+- the claims group `unseenet.lists.claims@<fp>` and the reports group
+  `unseenet.lists.reports@<fp>`;
+- its groups for proposals, talk, log and its room under
+  `unseenet.council.*` (UN-RFC 0061 section 3).
 
-# 13. Security Considerations
+The old groups get a last list each, saying where the lists went, and are
+read until their last list is a year old. From then on the project key
+has no part in the lists. The files in the repository become snapshots,
+refreshed from the network before each release, so that a new client has
+somewhere to start before it reaches the network. Changes go through the
+rules, not pull requests.
 
-- **Stolen approver key.** The thief can accept or refuse anything until
-  the owner removes the key from `approvers`; every decision is public
-  and names the key. Later decisions can undo the damage, but cannot
-  delete the record. A `quorum` of 2 or more makes one stolen key
-  harmless.
-- **Stolen replica key.** The thief can post a list that differs from
-  the ledger, with a late `Date`, so that clients take it. Honest
-  replicas notice and repost (section 8), but a forged `Date` far in the
-  future wins on clients until the owner removes the key. This is the
-  same risk as a stolen poster key today (UN-RFC 0010 section 7), spread
-  over more keys; owners SHOULD keep few replicas and watch the
-  warnings. A future version MAY let clients prefer the list with the
-  highest `ledger` sequence over the newest `Date`.
-- **Withheld decisions.** A node can withhold the ledger or part of it;
-  section 7.2 makes replicas wait rather than skip, and they read through
-  several nodes.
-- **Spam requests.** Postage on the inbox, and approvers ignoring
-  requests whose checks failed.
-- **Privacy.** Requests travel over Tor and need no outside account.
-  Requests and checks are public in the ledger, and so is the
-  `Sender-Key` of every request; that is the point. A request does not
-  reveal more than the list entry it asks for would.
+A GitHub issue form may stay as a front door: a node operator pastes an
+announcement made by their own software, and a bridge posts it. The
+bridge needs no key, since the announcement is already signed.
+
+# 11. Rationale
+
+- **Why no approvers?** Any key that approves is a key that can be
+  stolen or pressured, and approvers chosen by an owner make the lists
+  that owner's. The judgements left over are few - abuse, the rules
+  themselves - and those get a public hearing that anybody can object to
+  (UN-RFC 0061).
+- **Why first claim for hierarchies?** It is the only rule that needs no
+  judgement and that everybody can check. Commit and reveal stop anyone
+  from seeing a claim and getting ahead of it; ripened keys, a limit per
+  key and yearly renewal make squatting cost something and not last.
+- **Why DNS for `dk.*` and `torproject.*`?** Those names already belong
+  to somebody outside the network, and DNS is how the world says who.
+  It is the same proof names use (UN-RFC 0019).
+- **Why measure, not trust?** A node that answers, carries the network's
+  own groups and is connected is useful to a new client, whoever runs
+  it. A node that does not is not, whatever anybody promises.
+
+# 12. Security Considerations
+
+- **Many announced nodes.** One party can announce many nodes. They
+  cost postage and must really answer and carry the network's groups;
+  the list is a starting point, not the only one (UN-RFC 0055 section 5),
+  and clients mix sources. A council MAY, by proposal, cap entries per
+  operator key.
+- **Squatting.** Commit and reveal, ripened keys, 3 per key and yearly
+  renewal. A squatted name that harms people can be released by an
+  urgent proposal.
+- **DNS.** A domain's DNS can be changed by whoever controls the domain,
+  and read wrongly by one replica; decisions depending on DNS follow the
+  registrar's handling (UN-RFC 0054 section 12, item 2).
+- **Stolen member key.** The thief can post a list that differs from the
+  rules. Honest replicas repost theirs and the difference shows in the
+  log; the member's own rules remove the key (UN-RFC 0054 section 12,
+  item 1, applied to lists: a list no inputs explain).
+- **Withholding.** A node can hide announcements or reports from a
+  replica. Replicas read through several nodes; the grace of section 6.1
+  is long on purpose.
+- **Privacy.** Announcements and claims are public; that is the point.
+  They reveal no more than the entry they ask for.
+
+# 13. What Is Autonomous, and What Is Not Yet (Informative)
+
+The lists follow from public data by rules every replica computes alike,
+and no single key can change them. But while the list council's members
+are the replicas of the founding project (UN-RFC 0054 section 22), one
+hand runs the machinery that applies the rules - it cannot quietly
+break them, since anybody can recompute the lists and the log shows any
+difference, but it is one hand. The council is alive when others sit in
+it.
 
 # 14. Changes to Other Documents
 
-- UN-RFC 0010 section 6: "kept in the project's repository and changed
-  by pull request" is replaced by: kept in the project's ledger (UN-RFC
-  0020); the challenge is replaced by a request signed by the node key;
-  "removed" after 10 days becomes "down" as in UN-RFC 0020 section 9.
-- UN-RFC 0018 section 6.2: as for UN-RFC 0010 section 6.
-- UN-RFC 0018 section 7.1: requests are sent as in UN-RFC 0020 section
-  5; a GitHub issue is one possible front door.
-- UN-RFC 0000 section 6: 0020 is added to the index.
+- UN-RFC 0010 section 6: the project's node list is kept by the list
+  council by the rules of section 6.1; the challenge and the GitHub
+  process are replaced by announcements (UN-RFC 0055 section 5).
+- UN-RFC 0018 sections 6.2 and 7: the root list is kept by the list
+  council by the rules of section 6.2; requests are claims in its claims
+  group; the criteria of section 7.2 are replaced by those rules.
+- UN-RFC 0043 section 8.1: the list of known entrances is kept by the
+  list council by the rules of section 6.3; entrances announce
+  themselves (section 5.1).
+- UN-RFC 0055 section 8: the rules left to this document are those of
+  section 6.
+- UN-RFC 0000 section 6: the title of 0020 becomes "Lists Kept by
+  Councils".
 
 # Copyright Notice
 

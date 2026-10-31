@@ -22,9 +22,13 @@ steps (commit, then reveal), so that anybody can check every decision.
 A new replica first runs as a **shadow**; once it has made the same
 decisions as the council for 60 days, the members' replicas admit it
 automatically. A member whose certificates no claim can explain, or that
-has fallen silent, is removed the same way. After the council is
-founded, no single key - the project's included - can change who the
-replicas are.
+has fallen silent, is removed the same way, and a member can step down.
+After the council is founded, no single key - the project's included -
+can change who the replicas are. To bring a new council to life, its
+genesis may name a **founder** who can admit members faster for a
+limited time that the genesis fixes (Part III); the founder can never
+remove anyone. Members talk in a closed room of their own whose key the
+replicas hand on by themselves.
 
 # 1. Motivation
 
@@ -99,6 +103,8 @@ changes:
 | `max_probation` | integer      | no            | How many members may be on probation at once; default `1` |
 | `sponsors`  | integer          | no            | How many full members must sponsor a candidate (section 11.1); default `0` |
 | `succeeds`  | object           | no            | Genesis only: the council this one leaves (section 13.2) |
+| `founding`  | object           | no            | Genesis only: the founding period (section 19)    |
+| `room`      | Group ID         | no            | The council's closed room (section 21)            |
 
 Each member is an object:
 
@@ -107,6 +113,7 @@ Each member is an object:
 | `key`    | key string | The member's key                                 |
 | `joined` | date       | When it was admitted (the `date` of that manifest) |
 | `full`   | boolean    | `true` for a full member, `false` on probation   |
+| `by`     | string     | `founder` if the founder admitted it (section 19); absent otherwise |
 
 A council manifest's `serial` equals `council.seq`. Every other field of
 UN-RFC 0004 section 3.1 (`title`, `posters`, `min_pow`, ...) and fields
@@ -130,11 +137,16 @@ ID.
      to *M*'s `date`, at least 30 days after the `date` of the last
      admission (or of the genesis, if there was none), and only if
      manifest *n* - 1 has fewer members on probation than its
-     `max_probation`;
+     `max_probation` - or, while the founding period lasts, a **founder
+     admission** with `by` set to `founder`, at least 7 days after the
+     last admission and within the founding period's own limit on
+     probation (section 19);
    - **promotion:** one member's `full` becomes `true`, at least 180
-     days after its `joined`;
+     days after its `joined` - 30 days for a member with `by` set to
+     `founder`;
    - **removal:** one member is left out;
-   - no change of members (other fields only);
+   - no change of members (other fields only), where `founding` may
+     change only as section 19 allows;
 3. *M* leaves at least 2 full members; and
 4. at least *Q* different full members of manifest *n* - 1 that are still
    members in *M* have each posted an article with exactly *M*'s body,
@@ -164,8 +176,9 @@ SHOULD show the group as **disputed**.
   even before they count, so that the identical copies can come
   together.
 - **Not available.** Cancels (UN-RFC 0004 section 7), removing the group
-  (UN-RFC 0013), closed council groups and transfer (UN-RFC 0015) are not
-  defined for council groups in this document.
+  (UN-RFC 0013) and transfer (UN-RFC 0015) are not defined for council
+  groups in this document. A closed council group is defined only as the
+  council's room (section 21).
 - **Keeping the chain.** For every council manifest that counts, nodes
   MUST keep, whatever the group's `retention_days`, enough of the
   identical copies to make it count, since a copy alone proves nothing:
@@ -303,7 +316,8 @@ Each full member's replica posts a manifest that removes a member *M*
 when one of these holds. Its `date` is 00:00 UTC of the day the reason
 arose, taken from the articles themselves - the `Date` of the
 certificate in item 1, 48 hours after the third certificate in item 2,
-90 days after *M*'s last article in item 3, or the previous manifest's
+90 days after *M*'s last article in item 3, the `resign` article's
+`Date` in item 4, or the previous manifest's
 `date` if that is later - not from when a replica noticed, so that every
 replica computes the same body:
 
@@ -321,6 +335,7 @@ replica computes the same body:
    section 6.8, rule 4).
 3. **Silent.** *M* has posted nothing in the registrar's group for 90
    days.
+4. **Stepped down.** *M* has posted a `resign` article (section 20).
 
 If reasons hold for several members, the replica removes the one whose
 reason arose first, then the next, one manifest at a time.
@@ -485,6 +500,14 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
 - **Claims are public.** Anybody can now see which key claimed which
   name, including claims that were refused or lapsed. Clients MUST say so
   before sending a claim.
+- **A stolen founder key** (section 19). While the founding period
+  lasts, a thief can admit keys of their own, one a week and at most two
+  on probation at a time. They count for no quorum for 30 days, so in
+  that time the
+  admissions are in plain sight in the council's log (UN-RFC 0061), the
+  operators can hold, and the full members can remove the newcomers. The
+  thief can remove nobody and cannot lengthen the founding period. After
+  the period, or a renunciation, the key has no power over the council.
 - **Who runs a replica** is not published: a member is a key, and its
   replica reaches the network over Tor like any client. Heartbeats are
   posted at random times so that they do not mark a schedule.
@@ -512,7 +535,120 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   6.8 are not used.
 - UN-RFC 0019 section 7.1: the registrar keys of a council registrar are
   the members of its current council manifest.
+- UN-RFC 0004 section 6: a council group may be closed; its key
+  updates and grants come from its full members (section 21).
 - UN-RFC 0000 section 6: 0054 is added to the index.
+
+# Part III - Founding, Stepping Down and the Room
+
+# 19. The Founding Period
+
+A council that nobody joins is dead, and the shadow route of section 11
+is slow on purpose: the first member from outside is full after about
+eight months at the earliest. The genesis may therefore name a
+**founder** that can admit members faster for a limited time. The
+genesis's `founding` object:
+
+| Field      | Type       | Req. | Meaning                                              |
+|------------|------------|------|------------------------------------------------------|
+| `founder`  | key string | yes  | The key that may ask for founder admissions          |
+| `until`    | date       | yes  | The founding period ends at this time at the latest; at most 3 years after the genesis `date` |
+| `size`     | integer    | yes  | ... or once the council has this many full members; at most 16 |
+| `max_probation` | integer | no | Members on probation at once while it lasts; default `2` |
+| `renounced`| boolean    | no   | `true` once the founder has renounced (below)        |
+
+Later manifests copy `founding` unchanged, except as this section says.
+Because the genesis is hashed into the Group ID, nobody - the founder
+included - can change what the genesis set.
+
+**When it lasts.** The founding period lasts while a manifest's `date`
+is before `until`, the manifest before it has fewer than `size` full
+members, and `renounced` is not `true`.
+
+**A founder admission.** The founder posts, in the council group, an
+article with `Subject: admit <key>` and an empty JSON object. Each full
+member's replica posts the manifest that admits that key, with `by` set
+to `founder`, when
+
+1. the founding period lasts;
+2. the key is ripened to the council's `min_level`;
+3. it has run as a shadow (section 10) on each of the last 7 days, and
+   none of its reports in those days disagrees with the council on a
+   decision that does not depend on DNS; and
+4. the last admission was at least 7 days ago; and
+5. fewer members are on probation than the founding period's
+   `max_probation`.
+
+`date` is 00:00 UTC of the later of the day the founder asked and the
+day the last condition holds. Shadows the founder has not named are
+admitted by section 11 as usual, and come first when both are due on the
+same day. A founder admission is on probation for 30 days instead of 180;
+then the replicas promote it as in section 11.
+
+The founder can only admit. It cannot remove anybody, promote anybody
+early, or post a council manifest: removals follow section 12 alone.
+Sponsors (section 11.1) are not needed for a founder admission: the
+founder's request is a public sponsorship, and objections (section
+13.1) to the candidate are shown next to it as for any other.
+
+**Renouncing.** The founder may post `Subject: renounce` with an empty
+JSON object. The replicas then post a manifest that sets `renounced` to
+`true`. That cannot be undone.
+
+**Extending.** Once the founding period is over, and unless it was
+renounced, a manifest may set `until` to at most one year after its own
+`date`. It counts like any other manifest (section 5), and its members
+SHOULD post it only after a hearing without enough objections (UN-RFC
+0061). The founder alone can never extend it.
+
+**Shown openly.** Clients SHOULD show "in its founding period until
+<date>; founder: <key>", and mark the members with `by` set to
+`founder`. Who runs a key is never known, so `size` counts every full
+member, whoever admitted it.
+
+# 20. Stepping Down
+
+A member steps down by posting, in the council group, an article with
+`Subject: resign` and an empty JSON object, signed by its member key.
+The replicas remove it as in section 12, item 4. A member that only goes
+quiet is removed after 90 days (section 12, item 3); `resign` is the
+clean way and leaves a record of why.
+
+# 21. The Council's Room
+
+The council manifest may name, in `room`, a **closed** council group
+(UN-RFC 0004 section 6) where the members talk. Its council is kept the
+same as the registrar group's, as for the claims group (section 8).
+
+Key updates and grants in the room come from full members instead of an
+owner. So that every replica does not start an epoch of its own, the
+full member whose key sorts first does it; the next one in that order
+does it if nothing has come within 24 hours, and so on. Nodes accept the
+first valid key update or grant for an epoch from any full member of the
+current manifest and refuse later ones for the same epoch:
+
+- **on admission**, the replica that acts posts a `key-grant` (UN-RFC
+  0004 section 6.3) with an envelope for the new member;
+- **on removal or stepping down**, it posts a `key-update` with
+  `closes_previous` set to `true` and envelopes for the remaining
+  members (UN-RFC 0004 section 6.2).
+
+Nobody hands keys over by hand. A member reads and writes the room with
+the same key its replica uses. The council's open groups - proposals,
+objections, talk and the log - are in UN-RFC 0061.
+
+# 22. What Is Autonomous, and What Is Not Yet (Informative)
+
+When a council registrar runs by this document, its machinery is
+autonomous: no single key - the project's included - can change the
+council, the names or who decides them; every decision follows rules
+anybody can check from public data; and anybody can join as a shadow.
+
+Its crew is not, at first. At the genesis the members are the replicas
+the founding project runs, and until others have come in, one hand sits
+on every seat. A council is only alive when several people, on different
+infrastructure, sit in it. Councils and clients SHOULD say so plainly,
+and the founding period exists to get there sooner.
 
 # Copyright Notice
 
