@@ -66,7 +66,8 @@ The group and its posts are deleted, and the node refuses the group from
 then on, also if peers send it again. Your peers are not told: it is your
 node's decision only. To allow it again, use `--undrop-group` with the same
 group ID. (A group removed by its **owner** is gone for good and cannot be
-restored.)
+restored.) The network's own groups cannot be dropped; every node carries them
+([UN-RFC 0055](../spec/un-rfc-0055.md) section 4).
 
 If the group is **yours** - created by an identity you have - remove it
 from the whole network instead, with `unseenet group-remove` or in the

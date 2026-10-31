@@ -98,6 +98,9 @@ class NodeConfig:
     forward_delay: tuple[float, float] = (0.0, 60.0)  # UN-RFC 0005, section 5.5
     require_peer_auth: bool = False
     excludes: str = ""                   # wildmat of groups not carried by choice (UN-RFC 0021)
+    # UN-RFC 0055 section 3.1: the pattern list over group names this node carries; the
+    # network's own groups are carried whatever it says (section 4)
+    carries: list[str] = field(default_factory=lambda: ["*"])
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
     # UN-RFC 0045 section 6: the report issuers this node follows, each
@@ -181,6 +184,7 @@ from .controls import Controls  # noqa: E402
 from .kept import Kept  # noqa: E402
 from .blobs import Blobs  # noqa: E402
 from .blocks import Blocks  # noqa: E402
+from .carrying import Carrying  # noqa: E402
 from .edits import Edits  # noqa: E402
 from .shares import Shares  # noqa: E402
 from .fetching import Fetching, FETCH_CACHE_SECONDS, FETCH_MISS_SECONDS, FETCH_HOLD_SECONDS  # noqa: E402,F401
@@ -197,8 +201,8 @@ from .meet_commands import MeetCommands  # noqa: E402
 from .fetch_commands import FetchCommands  # noqa: E402
 
 
-class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Reports, Edits, Shares,
-           Fetching, Forwarding):
+class Node(NodeBase, Accepting, Postage, Manifests, Controls, Kept, Blobs, Blocks, Carrying, Reports,
+           Edits, Shares, Fetching, Forwarding):
     """A node: takes articles from clients and peers, keeps them, passes them on.
     Split into parts by area (node/server/*.py, see above)."""
 

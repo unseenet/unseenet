@@ -9,7 +9,7 @@ sudo systemctl restart unseenet-node
 
 **Changing what the node carries.** When you change what decides which
 posts the node takes from its peers - `new_groups`, `trusted_owners`,
-`excludes`, `profiles`, `avatars`, `sites`, `[blobs]` or a peer's
+`carries`, `excludes`, `profiles`, `avatars`, `sites`, `[blobs]` or a peer's
 `accept` - the node notices at the next start. It forgets the posts it
 refused under the old setting, catches up with its peers again from the
 start of retention, and fetches the files of posts it already holds if
@@ -44,6 +44,7 @@ groups = "*"
 | `min_ripe` | `0` | The lowest [key ripening](../spec/un-rfc-0025.md) level (0-4) this node accepts, or `"-"` for none. A new key reaches level 0 after a few minutes of computing on its owner's machine, so throwaway keys cost something. Riper keys pay less postage. Needs `chiavdf` (installed with Unseenet on Linux, Windows and Apple Silicon). |
 | `retention_days` | `90` | How long posts are kept. A group's own retention is used if it is shorter. Expired posts are removed once an hour. |
 | `max_size` | `65536` | Largest post in bytes. Must be between 32768 and 65536. |
+| `carries` | `["*"]` | The hierarchies this node carries, such as `["alt.*", "dk.*"]`, see [below](#carries-the-hierarchies-you-carry). The network's own groups are always carried. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
@@ -124,6 +125,35 @@ show a post as "Hidden by ... : spam" rather than dropping it. This
 setting decides only what *your node* carries and passes on. Your node
 information lists the issuers you follow (`policy.report_issuers`).
 
+### `carries`: the hierarchies you carry
+
+```toml
+[node]
+carries = ["alt.*", "dk.*", "!dk.politik.*"]
+```
+
+A node does not have to carry every group ([UN-RFC 0055](../spec/un-rfc-0055.md)).
+List the hierarchies you want, as patterns over group names: `*` matches
+anything, a pattern starting with `!` leaves out, and the last pattern that
+matches decides. `["*"]`, the default, is everything. A node for one cause
+might carry only `["palaestina.*"]`; an association only `["forening.*"]`.
+
+Whatever the list says, every node carries **the network's own groups**:
+the lists of nodes, hierarchies and names, releases and announcements, and the
+other groups of `unseenet.*` that the hierarchy's maintainer endorses. They are
+small and text only. Without them, a node or a group of nodes could hide which
+nodes carry what. They cannot be left out with `excludes` or dropped. A group
+somebody names `unseenet.something` without that endorsement is an ordinary
+group and follows your list.
+
+Profiles, pictures and other groups that belong to one key (`profile@...`,
+`inbox@...`) follow their own settings, not this list, and so do
+[local groups](../spec/un-rfc-0009.md).
+
+The node says what it carries in its node information, so clients and peers
+can see it. A peer sends you only the groups you both carry, and you send a
+peer only what it carries; it learns that when it connects, and again daily.
+
 ### `new_groups`: which groups the node carries
 
 | Value | Behaviour |
@@ -151,8 +181,8 @@ under **About this node**), together with every group you have
 A listed node must carry what most listed nodes carry, *except* what it
 excludes ([UN-RFC 0021](../spec/un-rfc-0021.md)). `excludes` is how you
 stay listed and still leave out something you will not or may not carry
-where your node runs. The project's own groups (`unseenet*`) cannot be
-excluded by a listed node.
+where your node runs. For whole hierarchies, use `carries` instead. The
+network's own groups (see `carries`) cannot be excluded.
 
 ## `[limits]`
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from ..core import crypto
@@ -66,12 +67,15 @@ class Feeder:
             elif self.peer.password:
                 await client.command(f"AUTHINFO USER {self.node_name}", (381,))
                 await client.command(f"AUTHINFO PASS {self.peer.password}", (281,))
+            await self._learn_carries(client)
             await client.command("MODE STREAM", (203,))
             taken = 0
             for msgid in due:
                 raw = store.get(msgid)
-                if raw is None or self.node.report_hidden(msgid):   # gone, or reported (0045)
-                    store.dequeue(self.peer.name, msgid)
+                meta = store.get_meta(msgid)
+                if (raw is None or self.node.report_hidden(msgid)      # gone, or reported (0045)
+                        or (meta and not self.node.peer_carries(self.peer.name, meta[0]))):
+                    store.dequeue(self.peer.name, msgid)               # not carried there (0055)
                     continue
                 code, _ = await client.command(f"CHECK {msgid}")
                 if code == 238:
@@ -86,6 +90,22 @@ class Feeder:
             return taken
         finally:
             await client.quit()
+
+    async def _learn_carries(self, client: Client) -> None:
+        """UN-RFC 0055 section 6: what the peer carries, from its node information, when
+        it connects and at least daily. A peer that does not say is taken to carry all."""
+        if not self.node.peer_info_due(self.peer.name):
+            return
+        if client.capability("UNSEENET-NODEINFO") is None:
+            await client.fetch_capabilities()
+        info: dict = {}
+        if client.capability("UNSEENET-NODEINFO") is not None:
+            try:
+                lines = await client.multiline("LIST UNSEENET.NODEINFO", 215)
+                info = json.loads(lines[0]) if lines else {}
+            except (NNTPError, ValueError):
+                info = {}
+        self.node.peer_knows(self.peer.name, info if isinstance(info, dict) else {})
 
     @property
     def node_name(self) -> str:
