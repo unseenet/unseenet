@@ -44,6 +44,7 @@ import sys
 import _owner
 from _owner import FP, fetch_manifests, open_owner_session, post_everywhere
 
+from unseenet.core.article import new_article
 from unseenet.core.groups import make_manifest, manifest_article, with_charter
 
 TALK = """The place to talk about Unseenet itself: the protocol (the UN-RFCs), the
@@ -121,7 +122,7 @@ client, the vault, nodes, names, groups. Any question is welcome; say what
 you did and what happened. People answer when they can. The help bot
 (unseenet/unseenet-helpbot) answers from the documentation if nobody has
 after a while, or right away if you write @helpbot - it can be wrong, and it
-says where its answer comes from. The user guide is the site unseenet.help.guide@""" + FP + """
+says where its answer comes from. The user guide is the site docs.unseenet.clients@""" + FP + """
 (and unseenet.org/use/). Ideas and talk about the project belong in
 unseenet@""" + FP + "."
 
@@ -160,8 +161,8 @@ GROUPS = (
      "The help bot tells about new releases in ordinary language. Comment to ask; "
      "the official release notes are in unseenet.announce.",
      NEWS, "ed25519:6gf6zqd6hzligjk57kdbna3z7uwlnipfgg47v765kitkn2avdxfa", 20),
-    ("unseenet.help.guide", "channel", "pages", "The Unseenet user guide",
-     "How do I ...: the user guide for both clients, published from unseenet.org.",
+    ("docs.unseenet.clients", "channel", "pages", "The Unseenet clients - the user guide",
+     "How do I ...: the user guide for the clients, published from unseenet.org.",
      GUIDE, "github_poster", 20),
     ("unseenet.announce", "channel", "threads", "Unseenet announcements: releases and news",
      "Releases, security notices and network news from the Unseenet project.", ANNOUNCE,
@@ -358,7 +359,7 @@ ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.privacy.eff", "alt.space.nasa", "alt.news.ourworldindata", "alt.humor.xkcd",
     "alt.comics.peppercarrot")}
 # the user guide's screenshots (unseenet-docs#7): about a dozen, each under 64 KiB
-ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
+ATTACHMENTS["docs.unseenet.clients"] = BOT_PICTURES
 
 
 # The project's spam report issuer (tools/project/report_issuer.py), named in the bot
@@ -378,12 +379,19 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
     "alt.humor.xkcd", "alt.comics.peppercarrot", "alt.science.arxiv.security",
     "alt.science.arxiv.ai", "alt.news.fedoramagazine")}
 
+# Groups the project moved (old name -> new name): the old one is removed from the
+# network by its owner (UN-RFC 0013), once, with the new name as the reason. Every node
+# carries the endorsed groups of unseenet.*, so groups where anything may be posted
+# live elsewhere (UN-RFC 0055 section 4.1, #821).
+MOVED = {"unseenet.test": "test.unseenet",
+         "unseenet.help.guide": "docs.unseenet.clients"}   # a site with pictures
+
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
 # they say none. Clients suggest the group's language to those who write there.
 LANGUAGES = {name: ["en"] for name in (
     "unseenet", "unseenet.chat", "test.unseenet", "unseenet.help", "unseenet.help.news",
-    "unseenet.help.guide",
+    "docs.unseenet.clients",
     "unseenet.announce", "unseenet.admin",
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",
@@ -508,6 +516,14 @@ async def main() -> None:
             art = manifest_article(owner, gid, data, pow_bits=_owner.POW_BITS)
         todo.append((art, gtype, True))
         print(f"{gid}: will create ({gtype}, view {view}, posters {posters or 'none'})")
+    for old, new in MOVED.items():              # once: then the vault no longer owns it
+        gid = f"{old}@{owner.fingerprint}"
+        if not s.data["groups"].get(gid, {}).get("owner"):
+            continue
+        art = new_article(gid, None, f"Moved to {new}@{owner.fingerprint}.\n",
+                          extra=[("Control", "rmgroup")]).finalize(owner, _owner.POW_BITS)
+        todo.append((art, None, False))
+        print(f"{gid}: will remove from the network (moved to {new})")
     if not dry:
         s.save()                                # remembers the manifests read from the nodes
     if not todo or dry:
@@ -516,6 +532,9 @@ async def main() -> None:
     if await post_everywhere([a for a, _, _ in todo], session=s) == 0:
         sys.exit("No node took the manifests; nothing stored. Try again later.")
     for art, gtype, new in todo:
+        if art.control == ["rmgroup"]:
+            s.forget_group(art.group)
+            continue
         entry = s.group_entry(art.group)
         entry.update({"type": gtype, "owner": True, "owner_key": owner.key_text,
                       "manifest": json.loads(art.body)})

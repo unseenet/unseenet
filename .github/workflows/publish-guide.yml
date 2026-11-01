@@ -1,6 +1,6 @@
 name: publish-guide
 # Publishes the user guide (unseenet.org/use/, from unseenet-docs) as the site
-# unseenet.help.guide inside Unseenet (unseenet-docs#7), so people find it where they
+# docs.unseenet.clients inside Unseenet (unseenet-docs#7), so people find it where they
 # already are - also on the bootable client, which never opens the web.
 #
 # The pages are made from the docs: unseenet-docs' tools/gather.py puts the guide and
@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GUIDE_GROUP: unseenet.help.guide@ph5fc5hop5232qsz
+  GUIDE_GROUP: docs.unseenet.clients@ph5fc5hop5232qsz
 
 jobs:
   publish:

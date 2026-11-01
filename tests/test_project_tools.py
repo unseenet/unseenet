@@ -2,6 +2,7 @@
 
 import getpass
 import importlib
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,7 +27,7 @@ KDF = {"ops": 1, "mem": 8192 * 1024}
 @pytest.fixture
 async def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    # sites: the project groups include one (unseenet.help.guide), as the project nodes carry
+    # sites: the project groups include one (docs.unseenet.clients), as the project nodes carry
     node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0), sites="accept"))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
@@ -286,3 +287,29 @@ async def test_welcome_posts_pin_once_and_replace_when_changed(setup, monkeypatc
     assert "withdrew 1 earlier" in capsys.readouterr().out
     (note, now), = await pinned("unseenet")
     assert note == "Start here" and now.message_id != first and now.body.rstrip().endswith("One more line.")
+
+
+async def test_create_groups_removes_a_group_the_project_moved(setup):
+    """#821: unseenet.test moved to test.unseenet; create_groups removes the old one
+    from the network once (UN-RFC 0013), and a later run leaves it alone."""
+    from unseenet.core.groups import make_manifest
+    run, project = setup["run"], setup["project"]
+    v = Vault.open(setup["vault"], "pw")
+    v.data["registrar_poster"] = {"seed": crypto.Identity.generate().seed.hex(),
+                                  "key": crypto.Identity.generate().key_text}
+    old = make_manifest(project, "unseenet.test", "open", pow_bits=8)
+    v.data["groups"][old.group] = {"type": "open", "owner": True,
+                                   "manifest": json.loads(old.body)}
+    v.save()
+    c = await Client.connect(setup["addr"])
+    assert (await c.post(old.to_bytes()))[0] == 240
+    await c.quit()
+    await run("create_groups")
+    v = Vault.open(setup["vault"], "pw")
+    assert old.group not in v.data["groups"]
+    assert f"test.unseenet@{project.fingerprint}" in v.data["groups"]
+    c = await Client.connect(setup["addr"])
+    code, text = await c.command(f"GROUP {old.group}")
+    await c.quit()
+    assert code == 411 and "removed" in text
+    await run("create_groups")                       # nothing more to remove

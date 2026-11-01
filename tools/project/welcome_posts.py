@@ -54,7 +54,7 @@ sites and private posts, on nodes anyone can run. No accounts - you are your key
 - !unseenet.chat@{FP} - quick chat, also
   [the project's Matrix room](https://matrix.to/#/#unseenet:unseenet.org) (outside Tor).
 - !test.unseenet@{FP} - try posting, replies and pictures. Anything goes.
-- !unseenet.help.guide@{FP} - the user guide, as a site in the network.
+- !docs.unseenet.clients@{FP} - the user guide, as a site in the network.
 - !unseenet.help.news@{FP} - what's new, in plain words.
 - !unseenet.announce@{FP} - the official release notes.
 - !demo.unseenet - a small demo village with feeds, a site and photos.
@@ -87,7 +87,7 @@ and it says where its answer comes from.
 ### Maybe it is already answered
 
 {LINKS}
-- The user guide in the network: !unseenet.help.guide@{FP}
+- The user guide in the network: !docs.unseenet.clients@{FP}
 - Help on the web: https://unseenet.org/help/
 
 Ideas and talk about the project belong in !unseenet@{FP}; quick chat in
