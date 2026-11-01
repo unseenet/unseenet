@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0061                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - `list`, `endorse`, `retire` and `rfc` changes are heard but not yet applied (#56, #826), and the log does not yet name replicas below a minimum version (#56)
+Implemented: unseenet 0.7.0; partly - `list`, `endorse`, `retire` and `rfc` changes are heard but not yet applied (#56, #826), and the log does not yet name replicas below a minimum version (#56)
 Updates: 0054, 0055
 
        Unseenet: Council Proposals, Hearings and Objections
