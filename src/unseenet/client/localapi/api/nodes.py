@@ -51,11 +51,11 @@ class Nodes:
         moved: list[str] = []
         if action == "add":
             if address not in s.nodes:
-                check_node_address(address)
+                address = check_node_address(address)
             s.add_node(address)
         elif action == "default":
             if address not in s.nodes:
-                check_node_address(address)
+                address = check_node_address(address)
             s.add_node(address, default=True)
         elif action == "remove":
             if address not in s.nodes:
@@ -93,15 +93,19 @@ class AnnouncedNodes:
         return {"nodes": s.announced_nodes()}
 
 
-def check_node_address(address: str) -> None:
-    """An address a client can reach: ``<56 base32>.onion`` (with an optional port), or
-    ``host:port`` for a node on this machine or network."""
-    import re
-    host, _, port = address.partition(":")
-    if port and not (port.isdigit() and 0 < int(port) < 65536):
-        raise SessionError(f"{address}: the port is not a number from 1 to 65535")
-    if host.endswith(".onion"):
-        if not re.fullmatch(r"[a-z2-7]{56}\.onion", host.lower()):
-            raise SessionError(f"{address} is not an onion address (56 letters and digits, then .onion)")
-    elif not port:
-        raise SessionError(f"{address}: give an onion address, or host:port")
+def check_node_address(address: str) -> str:
+    """An address a client can reach (UN-RFC 0064): ``onion:<56 base32>.onion`` or the
+    bare ``<56 base32>.onion`` (with an optional port), or ``host:port`` / ``test:host:port``
+    for a node on this machine or network. Returns the form kept: ``x.onion[:port]`` or
+    ``host:port``."""
+    from ....core import transport
+    try:
+        a = transport.parse(address)
+    except transport.AddressProblem as exc:
+        if address.split(":")[0].endswith(".onion") or address.startswith("onion:"):
+            raise SessionError(f"{address} is not an onion address (56 letters and digits, "
+                               "then .onion)") from exc
+        raise SessionError(f"{address}: give an onion address, or host:port") from exc
+    if a is None:
+        raise SessionError(f"{address}: this client cannot reach a node on that transport")
+    return a.plain()

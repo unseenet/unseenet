@@ -37,7 +37,18 @@ def load_node_config(path: Path | None):
     data = tomllib.loads(path.read_text())
     node = data.get("node", {})
     peers = [PeerConfig(**p) for p in data.get("peer", [])]
+    from ..core import transport
     for p in peers:
+        try:                                   # UN-RFC 0064: a transport address
+            a = transport.parse(p.address)
+        except transport.AddressProblem as exc:
+            sys.exit(f"{path}: peer {p.name}: {exc}")
+        if a is None:
+            sys.exit(f"{path}: peer {p.name}: this node has no transport for {p.address}")
+        if a.scheme == "test":
+            logging.getLogger("unseenet.node").warning(
+                "peer %s is reached over plain TCP (%s), which hides nothing: for test "
+                "networks only (UN-RFC 0064 section 2.2)", p.name, p.address)
         if p.key:
             try:
                 p.public_key()

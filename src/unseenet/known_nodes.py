@@ -74,7 +74,6 @@ MOVED_STARTER_GROUPS = {
 STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version
                        if g not in MOVED_STARTER_GROUPS)
 
-_ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
 MAX_NODES = 200
 
 
@@ -85,6 +84,7 @@ class KnownNode:
     description: str = ""
     node_key: str = ""
     operator: str = ""
+    addresses: tuple = ()        # UN-RFC 0064 section 4: further addresses of this node
 
 
 def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
@@ -92,15 +92,21 @@ def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
     data = json.loads(text)
     if not isinstance(data, dict) or data.get("v") != 1 or not isinstance(data.get("nodes"), list):
         raise ValueError("not a version 1 node list")
+    from .core import transport
     nodes = []
     for item in data["nodes"][:MAX_NODES]:
         if not isinstance(item, dict):
             continue
-        address = str(item.get("address", "")).strip()
-        if not _ADDRESS.match(address):
-            continue                  # one bad entry does not spoil the list
+        extra = item.get("addresses") if isinstance(item.get("addresses"), list) else []
+        # UN-RFC 0064: onion: first, unknown schemes left out, test: only when allowed;
+        # an entry with no address we can use is skipped, and spoils nothing
+        usable = transport.usable([str(item.get("address", ""))] + extra[:transport.MAX_ADDRESSES])
+        if not usable:
+            continue
+        address = usable[0].plain()
         nodes.append(KnownNode(name=str(item.get("name", address))[:64],
                                address=address,
+                               addresses=tuple(a.plain() for a in usable[1:]),
                                description=str(item.get("description", ""))[:200],
                                node_key=str(item.get("node_key", ""))[:80],
                                operator=str(item.get("operator", ""))[:80]))

@@ -239,12 +239,17 @@ class NodesMixin:
         now = datetime.now(timezone.utc)
         kept = self.data.setdefault("announced", {})
         newest = an.newest(found, now)
+        from ...core import transport
         for key, a in newest.items():
+            usable = transport.usable([a.address, *a.addresses])   # UN-RFC 0064: onion: first
+            if not usable:
+                continue                                  # no address this client can use
             old = kept.get(key, {})
-            entry = {"address": a.address, "addresses": list(a.addresses), "name": a.name,
+            entry = {"address": usable[0].plain(), "addresses": [u.plain() for u in usable[1:]],
+                     "name": a.name,
                      "carries": a.carries, "date": a.date.isoformat(),
                      "operator": a.operator, "contact": a.contact}
-            if old.get("address") == a.address:          # the check holds for this address
+            if old.get("address") == entry["address"]:   # the check holds for this address
                 entry.update({k: old[k] for k in ("checked", "checked_at") if k in old})
             kept[key] = entry
         for key in [k for k, e in kept.items()

@@ -547,7 +547,15 @@ async def open_connection(address: str, socks_port: int | Socks | None):
     already running.
 
     Hostnames are resolved by Tor (remote DNS), never locally (UN-RFC 0005, section 1).
+    ``address`` may also be a transport address (UN-RFC 0064): ``onion:x.onion``,
+    ``test:host:port``.
     """
+    from . import transport
+    if address.startswith(("onion:", "test:")):
+        try:
+            address = transport.connect_target(address)
+        except transport.AddressProblem as exc:
+            raise ConnectionError(str(exc)) from exc
     host, _, port = address.rpartition(":")
     if not host:
         host, port = address, "119"

@@ -322,7 +322,7 @@ One section per peer. See [Peering](peering.md).
 | Key | Required | Meaning |
 |-----|----------|---------|
 | `name` | yes | Your label for the peer, used in the logs. (With a password: must equal the `name` in the peer's own `[node]` section.) |
-| `address` | yes | The peer's onion address with port, `xyz.onion:119`. (`host:port` works for local testing.) |
+| `address` | yes | The peer's onion address, `onion:xyz.onion` or just `xyz.onion` (port 119 unless you add one, `xyz.onion:1119`). For a test network, `test:host:port` (or `host:port`) reaches a node over plain TCP; the node warns at start, since that hides nothing ([UN-RFC 0064](../spec/un-rfc-0064.md)). |
 | `key` | yes, for new peerings | The peer's node key, `ed25519:...` ([UN-RFC 0016](../spec/un-rfc-0016.md)). Used to accept the peer logging in to you, and to check that you reached the right node. |
 | `groups` | no, `"*"` | Which groups to **send** to this peer, as a wildmat (see below). `""` sends nothing. |
 | `pull` | no, `"*"` | Which groups to [catch up on](peering.md#catching-up) from this peer. `""` pulls nothing. |

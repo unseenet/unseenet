@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0064                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: -
+Implemented: unseenet main (unreleased); partly - sections 2 and 4 (reading and writing addresses, `addresses`, `test:` behind a setting); the council's node list (section 6, UN-RFC 0020) follows (#56)
 Updates: 0005, 0010, 0020, 0055
 
                 Transport Addresses and Transport Bindings
