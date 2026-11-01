@@ -552,3 +552,24 @@ def test_dir_before_or_after_the_command(tmp_path, capsys):
     assert cli.main(["status", "--dir", str(tmp_path)]) == 1
     assert str(tmp_path) in capsys.readouterr().out
     assert "--dir {dir} run " in cli.SERVICE_UNIT and "--dir {dir} update" in cli.UPDATE_UNIT
+
+
+def test_the_main_channel_follows_the_commit(tmp_path, monkeypatch):
+    """main keeps the last release's version number, so the commit tells whether there
+    is anything new (pip --upgrade alone never updated a replica on main)."""
+    from types import SimpleNamespace
+
+    from unseenet.replica import cli
+    ran = []
+
+    def fake(cmd, check=True):
+        ran.append(cmd)
+        if cmd[0] == "git":
+            return SimpleNamespace(returncode=0, stdout=f"{'a' * 40}\trefs/heads/main\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(cli, "_run", fake)
+    assert cli._update_main(tmp_path) == 0
+    assert any("--force-reinstall" in c for c in ran) and ["systemctl", "restart", cli.SERVICE] in ran
+    ran.clear()
+    assert cli._update_main(tmp_path) == 0
+    assert [c[0] for c in ran] == ["git"]                  # nothing new: nothing installed

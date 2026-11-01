@@ -170,6 +170,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   --dir ...`, which the command line refused, so the service stopped at once and the
   update timer did too. The units now put `--dir` first, and the command line takes it
   after the command as well, so units written before keep working.
+- **A replica on the `main` channel updates.** main keeps the last release's version
+  number, so `pip install --upgrade` saw nothing new. The daily update now asks GitHub
+  which commit main is at, and installs and restarts when it has moved.
 
 ## [0.6.9] - 2026-11-01
 
