@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0064                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - sections 2 and 4 (reading and writing addresses, `addresses`, `test:` behind a setting); the council's node list (section 6, UN-RFC 0020) follows (#56)
+Implemented: unseenet main (unreleased); partly - sections 2 and 4 (reading and writing addresses, `addresses`, `test:` behind a setting, peering on a private network); the council's node list (section 6, UN-RFC 0020) follows (#56)
 Updates: 0005, 0010, 0020, 0055
 
                 Transport Addresses and Transport Bindings
@@ -80,6 +80,37 @@ the remark in UN-RFC 0010 section 2 that non-onion addresses are
 allowed for testing. Clients MUST NOT offer `test:` addresses to
 ordinary users, and nodes MUST NOT peer over them unless the operator
 has turned on a test setting.
+
+## 2.3 Peering on a Private Network
+
+An operator who runs several nodes on their own machine or network may
+let them peer over plain TCP there, without Tor and without a test
+setting. This is not a transport for clients and does not weaken
+section 3: it is a link between machines the operator already controls.
+
+A host is on a private network when it is a loopback address, a
+private or link-local range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+169.254.0.0/16, 100.64.0.0/10, fc00::/7, fe80::/10), `localhost`, a name
+ending in `.local`, `.lan`, `.internal` or `.home.arpa`, or a name
+without a dot (such as a container service name).
+
+1. A node MAY peer over `test:` (or plain `host:port`) with a host on a
+   private network without a test setting, but only when that peer is
+   configured with its `node_key`, so the node proves who it is
+   (UN-RFC 0016) as it would over an onion service.
+2. A node MUST NOT peer over plain TCP with any other host unless the
+   operator has turned on a test setting, and SHOULD refuse to start
+   when told to.
+3. A node MUST NOT put a private-network or other `test:` address in its
+   announcement (UN-RFC 0055 section 5) or in a list, unless it runs on a
+   test network behind a test setting. Such addresses mean nothing to
+   anyone else, and give away how the operator's network is laid out.
+
+The traffic between such peers is not encrypted by the transport.
+Articles are signed, and closed groups are encrypted end to end, so
+what a listener on that network learns is which public articles the
+nodes exchange. An operator who does not trust their own network should
+peer over onion addresses instead.
 
 # 3. What a Transport Must Provide
 

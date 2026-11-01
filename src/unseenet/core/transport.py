@@ -9,6 +9,7 @@ Not here: opening the connection (``core/tor.py``)."""
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 from dataclasses import dataclass
@@ -52,6 +53,31 @@ def test_allowed() -> bool:
     """Whether ``test:`` addresses (and plain ``host:port``) may be offered from lists
     (section 2.2): only behind a test setting, ``UNSEENET_TEST_ADDRESSES=1``."""
     return os.environ.get("UNSEENET_TEST_ADDRESSES", "").lower() in ("1", "true", "yes")
+
+
+_SHARED = ipaddress.ip_network("100.64.0.0/10")     # carrier-grade NAT, and Tailscale
+LOCAL_SUFFIXES = (".local", ".lan", ".internal", ".home.arpa", ".localhost")
+
+
+def private(host: str) -> bool:
+    """Whether ``host`` is on the operator's own machine or network (section 2.3):
+    loopback, the private and link-local ranges (10/8, 172.16/12, 192.168/16,
+    169.254/16, 100.64/10 as Tailscale uses, fc00::/7, fe80::/10), ``localhost``, names ending in ``.local``,
+    ``.lan``, ``.internal`` or ``.home.arpa``, and names without a dot, such as a
+    Docker service (``node2``)."""
+    h = host.strip("[]").lower().rstrip(".")
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return h == "localhost" or "." not in h or h.endswith(LOCAL_SUFFIXES)
+    return ip.is_loopback or ip.is_private or ip.is_link_local or ip in _SHARED
+
+
+def announceable(a: Address, allow_test: bool | None = None) -> bool:
+    """Whether a node may put ``a`` in its announcement or a list (section 2.3): an
+    onion address always; a ``test:`` one only behind the test setting."""
+    allow_test = test_allowed() if allow_test is None else allow_test
+    return a.scheme == "onion" or allow_test
 
 
 def _port(text: str | None, default: int) -> int:
