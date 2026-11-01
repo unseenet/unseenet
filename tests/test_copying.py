@@ -227,6 +227,7 @@ async def test_a_wrong_code_uses_it_up(devices):
             break
         await asyncio.sleep(0.02)
     assert offer.state == "failed" and offer.onion not in listeners
+    assert "used up: start again" in offer.error         # the old device says so too (#757)
     with pytest.raises(SessionError):
         await offer.confirm(True)
 

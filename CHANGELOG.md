@@ -190,6 +190,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **Copying: the old device says the code is used up too** (#757). When the new device
+  reached it but the copy failed, the old device now ends with "This code is used up:
+  start again for a new code", as the new device already did - one attempt per code
+  (UN-RFC 0050 section 3.2) stays.
 - **The node's image reads its passphrase secret when the file belongs to the host's user**
   (mode 600, as the guide says): the start script copies it for the node's user while it
   is still root. Before, the node stopped with "no passphrase" (#862).
