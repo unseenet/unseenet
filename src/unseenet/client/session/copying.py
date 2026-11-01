@@ -134,9 +134,11 @@ class CopyOffer:
             self.added = [str(a) for a in answer.get("added", [])]
             await self._finish("done")
         except (cp.CopyError, asyncio.TimeoutError, OSError, ConnectionError) as exc:
-            self.error = _say_error(exc)
-            await self._finish("cancelled" if self._decision.done() and not self._decision.result()
-                               and self.state == "check" else "failed")
+            cancelled = self._decision.done() and not self._decision.result() and self.state == "check"
+            # one attempt per code: say so on this device too, not only on the new one (#757)
+            self.error = _say_error(exc) + ("" if cancelled or self.state == "sent" else
+                                            " This code is used up: start again for a new code.")
+            await self._finish("cancelled" if cancelled else "failed")
         finally:
             writer.close()
 
