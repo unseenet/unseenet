@@ -163,6 +163,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   year. `unseenet council create --founding YEARS` makes one with you as founder;
   `council show` and `sign` show it openly.
 
+
+### Fixed
+
+- **The replica service started** (UN-RFC 0054, #838). Its units ran `unseenet-replica run
+  --dir ...`, which the command line refused, so the service stopped at once and the
+  update timer did too. The units now put `--dir` first, and the command line takes it
+  after the command as well, so units written before keep working.
+
 ## [0.6.9] - 2026-11-01
 
 Released from `release/0.6`, with only this change; the rest of `[Unreleased]` comes in

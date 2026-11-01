@@ -186,7 +186,7 @@ User={user}
 WorkingDirectory={dir}
 # the vault's passphrase, readable only by root: systemd hands it to the service
 LoadCredential=passphrase:{etc}/passphrase
-ExecStart={bin} run --dir {dir} --passphrase-file ${{CREDENTIALS_DIRECTORY}}/passphrase
+ExecStart={bin} --dir {dir} run --passphrase-file ${{CREDENTIALS_DIRECTORY}}/passphrase
 Restart=always
 RestartSec=60
 Nice=5
@@ -205,7 +205,7 @@ Description=Update the Unseenet replica
 
 [Service]
 Type=oneshot
-ExecStart={bin} update --dir {dir}
+ExecStart={bin} --dir {dir} update
 """
 
 UPDATE_TIMER = """[Unit]
@@ -643,6 +643,8 @@ def main(argv=None) -> int:
     s.add_argument("id")
     s.add_argument("reason", nargs="?", default="")
     s.add_argument("--withdraw", action="store_true", help="take an objection back")
+    for c in sub.choices.values():          # also after the command, as units before 0.7 wrote it
+        c.add_argument("--dir", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return {"setup": setup, "run": run_service, "status": status, "agree": agree,

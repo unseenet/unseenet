@@ -542,3 +542,13 @@ async def test_a_copy_of_a_replica_stops_signing(net, monkeypatch, tmp_path):
     assert cli.main(["--dir", str(d2), "twin-gone"]) == 0
     net.clock += timedelta(hours=1)
     assert "twin" not in await two.run_once()
+
+
+def test_dir_before_or_after_the_command(tmp_path, capsys):
+    """The service units name the folder; both places work (the units of before wrote
+    ``run --dir ...``, which argparse refused, so the service never started)."""
+    from unseenet.replica import cli
+    assert cli.main(["--dir", str(tmp_path), "status"]) == 1
+    assert cli.main(["status", "--dir", str(tmp_path)]) == 1
+    assert str(tmp_path) in capsys.readouterr().out
+    assert "--dir {dir} run " in cli.SERVICE_UNIT and "--dir {dir} update" in cli.UPDATE_UNIT
