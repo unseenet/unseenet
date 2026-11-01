@@ -1,25 +1,29 @@
 name: docker
-# The node's container image, ghcr.io/unseenet/node (Dockerfile, docs/node/docker.md):
-# published as :<version> and :latest from release tags only - not on every merge -
+# The servers' container images from one Dockerfile: ghcr.io/unseenet/node
+# (docs/node/docker.md) and ghcr.io/unseenet/replica (docs/replica.md, "In Docker").
+# Published as :<version> and :latest from release tags only - not on every merge -
 # for amd64 and arm64, with provenance, an SBOM and a cosign signature. By hand
-# from main it publishes :dev; a pull request that changes the image only builds
+# from main it publishes :dev; a pull request that changes an image only builds
 # and tests it.
 on:
   push:
     tags: ["v*"]
   pull_request:
-    paths: ["Dockerfile", "docker/**", ".github/workflows/docker.yml"]
+    paths: ["Dockerfile", "docker/**", "deploy/docker-compose*.yml", ".github/workflows/docker.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  IMAGE: ghcr.io/unseenet/node
-
 jobs:
   image:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [node, replica]
+    env:
+      IMAGE: ghcr.io/unseenet/${{ matrix.target }}
     permissions:
       contents: read
       packages: write
@@ -43,9 +47,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          target: ${{ matrix.target }}
           load: true
-          tags: unseenet-node:test
-      - name: Test
+          tags: unseenet-${{ matrix.target }}:test
+      - name: Test the node
+        if: matrix.target == 'node'
         run: |
           docker run --rm -v t:/data unseenet-node:test && exit 1 || test $? -eq 64   # no passphrase
           KEY=$(docker run --rm -v t:/data -e UNSEENET_NODE_PASSPHRASE=ci unseenet-node:test --show-key | tail -1)
@@ -63,6 +69,22 @@ jobs:
           docker exec unseenet-test unseenet-monitor --version
           docker logs unseenet-test
           docker rm -f unseenet-test
+      - name: Test the replica
+        if: matrix.target == 'replica'
+        run: |
+          docker run --rm -v r:/data unseenet-replica:test && exit 1 || test $? -eq 64   # no passphrase
+          docker run -d --name replica-test -v r:/data -e UNSEENET_REPLICA_PASSPHRASE=ci-passphrase-1 \
+            -e UNSEENET_REPLICA_NODES=127.0.0.1:9 --read-only --tmpfs /tmp --cap-drop ALL \
+            --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add FOWNER --cap-add DAC_OVERRIDE \
+            --security-opt no-new-privileges unseenet-replica:test
+          for i in $(seq 1 30); do docker logs replica-test 2>&1 | grep -q "ed25519:" && break; sleep 2; done
+          docker logs replica-test
+          docker exec replica-test ps -o user,args | grep -q "^unseenet .*unseenet-replica run"   # not root
+          docker exec replica-test unseenet-replica status
+          docker exec replica-test sh -c 'test ! -e /data/passphrase'      # the secret stays out of the volume
+          docker exec replica-test unseenet-replica hold removal
+          docker exec replica-test stat -c %U /data/config.json | grep -qx unseenet
+          docker rm -f replica-test
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -86,6 +108,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

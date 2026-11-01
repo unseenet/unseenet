@@ -61,6 +61,7 @@ edit the file in the volume and restart the container:
 | `UNSEENET_BLOBS` | `no` | `yes`: carry pictures and small files, 1 MiB, 30 days ([why it is a choice](install.md#pictures-and-files)) |
 | `UNSEENET_AVATARS` | `no` | `yes`: carry profile pictures |
 | `UNSEENET_SITES` | `no` | `yes`: carry sites, pages that stay ([UN-RFC 0035](../spec/un-rfc-0035.md)) |
+| `UNSEENET_LISTEN` | `127.0.0.1:1119` | Read at every start. `0.0.0.0:1119` lets other containers on the same Docker network use the node, such as a [replica](../replica.md#in-docker) beside it. Publish no port |
 
 ```bash
 docker run --rm -it -v unseenet:/data alpine vi /data/node.toml   # add [[peer]] sections
@@ -94,3 +95,17 @@ docker run --rm -v unseenet:/data -e UNSEENET_NODE_PASSPHRASE=... \
       --certificate-identity-regexp 'https://github.com/unseenet/unseenet/' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
     ```
+
+## The other servers in Docker
+
+Every Unseenet server has an image, built and signed the same way:
+
+| Image | Server | Guide |
+|---|---|---|
+| `ghcr.io/unseenet/node` | A node | this page |
+| `ghcr.io/unseenet/replica` | A council replica, alone or beside a node | [Running a replica](../replica.md#in-docker) |
+| `ghcr.io/unseenet/entrance` | A web entrance | [Entrance](https://unseenet.org/entrance/#in-docker) |
+| `ghcr.io/unseenet/gateway` | A gateway to Usenet, Matrix or Nostr | [Gateways](https://unseenet.org/gateways/#in-docker) |
+
+None updates itself inside its container: `docker compose pull && docker
+compose up -d` gets the newest release.

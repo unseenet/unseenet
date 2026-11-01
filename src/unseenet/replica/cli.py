@@ -105,7 +105,8 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
     if not st:
         return ["The replica has not finished a round yet. If it was just set up, give it",
                 "a few minutes (it starts Tor first). Otherwise look at its log:",
-                f"  journalctl -u {SERVICE} -n 50"]
+                ("  docker logs <container>" if os.environ.get("UNSEENET_CONTAINER")
+                 else f"  journalctl -u {SERVICE} -n 50")]
     out = []
     role = st.get("role", "?")
     group = st.get("group", cfg.get("group", "?"))
@@ -248,15 +249,23 @@ def setup(args) -> int:
         return 1
     d.mkdir(parents=True, exist_ok=True)
     os.chmod(d, 0o700)
-    passphrase = secrets.token_urlsafe(32)
-    if systemd:
-        ETC.mkdir(parents=True, exist_ok=True)
-        os.chmod(ETC, 0o700)
-        pw_file = ETC / "passphrase"
+    if getattr(args, "passphrase_file", None):
+        # the operator keeps the passphrase (a container's secret): use it, write none
+        pw_file = Path(args.passphrase_file)
+        passphrase = pw_file.read_text().strip()
+        if len(passphrase) < 12:
+            print(f"The passphrase in {pw_file} is too short: use at least 12 characters.")
+            return 1
     else:
-        pw_file = d / "passphrase"
-    pw_file.write_text(passphrase + "\n")
-    os.chmod(pw_file, 0o600)
+        passphrase = secrets.token_urlsafe(32)
+        if systemd:
+            ETC.mkdir(parents=True, exist_ok=True)
+            os.chmod(ETC, 0o700)
+            pw_file = ETC / "passphrase"
+        else:
+            pw_file = d / "passphrase"
+        pw_file.write_text(passphrase + "\n")
+        os.chmod(pw_file, 0o600)
 
     print("Making the replica's key and its vault (this takes a moment)...")
     s = Session(Vault.open(d / "replica.vault", passphrase), status=lambda *_: None)
@@ -309,7 +318,7 @@ def setup(args) -> int:
         print("  4. Once a day it updates itself to the newest code (main, for testing).")
     print()
     print("See how it is doing at any time:  unseenet-replica status")
-    if not systemd:
+    if not systemd and not getattr(args, "passphrase_file", None):
         print(f"Start it:  unseenet-replica run --dir {d} --passphrase-file {pw_file}")
     print("Nobody learns who runs this replica: it reaches the network over Tor, like any")
     print("client. Keep the folder and the passphrase file safe; they are the replica.")
@@ -509,6 +518,9 @@ def sign(args) -> int:
         write_config(d, cfg)
     if getattr(os, "geteuid", lambda: -1)() == 0 and shutil.which("systemctl"):
         _run(["systemctl", "restart", SERVICE], check=False)
+    elif cfg.get("moved_from"):
+        print("Restart the replica now, so that it works for this council "
+              "(in Docker: docker restart <container>).")
     print("Queued; the service posts it within a few minutes. The council counts once")
     print("every member has posted the same. See: unseenet-replica status")
     return 0
@@ -682,6 +694,8 @@ def main(argv=None) -> int:
     s.add_argument("--interval", type=int, default=300, help="seconds between rounds")
     s.add_argument("--seed-file", help="use this key (a file with its 64 hex seed) instead of a new one")
     s.add_argument("--no-systemd", action="store_true", help="no service: start it yourself")
+    s.add_argument("--passphrase-file", help="lock the vault with the passphrase in this file "
+                   "(e.g. a container's secret) instead of a new random one, and write none")
     s = sub.add_parser("run", help="run the replica (what the service does)")
     s.add_argument("--group", default=None)
     s.add_argument("--passphrase-file")

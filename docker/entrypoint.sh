@@ -14,6 +14,16 @@ if [ "$(id -u)" = 0 ]; then
         chown -R unseenet:unseenet "$DATA"
     fi
     chmod 700 "$DATA"
+    # A secret file is mounted as it is on the host (often root's, mode 600), so the
+    # node's user may not read it: hand a copy on in /tmp (a tmpfs), readable by it only.
+    for f in "${UNSEENET_NODE_PASSPHRASE_FILE:-}" /run/secrets/unseenet_node_passphrase; do
+        if [ -n "$f" ] && [ -r "$f" ]; then
+            (umask 077 && cat "$f" > /tmp/unseenet_node_passphrase)
+            chown unseenet:unseenet /tmp/unseenet_node_passphrase
+            export UNSEENET_NODE_PASSPHRASE_FILE=/tmp/unseenet_node_passphrase
+            break
+        fi
+    done
     exec su-exec unseenet "$0" "$@"
 fi
 
@@ -79,5 +89,7 @@ if [ -n "${1:-}" ]; then              # an unseenet-node option such as --show-k
 fi
 NO_TOR=""
 [ -n "${UNSEENET_NO_TOR:-}" ] && NO_TOR=--no-tor      # tests only: no onion service
-exec unseenet-node --data "$DATA" --config "$CONFIG" --listen 127.0.0.1:1119 \
+# Clients reach the node over Tor. UNSEENET_LISTEN=0.0.0.0:1119 also lets containers on
+# the same Docker network in, e.g. a replica beside it (docs/replica.md) - publish no port.
+exec unseenet-node --data "$DATA" --config "$CONFIG" --listen "${UNSEENET_LISTEN:-127.0.0.1:1119}" \
     --monitor "${UNSEENET_MONITOR:-$DATA/monitor.sock}" $NO_TOR
