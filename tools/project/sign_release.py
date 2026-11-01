@@ -12,6 +12,9 @@ SHA256SUMS.txt, checks that it names this version, asks for the owner vault's
 passphrase (once), signs, uploads SHA256SUMS.txt.sig and posts both in
 unseenet.releases. The project key never leaves this computer.
 
+It also signs the core release, whose server requirements self-updating servers
+take (unseenet.service_update, #827).
+
 Sticks on the stable channel accept only this signature (unseenet.update).
 Run it again after files were added to the release: the sums change, and
 the old signature no longer fits.
@@ -33,7 +36,20 @@ from unseenet.core.article import new_article
 from unseenet.known_nodes import RELEASES_GROUP
 
 REPOS = {"unseenet/unseenet-portable": "linux-x86_64",       # the zip that names the version
-         "unseenet/unseenet-bootable": "x86_64-update"}
+         "unseenet/unseenet-bootable": "x86_64-update",
+         # the core: the servers' requirements, which self-updating servers take (#827)
+         "unseenet/unseenet": SERVER}
+
+
+SERVER = "server-requirements"
+
+
+def server_requirements(sums: dict[str, str]) -> tuple[str, str]:
+    """(file name, version) of the core release's server requirements."""
+    for name in sums:
+        if name.startswith("unseenet-") and name.endswith("-server-requirements.txt"):
+            return name, name[len("unseenet-"):-len("-server-requirements.txt")]
+    sys.exit(f"{update.SUMS} names no server requirements")
 
 
 def gh(repo: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -74,7 +90,8 @@ def main() -> None:
             d.mkdir()
             gh(repo, "release", "download", tag, "-p", update.SUMS, "-D", str(d))
             sums = (d / update.SUMS).read_bytes()
-            name, version = update.asset_in(update.parse_sums(sums), what)
+            name, version = (server_requirements(update.parse_sums(sums)) if what == SERVER
+                             else update.asset_in(update.parse_sums(sums), what))
             if version != tag[1:]:
                 sys.exit(f"{repo}: {update.SUMS} lists {name}, not version {tag[1:]}")
             print(f"{repo} {tag}: {len(update.parse_sums(sums))} files, {name}")
@@ -82,10 +99,15 @@ def main() -> None:
                 s = open_owner_session()
                 identity = s.identity()
             sig = update.signature_text(sums, identity)
-            update.check_release(sums, sig, "stable", what)     # as sticks will check it
+            if what == SERVER:
+                update.check_signature(sums, sig, "stable")     # as servers will check it
+            else:
+                update.check_release(sums, sig, "stable", what)  # as sticks will check it
             (d / update.SIG).write_text(sig)
             gh(repo, "release", "upload", tag, str(d / update.SIG), "--clobber")
             print(f"Signed: {update.SIG} is on {repo} {tag}.")
+            if what == SERVER:                     # servers read it there; not for clients
+                continue
             # and tell the clients through the network (#264): the checksums and the
             # signature, posted by the project key itself in unseenet.releases
             subject, body = update.release_post(sums, sig, "stable")

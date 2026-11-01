@@ -1,0 +1,15 @@
+# Updates the service named after the @ (unseenet-node, unseenet-registrar) from the
+# newest signed stable release (UN-RFC 0062 section 6.1, #827). Root, since it restarts
+# the service; pip itself runs as the owner of the environment.
+# Turn it off with:  sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update off --service unseenet-node
+# (it then only tells you, in the log, when a release has been out for 30 days).
+[Unit]
+Description=Update %i from the newest signed release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# CHECK="--check tcp:127.0.0.1:1119" for a node: it must answer after the update
+EnvironmentFile=-/etc/unseenet-update/%i.env
+ExecStart=/home/unseenet/unseenet/.venv/bin/unseenet-service-update run --service %i $CHECK

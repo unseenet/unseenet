@@ -118,8 +118,20 @@ fi
 exec sudo -u unseenet "$BIN" --node "$SOCK" "$@"
 MON
 chmod 755 /usr/local/bin/unseenet-monitor
+# Self-updating (UN-RFC 0062 section 6.1): on unless UNSEENET_SELF_UPDATE=no. The timer
+# runs either way; turned off, it only tells you when a release has been out 30 days.
+install -m 644 /home/unseenet/unseenet/deploy/unseenet-update@.service \
+               /home/unseenet/unseenet/deploy/unseenet-update@.timer /etc/systemd/system/
+mkdir -p /etc/unseenet-update
+echo 'CHECK="--check tcp:127.0.0.1:1119"' > /etc/unseenet-update/unseenet-node.env
+UPDATER=/home/unseenet/unseenet/.venv/bin/unseenet-service-update
+case "${UNSEENET_SELF_UPDATE:-yes}" in
+  [nN]*|0|false|off) "$UPDATER" off --service unseenet-node >/dev/null ;;
+  *) "$UPDATER" on --service unseenet-node >/dev/null ;;
+esac
 systemctl daemon-reload
 systemctl enable --now unseenet-node >/dev/null
+systemctl enable --now unseenet-update@unseenet-node.timer >/dev/null
 echo "Started. Waiting for the onion address (Tor bootstrap can take a minute) ..."
 for _ in $(seq 1 90); do
   ADDR=$(journalctl -u unseenet-node -o cat --no-pager | grep -o '[a-z2-7]\{56\}\.onion' | tail -1 || true)

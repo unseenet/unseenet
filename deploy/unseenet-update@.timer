@@ -1,0 +1,10 @@
+[Unit]
+Description=Look for a new release of %i four times a day
+
+[Timer]
+OnCalendar=*-*-* 00/6:00:00
+RandomizedDelaySec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

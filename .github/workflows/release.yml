@@ -32,10 +32,27 @@ jobs:
       - run: pip install -e ".[dev]" build twine
       - run: pytest -q
       - run: python -m build && twine check dist/*
+      - name: Server requirements, every package with its hash (UN-RFC 0062 section 5.1, #827)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          pip install uv
+          mkdir -p server
+          uv pip compile pyproject.toml --extra monitor --universal --generate-hashes \
+            --python-version 3.11 --no-header -q -o server/deps.txt
+          { cat server/deps.txt
+            printf 'unseenet==%s' "$VERSION"
+            for f in dist/*; do printf ' \\\n    --hash=sha256:%s' "$(sha256sum "$f" | cut -d' ' -f1)"; done
+            echo; } > "server/unseenet-$VERSION-server-requirements.txt"
+          rm server/deps.txt
+          tail -4 "server/unseenet-$VERSION-server-requirements.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server
+          path: server/
 
   pypi:
     needs: build
@@ -63,6 +80,14 @@ jobs:
         with:
           name: dist
           path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: server
+          path: server/
+      - name: Checksums, for the project key to sign (tools/project/sign_release.py)
+        run: |
+          cp server/* dist/
+          (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Release notes from CHANGELOG.md
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
