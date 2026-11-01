@@ -573,3 +573,67 @@ def test_the_main_channel_follows_the_commit(tmp_path, monkeypatch):
     ran.clear()
     assert cli._update_main(tmp_path) == 0
     assert [c[0] for c in ran] == ["git"]                  # nothing new: nothing installed
+
+
+async def test_the_registrar_moves_to_its_council(net, monkeypatch, tmp_path):
+    """UN-RFC 0054 section 14 (#691): the founding replicas sign the genesis from a draft
+    through their outbox, re-issue the old group's certificates valid at the genesis, and
+    clients follow the old group's last manifest (``moved_to``) to the council - keeping
+    the old certificates issued before the move."""
+    from unseenet import known_nodes as kn
+    from unseenet.core.groups import manifest_article
+    from unseenet.replica import cli
+    proj, a, b, c, user = (net.session(n) for n in ("proj", "a", "b", "c", "user"))
+    monkeypatch.setattr(kn, "PROJECT_KEY", proj.identity().key_text)
+    old = await proj.create_group("unseenet.names", "channel", min_pow=8,
+                                  posters=[proj.identity().key_text])
+    monkeypatch.setattr(nm, "NAMES_GROUP", old)
+    alice = crypto.Identity.generate().key_text
+    cert = nm.make_certificate(proj.identity(), "alice", alice, 1, net.clock - timedelta(days=30))
+    await proj.post(old, nm.certificate_subject("alice"), cert.to_json() + "\n",
+                    content_type="application/json")
+    net.clock += timedelta(days=1)
+    # the draft, made by somebody who is not a member; the founder is another key
+    keys = [m.identity().key_text for m in (a, b, c)]
+    claims, cbody = user.council_genesis("unseenet.names.claims", "open", keys,
+                                         fields={"min_pow": 8}, date=net.clock,
+                                         founding_years=3, founder=user.identity().key_text)
+    group, body = user.council_genesis("unseenet.names", "channel", keys,
+                                       fields={"min_pow": 0, "claims": claims}, date=net.clock,
+                                       founding_years=3, founder=user.identity().key_text)
+    draft = tmp_path / "genesis.council.json"
+    draft.write_text(__import__("json").dumps(
+        {"v": 1, "group": group, "body": body, "also": [{"group": claims, "body": cbody}]}))
+    reps = []
+    for s in (a, b, c):
+        d = tmp_path / s.identity().key_text[8:16]
+        d.mkdir()
+        cli.write_config(d, {"group": old, "hold": [], "agreed": []})
+        (d / "status.json").write_text(__import__("json").dumps({"key": s.identity().key_text}))
+        assert cli.main(["--dir", str(d), "sign", str(draft), "--yes"]) == 0
+        assert cli.read_config(d)["group"] == group and cli.read_config(d)["moved_from"] == old
+        reps.append(net.replica(s, group, state_dir=d))
+    await rounds(reps, 3)            # sign, re-issue, then read each other's re-issues
+    assert all(r.status.get("role") == "full member" for r in reps)
+    assert all(r.status.get("disputed") is False for r in reps)
+    reissued = [x for x in reps[0].reg.certs if x.name == "alice"]
+    assert {x.registrar for x in reissued} == set(keys)          # each member re-issued it
+    assert all((x.key, x.serial, x.issued, x.expires) == (cert.key, 1, cert.issued, cert.expires)
+               for x in reissued)
+    # a certificate the old registrar issues after the move does not count
+    late = nm.make_certificate(proj.identity(), "bob", alice, 1, net.clock + timedelta(hours=2))
+    data = proj.manifest_data(old)
+    data.update({"serial": int(data["serial"]) + 1, nm.MOVED_TO: group,
+                 nm.MOVED_ON: nm.rfc3339(net.clock + timedelta(hours=1))})
+    data.pop("claims", None)
+    await proj.post_article(manifest_article(proj.identity(), old, data, pow_bits=8))
+    net.clock += timedelta(hours=3)
+    await proj.post(old, nm.certificate_subject("bob"), late.to_json() + "\n",
+                    content_type="application/json")
+    st = naming._store(user)
+    await naming._read_names(user, st)
+    names = st["names"]
+    assert names["public"] and names["claims"] == claims
+    assert set(keys) <= set(names["registrars"])
+    got = {nm.parse_certificate(t).name for t in names["certs"]}
+    assert "alice" in got and "bob" not in got

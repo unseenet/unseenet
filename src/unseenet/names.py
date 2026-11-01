@@ -15,6 +15,9 @@ from .core.encoding import DS, H, b64, b64decode
 from .core.groups import canonical_json, parse_canonical_json
 
 NAMES_GROUP = "unseenet.names@ph5fc5hop5232qsz"      # the project's registrar (section 7.2)
+# When the registrar moves to a council (UN-RFC 0054 section 14), the old group's last
+# manifest names the council's group and the time of the move; clients follow it.
+MOVED_TO, MOVED_ON = "moved_to", "moved_on"
 PURPOSE_NAME_CERT = "UNSEENET-NAME-CERT-1"            # section 10
 PURPOSE_SUBNAME_CERT = "UNSEENET-SUBNAME-CERT-1"      # section 5.4
 SUB_LIFETIME_MAX = timedelta(days=5 * 365 + 1)        # section 5.4

@@ -157,12 +157,12 @@ class Replica(PublicDuties):
             self.s.save()
             self._write_status()
             return self.status
-        if cur is None:
+        await self._outbox()                   # what the operator said with the member key,
+        if cur is None:                        # the genesis copy among it (cli: sign)
             self.status["note"] = "the council does not count yet (its genesis is not signed by all)"
             self._write_status()
             return self.status
         self.reg.shadow = role == "shadow"
-        await self._outbox()                   # what the operator said with the member key
         await self.reg.run_once()
         posts = await self.reg.read_public()
         council_posts = [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
@@ -189,6 +189,7 @@ class Replica(PublicDuties):
             await self._report(decisions, today, now)
         else:
             await self._heartbeat(now)
+            await self._reissue(chain, cfg)
             if cfg.get("resign") and not self.st.get("resigned"):
                 await self.resign()
         world = self._world(chain, posts, council_posts, decisions)
@@ -210,6 +211,41 @@ class Replica(PublicDuties):
         self.s.save()
         self._write_status()
         return self.status
+
+    # --- moving the project's registrar (section 14) ---------------------------------------
+
+    async def _reissue(self, chain: cn.Chain, cfg: dict) -> int:
+        """Section 14, step 2: re-issue, in this council's group, every certificate that was
+        valid in the registrar group it replaces at the genesis ``date`` - same name, key,
+        serial, issued and expires, signed with this member's key. Once; returns how many
+        it issued now. The group replaced is ``moved_from`` in the config, by default the
+        project's registrar when this council is another group."""
+        old = cfg.get("moved_from") or (nm.NAMES_GROUP if self.group != nm.NAMES_GROUP else None)
+        genesis = chain.counted[0].date
+        if not old or self.st.get("reissued") == old:
+            return 0
+        from ..client.naming import _registrar_group
+        got = await _registrar_group(self.s, old)
+        if got is None:
+            log.warning("could not read %s to re-issue its certificates yet", old)
+            return 0
+        _, _, _, certs, revoked = got
+        by_name: dict[str, list[nm.Certificate]] = {}
+        for c in certs.values():
+            if (c.name, c.serial) not in revoked:
+                by_name.setdefault(c.name, []).append(c)
+        n = 0
+        for name, cs in sorted(by_name.items()):
+            cur, disputed = nm.current(cs)
+            if disputed or cur is None or cur.issued > genesis or cur.expires <= genesis:
+                continue
+            before = len(self.reg.certs)
+            await self.reg.issue(name, cur.key, cur.serial, claim=cur.claim,
+                                 claimed=cur.claimed, when=cur.issued)
+            n += len(self.reg.certs) - before
+        self.st["reissued"] = old
+        log.info("re-issued %d certificate(s) of %s valid at the genesis", n, old)
+        return n
 
     # --- shadow reports (section 10) -------------------------------------------------------
 

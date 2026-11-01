@@ -428,9 +428,13 @@ The project moves its registrar (UN-RFC 0019 section 7.2) in these steps:
 2. The council re-issues, in the new group, every certificate valid in
    the old one at the genesis `date`, with the same `name`, `key`,
    `serial`, `issued` and `expires`, signed with the members' keys.
-3. The reference client pins the new group in place of the old one. The
-   old group's owner posts a last manifest saying the registrar has
-   moved, and the old group is read until its last certificate expires.
+3. The old group's owner posts a last manifest with `moved_to`, the new
+   group's Group ID, and `moved_on`, the time of the move, and without
+   `claims`. A client that reads it takes the council group as the
+   registrar if it is a council group, and keeps the old group's
+   certificates issued before `moved_on` until they expire; later ones
+   do not count. The reference client then pins the new group in place
+   of the old one.
 
 From then on the project key has no part in the registrar.
 

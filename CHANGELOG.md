@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Moving the project's registrar to a council** (UN-RFC 0054 section 14, #691).
+  `unseenet council create` takes `--without-me` (the draft's writer is not a member, as a
+  founder need not be), `--founder KEY` and `--claims` (the claims group of a council
+  registrar). `unseenet-replica sign DRAFT` posts the replica's copy of a genesis through
+  its outbox and points the replica at that council; once it counts, each member re-issues
+  the certificates the old registrar group held valid at the genesis (same name, key,
+  serial, issued, expires). The old group's last manifest names the council (`moved_to`,
+  `moved_on`, `tools/project/move_registrar.py`); clients follow it, and keep the old
+  certificates issued before the move until they expire.
 - **Nodes find peers by themselves** (UN-RFC 0055 section 5.5). Besides its configured
   peers, a node with Tor pulls from 3 nodes it finds announced (`auto_peers` in `[node]`;
   0 turns it off): chosen at random, checked first to have the key they announced (one

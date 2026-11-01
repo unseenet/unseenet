@@ -198,20 +198,21 @@ async def keep_my_names(s: "Session") -> None:
     s.save()
 
 
-async def _read_names(s: "Session", st: dict) -> None:
-    """The registrar's group: its certificates and revocations, and who may sign them.
+async def _registrar_group(s: "Session", gid: str, *, council_only: bool = False):
+    """One registrar group: (manifest, registrar keys, council?, certificates, revoked),
+    or None when it cannot be read or is not a registrar this client trusts.
 
-    An owned registrar group (UN-RFC 0019 section 7.1) trusts its owner and posters.
-    A council registrar (UN-RFC 0054 section 7) trusts the members of its current
-    council manifest, full or on probation - counted here from the members' copies,
-    never on a node's word - and takes claims in the open (section 8)."""
+    An owned registrar group (UN-RFC 0019 section 7.1) trusts its owner and posters, and
+    only when the owner is the project key. A council registrar (UN-RFC 0054 section 7)
+    trusts the members of its current council manifest, full or on probation - counted
+    here from the members' copies, never on a node's word - and takes claims in the open
+    (section 8)."""
     from .session import SessionError
-    gid = nm.NAMES_GROUP
     subscribed = gid in s.data["subscribed"]
     try:
         messages = await s.fetch_group(gid)
     except SessionError:
-        return
+        return None
     finally:
         if not subscribed:
             s.cache.pop(gid, None)
@@ -227,18 +228,18 @@ async def _read_names(s: "Session", st: dict) -> None:
             m = None
         manifest = dict(m.raw) if m is not None and m.is_council else {}
     if not manifest:
-        return
+        return None
     council = "council" in manifest and "owner" not in manifest
     if council:
         registrars = sorted(m["key"] for m in manifest["council"].get("members", [])
                             if isinstance(m, dict) and isinstance(m.get("key"), str))
-    elif manifest.get("owner") == kn.PROJECT_KEY:
+    elif manifest.get("owner") == kn.PROJECT_KEY and not council_only:
         registrars = sorted({kn.PROJECT_KEY, *manifest.get("posters", [])})
     else:
-        return
+        return None
     allowed = set(registrars)
     posts = [(m, m.author_key) for m in messages if m.readable and m.author_key in allowed]
-    certs: dict[str, str] = {}
+    certs: dict[str, nm.Certificate] = {}
     newest: dict[str, tuple] = {}
     for m, author in posts:
         if m.subject.startswith("name "):
@@ -247,7 +248,7 @@ async def _read_names(s: "Session", st: dict) -> None:
             except nm.NameProblem:
                 continue
             if cert.registrar in registrars:
-                certs[cert.to_json()] = cert.to_json()
+                certs[cert.to_json()] = cert
         elif m.subject == nm.REVOKED_SUBJECT:
             try:
                 revoked = nm.parse_revocations(m.body)
@@ -256,6 +257,33 @@ async def _read_names(s: "Session", st: dict) -> None:
             if author not in newest or (m.date and newest[author][0] and m.date > newest[author][0]):
                 newest[author] = (m.date, revoked)
     revoked = set().union(*(r for _, r in newest.values())) if newest else set()
+    return manifest, registrars, council, certs, revoked
+
+
+async def _read_names(s: "Session", st: dict) -> None:
+    """The registrar's group: its certificates and revocations, and who may sign them.
+
+    When the project's registrar group says it has moved to a council (``moved_to``,
+    UN-RFC 0054 section 14), the council's group is the registrar from then on, and the
+    certificates of the old group issued before the move (``moved_on``) still count
+    until they expire - the council re-issues them anyway."""
+    old = await _registrar_group(s, nm.NAMES_GROUP)
+    if old is None:
+        return
+    manifest, registrars, council, certs, revoked = old
+    moved = manifest.get(nm.MOVED_TO) if not council else None
+    if isinstance(moved, str) and moved != nm.NAMES_GROUP:
+        new = await _registrar_group(s, moved, council_only=True)
+        if new is not None:
+            try:
+                until = nm.parse_rfc3339(manifest.get(nm.MOVED_ON) or "")
+            except (TypeError, ValueError):
+                until = datetime.now(timezone.utc)
+            kept = {t: c for t, c in certs.items() if c.issued < until}
+            manifest, new_registrars, council, new_certs, new_revoked = new
+            registrars = sorted(set(registrars) | set(new_registrars))
+            certs = {**kept, **new_certs}
+            revoked = revoked | new_revoked
     st["names"] = {"registrars": registrars, "claims": manifest.get("claims"),
                    "public": council,
                    "certs": sorted(certs), "revoked": sorted([n, v] for n, v in revoked)}

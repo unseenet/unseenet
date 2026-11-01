@@ -53,9 +53,13 @@ class PublicDuties:
         for path in sorted(box.glob("*.json")):
             try:
                 item = json.loads(path.read_text())
-                await self.s.post(item["group"], item["subject"], item["body"],
-                                  content_type=item.get("content_type"),
-                                  references=item.get("references") or None)
+                if item.get("kind") == "council_sign":      # a genesis copy (cli: sign)
+                    await self.s.council_sign(item["group"], item["body"])
+                    item.setdefault("subject", f"council manifest for {item['group']}")
+                else:
+                    await self.s.post(item["group"], item["subject"], item["body"],
+                                      content_type=item.get("content_type"),
+                                      references=item.get("references") or None)
             except (OSError, ValueError, KeyError) as exc:
                 log.warning("outbox %s not posted: %s", path.name, exc)
                 continue
