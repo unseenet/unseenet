@@ -20,8 +20,10 @@ release notes unless you would rather not be named.
 
 Unseenet is pre-alpha. Until 1.0:
 
-- The **latest minor release** (now 0.3.x) gets security and bug fixes,
-  until the next minor release comes out. Then upgrade.
+- The **latest minor release** gets security and bug fixes, until the next
+  minor release comes out. Then upgrade. Servers that update themselves
+  ([UN-RFC 0062](rfc/un-rfc-0062.md) section 6.1) do so within two days of a
+  signed release.
 - Fixes are made on `main` first and carried to a `release/0.x` branch,
   which is created the first time a fix is needed. That branch takes only
   fixes: no new features and no protocol changes.
@@ -40,3 +42,8 @@ UN-RFCs themselves count as much as bugs in the code.
 
 Unseenet is pre-alpha and has not had an independent security review yet.
 Do not rely on it where your safety depends on it.
+
+Where the network as a whole is robust and where it is fragile today - few
+nodes, one project key that still signs the lists and the releases, one
+maintainer, no reproducible builds yet - is written down in the guide:
+[How robust is it?](https://unseenet.org/guide/robustness/).
