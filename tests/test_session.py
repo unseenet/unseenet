@@ -279,6 +279,7 @@ def test_new_vault_has_signature_and_project_groups(tmp_path):
     s.add_node("127.0.0.1:1119")
     assert s.subscribe_starter_groups()
     assert all(g in s.data["subscribed"] for g in STARTER_GROUPS)
+    assert "unseenet.test@ph5fc5hop5232qsz" not in s.data["subscribed"]     # moved away
     s.subscribe(STARTER_GROUPS[-1], False)    # unsubscribed groups stay away
     assert not s.subscribe_starter_groups()
     assert STARTER_GROUPS[-1] not in s.data["subscribed"]
@@ -1141,6 +1142,21 @@ async def test_mention_notices_go_with_approval(tmp_path, monkeypatch):
     server.close()
 
 
+def test_moved_starter_groups_take_the_old_ones_place(tmp_path):
+    """UN-RFC 0055 4.1: test and the demo moved out of unseenet.*; a vault that follows
+    the old groups follows the new ones in their place, in the user's order."""
+    from unseenet import known_nodes
+    s = Session(Vault.open(tmp_path / "a.vault", "pw", **KDF), status=lambda *_: None)
+    s.new_identity("andreas", "Andreas")
+    s.add_node("127.0.0.1:1119")
+    s.data["subscribed"] = ["unseenet.demo.feed@lcgptqqjydt2sevj", "dk.snak@abcdefghijklmnop",
+                            "unseenet.test@ph5fc5hop5232qsz"]
+    s.data["starter_groups"] = 4
+    assert s.subscribe_starter_groups()
+    assert s.data["subscribed"] == ["demo.unseenet.feed@lcgptqqjydt2sevj", "dk.snak@abcdefghijklmnop",
+                                    "test.unseenet@ph5fc5hop5232qsz"]   # demo.site was left
+
+
 def test_starter_groups_added_later_reach_earlier_vaults(tmp_path, monkeypatch):
     """#388: a vault that took the first list gets the groups added since - and never
     again one it left."""
@@ -1154,6 +1170,7 @@ def test_starter_groups_added_later_reach_earlier_vaults(tmp_path, monkeypatch):
     assert s.subscribe_starter_groups()
     assert "unseenet.chat@ph5fc5hop5232qsz" in s.data["subscribed"]
     assert first[-1] not in s.data["subscribed"]                 # left: stays away
+    assert known_nodes.MOVED_STARTER_GROUPS[first[-1]] not in s.data["subscribed"]  # moved too
     assert s.data["starter_groups"] == len(known_nodes.STARTER_GROUP_VERSIONS)
     assert not s.subscribe_starter_groups()                      # nothing new
     monkeypatch.setattr(known_nodes, "STARTER_GROUP_VERSIONS",

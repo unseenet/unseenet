@@ -26,6 +26,8 @@ from importlib import resources
 # ph5fc5hop5232qsz is part of their IDs.
 PROJECT_KEY = "ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya"
 NODES_GROUP = "unseenet.nodes@ph5fc5hop5232qsz"
+# Nodes' own announcements (UN-RFC 0055 section 5), signed with their node keys.
+NODES_ANNOUNCE_GROUP = "unseenet.nodes.announce@ph5fc5hop5232qsz"
 # Known web entrances (UN-RFC 0043 section 8.1), for web clients and the jump page.
 ENTRANCES_GROUP = "unseenet.entrances@ph5fc5hop5232qsz"
 ANNOUNCE_GROUP = "unseenet.announce@ph5fc5hop5232qsz"
@@ -38,6 +40,7 @@ CANARY_GROUP = "unseenet.canary@ph5fc5hop5232qsz"
 # has read the manifests.
 DATA_GROUPS = frozenset({
     NODES_GROUP,
+    NODES_ANNOUNCE_GROUP,
     ENTRANCES_GROUP,
     RELEASES_GROUP,
     CANARY_GROUP,
@@ -58,8 +61,18 @@ STARTER_GROUP_VERSIONS = (
     ("unseenet.chat@ph5fc5hop5232qsz",),                                # 2 (#388)
     ("unseenet.demo.site@lcgptqqjydt2sevj", "unseenet.demo.feed@lcgptqqjydt2sevj"),      # 3: the demo (#385, #388)
     ("unseenet.help.news@ph5fc5hop5232qsz",),                          # 4: the help bot's news (helpbot#21)
+    ("test.unseenet@ph5fc5hop5232qsz", "demo.unseenet.site@lcgptqqjydt2sevj",  # 5: moved out of
+     "demo.unseenet.feed@lcgptqqjydt2sevj"),                           # unseenet.* (UN-RFC 0055 4.1)
 )
-STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version)
+# Starter groups that moved (old -> new): a new vault never gets the old one, and a vault
+# that follows the old one follows the new one in its place.
+MOVED_STARTER_GROUPS = {
+    "unseenet.test@ph5fc5hop5232qsz": "test.unseenet@ph5fc5hop5232qsz",
+    "unseenet.demo.site@lcgptqqjydt2sevj": "demo.unseenet.site@lcgptqqjydt2sevj",
+    "unseenet.demo.feed@lcgptqqjydt2sevj": "demo.unseenet.feed@lcgptqqjydt2sevj",
+}
+STARTER_GROUPS = tuple(g for version in STARTER_GROUP_VERSIONS for g in version
+                       if g not in MOVED_STARTER_GROUPS)
 
 _ADDRESS = re.compile(r"^([a-z2-7]{56}\.onion|[A-Za-z0-9.-]+)(:\d{1,5})?$")
 MAX_NODES = 200
