@@ -173,7 +173,9 @@ users post, files and sites included, so they do not belong among the
 endorsed groups. They live in the free hierarchies `test.*` and `demo.*`
 (UN-RFC 0018 section 9), such as the project's `test.unseenet` and its
 demo village `demo.unseenet.*`, and are carried by the nodes that choose
-to.
+to. So does documentation published as sites with pictures, in the free
+hierarchy `docs.*`, such as the project's user guide
+`docs.unseenet.clients`.
 
 ## 4.2 Why Every Node
 

@@ -122,7 +122,7 @@ client, the vault, nodes, names, groups. Any question is welcome; say what
 you did and what happened. People answer when they can. The help bot
 (unseenet/unseenet-helpbot) answers from the documentation if nobody has
 after a while, or right away if you write @helpbot - it can be wrong, and it
-says where its answer comes from. The user guide is the site unseenet.help.guide@""" + FP + """
+says where its answer comes from. The user guide is the site docs.unseenet.clients@""" + FP + """
 (and unseenet.org/use/). Ideas and talk about the project belong in
 unseenet@""" + FP + "."
 
@@ -161,8 +161,8 @@ GROUPS = (
      "The help bot tells about new releases in ordinary language. Comment to ask; "
      "the official release notes are in unseenet.announce.",
      NEWS, "ed25519:6gf6zqd6hzligjk57kdbna3z7uwlnipfgg47v765kitkn2avdxfa", 20),
-    ("unseenet.help.guide", "channel", "pages", "The Unseenet user guide",
-     "How do I ...: the user guide for both clients, published from unseenet.org.",
+    ("docs.unseenet.clients", "channel", "pages", "The Unseenet clients - the user guide",
+     "How do I ...: the user guide for the clients, published from unseenet.org.",
      GUIDE, "github_poster", 20),
     ("unseenet.announce", "channel", "threads", "Unseenet announcements: releases and news",
      "Releases, security notices and network news from the Unseenet project.", ANNOUNCE,
@@ -359,7 +359,7 @@ ATTACHMENTS = {name: BOT_PICTURES for name in (
     "alt.privacy.eff", "alt.space.nasa", "alt.news.ourworldindata", "alt.humor.xkcd",
     "alt.comics.peppercarrot")}
 # the user guide's screenshots (unseenet-docs#7): about a dozen, each under 64 KiB
-ATTACHMENTS["unseenet.help.guide"] = BOT_PICTURES
+ATTACHMENTS["docs.unseenet.clients"] = BOT_PICTURES
 
 
 # The project's spam report issuer (tools/project/report_issuer.py), named in the bot
@@ -383,14 +383,15 @@ REPORT_ISSUERS = {name: [PROJECT_ISSUER] for name in (
 # network by its owner (UN-RFC 0013), once, with the new name as the reason. Every node
 # carries the endorsed groups of unseenet.*, so groups where anything may be posted
 # live elsewhere (UN-RFC 0055 section 4.1, #821).
-MOVED = {"unseenet.test": "test.unseenet"}
+MOVED = {"unseenet.test": "test.unseenet",
+         "unseenet.help.guide": "docs.unseenet.clients"}   # a site with pictures
 
 # The languages written in a group (UN-RFC 0052 section 5a): the project talks English,
 # and the bot channels' sources are English. Data channels hold no text for people, so
 # they say none. Clients suggest the group's language to those who write there.
 LANGUAGES = {name: ["en"] for name in (
     "unseenet", "unseenet.chat", "test.unseenet", "unseenet.help", "unseenet.help.news",
-    "unseenet.help.guide",
+    "docs.unseenet.clients",
     "unseenet.announce", "unseenet.admin",
     "alt.news.wikipedia", "alt.history.onthisday", "alt.news.globalvoices",
     "alt.news.theconversation", "alt.privacy.eff", "alt.space.nasa",

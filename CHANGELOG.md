@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The user guide moves to `docs.unseenet.clients`** (UN-RFC 0055 section 4.1, #821). It is
+  a site with pictures, and every node carries the endorsed groups of `unseenet.*`, which
+  are text only; `docs` is a free hierarchy in the root list for documentation. The guide
+  for the clients is `docs.unseenet.clients`; the servers' later `docs.unseenet.servers`.
+  `tools/project/create_groups.py` makes it and removes `unseenet.help.guide`, and also
+  removes `unseenet.test`, which moved to `test.unseenet`.
 - **Nodes announce themselves** (UN-RFC 0055 section 5, #700). A node with Tor ripens its
   own node key in the background (to level 1 by default, `ripen_to`), then posts its
   onion address, name and `carries` in `unseenet.nodes.announce`, signed with that key:

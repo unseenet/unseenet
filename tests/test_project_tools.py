@@ -27,7 +27,7 @@ KDF = {"ops": 1, "mem": 8192 * 1024}
 @pytest.fixture
 async def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "DEFAULT_POW", 8)
-    # sites: the project groups include one (unseenet.help.guide), as the project nodes carry
+    # sites: the project groups include one (docs.unseenet.clients), as the project nodes carry
     node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0), sites="accept"))
     server = await node.serve("127.0.0.1", 0)
     addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
