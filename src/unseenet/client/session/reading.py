@@ -70,21 +70,33 @@ class ReadingMixin:
         """Follow the project's starter groups (a new client has something to read):
         each version of the list once per vault, so groups added later reach those
         who started earlier too. A group left later is never added again - only the
-        groups of versions this vault has not taken yet are. True if any were added."""
-        from ...known_nodes import STARTER_GROUP_VERSIONS
+        groups of versions this vault has not taken yet are. A starter group that
+        moved takes the old one's place, and a new vault never gets the old one.
+        True if any were added."""
+        from ...known_nodes import MOVED_STARTER_GROUPS, STARTER_GROUP_VERSIONS
+        moved_from = {new: old for old, new in MOVED_STARTER_GROUPS.items()}
         if not self.node:
             return False
         have = self.data.get("starter_groups")
         taken = 1 if have is True else int(have or 0)        # True: version 1, before #388
         if taken >= len(STARTER_GROUP_VERSIONS):
             return False
+        offered = {g for version in STARTER_GROUP_VERSIONS[:taken] for g in version}
         added = False
         for version in STARTER_GROUP_VERSIONS[taken:]:
             for gid in version:
-                if gid not in self.data["subscribed"]:
-                    self.data["subscribed"].append(gid)
-                    self.group_entry(gid).setdefault("node", self.node)
-                    added = True
+                subscribed = self.data["subscribed"]
+                old = moved_from.get(gid)
+                if gid in MOVED_STARTER_GROUPS or gid in subscribed:
+                    continue
+                if old in subscribed:                   # in its place, in the user's order
+                    subscribed[subscribed.index(old)] = gid
+                elif old in offered:                    # the user left the old one
+                    continue
+                else:
+                    subscribed.append(gid)
+                self.group_entry(gid).setdefault("node", self.node)
+                added = True
         self.data["starter_groups"] = len(STARTER_GROUP_VERSIONS)
         self.save()
         return added

@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "updated": "2026-10-24",
+  "updated": "2026-10-31",
   "hierarchies": [
     {
       "name": "unseenet",
@@ -13,6 +13,8 @@
     },
     {"name": "alt", "policy": "free", "title": "Anything goes", "description": "Anybody may create anything here, as on Usenet."},
     {"name": "test", "policy": "free", "title": "Testing", "description": "For trying things out. Nodes keep it only briefly."},
+    {"name": "docs", "policy": "free", "title": "Documentation", "description": "Documentation as sites, such as the project's own in docs.unseenet.*: docs.unseenet.clients for the clients, later docs.unseenet.servers. Anybody may publish some."},
+    {"name": "demo", "policy": "free", "title": "Demonstrations", "description": "Demos of what Unseenet can do, such as the demo village in demo.unseenet.*. Anybody may make one."},
     {"name": "usenet", "policy": "reserved", "title": "Usenet, through gateways", "description": "Groups gatewayed from Usenet (UN-RFC 0023, 0024), e.g. usenet.comp.misc. Governed once the first gateway is endorsed."},
     {"name": "fido", "policy": "reserved", "title": "FidoNet, through gateways", "description": "Held for echo areas gatewayed from FidoNet (UN-RFC 0023)."},
     {"name": "matrix", "policy": "reserved", "title": "Matrix, through gateways", "description": "Held for public rooms gatewayed from Matrix (UN-RFC 0023)."},

@@ -1,15 +1,13 @@
 {
   "v": 1,
   "hierarchy": "unseenet",
-  "updated": "2026-10-30",
+  "updated": "2026-11-01",
   "report_issuers": ["ed25519:mhgvcdevmx5g2r6tqm5nrsm62k4hp3ahpgpx7re5lqvmw326btmq"],
   "groups": [
     {"group": "unseenet@ph5fc5hop5232qsz", "note": "talk about Unseenet"},
     {"group": "unseenet.chat@ph5fc5hop5232qsz", "note": "chat, also the Matrix room #unseenet:unseenet.org"},
-    {"group": "unseenet.test@ph5fc5hop5232qsz", "note": "test posts"},
     {"group": "unseenet.help@ph5fc5hop5232qsz", "note": "questions and answers"},
     {"group": "unseenet.help.news@ph5fc5hop5232qsz", "note": "what's new, in plain words, by the help bot"},
-    {"group": "unseenet.help.guide@ph5fc5hop5232qsz", "note": "the user guide, a site published from unseenet.org"},
     {"group": "unseenet.announce@ph5fc5hop5232qsz", "note": "releases and news"},
     {"group": "unseenet.admin@ph5fc5hop5232qsz", "note": "hierarchy requests and name disputes"},
     {"group": "unseenet.nodes@ph5fc5hop5232qsz", "note": "data: the node list"},
@@ -18,12 +16,8 @@
     {"group": "unseenet.hierarchies@ph5fc5hop5232qsz", "note": "data: the root list"},
     {"group": "unseenet.checkgroups@ph5fc5hop5232qsz", "note": "data: this list"},
     {"group": "unseenet.names@ph5fc5hop5232qsz", "note": "data: name certificates"},
+    {"group": "unseenet.nodes.announce@ph5fc5hop5232qsz", "note": "data: nodes' own announcements"},
     {"group": "unseenet.canary@ph5fc5hop5232qsz", "note": "data: connection checks"},
-    {"group": "unseenet.gateways@ph5fc5hop5232qsz", "note": "data: the gateway directory"},
-    {"group": "unseenet.demo@lcgptqqjydt2sevj", "note": "demo: discussion, owned by the demo key, reset every Monday"},
-    {"group": "unseenet.demo.chat@lcgptqqjydt2sevj", "note": "demo: chat room, demo key, reset every Monday"},
-    {"group": "unseenet.demo.feed@lcgptqqjydt2sevj", "note": "demo: shared feed with comments, demo key, reset every Monday"},
-    {"group": "unseenet.demo.photos@lcgptqqjydt2sevj", "note": "demo: pictures, demo key, reset every Monday"},
-    {"group": "unseenet.demo.site@lcgptqqjydt2sevj", "note": "demo: the demo's site, demo key, reset every Monday"}
+    {"group": "unseenet.gateways@ph5fc5hop5232qsz", "note": "data: the gateway directory"}
   ]
 }
