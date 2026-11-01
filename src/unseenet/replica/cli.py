@@ -39,7 +39,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .. import __version__
 from .. import names as nm
 
 DEFAULT_DIR = Path("/var/lib/unseenet-replica")
@@ -47,7 +46,6 @@ ETC = Path("/etc/unseenet-replica")
 USER = "unseenet-replica"
 UNITS = Path("/etc/systemd/system")
 SERVICE = "unseenet-replica"
-CHANNELS = {"stable": "unseenet", "main": "git+https://github.com/unseenet/unseenet@main"}
 STALE_MINUTES = 30
 
 
@@ -557,20 +555,45 @@ def update(args) -> int:
             print(f"could not look for updates: {exc}")
             return 1
         return 1 if what == "rolled-back" else 0
-    pip = Path(sys.executable).with_name("pip")   # main: the newest code, not signed
-    before = __version__
-    r = _run([str(pip), "install", "--quiet", "--upgrade", CHANNELS.get(channel, CHANNELS["stable"])],
-             check=False)
-    if r.returncode != 0:
-        print(f"update failed: {r.stderr.strip()[-500:]}")
+    return _update_main(Path(args.dir))
+
+
+MAIN_REPO = "https://github.com/unseenet/unseenet"
+
+
+def _main_commit() -> str | None:
+    """The commit main is at now, or None when GitHub cannot be reached."""
+    r = _run(["git", "ls-remote", MAIN_REPO, "refs/heads/main"], check=False)
+    sha = r.stdout.split()[0] if r.returncode == 0 and r.stdout.strip() else ""
+    return sha if len(sha) == 40 else None
+
+
+def _update_main(d: Path) -> int:
+    """The ``main`` channel: when main has moved, install that commit and restart. The
+    version number on main stays at the last release until the next one, so pip would
+    see nothing new: the commit is what tells (kept in ``main-commit``)."""
+    sha = _main_commit()
+    if sha is None:
+        print("could not ask GitHub where main is")
         return 1
-    after = _run([sys.executable, "-c", "import unseenet; print(unseenet.__version__)"],
-                 check=False).stdout.strip()
-    if after and after != before:
-        print(f"updated {before} -> {after}; restarting")
-        _run(["systemctl", "restart", SERVICE], check=False)
-    else:
-        print(f"up to date ({before})")
+    mark = d / "main-commit"
+    try:
+        had = mark.read_text().strip()
+    except OSError:
+        had = ""
+    if had == sha:
+        print(f"up to date (main at {sha[:10]})")
+        return 0
+    pip = Path(sys.executable).with_name("pip")
+    src = f"git+{MAIN_REPO}@{sha}"
+    for extra in ([], ["--force-reinstall", "--no-deps"]):     # its dependencies, then it
+        r = _run([str(pip), "install", "--quiet", "--upgrade", *extra, src], check=False)
+        if r.returncode != 0:
+            print(f"update failed: {r.stderr.strip()[-500:]}")
+            return 1
+    mark.write_text(sha + "\n")
+    print(f"updated to main at {sha[:10]} (was {had[:10] or 'unknown'}); restarting")
+    _run(["systemctl", "restart", SERVICE], check=False)
     return 0
 
 
