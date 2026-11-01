@@ -23,7 +23,8 @@ def node_list(*addresses, updated="2026-10-16"):
         {"name": f"n{i}", "address": a, "description": "test"} for i, a in enumerate(addresses)]})
 
 
-def test_parse_and_builtin():
+def test_parse_and_builtin(monkeypatch):
+    monkeypatch.setenv("UNSEENET_TEST_ADDRESSES", "1")                 # UN-RFC 0064 2.2
     updated, nodes = kn.parse_node_list(node_list(ONION, "host.example:1119", "not a node!"))
     assert [n.address for n in nodes] == [ONION, "host.example:1119"]     # bad entry skipped
     with pytest.raises(ValueError):

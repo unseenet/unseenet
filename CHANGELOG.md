@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Transport addresses** (UN-RFC 0064, #836). A node address may be written `onion:x.onion`
+  (the same as the bare `x.onion` of before) or `test:host:port` (plain TCP, for test
+  networks; a plain `host:port` still means that). Node lists and announcements may give a
+  node up to 8 `addresses`; `onion:` ones are used first, and an address with a scheme this
+  software does not know is left out without error. Lists offer `test:` addresses only
+  with `UNSEENET_TEST_ADDRESSES=1`, and a node warns at start about a peer reached over
+  plain TCP. Connections, `[[peer]]` addresses and the local API take every form.
 - **Clients know announced nodes** (UN-RFC 0055 sections 5.3 and 7, #700). The session
   reads the nodes' announcements (`refresh_announced_nodes`), checks a node before it is
   used - the node at the announced address must have the announcing key

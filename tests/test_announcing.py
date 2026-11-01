@@ -101,10 +101,12 @@ async def test_what_a_node_takes_in_the_announcement_group(tmp_path, announce_gr
     assert e.value.reason == "syntax"
 
 
-async def test_a_client_reads_checks_and_counts_announced_nodes(tmp_path, announce_group):
+async def test_a_client_reads_checks_and_counts_announced_nodes(tmp_path, announce_group,
+                                                                monkeypatch):
     """Section 7: a client reads the announcements, checks a node before it offers or
     uses it (5.3), and shows how many announced nodes carry a group."""
     pytest.importorskip("chiavdf")
+    monkeypatch.setenv("UNSEENET_TEST_ADDRESSES", "1")        # a node on 127.0.0.1 (0064 2.2)
     from unseenet.client.session import Session
     from unseenet.core.vault import Vault
     node = Node(Store(), NodeConfig(name="kvisten", min_pow=BITS, forward_delay=(0, 0),
