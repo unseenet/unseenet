@@ -2,6 +2,29 @@
 
 ## Updating
 
+A node installed with `install-node.sh` updates itself
+([UN-RFC 0062](../spec/un-rfc-0062.md) section 6.1). Four times a day the timer
+`unseenet-update@unseenet-node.timer` looks for the newest stable release and:
+
+- takes it only when the project key has signed its checksums, and installs
+  only packages whose hashes the release names;
+- never goes to an older version;
+- waits a random time of up to 48 hours after it first sees the release, so a
+  faulty release reaches a few nodes before it reaches all;
+- copies the node's environment first, restarts the node, and checks that it
+  stays up and answers within 10 minutes. If it does not, it puts the copy
+  back, restarts again, and never tries that version again.
+
+| What | Command |
+|---|---|
+| What it did | `/home/unseenet/unseenet/.venv/bin/unseenet-service-update status --service unseenet-node` |
+| Its log | `journalctl -u unseenet-update@unseenet-node` |
+| Update now, without the delay | `sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update run --service unseenet-node --check tcp:127.0.0.1:1119 --now` |
+| Turn it off | `sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update off --service unseenet-node` |
+
+Turned off, it still looks, and writes a warning in its log when a newer
+release has been out for 30 days. To update by hand then:
+
 ```bash
 sudo -u unseenet bash -c 'cd ~/unseenet && git pull && .venv/bin/pip install -q -e .'
 sudo systemctl restart unseenet-node

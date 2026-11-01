@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: -
+Implemented: unseenet main (unreleased); partly - section 6.1 for the node, council replicas and the registrar (one signer, the project key; key lists and thresholds, sections 3 and 4, follow)
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures

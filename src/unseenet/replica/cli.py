@@ -288,8 +288,8 @@ def setup(args) -> int:
         (UNITS / f"{SERVICE}-update.timer").write_text(UPDATE_TIMER)
         _run(["systemctl", "daemon-reload"])
         _run(["systemctl", "enable", "--now", f"{SERVICE}.service"])
-        if args.channel != "off":
-            _run(["systemctl", "enable", "--now", f"{SERVICE}-update.timer"])
+        # also when off: it then only says when a release has been out 30 days (0062 6.1)
+        _run(["systemctl", "enable", "--now", f"{SERVICE}-update.timer"])
 
     print()
     print("Done. Your replica's key is:")
@@ -302,8 +302,11 @@ def setup(args) -> int:
     print("     asks for a ripened key so that new members cannot be made in bulk.")
     print("  3. When it has agreed with the council for 60 days and the key is ripe, the")
     print("     members' replicas admit it. 180 days later it is a full member.")
-    if args.channel != "off":
-        print(f"  4. Once a day it updates itself ({args.channel} channel) and restarts if needed.")
+    if args.channel == "stable":
+        print("  4. It updates itself to each new signed release, a random time of up to two")
+        print("     days after it appears, and goes back if the replica does not come up.")
+    elif args.channel == "main":
+        print("  4. Once a day it updates itself to the newest code (main, for testing).")
     print()
     print("See how it is doing at any time:  unseenet-replica status")
     if not systemd:
@@ -538,13 +541,23 @@ def object_(args) -> int:
 
 
 def update(args) -> int:
-    """Upgrade the package from the configured channel and restart the service if the
-    version changed. Run by the daily timer."""
+    """Update from the configured channel and restart the service. Run by the daily
+    timer. ``stable``: the newest signed release, with the random delay and the way back
+    of unseenet.service_update; ``off``: only says when a release has been out 30 days;
+    ``main``: the newest code from GitHub, unsigned, for testing."""
     cfg = read_config(Path(args.dir))
     channel = cfg.get("channel", "stable")
-    if channel == "off":
-        return 0
-    pip = Path(sys.executable).with_name("pip")
+    if channel in ("stable", "off"):             # signed releases only (UN-RFC 0062 6.1)
+        from .. import service_update as su
+        state = su.State.load(su.STATE_ROOT / SERVICE / "state.json")
+        state.note(off=channel == "off")
+        try:
+            what = su.run(su.Machine(SERVICE, Path(sys.prefix)), state)
+        except (su.Problem, su.up.UpdateError, OSError) as exc:
+            print(f"could not look for updates: {exc}")
+            return 1
+        return 1 if what == "rolled-back" else 0
+    pip = Path(sys.executable).with_name("pip")   # main: the newest code, not signed
     before = __version__
     r = _run([str(pip), "install", "--quiet", "--upgrade", CHANNELS.get(channel, CHANNELS["stable"])],
              check=False)

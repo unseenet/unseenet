@@ -9,6 +9,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Servers update themselves** (UN-RFC 0062 section 6.1, #827). `unseenet-service-update`,
+  run by a timer, updates a node, a council replica or the registrar to the newest stable
+  release: only when the project key has signed its checksums, installing only packages
+  whose hashes the release's `unseenet-<version>-server-requirements.txt` names; never to
+  an older version; a random time of up to 48 hours after it first sees the release. It
+  copies the environment first, and if the service does not stay up (and, for a node,
+  answer) within 10 minutes it goes back and skips that version. On by default
+  (`UNSEENET_SELF_UPDATE=no` or `unseenet-service-update off` turns it off; then it warns
+  when a release has been out 30 days). Every release now carries `SHA256SUMS.txt` and the
+  server requirements, and `tools/project/sign_release.py` signs them too.
 - **Transport addresses** (UN-RFC 0064, #836). A node address may be written `onion:x.onion`
   (the same as the bare `x.onion` of before) or `test:host:port` (plain TCP, for test
   networks; a plain `host:port` still means that). Node lists and announcements may give a

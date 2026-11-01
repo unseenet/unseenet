@@ -29,6 +29,15 @@ python3 -m venv .venv
 .venv/bin/pip install -q -e .
 USER
 install -m 644 /home/unseenet/unseenet/deploy/unseenet-registrar.service /etc/systemd/system/
+# Self-updating (UN-RFC 0062 section 6.1): on unless UNSEENET_SELF_UPDATE=no
+install -m 644 /home/unseenet/unseenet/deploy/unseenet-update@.service \
+               /home/unseenet/unseenet/deploy/unseenet-update@.timer /etc/systemd/system/
+UPDATER=/home/unseenet/unseenet/.venv/bin/unseenet-service-update
+case "${UNSEENET_SELF_UPDATE:-yes}" in
+  [nN]*|0|false|off) "$UPDATER" off --service unseenet-registrar >/dev/null ;;
+  *) "$UPDATER" on --service unseenet-registrar >/dev/null ;;
+esac
 systemctl daemon-reload
+systemctl enable --now unseenet-update@unseenet-registrar.timer >/dev/null
 echo "Installed Unseenet $(sudo -u unseenet git -C /home/unseenet/unseenet log -1 --format=%h)."
 echo "Next: make or move the vault, then: systemctl enable --now unseenet-registrar"

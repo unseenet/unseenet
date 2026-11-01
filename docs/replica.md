@@ -51,7 +51,10 @@ The script installs Tor and Unseenet in `/opt/unseenet-replica`, then runs
 3. creates the system user `unseenet-replica`, and installs and starts the
    service `unseenet-replica`;
 4. installs a **daily update** (`unseenet-replica-update.timer`), so the
-   replica keeps up with the network by itself;
+   replica keeps up with the network by itself. It takes only releases the
+   project key has signed, waits a random time of up to 48 hours after a release
+   appears, and goes back to the version it ran if the replica does not come up
+   ([UN-RFC 0062](https://unseenet.org/spec/un-rfc-0062/) section 6.1);
 5. prints the replica's key.
 
 Then, and at any time after:
@@ -198,7 +201,8 @@ replica that is simply switched off is removed after 90 days of silence;
 | Its log | `journalctl -u unseenet-replica -n 100` |
 | Restart | `sudo systemctl restart unseenet-replica` |
 | Update now | `sudo systemctl start unseenet-replica-update` |
-| Stop updating by itself | `sudo systemctl disable --now unseenet-replica-update.timer` |
+| What the update did | `/opt/unseenet-replica/bin/unseenet-service-update status --service unseenet-replica` |
+| Stop updating by itself | `--channel off` at setup; it then only warns in its log when a release has been out 30 days |
 
 **Back up** `/var/lib/unseenet-replica/replica.vault` and
 `/etc/unseenet-replica/passphrase`. Together they are the replica: with them it
@@ -217,8 +221,8 @@ then run the `twin-gone` command that `status` shows.
 - The replica reaches the network only over Tor. Nobody learns from the network
   where it runs or who runs it; a member is just a key. Its signs of life are
   posted at random times, so they mark no schedule.
-- Updates are fetched from PyPI (or GitHub with `UNSEENET_CHANNEL=main`) over the
-  ordinary internet. That shows the machine's address installs Unseenet, not that
+- Updates are fetched from GitHub and PyPI (only GitHub with `UNSEENET_CHANNEL=main`)
+  over the ordinary internet. That shows the machine's address installs Unseenet, not that
   it runs a replica. If that matters to you, turn the timer off and update by
   hand over Tor.
 - Name claims are public by design: anybody can see which key claimed which
