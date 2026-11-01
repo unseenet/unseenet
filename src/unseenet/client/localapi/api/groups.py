@@ -128,6 +128,8 @@ class Groups:
                          "chat": _perm(s.write_permission(gid, kind=KIND_CHAT))},
                # files: what the group takes, and whether its node carries them (#442)
                "files": self._files_policy(data), "node_files": s.node_files_known(gid),
+               # how many announced nodes carry it (UN-RFC 0055 section 7): information
+               "coverage": s.carrying_nodes(gid),
                # pinned posts, newest pin first, and whether you may pin (UN-RFC 0033, #442)
                "pins": self._pins(s, gid), "max_pins": self._max_pins(data),
                "may_pin": s.moderates_or_owns(gid) and self._max_pins(data) > 0,

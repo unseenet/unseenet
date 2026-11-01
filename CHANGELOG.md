@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Clients know announced nodes** (UN-RFC 0055 sections 5.3 and 7, #700). The session
+  reads the nodes' announcements (`refresh_announced_nodes`), checks a node before it is
+  used - the node at the announced address must have the announcing key
+  (`check_announced`) - and counts how many announced nodes carry a group
+  (`carrying_nodes`). When none of your nodes answers, the client falls back to a listed
+  node first and then to an announced node whose key checks out, and moves a group only
+  to a node that carries it. Local API: `GET /api/nodes/announced` (`refresh`, `check`)
+  and `coverage` in a group's information. Node information keeps the node's own word as
+  `carried`; `carries` stays the number of groups the node lists.
 - **The user guide moves to `docs.unseenet.clients`** (UN-RFC 0055 section 4.1, #821). It is
   a site with pictures, and every node carries the endorsed groups of `unseenet.*`, which
   are text only; `docs` is a free hierarchy in the root list for documentation. The guide

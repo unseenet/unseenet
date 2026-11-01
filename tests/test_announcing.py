@@ -99,3 +99,42 @@ async def test_what_a_node_takes_in_the_announcement_group(tmp_path, announce_gr
     with pytest.raises(ArticleError) as e:
         node.accept(junk.to_bytes())
     assert e.value.reason == "syntax"
+
+
+async def test_a_client_reads_checks_and_counts_announced_nodes(tmp_path, announce_group):
+    """Section 7: a client reads the announcements, checks a node before it offers or
+    uses it (5.3), and shows how many announced nodes carry a group."""
+    pytest.importorskip("chiavdf")
+    from unseenet.client.session import Session
+    from unseenet.core.vault import Vault
+    node = Node(Store(), NodeConfig(name="kvisten", min_pow=BITS, forward_delay=(0, 0),
+                                    carries=["alt.*"]), key=crypto.Identity.generate())
+    hold(node, announce_group)
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    await announcing.Announcer(node, tmp_path, addr, ripen_to=0).run_once()
+    # a second "node" announces somebody else's address: its key will not match
+    liar = Node(Store(), NodeConfig(name="liar", min_pow=BITS), key=crypto.Identity.generate())
+    hold(liar, announce_group)
+    (tmp_path / "x").mkdir()
+    await announcing.Announcer(liar, tmp_path / "x", addr, ripen_to=0).run_once()
+    for mid, gid in liar.store.received_since(0):         # its ripe@ chain, then its word
+        if gid != announce_group.group or mid != announce_group.message_id:
+            try:
+                node.accept(liar.store.get(mid), from_peer=True)
+            except ArticleError as exc:
+                assert exc.reason == "duplicate"
+    s = Session(Vault.open(tmp_path / "c.vault", "pw", ops=1, mem=8192 * 1024),
+                status=lambda *_: None)
+    s.new_identity("a", "A")
+    s.add_node(addr)
+    found = {e["name"]: e for e in await s.refresh_announced_nodes()}
+    assert set(found) == {"kvisten", "liar"} and found["kvisten"]["checked"] is None
+    assert await s.check_announced(found["kvisten"]["key"]) is True
+    assert await s.check_announced(found["liar"]["key"]) is False
+    assert s.carrying_nodes("alt.test@abcdefghijklmnop")["checked"] == 1
+    assert s.carrying_nodes("dk.snak@abcdefghijklmnop")["nodes"] == 1      # the liar says *
+    info = await s.node_info(addr)
+    assert info["carried"] == {"groups": ["alt.*"]} and isinstance(info["carries"], int)
+    await s.close()
+    server.close()
