@@ -8,6 +8,7 @@ sets everything up, one tells in plain words how the replica is doing.
     sudo unseenet-replica agree removal:ed25519:...           agree to a held change
     sudo unseenet-replica hold admission,removal              what to agree to first
     sudo unseenet-replica resign                              step down (UN-RFC 0054, 20)
+    sudo unseenet-replica sign genesis.council.json           a new council's genesis (0054, 14)
     sudo unseenet-replica propose --set min_level=3 --reason ...   a proposal (UN-RFC 0061)
     sudo unseenet-replica second ID                           post the same proposal too
     sudo unseenet-replica talk "subject" "text"               say something as the member
@@ -40,6 +41,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import names as nm
+from ..core import crypto
 
 DEFAULT_DIR = Path("/var/lib/unseenet-replica")
 ETC = Path("/etc/unseenet-replica")
@@ -460,6 +462,58 @@ def _parse_value(text: str):
         return text
 
 
+def sign(args) -> int:
+    """Post this replica's copy of a new council's genesis (UN-RFC 0054 section 14): the
+    draft that ``unseenet council create`` wrote. It goes through the outbox, so the
+    running service posts it with the member key, and the replica works for that council
+    from then on. Its certificates of the registrar group it replaces are re-issued once
+    the council counts."""
+    from ..core.council import CouncilManifest
+    d = Path(args.dir)
+    st, cfg = read_status(d), read_config(d)
+    if not cfg:
+        print(f"There is no replica in {d}. Set one up with: sudo unseenet-replica setup")
+        return 1
+    draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+    gid, body = draft["group"], draft["body"]
+    try:
+        m = CouncilManifest.from_body(gid, body)
+    except Exception as exc:  # noqa: BLE001 - say it plainly
+        print(f"That is not a council genesis: {exc}")
+        return 1
+    key = st.get("key")
+    if not key:
+        print("The replica has not finished a round yet, so its key is not known here. "
+              "Give it a few minutes and try again.")
+        return 1
+    if key not in {crypto.key_to_text(k) for k in m.keys}:
+        print(f"This replica's key {key} is not one of the members of {gid}.")
+        return 1
+    print(f"Council {gid}")
+    print(f"  members: {len(m.keys)}; this replica is one of them")
+    if m.founding is not None:
+        print(f"  founding period until {m.founding.until:%Y-%m-%d} or {m.founding.size} full "
+              f"members; founder {crypto.key_to_text(m.founding.founder)}")
+    print(f"  newcomers' keys ripened to level {m.min_level}")
+    for x in draft.get("also", []):
+        print(f"  also {x['group']}")
+    if not args.yes and input("Post this replica's copy, and work for this council? [y/N] "
+                              ).strip().lower() not in ("y", "yes", "j", "ja"):
+        print("Nothing posted.")
+        return 1
+    for x in [*draft.get("also", []), {"group": gid, "body": body}]:
+        _queue(d, {"kind": "council_sign", "group": x["group"], "body": x["body"]})
+    if cfg.get("group") != gid:
+        cfg["moved_from"] = cfg.get("moved_from") or cfg.get("group") or nm.NAMES_GROUP
+        cfg["group"] = gid
+        write_config(d, cfg)
+    if getattr(os, "geteuid", lambda: -1)() == 0 and shutil.which("systemctl"):
+        _run(["systemctl", "restart", SERVICE], check=False)
+    print("Queued; the service posts it within a few minutes. The council counts once")
+    print("every member has posted the same. See: unseenet-replica status")
+    return 0
+
+
 def propose(args) -> int:
     from ..core import proposals as pr
     d = Path(args.dir)
@@ -659,6 +713,10 @@ def main(argv=None) -> int:
     s = sub.add_parser("second", help="as a member: post a waiting proposal too")
     s.add_argument("id")
     s.add_argument("--yes", action="store_true")
+    s = sub.add_parser("sign", help="post this replica's copy of a new council's genesis "
+                                    "(UN-RFC 0054 section 14)")
+    s.add_argument("draft", help="the draft file from 'unseenet council create'")
+    s.add_argument("--yes", action="store_true")
     s = sub.add_parser("talk", help="as a member: post in the council's talk group")
     s.add_argument("subject")
     s.add_argument("text")
@@ -672,7 +730,7 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return {"setup": setup, "run": run_service, "status": status, "agree": agree,
             "hold": hold, "resign": resign, "update": update, "propose": propose,
-            "second": second, "talk": talk, "object": object_,
+            "second": second, "talk": talk, "object": object_, "sign": sign,
             "twin-gone": twin_gone}[args.cmd](args)
 
 

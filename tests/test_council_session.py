@@ -137,3 +137,25 @@ async def test_a_council_with_a_room(net, tmp_path, capsys):
     capsys.readouterr()
     assert (await a.council_chain(room)).current.type == "closed"
     assert (await a.council_chain(d["group"])).current.room == room
+
+
+async def test_a_registrar_council_drafted_by_its_founder(net, tmp_path, capsys):
+    """``council create --without-me --founder KEY --claims``: the draft for a council
+    registrar (UN-RFC 0054 section 14), made by its founder, who is not a member; the
+    claims group is in the same draft and named by the council."""
+    a, b, c, f = net("a"), net("b"), net("c"), net("founder")
+    draft = tmp_path / "unseenet.names.council.json"
+    await cli.c_council(App(f), Namespace(
+        json=True, identity=None, what="create", name="unseenet.names", type="channel",
+        member=[x.identity().key_text for x in (a, b, c)], title="", description="",
+        min_pow=None, retention_days=None, min_level=3, sponsors=None, out=str(draft),
+        sign=True, founding=3, founding_size=9, founder=f.identity().key_text,
+        without_me=True, claims=True))
+    capsys.readouterr()
+    d = json.loads(draft.read_text())
+    m = CouncilManifest.from_body(d["group"], d["body"])
+    assert f.identity().public_key not in m.keys and len(m.keys) == 3
+    assert m.founding.founder == f.identity().public_key and m.min_level == 3
+    claims = d["also"][0]["group"]
+    assert claims.startswith("unseenet.names.claims@") and m.data["claims"] == claims
+    assert not (await f.council_copies(d["group"]))          # not a member: nothing posted

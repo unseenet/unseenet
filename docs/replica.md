@@ -118,6 +118,36 @@ until 60 days without disagreement have passed. Decisions on domain names
 (`andlo@lorensen.dk`) depend on DNS answers, which may differ from place to
 place, and are not held against anybody.
 
+## Founding a council
+
+A new council is founded by the replicas that run at the time, at least
+three, on different machines. Anybody may write the draft, also somebody who
+is not a member, such as the founder:
+
+```bash
+unseenet council create unseenet.names --without-me --claims --groups \
+    --member ed25519:<replica 1> --member ed25519:<replica 2> --member ed25519:<replica 3> \
+    --founding 3 --founder ed25519:<founder> --min-level 3
+```
+
+`--claims` adds the group for public claims, `--groups` the groups for
+proposals, talk and the log ([UN-RFC 0061](https://unseenet.org/spec/un-rfc-0061/)),
+and `--founding` a founding period in which the founder can admit members
+faster ([UN-RFC 0054](https://unseenet.org/spec/un-rfc-0054/) section 19).
+Copy the draft file to each replica, and there run:
+
+```bash
+sudo unseenet-replica sign unseenet.names.council.json
+```
+
+It shows what the draft says and asks first. The service then posts the
+replica's copy of the genesis with its key, and works for that council from
+then on. The council counts once every member has posted the same. When the
+council takes over a registrar (the project's moves this way, section 14), each
+replica re-issues the old group's certificates that were valid at the genesis,
+and the old group's owner posts a last manifest pointing to the council
+(`tools/project/move_registrar.py`).
+
 ## Holding
 
 The replica posts every change the rules call for by itself; that is what keeps

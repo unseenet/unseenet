@@ -44,6 +44,12 @@ def council_parsers(sub) -> None:
                         "(UN-RFC 0054 section 21)")
     p.add_argument("--groups", action="store_true",
                    help="also the council's proposals, talk and log groups (UN-RFC 0061)")
+    p.add_argument("--founder", default=None, metavar="KEY",
+                   help="the founder's key, if not the first member (UN-RFC 0054 section 19)")
+    p.add_argument("--without-me", action="store_true",
+                   help="you write the draft but are not a member (the members are --member)")
+    p.add_argument("--claims", action="store_true",
+                   help="also its claims group, for a council registrar (UN-RFC 0054 section 8)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
@@ -118,8 +124,10 @@ async def c_council(app: App, args) -> None:
                                         ("retention_days", args.retention_days)) if v}
             common = dict(min_level=args.min_level, sponsors=args.sponsors,
                           founding_years=getattr(args, "founding", None),
-                          founding_size=getattr(args, "founding_size", 9))
-            members = [me.key_text, *args.member]
+                          founding_size=getattr(args, "founding_size", 9),
+                          founder=getattr(args, "founder", None))
+            members = [*args.member] if getattr(args, "without_me", False) \
+                else [me.key_text, *args.member]
             also, room = [], None
             if getattr(args, "room", False):
                 room, room_body = s.council_genesis(f"{args.name}.room", "closed", members,
@@ -133,6 +141,13 @@ async def c_council(app: App, args) -> None:
                                              fields=extra, **common)
                     also.append({"group": g, "body": b})
                     fields[part] = g
+            if getattr(args, "claims", False):           # UN-RFC 0054 section 8
+                from ..names import CLAIM_POW
+                g, b = s.council_genesis(f"{args.name}.claims", "open", members,
+                                         fields={"min_pow": CLAIM_POW,
+                                                 "title": "Public name claims"}, **common)
+                also.append({"group": g, "body": b})
+                fields["claims"] = g
             gid, body = s.council_genesis(args.name, args.type, members, fields=fields,
                                           room=room, **common)
             out = Path(args.out or f"{args.name}.council.json")
@@ -146,7 +161,7 @@ async def c_council(app: App, args) -> None:
                     "The council exists when every member has posted exactly this. Send the",
                     "file to the others; each runs:  unseenet council sign " + out.name]
             mid = None
-            if args.sign:
+            if args.sign and me.key_text in members:
                 for x in also:
                     await s.council_sign(x["group"], x["body"])
                 mid = await s.council_sign(gid, body)
