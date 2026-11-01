@@ -131,6 +131,20 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   year. `unseenet council create --founding YEARS` makes one with you as founder;
   `council show` and `sign` show it openly.
 
+## [0.6.9] - 2026-11-01
+
+Released from `release/0.6`, with only this change; the rest of `[Unreleased]` comes in
+0.7.0.
+
+### Changed
+
+- **Testing, the demo and the user guide moved out of `unseenet.*`** (UN-RFC 0055 section
+  4.1, #821). New clients follow `test.unseenet`, `demo.unseenet.site` and
+  `demo.unseenet.feed`; a client that follows the old groups follows the new ones in their
+  place, and one that left them gets neither. `demo` and `docs` are free hierarchies in
+  the shipped root list, and the shipped list for `unseenet` no longer endorses the moved
+  groups.
+
 ## [0.6.8] - 2026-10-31
 
 For the graphical client's new share flow; nodes need no update.
@@ -2359,7 +2373,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.9...HEAD
+[0.6.9]: https://github.com/unseenet/unseenet/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/unseenet/unseenet/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/unseenet/unseenet/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/unseenet/unseenet/compare/v0.6.5...v0.6.6
