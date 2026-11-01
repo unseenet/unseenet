@@ -491,6 +491,34 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   without running the registrar. The reasons for a change are the
   members' business; a quorum is needed exactly because one member's
   judgement is not enough.
+- **Why at most 16 members?** Every change of the council is a quorum of
+  identical copies, and every node keeps every copy for as long as the
+  chain is counted: 16 members means 9 copies a change, 100 would mean 51,
+  and that many replicas up at the same time. The room's key updates hold
+  an envelope per member, and a manifest stays near 4 KiB (section 17).
+  The limit does not hold growth back: at one admission a month and half
+  a year of probation, reaching 16 takes years. Nor would more seats make
+  a council safer by themselves: what protects it is that its members
+  are different people on different infrastructure, and nine such
+  members are stronger than fifty of whom thirty answer to one hand -
+  while every extra seat is one more a patient attacker can fill with
+  perfect shadows (section 17).
+- **What if more people should take part?** Then there should be more
+  councils, not a larger one. A council keeps one thing - the names, a
+  list (UN-RFC 0020 section 8), the UN-RFCs - and a council whose work
+  grows can be split by founding councils for parts of it, each with its
+  own members. Taking part does not need a seat either: anybody can run
+  a shadow and do the council's work in public, and anybody with a
+  ripened key can object in a hearing (UN-RFC 0061).
+- **Why no rotation?** A rule that retires members after a time would let
+  shadows that waited long take a seat, and keep a council from becoming
+  the club of its first members. But it would also open seats on a known
+  date, which a patient attacker can prepare for, and remove honest
+  members for no reason. Members leave here only for what they do (section
+  12). A later revision may add a milder form, such as asking the longest
+  serving full member of a full council to be confirmed in a hearing,
+  and giving the seat to the oldest shadow if enough people object; this
+  document does not.
 
 # 17. Security and Privacy Considerations
 
