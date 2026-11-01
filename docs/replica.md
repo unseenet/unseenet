@@ -88,6 +88,56 @@ Set these before running the script (`sudo -E bash` keeps them):
 Or run `sudo unseenet-replica setup --help` yourself in an existing
 installation.
 
+## In Docker
+
+The replica is also a container image, `ghcr.io/unseenet/replica`, for amd64
+and arm64: `unseenet-replica` and Tor on Alpine Linux, the same build as the
+[node's image](node/docker.md). Save
+[`docker-compose.replica.yml`](https://github.com/unseenet/unseenet/blob/main/deploy/docker-compose.replica.yml),
+give the replica a passphrase in a file next to it, and start it:
+
+```bash
+echo 'a long passphrase only you know' > unseenet_replica_passphrase.txt
+chmod 600 unseenet_replica_passphrase.txt
+docker compose -f docker-compose.replica.yml up -d
+docker compose -f docker-compose.replica.yml logs replica      # the replica's key
+docker compose -f docker-compose.replica.yml exec replica unseenet-replica status
+```
+
+The first start makes the key and the vault in the volume, sealed with the
+passphrase; the passphrase itself never goes into the volume. `status`,
+`hold`, `agree`, `sign` and the other commands below work the same way with
+`docker compose exec replica unseenet-replica ...`. After `sign`, restart the
+container so that the replica works for the new council.
+
+Running a node too? [`docker-compose.node-replica.yml`](https://github.com/unseenet/unseenet/blob/main/deploy/docker-compose.node-replica.yml)
+starts both: the replica reads and posts through the node beside it, on a
+Docker network of their own with no published port, and the node reaches
+everybody else over Tor. Add other nodes' onion addresses to
+`UNSEENET_REPLICA_NODES` before the first start, comma separated, so that no
+single node can hide claims from your replica. Your replica's posts then
+leave through your node, so whoever watches the node could link the two; on
+its own, a replica reaches the network over Tor like any client.
+
+| Variable (first start only) | Meaning |
+|-----------------------------|---------|
+| `UNSEENET_REPLICA_PASSPHRASE` | The passphrase, if you do not use the secret file (`docker inspect` shows it) |
+| `UNSEENET_REPLICA_HOLD` | Changes you want to agree to yourself first, e.g. `removal` |
+| `UNSEENET_REPLICA_GROUP` | Another council registrar than the project's |
+| `UNSEENET_REPLICA_NODES` | Nodes to use, comma separated; by default the known nodes |
+
+**Updating.** A replica in a container does not update itself:
+`docker compose pull && docker compose up -d` gets the newest signed
+release. Images are made for every release and signed (cosign).
+
+!!! danger "One volume, one replica"
+    The volume *is* the replica: its key, vault and state. Back it up (with
+    the container stopped), but never start a second container on it or on a
+    copy while the first still runs - not on another machine, not to try
+    something out. Two replicas with one key can split the council; the
+    replica stops signing when it sees it, and you then need `twin-gone`
+    ([Looking after it](#looking-after-it)).
+
 ## What happens next
 
 Nothing more is needed from you. In order:

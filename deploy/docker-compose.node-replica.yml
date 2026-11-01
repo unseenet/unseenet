@@ -1,0 +1,74 @@
+# A node and a council replica together, with Docker Compose. See
+# https://unseenet.org/replica/#in-docker and https://unseenet.org/node/docker/
+#
+#   echo 'a long passphrase' > unseenet_node_passphrase.txt
+#   echo 'another long passphrase' > unseenet_replica_passphrase.txt
+#   chmod 600 unseenet_*_passphrase.txt
+#   docker compose -f docker-compose.node-replica.yml up -d
+#   docker compose -f docker-compose.node-replica.yml logs node      # onion address and node key
+#   docker compose -f docker-compose.node-replica.yml exec replica unseenet-replica status
+#
+# The replica reads and posts through the node beside it, on a network of their own
+# with no published port; the node reaches everybody else over Tor.
+services:
+  node:
+    image: ghcr.io/unseenet/node:latest
+    container_name: unseenet-node
+    restart: unless-stopped
+    environment:
+      UNSEENET_NODE_NAME: my-unseenet-node      # only used for the first node.toml
+      UNSEENET_LISTEN: 0.0.0.0:1119             # the replica beside it may connect
+      UNSEENET_BLOBS: "no"
+      UNSEENET_AVATARS: "no"
+      UNSEENET_SITES: "no"
+    secrets:
+      - unseenet_node_passphrase
+    volumes:
+      - unseenet:/data
+    networks: [unseenet]
+    read_only: true
+    ulimits:
+      nofile: {soft: 65536, hard: 65536}
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+
+  replica:
+    image: ghcr.io/unseenet/replica:latest
+    container_name: unseenet-replica
+    restart: unless-stopped
+    depends_on: [node]
+    environment:
+      # First start only. Its own node first; add other nodes' onion addresses after a
+      # comma, so that one node cannot hide claims from the replica (UN-RFC 0054 section 17).
+      UNSEENET_REPLICA_NODES: node:1119
+      UNSEENET_REPLICA_HOLD: ""
+    secrets:
+      - unseenet_replica_passphrase
+    volumes:
+      - replica:/data                           # the replica: never two containers on it
+    networks: [unseenet]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  unseenet:
+    internal: false                             # both need Tor's way out
+
+secrets:
+  unseenet_node_passphrase:
+    file: ./unseenet_node_passphrase.txt
+  unseenet_replica_passphrase:
+    file: ./unseenet_replica_passphrase.txt
+
+volumes:
+  unseenet:
+  replica:

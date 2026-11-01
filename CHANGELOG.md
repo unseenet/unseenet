@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A container image for council replicas** (#862): `ghcr.io/unseenet/replica`, built
+  from the node's Dockerfile (`--target replica`) for amd64 and arm64 and signed the same
+  way. The first start makes the key and vault in the volume, sealed with a passphrase
+  given as a Docker secret that never enters the volume (`unseenet-replica setup
+  --passphrase-file`); `docker exec ... unseenet-replica status` and the other commands
+  run as the replica's user. `deploy/docker-compose.replica.yml`, and
+  `deploy/docker-compose.node-replica.yml` for a node and a replica together: the node
+  image takes `UNSEENET_LISTEN` so that containers beside it can use it. Guide:
+  `docs/replica.md`, "In Docker".
 - **Moving the project's registrar to a council** (UN-RFC 0054 section 14, #691).
   `unseenet council create` takes `--without-me` (the draft's writer is not a member, as a
   founder need not be), `--founder KEY` and `--claims` (the claims group of a council
@@ -181,6 +190,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **The node's image reads its passphrase secret when the file belongs to the host's user**
+  (mode 600, as the guide says): the start script copies it for the node's user while it
+  is still root. Before, the node stopped with "no passphrase" (#862).
 - **The replica service started** (UN-RFC 0054, #838). Its units ran `unseenet-replica run
   --dir ...`, which the command line refused, so the service stopped at once and the
   update timer did too. The units now put `--dir` first, and the command line takes it

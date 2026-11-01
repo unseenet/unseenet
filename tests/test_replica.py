@@ -325,6 +325,26 @@ def test_setup_without_systemd(tmp_path, monkeypatch, capsys):
         cli.main(["--dir", str(d), "hold", "everything"])
 
 
+
+def test_setup_with_the_operators_passphrase(tmp_path, monkeypatch, capsys):
+    """In a container the passphrase is a secret the operator keeps: ``setup
+    --passphrase-file`` locks the vault with it and writes no passphrase of its own."""
+    import shutil
+    from unseenet.core.vault import Vault
+    from unseenet.replica import cli
+    monkeypatch.setenv("UNSEENET_INSECURE_FAST_KDF", "1")
+    real = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/tor" if n == "tor" else real(n))
+    secret = tmp_path / "secret"
+    secret.write_text("short\n")
+    d = tmp_path / "replica"
+    assert cli.main(["--dir", str(d), "setup", "--no-systemd", "--passphrase-file", str(secret)]) == 1
+    secret.write_text("a long passphrase only I know\n")
+    assert cli.main(["--dir", str(d), "setup", "--no-systemd", "--passphrase-file", str(secret)]) == 0
+    assert "Start it:" not in capsys.readouterr().out
+    assert not (d / "passphrase").exists()
+    Vault.open(d / "replica.vault", "a long passphrase only I know").close()
+
 # --- the council's room (UN-RFC 0054 section 21, #819): its key is handed on by the
 # replicas themselves - a first epoch for the founding members, a grant to each
 # newcomer, and a new epoch without anybody who left - and nodes take only full

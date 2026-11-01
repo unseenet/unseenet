@@ -1,0 +1,37 @@
+# A council replica with Docker Compose (UN-RFC 0054). See https://unseenet.org/replica/#in-docker
+#
+#   echo 'a long passphrase' > unseenet_replica_passphrase.txt && chmod 600 unseenet_replica_passphrase.txt
+#   docker compose -f docker-compose.replica.yml up -d
+#   docker compose -f docker-compose.replica.yml exec replica unseenet-replica status
+#
+# The volume IS the replica - its key, vault and state. Never run two containers on
+# one volume, or on a copy of it: two replicas with one key can split the council.
+services:
+  replica:
+    image: ghcr.io/unseenet/replica:latest
+    container_name: unseenet-replica
+    restart: unless-stopped
+    environment:
+      # Only used on the first start, when the key is made (then: unseenet-replica hold ...)
+      UNSEENET_REPLICA_HOLD: ""                 # e.g. "removal": changes you agree to first
+      # UNSEENET_REPLICA_GROUP: ...             # another council registrar than the project's
+      # UNSEENET_REPLICA_NODES: ...             # nodes to use, comma separated (default: the known nodes)
+    secrets:
+      - unseenet_replica_passphrase
+    volumes:
+      - replica:/data                           # the replica: key (sealed), settings, state, Tor
+    # No ports: the replica reaches the network over Tor, like any client.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]   # only to hand /data to the replica's user
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  unseenet_replica_passphrase:
+    file: ./unseenet_replica_passphrase.txt
+
+volumes:
+  replica:

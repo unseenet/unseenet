@@ -245,7 +245,8 @@ async def run_node(args) -> None:
         node.socks_port = socks_port           # for fetching shared articles (UN-RFC 0060)
         key_file = data / "onion_key.vault"
         key = unseal(key_file.read_bytes(), passphrase).decode() if key_file.exists() else None
-        onion, new_key = await tor.control.add_onion(key, 119, f"{host}:{port}")
+        target = "127.0.0.1" if host in ("0.0.0.0", "", "::", "[::]") else host   # Tor needs one address
+        onion, new_key = await tor.control.add_onion(key, 119, f"{target}:{port}")
         if new_key:
             key_file.write_bytes(seal(new_key.encode(), passphrase, **_kdf()))
             key_file.chmod(0o600)

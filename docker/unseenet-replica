@@ -1,0 +1,8 @@
+#!/bin/sh
+# unseenet-replica in the container: "docker exec <container> unseenet-replica status"
+# runs as root by default, so drop to the replica's user first - files it writes in
+# /data (config.json, the outbox) must stay the replica's.
+if [ "$(id -u)" = 0 ]; then
+    exec su-exec unseenet /opt/unseenet/bin/unseenet-replica "$@"
+fi
+exec /opt/unseenet/bin/unseenet-replica "$@"
