@@ -4,6 +4,12 @@ Peering is how nodes share groups. When your node gets a new post, it
 pushes it to each peer whose `groups` pattern matches - the same
 store-and-forward model Usenet used.
 
+!!! tip "A new node does not need a peer to start"
+    From 0.7.0 a node with Tor finds a few announced nodes by itself and
+    pulls from them, and they pull from it (`auto_peers`, see
+    [Configuration](configuration.md#peers-found-by-themselves)). Agreed
+    peers below are still worth having: they push new posts at once.
+
 !!! important "Peering is two-way"
     Both operators add each other: you put the other node's address and
     key in your `node.toml`, and they put yours in theirs. A node only

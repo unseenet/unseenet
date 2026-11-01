@@ -105,6 +105,8 @@ class NodeConfig:
     # after ripening the node key to this level
     announce: bool = True
     ripen_to: int = 1
+    # UN-RFC 0055 section 5.5: also pull from this many announced nodes (0: only peers)
+    auto_peers: int = 3
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
     # UN-RFC 0045 section 6: the report issuers this node follows, each

@@ -26,6 +26,13 @@ def _min_ripe(path, value):
         sys.exit(f"{path}: min_ripe must be a level 0-4 or \"-\", not {value!r}")
 
 
+def _auto_peers(path, value) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 16:
+        sys.exit(f"{path}: auto_peers is a number from 0 (only configured peers) to 16, "
+                 f"not {value!r}")
+    return value
+
+
 def load_node_config(path: Path | None):
     """Read ``node.toml`` into a ``NodeConfig``, checking every section - ``[node]``,
     ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]``, ``[refusals]`` - so a mistake stops the node at
@@ -84,6 +91,7 @@ def load_node_config(path: Path | None):
                       excludes=str(node.get("excludes", "")),
                       carries=_carries(path, node.get("carries", ["*"])),   # UN-RFC 0055
                       announce=bool(node.get("announce", True)),
+                      auto_peers=_auto_peers(path, node.get("auto_peers", 3)),
                       ripen_to=int(node.get("ripen_to", 1)),
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
@@ -257,6 +265,10 @@ async def run_node(args) -> None:
         from ..node.announcing import Announcer
         feeders.append(asyncio.create_task(
             Announcer(node, data, f"onion:{onion}", ripen_to=config.ripen_to).run_forever()))
+    if tor is not None and config.auto_peers:  # UN-RFC 0055 5.5: peers found by themselves
+        from ..node.autopeers import AutoPeers
+        feeders.append(asyncio.create_task(
+            AutoPeers(node, socks_port, config.auto_peers).run_forever()))
     if config.blobs is not None:               # blobs follow their article (UN-RFC 0027, 6.3)
         from ..node.blobfetch import BlobFollower
         feeders.append(asyncio.create_task(BlobFollower(node, socks_port).run_forever()))
