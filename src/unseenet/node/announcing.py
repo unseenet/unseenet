@@ -35,6 +35,16 @@ def _rfc3339(when: datetime) -> str:
     return when.astimezone(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _announceable(text: str) -> bool:
+    """An address this node may say it has: onion, or test only on a test network."""
+    from ..core import transport
+    try:
+        a = transport.parse(text)
+    except transport.AddressProblem:
+        return False
+    return a is not None and transport.announceable(a)
+
+
 class Announcer:
     """Ripens ``node``'s key and announces it at ``address``. State in
     ``<data>/announce.json``: the key's ripening chain, what was announced and when."""
@@ -42,7 +52,8 @@ class Announcer:
     def __init__(self, node: Node, data: Path, address: str, *, addresses=(),
                  ripen_to: int = RIPEN_TO, now: Callable[[], datetime] | None = None,
                  prove: Callable | None = None):
-        self.node, self.address, self.addresses = node, address, tuple(addresses)
+        self.node, self.address = node, address
+        self.addresses = tuple(t for t in addresses if _announceable(t))   # 0064 section 2.3
         self.path = Path(data) / "announce.json"
         self.ripen_to = ripen_to
         self.now = now or (lambda: datetime.now(timezone.utc))
@@ -133,6 +144,10 @@ class Announcer:
     async def announce(self) -> str | None:
         """Post this node's announcement when it is due. Returns its Message-ID, or None
         when nothing was due or it could not be posted yet (said in the log)."""
+        if not _announceable(self.address):
+            log.warning("not announcing %s: only onion addresses are announced outside a "
+                        "test network (UN-RFC 0064 section 2.3)", self.address)
+            return None
         now = self.now()
         said, what = self._says()
         last = self.state.get("last")

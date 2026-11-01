@@ -47,6 +47,7 @@ groups = "*"
 | `carries` | `["*"]` | The hierarchies this node carries, such as `["alt.*", "dk.*"]`, see [below](#carries-the-hierarchies-you-carry). The network's own groups are always carried. |
 | `announce` | `true` | Announce the node in the network, so people can find it, see [below](#announce-being-found). |
 | `ripen_to` | `1` | How far the node ripens its own key before it announces itself. |
+| `test_addresses` | `false` | For a test network: allow peers at a public address over plain TCP, which hides nothing. Not needed for your own nodes on your own network. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
 | `trusted_owners` | `[]` | Owner keys (`"ed25519:..."`) whose new groups are accepted when `new_groups = "trusted"`. |
@@ -322,7 +323,7 @@ One section per peer. See [Peering](peering.md).
 | Key | Required | Meaning |
 |-----|----------|---------|
 | `name` | yes | Your label for the peer, used in the logs. (With a password: must equal the `name` in the peer's own `[node]` section.) |
-| `address` | yes | The peer's onion address, `onion:xyz.onion` or just `xyz.onion` (port 119 unless you add one, `xyz.onion:1119`). For a test network, `test:host:port` (or `host:port`) reaches a node over plain TCP; the node warns at start, since that hides nothing ([UN-RFC 0064](../spec/un-rfc-0064.md)). |
+| `address` | yes | The peer's onion address, `onion:xyz.onion` or just `xyz.onion` (port 119 unless you add one, `xyz.onion:1119`). Your own nodes on the same machine or network can peer over plain TCP, `host:port` (for example `node2:119` or `192.168.1.20:119`), when you give the peer's `key`; see [Several nodes on your own network](#several-nodes-on-your-own-network). A public address over plain TCP needs `test_addresses = true` in `[node]`, for test networks only. |
 | `key` | yes, for new peerings | The peer's node key, `ed25519:...` ([UN-RFC 0016](../spec/un-rfc-0016.md)). Used to accept the peer logging in to you, and to check that you reached the right node. |
 | `groups` | no, `"*"` | Which groups to **send** to this peer, as a wildmat (see below). `""` sends nothing. |
 | `pull` | no, `"*"` | Which groups to [catch up on](peering.md#catching-up) from this peer. `""` pulls nothing. |
@@ -344,3 +345,24 @@ wins.
 Patterns are matched against the full group ID (`dk.snak@ab3k5x7q...`),
 so `dk.snak*` matches every `dk.snak`, whoever owns it. To match one
 specific group, use its full ID.
+
+## Several nodes on your own network
+
+Nodes on the same machine or home network - containers in one Docker
+setup, a node on your NAS and one on a Raspberry Pi - can peer directly,
+without Tor. Give each the other's address on your network and its node
+key (`unseenet-node --show-key` on that node):
+
+```toml
+[[peer]]
+name = "node2"
+address = "node2:119"           # or 192.168.1.20:119
+key = "ed25519:..."             # node2's node key
+```
+
+The key is required: it is how the node knows it is talking to your
+other machine. The connection itself is not encrypted, but articles are
+signed and closed groups are encrypted anyway. Such addresses are never
+announced or listed; to the rest of the network each node is still its
+onion address ([UN-RFC 0064](../spec/un-rfc-0064.md) section 2.3).
+

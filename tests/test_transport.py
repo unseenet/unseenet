@@ -63,3 +63,45 @@ async def test_a_connection_to_a_transport_address():
     assert (await reader.readline()).startswith(b"200")
     writer.close()
     server.close()
+
+
+def test_private_hosts():
+    """Section 2.3: the operator's own machine or network."""
+    for h in ("127.0.0.1", "10.1.2.3", "172.20.0.5", "192.168.1.10", "169.254.1.1", "100.101.1.2", "[::1]",
+              "[fd00::1]", "[fe80::1]", "localhost", "node2", "nas.local", "pi.lan",
+              "box.internal", "x.home.arpa"):
+        assert tr.private(h), h
+    for h in ("8.8.8.8", "172.32.0.1", "example.org", "[2a00:1450::1]"):
+        assert not tr.private(h), h
+
+
+def _cfg(tmp_path, peer):
+    p = tmp_path / "node.toml"
+    p.write_text(peer)
+    from unseenet.cli.node import load_node_config
+    return load_node_config(p)
+
+
+def test_peers_over_plain_tcp(tmp_path):
+    from unseenet.core import crypto
+    key = crypto.Identity.generate().key_text
+    # on your own network, with its node key: fine
+    cfg = _cfg(tmp_path, f'[[peer]]\nname="n2"\naddress="node2:119"\nkey="{key}"\n')
+    assert cfg is not None
+    # on your own network without a key: refused
+    with pytest.raises(SystemExit, match="node key"):
+        _cfg(tmp_path, '[[peer]]\nname="n2"\naddress="192.168.1.5:119"\npassword="x"\n')
+    # a public address over plain TCP: refused, unless a test network
+    with pytest.raises(SystemExit, match="test_addresses"):
+        _cfg(tmp_path, f'[[peer]]\nname="far"\naddress="93.184.216.34:119"\nkey="{key}"\n')
+    _cfg(tmp_path, '[node]\ntest_addresses=true\n[[peer]]\nname="far"\n'
+                   'address="test:93.184.216.34:119"\npassword="x"\n')
+
+
+def test_only_onion_addresses_are_announced(monkeypatch):
+    from unseenet.node.announcing import _announceable
+    monkeypatch.delenv("UNSEENET_TEST_ADDRESSES", raising=False)
+    assert _announceable("onion:" + "a" * 56 + ".onion")
+    assert not _announceable("test:192.168.1.5:119") and not _announceable("node2:119")
+    monkeypatch.setenv("UNSEENET_TEST_ADDRESSES", "1")
+    assert _announceable("127.0.0.1:1119")

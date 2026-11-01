@@ -38,6 +38,7 @@ def load_node_config(path: Path | None):
     node = data.get("node", {})
     peers = [PeerConfig(**p) for p in data.get("peer", [])]
     from ..core import transport
+    test_addresses = bool(node.get("test_addresses", False))
     for p in peers:
         try:                                   # UN-RFC 0064: a transport address
             a = transport.parse(p.address)
@@ -45,10 +46,16 @@ def load_node_config(path: Path | None):
             sys.exit(f"{path}: peer {p.name}: {exc}")
         if a is None:
             sys.exit(f"{path}: peer {p.name}: this node has no transport for {p.address}")
-        if a.scheme == "test":
-            logging.getLogger("unseenet.node").warning(
-                "peer %s is reached over plain TCP (%s), which hides nothing: for test "
-                "networks only (UN-RFC 0064 section 2.2)", p.name, p.address)
+        if a.scheme == "test" and not test_addresses:     # UN-RFC 0064 sections 2.2, 2.3
+            if not transport.private(a.host):
+                sys.exit(f"{path}: peer {p.name}: {p.address} is a public address over plain "
+                         "TCP, which hides nothing; use the peer's onion address, or set "
+                         "test_addresses = true in [node] on a test network "
+                         "(UN-RFC 0064 section 2.2)")
+            if not p.key:
+                sys.exit(f"{path}: peer {p.name}: a peer on your own network ({p.address}) "
+                         "needs its node key (key = \"ed25519:...\"), so this node knows it "
+                         "is that machine (UN-RFC 0064 section 2.3)")
         if p.key:
             try:
                 p.public_key()

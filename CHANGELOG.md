@@ -14,8 +14,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   networks; a plain `host:port` still means that). Node lists and announcements may give a
   node up to 8 `addresses`; `onion:` ones are used first, and an address with a scheme this
   software does not know is left out without error. Lists offer `test:` addresses only
-  with `UNSEENET_TEST_ADDRESSES=1`, and a node warns at start about a peer reached over
-  plain TCP. Connections, `[[peer]]` addresses and the local API take every form.
+  with `UNSEENET_TEST_ADDRESSES=1`. Connections, `[[peer]]` addresses and the local API
+  take every form.
+- **Nodes on your own network peer without Tor** (UN-RFC 0064 section 2.3). A `[[peer]]` on
+  the operator's own machine or network (loopback, 10/8, 172.16/12, 192.168/16, 100.64/10,
+  fc00::/7, `*.local`, `*.lan`, a Docker service name such as `node2`) may be reached over
+  plain TCP when it has its `key`. A public address over plain TCP needs
+  `test_addresses = true` in `[node]`; otherwise the node does not start. Such addresses are
+  never announced outside a test network.
 - **Clients know announced nodes** (UN-RFC 0055 sections 5.3 and 7, #700). The session
   reads the nodes' announcements (`refresh_announced_nodes`), checks a node before it is
   used - the node at the announced address must have the announcing key
