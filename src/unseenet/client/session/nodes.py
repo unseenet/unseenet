@@ -162,15 +162,23 @@ class NodesMixin:
 
     async def fall_back_to_known_node(self) -> str | None:
         """None of your nodes answers (#603): take a random node from the newest signed
-        known-node list (UN-RFC 0010 section 5) that does, make it your default, and read
-        the groups there that it carries; your inbox goes along. Only listed nodes -
-        never one learned from an article or a page. Returns its address, or None when
-        no listed node answers either."""
+        known-node list (UN-RFC 0010 section 5) that does - or else an announced node whose
+        key checks out (UN-RFC 0055 section 7) - make it your default, and read the groups
+        there that it carries; your inbox goes along. Never a node learned from an article
+        or a page. Returns its address, or None when none answers."""
         previous = self.node
         dead = list(self.nodes)
         candidates = [n.address for n in self.known_nodes() if n.address not in dead]
         random.shuffle(candidates)
+        listed = set(candidates)
+        announced = [e for e in self.announced_nodes()          # then announced ones, each
+                     if e["address"] not in dead and e["address"] not in listed]  # checked
+        random.shuffle(announced)
+        candidates += [e["address"] for e in announced]
+        keys = {e["address"]: e["key"] for e in announced}
         for address in candidates:
+            if address in keys and not await self.check_announced(keys[address]):
+                continue                                  # not the node it says (0055 5.3)
             carried = await self.carried_by(address)
             if carried is None:
                 continue
@@ -208,6 +216,79 @@ class NodesMixin:
         rest = [n for n in self.nodes if n != preferred]
         rest.sort(key=lambda n: self.down_for(n) > 0)
         return ([preferred] if preferred else []) + rest
+
+    # --- announced nodes (UN-RFC 0055 sections 5 and 7) -----------------------------
+    # Nodes announce themselves in a group every node carries. An announcement is only
+    # the node's own word: before a node is offered or used, the client connects to its
+    # address and checks that the node there has the announcing key (section 5.3).
+    async def refresh_announced_nodes(self) -> list[dict]:
+        """Read the nodes' announcements from your default node and keep the newest per
+        node that is not stale. Returns them as ``announced_nodes`` does."""
+        from ...core import announcements as an
+        from ...known_nodes import NODES_ANNOUNCE_GROUP
+        messages = await self.fetch_group(NODES_ANNOUNCE_GROUP)
+        found = []
+        for m in messages:
+            if not (m.readable and m.author_key and m.date):
+                continue
+            try:
+                found.append(an.parse(m.body, key=m.author_key, date=m.date,
+                                      message_id=m.message_id))
+            except an.AnnouncementProblem:
+                continue
+        now = datetime.now(timezone.utc)
+        kept = self.data.setdefault("announced", {})
+        newest = an.newest(found, now)
+        for key, a in newest.items():
+            old = kept.get(key, {})
+            entry = {"address": a.address, "addresses": list(a.addresses), "name": a.name,
+                     "carries": a.carries, "date": a.date.isoformat(),
+                     "operator": a.operator, "contact": a.contact}
+            if old.get("address") == a.address:          # the check holds for this address
+                entry.update({k: old[k] for k in ("checked", "checked_at") if k in old})
+            kept[key] = entry
+        for key in [k for k, e in kept.items()
+                    if k not in newest and now - datetime.fromisoformat(e["date"]) > an.STALE]:
+            del kept[key]                                  # stale and not renewed
+        self.save()
+        return self.announced_nodes()
+
+    def announced_nodes(self) -> list[dict]:
+        """The announced nodes this client knows, newest first: ``key``, ``address``,
+        ``name``, ``carries`` (the node's own word), ``checked`` (True: the node at that
+        address has that key; False: it has not; None: not checked yet)."""
+        out = [{"key": k, "checked": e.get("checked"), **{x: e[x] for x in
+               ("address", "addresses", "name", "carries", "date", "operator", "contact")}}
+               for k, e in self.data.get("announced", {}).items()]
+        return sorted(out, key=lambda e: e["date"], reverse=True)
+
+    async def check_announced(self, key: str) -> bool:
+        """Section 5.3: connect to the announced address and compare the node key it
+        gives with the announcing key. Kept for the address; False when it differs or
+        the node does not answer (then not kept: it may answer later)."""
+        entry = self.data.get("announced", {}).get(key)
+        if entry is None:
+            return False
+        try:
+            info = await self.node_info(entry["address"])
+        except (OSError, ConnectionError, SessionError, NNTPError, asyncio.IncompleteReadError,
+                asyncio.TimeoutError, ValueError):
+            return False
+        entry["checked"] = info.get("node_key") == key
+        entry["checked_at"] = datetime.now(timezone.utc).isoformat()
+        self.save()
+        return entry["checked"]
+
+    def carrying_nodes(self, group_id: str) -> dict:
+        """Section 7, coverage: of the announced nodes this client knows, those whose
+        ``carries`` covers ``group_id`` - ``{"nodes": n, "checked": n, "addresses": [...]}``.
+        It is information, not a warning; one node is worth saying plainly."""
+        from ...core import carrying as ca
+        network = ca.network_groups()
+        hits = [e for e in self.announced_nodes()
+                if ca.carries(group_id, ca.read_carries({"carries": e["carries"]}), network)]
+        return {"nodes": len(hits), "checked": sum(1 for e in hits if e["checked"]),
+                "addresses": [e["address"] for e in hits]}
 
     # --- names of nodes (#518) -------------------------------------------------
     # The signed known-node list (UN-RFC 0010) is trusted; a node's own name (UN-RFC
@@ -635,13 +716,17 @@ class NodesMixin:
     async def node_info(self, node: str | None = None) -> dict:
         """UN-RFC 0011 node information, or {} if the node does not offer it - with
         ``carries``, how many groups the node itself carries (one LIST ACTIVE), so a client
-        can show both that and how many of yours you read there (unseenet-gui#153)."""
+        can show both that and how many of yours you read there (unseenet-gui#153), and
+        ``carried``, what the node says it carries (UN-RFC 0055 section 3.1: its pattern
+        list, files, sites)."""
         async def run(c: Client) -> dict:
             info = {}
             if c.capability("UNSEENET-NODEINFO") is not None:
                 lines = await c.multiline("LIST UNSEENET.NODEINFO", 215)
                 info = json.loads(lines[0]) if lines else {}
                 self._keep_node_name(node or self.node, info)     # its own name, newest (#518)
+            if isinstance(info.get("carries"), dict):  # UN-RFC 0055 3.1: what it says it carries
+                info["carried"] = info.pop("carries")
             try:
                 info["carries"] = len(await c.list_active())
             except (NNTPError, OSError, ValueError):

@@ -77,6 +77,22 @@ class Nodes:
         return out
 
 
+class AnnouncedNodes:
+    async def announced(self, refresh: bool = False, check: str | None = None) -> dict:
+        """``GET /api/nodes/announced``: the nodes that announced themselves (UN-RFC 0055
+        section 5), newest first, each with ``key``, ``address``, ``name``, ``carries`` (its
+        own word) and ``checked`` (True: the node at that address has that key; False: it
+        has not; None: not yet). ``refresh`` reads the announcements again; ``check`` (a
+        node key) checks that one node first, as a client must before it offers or uses it
+        (section 5.3)."""
+        s = self._ready()
+        if refresh:
+            await s.refresh_announced_nodes()
+        if check:
+            await s.check_announced(check)
+        return {"nodes": s.announced_nodes()}
+
+
 def check_node_address(address: str) -> None:
     """An address a client can reach: ``<56 base32>.onion`` (with an optional port), or
     ``host:port`` for a node on this machine or network."""

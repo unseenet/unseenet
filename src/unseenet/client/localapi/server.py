@@ -236,6 +236,12 @@ async def known_nodes(request):
     return _json(_api(request).known_nodes())
 
 
+async def announced_nodes(request):
+    q = request.query
+    return _json(await _api(request).announced(refresh=q.get("refresh") in ("1", "true"),
+                                               check=q.get("check") or None))
+
+
 async def nodes(request):
     if request.method == "POST":
         return _json(await _api(request).change_nodes(await _body(request)))
@@ -703,6 +709,7 @@ ROUTES = [
     ("POST", "/api/refresh", refresh), ("POST", "/api/markup", markup_preview), ("POST", "/api/ripening", ripening),
     ("GET", "/api/known-nodes", known_nodes),
     ("GET", "/api/nodes", nodes), ("POST", "/api/nodes", nodes),
+    ("GET", "/api/nodes/announced", announced_nodes),
     ("GET", "/api/group-ref", group_ref), ("GET", "/api/address", address),
     ("GET", "/api/following", following), ("POST", "/api/following", following),
     ("GET", "/api/feed", feed), ("POST", "/api/feed", feed),

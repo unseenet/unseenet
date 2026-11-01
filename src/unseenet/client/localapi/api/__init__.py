@@ -135,7 +135,7 @@ from .pictures import Pictures  # noqa: E402
 from .addresses import Addresses  # noqa: E402
 from .feeds import Feeds  # noqa: E402
 from .pages import Pages  # noqa: E402
-from .nodes import Nodes  # noqa: E402
+from .nodes import AnnouncedNodes, Nodes  # noqa: E402
 from .recovery import Recovery  # noqa: E402
 from .copying import Copying  # noqa: E402
 from .rules import Rules  # noqa: E402
@@ -147,7 +147,7 @@ from .shares import Shares  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, DeviceUnlock, State, Groups, Writing, People, Running, Identity, Articles,
-               Files, Pictures, Addresses, Feeds, Pages, Nodes, Recovery, Copying, Rules,
+               Files, Pictures, Addresses, Feeds, Pages, Nodes, AnnouncedNodes, Recovery, Copying, Rules,
                Reports, Teams, ContentLabels, GroupEmoji, Shares):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
