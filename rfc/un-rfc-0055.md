@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0055                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - sections 2-7 (the clients' side in the core and its local API; the clients' screens follow); the council's node list follows (#56)
+Implemented: unseenet main (unreleased); partly - sections 2-7 (5.5 too) (the clients' side in the core and its local API; the clients' screens follow); the council's node list follows (#56)
 Updates: 0001, 0005, 0010, 0011, 0018, 0021
 
                Unseenet: What a Node Carries
@@ -262,6 +262,33 @@ A node SHOULD keep only the newest announcement per `Author-Key`, and
 MUST keep at least that one until it is stale. Nodes MAY refuse more
 than one announcement per `Author-Key` per day (`439`, reason `rate`).
 
+## 5.5 Pulling from Announced Nodes
+
+A node with no peer gets only what is posted to it, and a network that
+grows only by agreements between operators is easy to cut up. Pulling
+needs no agreement: it uses reader commands, which every node answers
+(UN-RFC 0005 section 5.3, UN-RFC 0017). So:
+
+1. A node SHOULD, besides its configured peers, pull from a few nodes
+   it finds announced - by default 3 - chosen at random among the
+   announcements it holds that are not stale, not its own, not a
+   configured peer, and reachable over a transport it uses (UN-RFC 0064).
+2. Before it takes anything, it MUST check the node as section 5.3
+   says: the node at the address proves the announced `node_key`
+   (UN-RFC 0016). A node that cannot, or that has another key, is left
+   out for at least a day.
+3. It SHOULD choose again about once a day, and at once when a chosen
+   node fails three times in a row, so that no node keeps the same few
+   sources for long.
+4. Everything it pulls is checked as from any peer - signature,
+   postage, ripening, its own rules - and is not passed on any
+   differently.
+5. The operator MAY set the number, and 0 turns it off.
+
+Nodes that find each other this way pull from each other, so articles
+go both ways without anybody pushing. Pushing (UN-RFC 0005 section 5.1)
+stays between configured peers.
+
 # 6. Peering
 
 The groups a node sends to a peer (UN-RFC 0005 section 5.1) default to
@@ -391,6 +418,13 @@ default spam-report issuers). The direction for that revision
 - **What `carries` reveals.** A pattern list tells what the operator
   chooses to carry, nothing about who reads it. An operator who does not
   want even that known does not announce the node.
+- **Pulling from strangers** (section 5.5) lets a node choose sources,
+  never the other way round: a node that is pulled from only answers
+  reader commands, as it does for any client. A bad node can offer
+  articles, which are checked like all others, or offer nothing, which
+  the daily new choice makes up for. Choosing at random among many
+  announced nodes keeps one operator with many fake nodes from becoming
+  every node's only source cheaply.
 - **Uptime.** Announcements renewed at least every 30 days at a random
   time do not reveal when a node is up beyond what connecting to it
   already does (UN-RFC 0005 section 7).

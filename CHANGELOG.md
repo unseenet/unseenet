@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Nodes find peers by themselves** (UN-RFC 0055 section 5.5). Besides its configured
+  peers, a node with Tor pulls from 3 nodes it finds announced (`auto_peers` in `[node]`;
+  0 turns it off): chosen at random, checked first to have the key they announced (one
+  that has not is left out for a day), chosen again daily or after three failures. They
+  pull from it the same way, so a new node gets the network's posts and passes its own on
+  without agreed peers. Pulling uses reader commands only, so it works with every node.
 - **Servers update themselves** (UN-RFC 0062 section 6.1, #827). `unseenet-service-update`,
   run by a timer, updates a node, a council replica or the registrar to the newest stable
   release: only when the project key has signed its checksums, installing only packages

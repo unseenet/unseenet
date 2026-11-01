@@ -47,8 +47,9 @@ class Puller:
     """Pulls what a peer has that this node has not seen."""
 
     def __init__(self, node: Node, peer: PeerConfig, socks_port: int | None = None,
-                 interval: float | None = None):
+                 interval: float | None = None, must_prove: bool = False):
         self.node, self.peer, self.socks_port = node, peer, socks_port
+        self.must_prove = must_prove      # an announced node: it must prove its key (0055 5.3)
         self.interval = interval if interval is not None else node.config.pull_interval
 
     def _state_due(self) -> bool:
@@ -69,6 +70,8 @@ class Puller:
         try:
             await client.fetch_capabilities()
             known = False
+            if peer.key and self.must_prove and client.capability("UNSEENET-PEERKEY") is None:
+                raise PeerAuthError("it cannot prove its node key (UN-RFC 0016)")
             if peer.key:
                 try:   # proves it is the node we meant; as a peer we also get articles as stored
                     await authenticate_with_key(client, self.node.key, peer.public_key())

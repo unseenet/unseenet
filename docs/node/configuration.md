@@ -47,6 +47,7 @@ groups = "*"
 | `carries` | `["*"]` | The hierarchies this node carries, such as `["alt.*", "dk.*"]`, see [below](#carries-the-hierarchies-you-carry). The network's own groups are always carried. |
 | `announce` | `true` | Announce the node in the network, so people can find it, see [below](#announce-being-found). |
 | `ripen_to` | `1` | How far the node ripens its own key before it announces itself. |
+| `auto_peers` | `3` | Also pull from this many nodes the node finds announced, chosen at random and changed daily, so it gets the network's posts without agreed peers. `0`: only the peers below. See [Peers found by themselves](#peers-found-by-themselves). |
 | `test_addresses` | `false` | For a test network: allow peers at a public address over plain TCP, which hides nothing. Not needed for your own nodes on your own network. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |
@@ -365,4 +366,16 @@ other machine. The connection itself is not encrypted, but articles are
 signed and closed groups are encrypted anyway. Such addresses are never
 announced or listed; to the rest of the network each node is still its
 onion address ([UN-RFC 0064](../spec/un-rfc-0064.md) section 2.3).
+
+## Peers found by themselves
+
+Besides the `[[peer]]` entries, a node with Tor pulls from a few nodes that
+announce themselves in the network (`auto_peers`, 3 by default). It checks
+first that each answers with the key it announced, picks new ones every day
+or when one stops answering, and checks everything it pulls like any other
+article. Those nodes see this node's announcement and pull from it too, so a
+new node gets the network's posts, and passes its own on, without anybody
+setting up a peer. Agreed peers are still worth having: they push new posts
+at once instead of within the hour, and they are kept whatever happens to
+the announcements ([UN-RFC 0055](../spec/un-rfc-0055.md) section 5.5).
 
