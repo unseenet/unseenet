@@ -7,6 +7,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-02
+
+Councils, carrying and finding nodes. Councils own groups together (UN-RFC 0054 Part I),
+run a registrar with no owner (Part II), decide changes after public hearings (UN-RFC
+0061) and can have a founding period; nodes say what they carry and announce
+themselves, and clients find and check them (UN-RFC 0055); node addresses get a
+transport scheme (UN-RFC 0064); nodes find peers by themselves among the announced
+nodes (UN-RFC 0055 section 5.5); servers update themselves from signed releases (UN-RFC
+0062). Testing, the demo and the user guide moved out of `unseenet.*`.
+
+**Update the nodes first.** 0.7.0 works with 0.6 nodes and clients, but only 0.7.0 nodes
+carry council groups, check node announcements and answer what they carry. The project's
+registrar moves to a council once the nodes run 0.7.0 (#691); until then names work as
+before. Programs built on the core (the clients, the gateway, the entrance, the bots, the
+help bot, watchman, stats) need a release that allows 0.7.
+
 ### Added
 
 - **A container image for council replicas** (#862): `ghcr.io/unseenet/replica`, built
@@ -2447,7 +2463,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/unseenet/unseenet/compare/v0.6.9...v0.7.0
 [0.6.9]: https://github.com/unseenet/unseenet/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/unseenet/unseenet/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/unseenet/unseenet/compare/v0.6.6...v0.6.7
