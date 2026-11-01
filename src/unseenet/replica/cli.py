@@ -507,7 +507,7 @@ def sign(args) -> int:
         cfg["moved_from"] = cfg.get("moved_from") or cfg.get("group") or nm.NAMES_GROUP
         cfg["group"] = gid
         write_config(d, cfg)
-    if os.geteuid() == 0 and shutil.which("systemctl"):
+    if getattr(os, "geteuid", lambda: -1)() == 0 and shutil.which("systemctl"):
         _run(["systemctl", "restart", SERVICE], check=False)
     print("Queued; the service posts it within a few minutes. The council counts once")
     print("every member has posted the same. See: unseenet-replica status")
