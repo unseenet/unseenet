@@ -106,9 +106,21 @@ def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
     req = fetch(up.release_url("stable", name, version, repo=base))
     if hashlib.sha256(req).hexdigest() != listed[name]:
         raise Problem(f"{name} does not match the signed checksums")
-    if f"{package}=={version} " not in req.decode("utf-8", "replace"):
+    if not names_itself(req.decode("utf-8", "replace"), package, version, base):
         raise Problem(f"{name} does not name {package} {version}")
     return Release(version, req)
+
+
+def names_itself(requirements: str, package: str, version: str, base: str) -> bool:
+    """The requirements install ``package`` at ``version``: from PyPI
+    (``unseenet-gateway==0.6.0 --hash=...``), or, for a service not on PyPI, as the
+    wheel of that very release (``unseenet-helpbot @ <base>/releases/download/v0.6.0/
+    unseenet_helpbot-0.6.0-py3-none-any.whl --hash=...``)."""
+    if f"{package}=={version} " in requirements:
+        return True
+    wheel = f"{base}/releases/download/v{version}/{package.replace('-', '_')}-{version}-"
+    return any(line.startswith(f"{package} @ {wheel}") and ".whl " in line
+               for line in requirements.splitlines())
 
 
 # --- state ------------------------------------------------------------------------------

@@ -234,3 +234,16 @@ def test_waits_while_the_service_is_busy(tmp_path):
     old = busy.stat().st_mtime - su.BUSY_FOR - 1               # left over: not busy
     os.utime(busy, (old, old))
     assert su.run(m, st, rel, say=lambda _: None, at_once=True) == "updated"
+
+
+def test_a_service_not_on_pypi_names_its_own_wheel():
+    base = "https://github.com/unseenet/unseenet-helpbot"
+    wheel = f"{base}/releases/download/v0.6.0/unseenet_helpbot-0.6.0-py3-none-any.whl"
+    assert su.names_itself(f"x==1 --hash=sha256:a\nunseenet-helpbot @ {wheel} --hash=sha256:b\n",
+                           "unseenet-helpbot", "0.6.0", base)
+    other = wheel.replace("unseenet/unseenet-helpbot", "someone/else")
+    assert not su.names_itself(f"unseenet-helpbot @ {other} --hash=sha256:b\n",
+                               "unseenet-helpbot", "0.6.0", base)
+    older = wheel.replace("0.6.0", "0.5.0")
+    assert not su.names_itself(f"unseenet-helpbot @ {older} --hash=sha256:b\n",
+                               "unseenet-helpbot", "0.6.0", base)
