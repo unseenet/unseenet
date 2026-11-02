@@ -4,6 +4,7 @@ claims, the shadow is admitted after 60 days of agreeing, a member that signs a
 certificate no claim explains is removed, and one that resigns is removed too - each
 change one manifest that the replicas computed alike."""
 
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -674,3 +675,56 @@ async def test_a_replica_reads_the_councils_groups_wide(net, monkeypatch):
     r.config = lambda: {"read_through": 3}
     await r.run_once()
     assert a._wide_groups()[group] == 3
+
+
+async def test_a_round_notes_members_candidates_and_posts(net, monkeypatch):
+    """#874: what `unseenet-replica members`, `hearings` and `read` show comes from the
+    round's status - public things only."""
+    a, b = net.session("a"), net.session("b")
+    group, claims = await net.found([a, b], groups=True)
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    chain = await a.council_chain(group)
+    await a.post(chain.current.data["talk"], "Hej rådet", "Første ord\n")
+    st = await net.replica(a, group).run_once()
+    assert [m["you"] for m in st["council_members"]] == [True, False]
+    assert all(m["full"] for m in st["council_members"]) and st["candidates"] == []
+    assert st["claims"] == claims
+    assert [p["subject"] for p in st["posts"]["talk"]] == ["Hej rådet"]
+    assert st["posts"]["talk"][0]["author"] == a.identity().key_text
+
+
+def test_the_member_commands(tmp_path, capsys):
+    from unseenet.replica import cli as rc
+    key = crypto.Identity.generate().key_text
+    st = {"role": "full member", "group": "g@x", "seq": 3, "claims": "c@x",
+          "groups": {"proposals": "p@x", "talk": "t@x", "log": "l@x"},
+          "council_members": [{"key": key, "full": True, "joined": "2026-10-01T00:00:00Z",
+                               "by": None, "you": True, "last_post": None, "objections": 0}],
+          "candidates": [{"key": key, "you": False, "level": 3, "reports_60": 12,
+                          "agreeing_60": 12, "sponsors": [key], "admitted_by_founder": False,
+                          "objections": 1}],
+          "hearings": [{"id": "abcd", "kind": "manifest", "reason": "fordi", "state": "open",
+                        "objections": 0, "active": 2, "closes": "2026-11-20T00:00:00Z",
+                        "urgent": False}],
+          "posts": {"talk": [{"id": "<1@x>", "subject": "Hej", "author": key,
+                              "date": "2026-11-02T10:00:00Z", "text": "Første ord\n"}], "log": []}}
+    (tmp_path / "status.json").write_text(json.dumps(st))
+    (tmp_path / "config.json").write_text("{}")
+    d = ["--dir", str(tmp_path)]
+    assert rc.main(d + ["members"]) == 0
+    out = capsys.readouterr().out
+    assert "(you)" in out and "reports 12/60 days" in out and "sponsored by 1" in out
+    assert rc.main(d + ["hearings"]) == 0 and "abcd  open" in capsys.readouterr().out
+    assert rc.main(d + ["read", "talk"]) == 0 and "Første ord" in capsys.readouterr().out
+    assert rc.main(d + ["reply", "<1@x>", "Svar"]) == 0
+    assert rc.main(d + ["sponsor", key, "--yes"]) == 0
+    assert rc.main(d + ["unsponsor", key]) == 0
+    queued = [json.loads(p.read_text()) for p in sorted((tmp_path / "outbox").glob("*.json"))]
+    assert [q["subject"] for q in queued] == ["Re: Hej", f"sponsor {key}", f"unsponsor {key}"]
+    assert queued[0]["references"] == ["<1@x>"] and queued[1]["group"] == "c@x"
+    with pytest.raises(SystemExit):
+        rc.main(d + ["reply", "<none@x>", "Svar"])
+    st["role"] = "member on probation"
+    (tmp_path / "status.json").write_text(json.dumps(st))
+    with pytest.raises(SystemExit, match="full members"):
+        rc.main(d + ["sponsor", key, "--yes"])

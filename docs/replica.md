@@ -305,6 +305,21 @@ sudo unseenet-replica second <id>          # join a proposal another member made
 sudo unseenet-replica object <id> "why"    # object to one
 ```
 
+Reading what goes on, and the rest of a member's work, also from the command line:
+
+```bash
+sudo unseenet-replica members              # members and candidates: reports, sponsors, objections
+sudo unseenet-replica hearings             # proposals in their hearing, with their counts
+sudo unseenet-replica read talk -n 20      # the newest posts in talk (or: read log)
+sudo unseenet-replica reply "<id>" "Agreed" # answer a post in talk
+sudo unseenet-replica sponsor <key>        # as a full member: sponsor a shadow
+sudo unseenet-replica unsponsor <key>
+```
+
+They read what the replica found at its last round (all public), so they work
+while it runs; add `--json` for scripts. The room is not shown here: its posts are
+for the members, and the replica keeps them in its vault only.
+
 `status` shows open hearings and proposals waiting for more members. Only
 **active** members - those who said something in the council's talk or proposals
 group in the last 90 days - count when people decide; the replica keeps working

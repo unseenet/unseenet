@@ -653,6 +653,132 @@ def object_(args) -> int:
     return 0
 
 
+# --- reading and the rest of a member's work (#874) ---------------------------------------
+
+def _short(key: str | None) -> str:
+    return (key or "?")[:20] + "..." if key and len(key) > 24 else (key or "?")
+
+
+def members(args) -> int:
+    """The council's members and the candidates on their way in, from the last round."""
+    st = read_status(Path(args.dir))
+    if "council_members" not in st:
+        raise SystemExit("The replica has not finished a round with a council yet "
+                         "(unseenet-replica status).")
+    if args.json:
+        print(json.dumps({"members": st["council_members"], "candidates": st.get("candidates", [])},
+                         indent=1, sort_keys=True))
+        return 0
+    print(f"Members ({len(st['council_members'])}):")
+    for m in st["council_members"]:
+        tags = [("full" if m["full"] else "probation"), f"joined {_date(m['joined'])}"]
+        if m.get("by") == "founder":
+            tags.append("admitted by the founder")
+        if m.get("last_post"):
+            tags.append(f"last spoke {_date(m['last_post'])}")
+        if m.get("objections"):
+            tags.append(f"{m['objections']} objection(s)")
+        print(f"  {m['key']}{' (you)' if m.get('you') else ''}\n      " + ", ".join(tags))
+    cands = st.get("candidates") or []
+    print(f"Candidates ({len(cands)}):" if cands else "No candidates.")
+    for c in cands:
+        tags = [f"reports {c['reports_60']}/60 days", f"agreeing {c['agreeing_60']}",
+                f"level {c['level'] if c.get('level') is not None else '?'}"]
+        if c.get("sponsors"):
+            tags.append(f"sponsored by {len(c['sponsors'])}")
+        if c.get("admitted_by_founder"):
+            tags.append("the founder asked to admit it")
+        if c.get("objections"):
+            tags.append(f"{c['objections']} objection(s)")
+        print(f"  {c['key']}{' (you)' if c.get('you') else ''}\n      " + ", ".join(tags))
+    return 0
+
+
+def hearings(args) -> int:
+    """Proposals in their hearing, with their counts, and those waiting to be seconded."""
+    st = read_status(Path(args.dir))
+    if getattr(args, "lists", False):
+        st = st.get("lists") or {}
+    hs = st.get("hearings") or []
+    if args.json:
+        print(json.dumps({"hearings": hs, "pending": st.get("proposals_pending") or {}},
+                         indent=1, sort_keys=True))
+        return 0
+    for h in hs:
+        print(f"{h['id']}  {h['state']:8}  {h['kind']:8}  {h['objections']} objection(s) / "
+              f"{h['active']} active  closes {_date(h['closes'])}"
+              + (" (urgent)" if h.get("urgent") else ""))
+        print(f"    {h['reason'][:200]}")
+    for pid, p in (st.get("proposals_pending") or {}).items():
+        print(f"{pid}  waiting  posted by {len(p.get('by', []))} so far "
+              f"(second it: sudo unseenet-replica second {pid})")
+    if not hs and not st.get("proposals_pending"):
+        print("No proposals.")
+    return 0
+
+
+def read(args) -> int:
+    """The newest posts in the council's talk or log group, from the last round."""
+    st = read_status(Path(args.dir))
+    if getattr(args, "lists", False):
+        st = st.get("lists") or {}
+    posts = (st.get("posts") or {}).get(args.group)
+    if posts is None:
+        raise SystemExit(f"No {args.group} group here, or no round has read it yet.")
+    posts = posts[-args.n:]
+    if args.json:
+        print(json.dumps(posts, indent=1, ensure_ascii=False))
+        return 0
+    for x in posts:
+        print(f"--- {x['date'][:16].replace('T', ' ')}  {_short(x['author'])}  {x['subject']}")
+        print(f"    id {x['id']}")
+        print("\n".join("    " + line for line in x["text"].rstrip("\n").splitlines()[:40]))
+    if not posts:
+        print("Nothing posted yet.")
+    return 0
+
+
+def reply(args) -> int:
+    """Answer a post in the council's talk group, as the member."""
+    d = Path(args.dir)
+    st, groups = _groups(d, getattr(args, "lists", False))
+    to = next((x for x in (st.get("posts") or {}).get("talk", []) if x["id"] == args.id), None)
+    if to is None or not groups.get("talk"):
+        raise SystemExit("No such post in talk (see: unseenet-replica read talk).")
+    subject = to["subject"] if to["subject"].lower().startswith("re:") else f"Re: {to['subject']}"
+    _queue(d, {"group": groups["talk"], "subject": subject[:200], "body": args.text + "\n",
+               "references": [args.id]})
+    print("Queued: the replica posts it at its next round.")
+    return 0
+
+
+def sponsor(args, take_back: bool = False) -> int:
+    """As a full member: sponsor a shadow (UN-RFC 0054 section 11.1), or take it back."""
+    from ..core.groups import canonical_json
+    d = Path(args.dir)
+    st = read_status(d)
+    if st.get("role") != "full member":
+        raise SystemExit("Only full members sponsor (unseenet-replica status).")
+    if not st.get("claims"):
+        raise SystemExit("This council has no claims group to sponsor in.")
+    try:
+        crypto.key_from_text(args.key)
+    except ValueError:
+        raise SystemExit(f"Not a key: {args.key}")
+    act = "unsponsor" if take_back else "sponsor"
+    if not take_back:
+        print(f"Sponsor {args.key}? You can sponsor one shadow in 180 days.")
+        if not args.yes and (not sys.stdin.isatty() or
+                             input("[y/N] ").strip().lower() not in ("y", "yes", "j", "ja")):
+            print("Not done.")
+            return 1
+    _queue(d, {"group": st["claims"], "subject": f"{act} {args.key}",
+               "body": canonical_json({"sponsor": args.key, "v": 1}) + "\n",
+               "content_type": "application/json"})
+    print("Queued: the replica posts it at its next round.")
+    return 0
+
+
 def update(args) -> int:
     """Update from the configured channel and restart the service. Run by the daily
     timer. ``stable``: the newest signed release, with the random delay and the way back
@@ -800,6 +926,28 @@ def main(argv=None) -> int:
     s.add_argument("id")
     s.add_argument("reason", nargs="?", default="")
     s.add_argument("--withdraw", action="store_true", help="take an objection back")
+    s = sub.add_parser("members", help="the council's members and its candidates")
+    s.add_argument("--json", action="store_true")
+    s = sub.add_parser("hearings", help="proposals in their hearing, and those waiting")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
+    s.add_argument("--json", action="store_true")
+    s = sub.add_parser("read", help="the newest posts in the council's talk or log group")
+    s.add_argument("group", choices=("talk", "log"))
+    s.add_argument("-n", type=int, default=10, help="how many (default 10)")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
+    s.add_argument("--json", action="store_true")
+    s = sub.add_parser("reply", help="as a member: answer a post in talk")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
+    s.add_argument("id", help="the post's Message-ID, as read shows it")
+    s.add_argument("text")
+    for act, helptext in (("sponsor", "as a full member: sponsor a shadow (UN-RFC 0054 11.1)"),
+                          ("unsponsor", "as a full member: take a sponsorship back")):
+        s = sub.add_parser(act, help=helptext)
+        s.add_argument("key")
+        s.add_argument("--yes", action="store_true")
     for c in sub.choices.values():          # also after the command, as units before 0.7 wrote it
         c.add_argument("--dir", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
@@ -807,7 +955,9 @@ def main(argv=None) -> int:
     return {"setup": setup, "run": run_service, "status": status, "agree": agree,
             "hold": hold, "resign": resign, "update": update, "propose": propose,
             "second": second, "talk": talk, "object": object_, "sign": sign,
-            "twin-gone": twin_gone}[args.cmd](args)
+            "twin-gone": twin_gone, "members": members, "hearings": hearings,
+            "read": read, "reply": reply, "sponsor": sponsor,
+            "unsponsor": lambda a: sponsor(a, take_back=True)}[args.cmd](args)
 
 
 def entry() -> None:

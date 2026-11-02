@@ -30,6 +30,16 @@ GROUPS = ("proposals", "talk", "log")
 INACTIVE_WARN = timedelta(days=14)          # section 8: members who stop being active
 
 
+SHOWN_POSTS = 30
+
+
+def _shown(items: list[pr.Item]) -> list[dict]:
+    """The newest public posts of a council group, for ``unseenet-replica read``."""
+    return [{"id": i.message_id, "subject": i.subject[:200], "author": i.author,
+             "date": nm.rfc3339(i.date), "text": i.body[:4000]}
+            for i in sorted(items, key=lambda i: i.date)[-SHOWN_POSTS:]]
+
+
 def items_of(messages) -> list[pr.Item]:
     return [pr.Item(m.message_id, m.subject or "", m.author_key, m.date, m.body)
             for m in messages if m.readable and m.author_key and m.date]
@@ -83,6 +93,9 @@ class PublicDuties:
             return
         proposals = items_of(await self.s.fetch_group(groups["proposals"]))
         talk = items_of(await self.s.fetch_group(groups["talk"])) if groups["talk"] else []
+        logged = (items_of(await self.s.fetch_group(groups["log"]))
+                  if groups.get("log") else [])
+        self.status["posts"] = {"talk": _shown(talk), "log": _shown(logged)}   # #874
         await self._hearings(chain, proposals, talk, groups.get("log"), now, agreed, busy)
         if groups.get("log") and self.role(cur) == "full member":
             await self._log_changes(chain, proposals + talk, groups["log"], now)

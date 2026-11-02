@@ -26,6 +26,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A council member's work from the command line** (#874, part 1): `unseenet-replica members`
+  (members and candidates: reports, agreeing days, level, sponsors, objections), `hearings`
+  (with their counts, and proposals waiting to be seconded), `read talk|log`, `reply <id>`, and
+  `sponsor`/`unsponsor` for full members. They read what the replica found at its last round,
+  so they work while it runs; `--json` for scripts.
 - **Councils in the local client API** (#841, UN-RFC 0046 section 4.26): `GET /api/council` shows
   a council in plain fields (members, the founding period, your place in it, disputed or not,
   and for a genesis who still has to sign), `GET /api/council/hearings` its hearings, and

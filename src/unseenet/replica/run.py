@@ -202,6 +202,7 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             self._write_status()
             return self.status
         self._read_wide(cur.room, (cur.data or {}).get("claims"))
+        self.status["claims"] = (cur.data or {}).get("claims")
         self.reg.shadow = role == "shadow"
         await self.reg.run_once()
         posts = await self.reg.read_public()
@@ -234,6 +235,7 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
                 await self.resign()
         world = self._world(chain, posts, council_posts, decisions)
         self._note_objections(posts, cur)
+        self._note_people(world, cur, today)
         change = rules.next_change(world, today) if not chain.disputed else None
         self.status.update(self._describe(world, cur, decisions, today))
         if change is not None:
@@ -540,6 +542,37 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
                     log.warning("could not publish ripening yet: %s", exc)
 
     # --- status -------------------------------------------------------------------------------------
+
+    def _note_people(self, w: rules.World, cur: cn.CouncilManifest, today: datetime) -> None:
+        """Members and candidates for the operator (``unseenet-replica members``, #874):
+        all public, read from the council's groups."""
+        me = self.me.key_text
+        days = rules.window(today)
+        about: dict[str, int] = {}
+        for o in self.status.get("objections") or []:
+            about[o["about"]] = about.get(o["about"], 0) + 1
+        members = []
+        for m in cur.members:
+            k = crypto.key_to_text(m.key)
+            last = w.last_post.get(k)
+            members.append({"key": k, "full": m.full, "joined": nm.rfc3339(m.joined),
+                            "by": m.by, "you": k == me,
+                            "last_post": nm.rfc3339(last) if last else None,
+                            "objections": about.get(k, 0)})
+        keys = {crypto.key_to_text(k) for k in cur.keys}
+        candidates = []
+        for k in sorted((set(w.judge.reports) | {x for _, x in w.admits}) - keys):
+            reports = w.judge.reports.get(k, {})
+            candidates.append({
+                "key": k, "you": k == me, "level": w.level.get(k),
+                "reports_60": sum(1 for d in days if d in reports),
+                "agreeing_60": sum(1 for d in days if rules.day_agrees(
+                    reports.get(d), w.judge.by_day.get(d, []))),
+                "sponsors": sorted(w.sponsors.get(k, set())),
+                "admitted_by_founder": any(x == k for _, x in w.admits),
+                "objections": about.get(k, 0)})
+        self.status["council_members"] = members
+        self.status["candidates"] = candidates[-100:]
 
     def _describe(self, w: rules.World, cur: cn.CouncilManifest, decisions, today) -> dict:
         me = self.me.key_text
