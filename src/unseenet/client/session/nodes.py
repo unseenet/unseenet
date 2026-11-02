@@ -506,25 +506,33 @@ class NodesMixin:
                 update.check_signature(sums, sig, channel)
             except update.UpdateError:
                 continue
-            versions = [a.group("version") for a in map(update.ASSET.match, update.parse_sums(sums)) if a]
-            if not versions:
-                continue
-            version = versions[0]
-            if channel not in best or update.version_key(version) > update.version_key(best[channel]["version"]):
-                best[channel] = {"version": version}
+            versions = update.versions_in(update.parse_sums(sums))
+            # each product on its own: the portable and the bootable builds post their
+            # own sums, and the graphical client is only in the portable ones (#264)
+            for product, key in (("unseenet", "version"), ("unseenet-gui", "gui")):
+                version = versions.get(product)
+                if not version:
+                    continue
+                have = (best.get(channel) or {}).get(key)
+                if have is None or update.version_key(version) > update.version_key(have):
+                    best[channel] = {**(best.get(channel) or {}), key: version}
         if best != self.data.get("releases"):
             self.data["releases"] = best
             self.save()
         return self.update_offer()
 
-    def update_offer(self) -> dict | None:
+    def update_offer(self, product: str = "unseenet", running: str | None = None) -> dict | None:
         """A signed release newer than this program, on its channel (a development
-        build follows development builds): {"version", "channel"}, or None."""
+        build follows development builds): {"version", "channel"}, or None.
+        ``product`` "unseenet-gui" with the graphical client's own version as
+        ``running`` asks for that client's builds (#264)."""
         from ... import __version__, update
-        channel = "dev" if ".dev" in __version__ else "stable"
-        found = (self.data.get("releases") or {}).get(channel)
-        if found and update.version_key(found["version"]) > update.version_key(__version__):
-            return {"version": found["version"], "channel": channel}
+        running = running or __version__
+        channel = "dev" if ".dev" in running else "stable"
+        found = ((self.data.get("releases") or {}).get(channel) or {}).get(
+            "gui" if product == "unseenet-gui" else "version")
+        if found and update.version_key(found) > update.version_key(running):
+            return {"version": found, "channel": channel}
         return None
 
     def _forget_numbers(self, group_id: str) -> None:

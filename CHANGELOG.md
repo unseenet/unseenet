@@ -17,6 +17,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The graphical client's folders can update themselves** (#264): `unseenet update` knows two
+  products in a folder - the terminal client (`unseenet-<version>-<kind>.zip`) and the graphical
+  client (`unseenet-gui-<version>-<kind>.zip`, in the same signed `SHA256SUMS.txt`) - each with
+  its own version and file list (`UNSEENET-GUI-VERSION`, `UNSEENET-GUI-FILES`), updated on its
+  own (`--product terminal|gui`; a folder with only the graphical client is `gui`), and neither
+  removes a file the other one lists. Before, such a folder was refused. Sessions keep the
+  graphical client's newest version from `unseenet.releases` too, and
+  `update_offer("unseenet-gui", <its version>)` offers it.
 - **A new node is part of the network at once** (#230, UN-RFC 0055 section 5.5): a node that
   no configured peer takes pushes from sends what its own readers post - its announcement and
   ripening chain included - to the announced nodes it pulls from, which pass it on

@@ -62,6 +62,33 @@ def test_offer_follows_the_channel(tmp_path):
     assert s.update_offer() == {"version": "99.0.0", "channel": channel}
     s.data["releases"] = {channel: {"version": "0.0.1"}}
     assert s.update_offer() is None
+    # the graphical client asks for its own builds, by its own version (#264)
+    s.data["releases"] = {"stable": {"version": "99.0.0", "gui": "0.7.0"}}
+    assert s.update_offer("unseenet-gui", "0.6.0") == {"version": "0.7.0", "channel": "stable"}
+    assert s.update_offer("unseenet-gui", "0.7.0") is None
+    assert s.update_offer("unseenet-gui", "0.7.0.dev3") is None             # dev: none posted
+
+
+async def test_releases_are_read_per_product(tmp_path, monkeypatch, trusted):
+    """The portable sums carry both clients, the bootable ones only the terminal client:
+    each product keeps its newest version (#264)."""
+    from types import SimpleNamespace
+
+    from unseenet.client.session import Session
+    from unseenet.core.vault import Vault
+    s = Session(Vault.open(tmp_path / "v.vault", "pw", ops=1, mem=8192 * 1024), status=lambda *_: None)
+    portable = ("a" * 64 + "  unseenet-9.9.9-linux-x86_64.zip\n"
+                + "b" * 64 + "  unseenet-gui-9.1.0-linux-x86_64.zip\n").encode()
+    images = ("c" * 64 + "  unseenet-9.9.8-x86_64-update.zip\n").encode()
+    posts = [SimpleNamespace(readable=True, body=update.release_post(x, update.signature_text(x, KEY),
+                                                                     "stable")[1])
+             for x in (portable, images)]
+
+    async def fetch_group(group):
+        return posts
+    monkeypatch.setattr(s, "fetch_group", fetch_group)
+    await s.refresh_releases()
+    assert s.data["releases"]["stable"] == {"version": "9.9.9", "gui": "9.1.0"}
 
 
 def test_a_mirror_is_found_by_every_version_it_has(monkeypatch):

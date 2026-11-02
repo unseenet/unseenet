@@ -25,6 +25,14 @@ little free room for a second copy of the system, so there is no previous
 version to go back to yet (issue #68, steps 3 and 4). ``ldlinux.sys`` is never
 touched, and the syslinux ``.c32`` files only when the syslinux version is the
 same as the one on the stick (they must match ``ldlinux.sys``).
+
+Two products (#264): the terminal client (``unseenet-<version>-<kind>.zip``) and the
+graphical client (``unseenet-gui-<version>-<kind>.zip``, built in unseenet-portable and
+signed in the same ``SHA256SUMS.txt``). Both can be in one folder and share ``data/``;
+each keeps its own version and file list (``UNSEENET-VERSION``/``UNSEENET-FILES``,
+``UNSEENET-GUI-VERSION``/``UNSEENET-GUI-FILES``), is updated on its own
+(``--product terminal|gui``; a folder with only the graphical client is ``gui``), and
+never removes a file the other one lists.
 """
 
 from __future__ import annotations
@@ -71,8 +79,9 @@ RELEASE_REPOS = ("https://github.com/unseenet/unseenet-portable",
 SUMS = "SHA256SUMS.txt"
 SIG = SUMS + ".sig"
 # What a release offers: one zip per kind of installation (see stick_kind)
-ASSET = re.compile(r"^unseenet-(?P<version>[0-9][0-9A-Za-z.+]*?)-(?P<what>x86_64-update|usb|"
-                   r"linux-x86_64|windows-x86_64|macos-aarch64|macos-x86_64)\.zip$")
+ASSET = re.compile(r"^(?P<product>unseenet(?:-gui)?)-(?P<version>[0-9][0-9A-Za-z.+]*?)-"
+                   r"(?P<what>x86_64-update|usb|linux-x86_64|windows-x86_64|macos-aarch64|"
+                   r"macos-x86_64)\.zip$")
 PLATFORMS = ("linux-x86_64", "windows-x86_64", "macos-aarch64", "macos-x86_64")
 TOP = "Unseenet"                     # the portable zips' top folder
 OLD_SUFFIX = ".unseenet-old"         # Windows: a program in use, moved aside
@@ -81,12 +90,31 @@ FILES_LIST = "UNSEENET-FILES"        # what this version put on the stick (remov
 MARKER = "UPDATING"                  # on the stick while files are being replaced
 SYSLINUX = "boot/syslinux"
 SYSLINUX_VERSION = SYSLINUX + "/SYSLINUX-VERSION"
-NEVER = {"data", "ldlinux.sys", MARKER}   # never in an update, never removed
+GUI_MARKER = "UPDATING-GUI"
+NEVER = {"data", "ldlinux.sys", MARKER, GUI_MARKER}   # never in an update, never removed
 KERNEL = ("boot/vmlinuz-lts", "boot/initramfs-lts", "boot/modloop-lts")   # replaced last
 
 
 class UpdateError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class Product:
+    """What is updated (#264): its zips' name, and its own version, file list and marker
+    in the folder, so the terminal and the graphical client can share one folder."""
+    name: str                # the zips: <name>-<version>-<kind>.zip
+    label: str
+    version_file: str
+    files_list: str
+    marker: str
+    prefix: str = ""         # its program folders: <prefix><platform>/
+
+
+TERMINAL = Product("unseenet", "Unseenet", VERSION_FILE, FILES_LIST, MARKER)
+GRAPHICAL_CLIENT = Product("unseenet-gui", "Unseenet graphical", "UNSEENET-GUI-VERSION",
+                           "UNSEENET-GUI-FILES", GUI_MARKER, "gui-")
+PRODUCTS = {"terminal": TERMINAL, "gui": GRAPHICAL_CLIENT}
 
 
 # ----------------------------------------------------------------------
@@ -116,11 +144,15 @@ def version_key(v: str) -> tuple:
     return (release, pre, postkey, devkey)
 
 
-def stick_version(media: Path) -> str:
+def stick_version(media: Path, product: Product = TERMINAL) -> str:
+    """The version of ``product`` in the folder. The terminal client without its file
+    is this program's; the graphical client without its file is older than any (its
+    first builds had none)."""
+    unknown = __version__ if product is TERMINAL else "0"
     try:
-        return (media / VERSION_FILE).read_text().strip() or __version__
+        return (media / product.version_file).read_text().strip() or unknown
     except OSError:
-        return __version__
+        return unknown
 
 
 # ----------------------------------------------------------------------
@@ -158,13 +190,24 @@ def parse_sums(sums: bytes) -> dict[str, str]:
     return out
 
 
-def asset_in(sums: dict[str, str], what: str) -> tuple[str, str]:
-    """(file name, version) of the zip for ``what`` that a release's checksums list."""
+def asset_in(sums: dict[str, str], what: str, product: Product = TERMINAL) -> tuple[str, str]:
+    """(file name, version) of ``product``'s zip for ``what`` that a release's checksums list."""
     for name in sums:
         m = ASSET.match(name)
-        if m and m.group("what") == what:
+        if m and m.group("what") == what and m.group("product") == product.name:
             return name, m.group("version")
-    raise UpdateError(f"this release has no {what} zip (it is older than updating)")
+    raise UpdateError(f"this release has no {product.name} {what} zip (it is older than updating)")
+
+
+def versions_in(sums: dict[str, str]) -> dict[str, str]:
+    """The version of each product a release's checksums list: {"unseenet": "0.8.0",
+    "unseenet-gui": "0.7.0"}."""
+    out: dict[str, str] = {}
+    for name in sums:
+        m = ASSET.match(name)
+        if m:
+            out.setdefault(m.group("product"), m.group("version"))
+    return out
 
 
 def update_zip_in(sums: dict[str, str]) -> tuple[str, str]:
@@ -172,13 +215,13 @@ def update_zip_in(sums: dict[str, str]) -> tuple[str, str]:
     return asset_in(sums, "x86_64-update")
 
 
-def stick_kind(root: Path) -> str:
+def stick_kind(root: Path, product: Product = TERMINAL) -> str:
     """Which of a release's zips updates ``root``: a bootable stick takes the update
     zip (it has the portable builds too), a USB folder with every platform the usb
     zip, and a folder with one platform that platform's zip."""
-    if (root / "unseenet.apkovl.tar.gz").exists():
+    if product is TERMINAL and (root / "unseenet.apkovl.tar.gz").exists():
         return "x86_64-update"
-    present = [p for p in PLATFORMS if (root / p).is_dir()]
+    present = [p for p in PLATFORMS if (root / (product.prefix + p)).is_dir()]
     return present[0] if len(present) == 1 else "usb"
 
 
@@ -248,7 +291,8 @@ def release_urls(channel: str, name: str, version: str | None = None) -> list[st
     return [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
 
 
-def from_github(channel: str, what: str, socks_port: int | None) -> tuple[list[Release], list[str]]:
+def from_github(channel: str, what: str, socks_port: int | None,
+                product: Product = TERMINAL) -> tuple[list[Release], list[str]]:
     """The signed releases for ``what`` in every release repo, and what went wrong where.
 
     Each build repo signs the sums of its own files, so a repo without ``what`` is no
@@ -259,7 +303,7 @@ def from_github(channel: str, what: str, socks_port: int | None) -> tuple[list[R
         try:
             sums = fetch(release_url(channel, SUMS, repo=repo), socks_port)
             sig = fetch(release_url(channel, SIG, repo=repo), socks_port).decode("utf-8", "replace")
-            found.append(check_release(sums, sig, channel, what))
+            found.append(check_release(sums, sig, channel, what, product))
         except UpdateError as exc:
             problems.append(f"{urlsplit(repo).path.strip('/')}: {exc}")
     return found, ([] if found else problems)
@@ -327,6 +371,15 @@ def _is_link(info: zipfile.ZipInfo) -> bool:
     return info.create_system == 3 and (info.external_attr >> 16) & 0o170000 == 0o120000
 
 
+def product_of(media: Path, asked: str | None = None) -> Product:
+    """``--product``, else the graphical client in a folder that has only it."""
+    if asked:
+        return PRODUCTS[asked]
+    if (media / GRAPHICAL).exists() and not (media / VERSION_FILE).exists():
+        return GRAPHICAL_CLIENT
+    return TERMINAL
+
+
 @dataclass
 class Plan:
     version: str
@@ -337,13 +390,13 @@ class Plan:
     prefix: str = ""            # the zip's top folder ("Unseenet/" in the portable zips)
 
 
-def make_plan(media: Path, zf: zipfile.ZipFile) -> Plan:
+def make_plan(media: Path, zf: zipfile.ZipFile, product: Product = TERMINAL) -> Plan:
     raw = [n for n in zf.namelist() if not n.endswith("/")]
     prefix = TOP + "/" if raw and all(n.startswith(TOP + "/") for n in raw) else ""
     names = [_member(n[len(prefix):]) for n in raw]
-    if VERSION_FILE not in names:
-        raise UpdateError(f"not an Unseenet update zip: it has no {VERSION_FILE}")
-    version = zf.read(prefix + VERSION_FILE).decode("utf-8", "replace").strip()
+    if product.version_file not in names:
+        raise UpdateError(f"not an update zip of {product.label}: it has no {product.version_file}")
+    version = zf.read(prefix + product.version_file).decode("utf-8", "replace").strip()
     new_sl = zf.read(prefix + SYSLINUX_VERSION).decode().strip() \
         if SYSLINUX_VERSION in names else ""
     old_sl = _read(media / SYSLINUX_VERSION)
@@ -352,11 +405,15 @@ def make_plan(media: Path, zf: zipfile.ZipFile) -> Plan:
         names = [n for n in names if not (n.startswith(SYSLINUX + "/")
                                           and (n.endswith(".c32") or n == SYSLINUX_VERSION))]
     # the version file last but the kernel: a stick that says "new" has all of it
-    order = (VERSION_FILE, FILES_LIST, *KERNEL)
+    order = (product.version_file, product.files_list, *KERNEL)
     names.sort(key=lambda n: (order.index(n) + 1 if n in order else 0, n))
     lower = {n.lower() for n in names}
+    # what the other product in the folder put there stays (they share LICENSES/ etc.)
+    others = {line.strip().lower() for p in PRODUCTS.values() if p is not product
+              for line in _read(media / p.files_list).splitlines()}
+    lower |= others
     remove = []
-    for line in _read(media / FILES_LIST).splitlines():
+    for line in _read(media / product.files_list).splitlines():
         try:
             old = _member(line.strip())
         except UpdateError:
@@ -462,17 +519,18 @@ def _write_link(zf: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path) -> None:
             (_write_link if _is_link(sub) else _write_file)(zf, sub, out)
 
 
-def apply(media: Path, zip_path: Path, say: Callable[[str], None] = print) -> Plan:
+def apply(media: Path, zip_path: Path, say: Callable[[str], None] = print,
+          product: Product = TERMINAL) -> Plan:
     """Replace the stick's system files with those in ``zip_path``. data/ is not touched."""
     clean_old(media)
     with zipfile.ZipFile(zip_path) as zf:
-        plan = make_plan(media, zf)
+        plan = make_plan(media, zf, product)
         free = shutil.disk_usage(media).free
         if free < plan.room:
             raise UpdateError(f"the stick needs {plan.room >> 20} MB free for the update and "
                               f"has {free >> 20} MB; delete something outside data/, or "
                               "start again with a fresh copy (keep a copy of data/ first)")
-        (media / MARKER).write_text(plan.version + "\n")
+        (media / product.marker).write_text(plan.version + "\n")
         _sync()
         for i, name in enumerate(plan.replace, 1):
             info = zf.getinfo(plan.prefix + name)
@@ -485,14 +543,14 @@ def apply(media: Path, zip_path: Path, say: Callable[[str], None] = print) -> Pl
             except OSError:              # in use (Windows): gone at the next update
                 pass
     _sync()
-    (media / MARKER).unlink(missing_ok=True)
+    (media / product.marker).unlink(missing_ok=True)
     _sync()
     return plan
 
 
-def unfinished(media: Path) -> str | None:
+def unfinished(media: Path, product: Product = TERMINAL) -> str | None:
     """The version an interrupted update was writing, if any."""
-    return _read(media / MARKER) or None
+    return _read(media / product.marker) or None
 
 
 # ----------------------------------------------------------------------
@@ -505,14 +563,17 @@ class Release:
     zip_name: str
     sha256: str
     signed_by: str
+    release: str = ""        # the terminal client's version in the same sums (mirrors keep by it)
 
 
-def check_release(sums: bytes, sig: str, channel: str, what: str = "x86_64-update") -> Release:
+def check_release(sums: bytes, sig: str, channel: str, what: str = "x86_64-update",
+                  product: Product = TERMINAL) -> Release:
     """What a release's signed checksums offer; UpdateError unless the signature is good."""
     signer = check_signature(sums, sig, channel)
     table = parse_sums(sums)
-    name, version = asset_in(table, what)
-    return Release(channel, version, name, table[name], signer)
+    name, version = asset_in(table, what, product)
+    return Release(channel, version, name, table[name], signer,
+                   versions_in(table).get(TERMINAL.name, version))
 
 
 # ----------------------------------------------------------------------
@@ -656,37 +717,35 @@ GRAPHICAL = "README-graphical.txt"      # a folder or stick of unseenet-gui's bu
 
 def run(args: argparse.Namespace, socks_port: int | None) -> int:
     media: Path = args.media
-    if (media / GRAPHICAL).exists():
-        # its builds have the graphical client too: this release's zips would remove it
-        raise UpdateError("this is a stick or folder of the graphical client (unseenet-gui); "
-                          "it cannot be updated with unseenet's own releases yet - "
-                          "download the new one from github.com/unseenet/unseenet-gui")
-    current = stick_version(media)
-    what = stick_kind(media)
-    print(f"This stick: Unseenet {current}  ({media})")
-    if (left := unfinished(media)):
+    product = product_of(media, getattr(args, "product", None))
+    current = stick_version(media, product)
+    what = stick_kind(media, product)
+    if product is GRAPHICAL_CLIENT and what == "x86_64-update":
+        raise UpdateError("the bootable image has no graphical client to update")
+    print(f"This stick: {product.label} {current}  ({media})")
+    if (left := unfinished(media, product)):
         print(f"An update to {left} did not finish; it is done again now.")
     if args.zip:                       # offline: the zip, with the release's sums and signature
         m = ASSET.match(args.zip.name)
-        if not m or m.group("what") != what:
+        if not m or m.group("what") != what or m.group("product") != product.name:
             raise UpdateError(f"{args.zip.name} is not the zip for this stick: it needs "
-                              f"unseenet-<version>-{what}.zip")
+                              f"{product.name}-<version>-{what}.zip")
         folder = args.zip.parent
         try:
             sums, sig = (folder / SUMS).read_bytes(), (folder / SIG).read_text()
         except OSError:
             raise UpdateError(f"put {SUMS} and {SIG} from the same release next to the zip")
         try:
-            rel = check_release(sums, sig, "stable", what)
+            rel = check_release(sums, sig, "stable", what, product)
         except UpdateError:              # a file you chose: a development build will do too
-            rel = check_release(sums, sig, "dev", what)
+            rel = check_release(sums, sig, "dev", what, product)
         if rel.zip_name != args.zip.name:
             raise UpdateError(f"{SUMS} is for {rel.zip_name}, not {args.zip.name}")
     else:
         print(f"Looking for the newest {args.channel} release (GitHub and the network) ...")
         found: list[Release] = []
         problems: list[str] = []
-        on_github, missed = from_github(args.channel, what, socks_port)
+        on_github, missed = from_github(args.channel, what, socks_port, product)
         found += on_github
         problems += [f"GitHub {m}" for m in missed]
         onions: list[str] = []
@@ -696,7 +755,7 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
                 post = parse_release_post(body)
                 if post and post[0] == args.channel:
                     try:
-                        found.append(check_release(post[1], post[2], args.channel, what))
+                        found.append(check_release(post[1], post[2], args.channel, what, product))
                     except UpdateError:
                         continue                 # not signed by a key this channel trusts
             if not bodies:
@@ -707,7 +766,7 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
             print(f"  ({problem})")
         rel = max(found, key=lambda r: version_key(r.version))
     who = "the project key" if rel.signed_by == PROJECT_KEY else "the release key (development)"
-    print(f"Newest: Unseenet {rel.version}, signed by {who}")
+    print(f"Newest: {product.label} {rel.version}, signed by {who}")
     if version_key(rel.version) <= version_key(current) and not args.force and not left:
         print("It is up to date.")
         return 3
@@ -722,7 +781,8 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
             sources = release_urls(args.channel, rel.zip_name, rel.version)
             if socks_port and onions:
                 sources += [base + MIRROR_PATH.format(channel=args.channel, name=rel.zip_name)
-                            for base in mirrors_with(onions, args.channel, rel.version, socks_port)]
+                            for base in mirrors_with(onions, args.channel, rel.release or rel.version,
+                                                     socks_port)]
             for url in sources:
                 print(f"Downloading {rel.zip_name} from {urlsplit(url).hostname} ...")
                 try:
@@ -741,8 +801,8 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
             raise UpdateError(f"{zip_path.name} does not match its checksum; nothing was changed")
         _remount_rw(media)
         print("Replacing the system files (do not pull out the stick) ...")
-        apply(media, zip_path)
-    print(f"Done: the stick has Unseenet {rel.version}. Your data/ is as it was.")
+        apply(media, zip_path, product=product)
+    print(f"Done: the stick has {product.label} {rel.version}. Your data/ is as it was.")
     if args.reboot and _ask("Restart now to use it?", args.yes):
         import subprocess
         subprocess.run(["reboot"])
@@ -771,6 +831,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--media", type=Path, help="the stick (default: the one this runs from)")
     p.add_argument("--channel", choices=("stable", "dev"), default="stable",
                    help="stable releases (default), or development builds")
+    p.add_argument("--product", choices=tuple(PRODUCTS),
+                   help="the terminal or the graphical client (default: the terminal one, "
+                        "or the graphical one in a folder that has only it)")
     p.add_argument("--zip", type=Path, help="update from this file instead of downloading; "
                    f"{SUMS} and {SIG} must be next to it")
     p.add_argument("--check", action="store_true", help="only say whether there is an update")
