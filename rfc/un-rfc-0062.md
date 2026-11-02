@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.7.0; partly - section 6.1 for the node, council replicas and the registrar (one signer, the project key; key lists and thresholds, sections 3 and 4, follow)
+Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 6.1 to 6.3 (one signer, the project key; key lists and thresholds, sections 3 and 4, follow)
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures
@@ -173,9 +173,91 @@ itself:
    10 minutes after an update, it goes back to the version it ran,
    tells its operator, and does not try that version again.
 
+6. **Over Tor.** Everything an update downloads - the checksums, their
+   signatures, the list of packages, and every package - SHOULD go over
+   Tor. Otherwise the downloads right after each release tell whoever
+   serves or watches them which machines run a server, and where. The
+   operator MAY turn this off. A server that should use Tor and cannot
+   reach it MUST NOT fall back to downloading without it; it waits for
+   the next look instead.
+7. **From the network first.** It SHOULD learn of a release from the
+   publisher's releases channel (section 6.2), read through a node - the
+   one on the same machine if there is one - and ask an outside site only
+   when the channel has no release of its package.
+8. **Not in the middle of something.** A service MAY say that it must not
+   be restarted now (while a key ripens, UN-RFC 0025: a restart would
+   start the segment being proved over); the update then waits. A
+   service a timer starts now and then is not restarted: the new version
+   must load, and the next run uses it.
+
 A server with self-updating turned off SHOULD tell its operator when a
 newer release has existed for 30 days, and at once when its version is
 below a council's minimum (UN-RFC 0020 section 6.5).
+
+## 6.2 Server Releases in the Releases Channel
+
+A server release is posted in the publisher's releases channel as one
+post per package and version, with the subject
+`Unseenet server <package> <version>` and the body
+
+```
+Unseenet server <package> <version>, <channel>
+
+SHA256SUMS.txt:
+<the release's SHA256SUMS.txt>
+SHA256SUMS.txt.sig:
+<its signature>
+
+<package>-<version>-server-requirements.txt (gzip, base64):
+<the file, gzip-compressed, in base64>
+```
+
+The requirements file names every package to install with its SHA-256
+(`<name>==<version> --hash=sha256:...`), the package itself included -
+by its wheel in the same release when it is not in a package index.
+It is packed because with every hash it is tens of kilobytes. A server
+takes the newest post for its own package whose checksums are validly
+signed (section 4), whose requirements match the checksums, and whose
+requirements name that package at that version; anything else in the
+channel is ignored. Nothing in the post is trusted for having been
+posted.
+
+## 6.3 Where Releases Are Fetched From
+
+Release files and the package index are on outside sites. If one takes
+the publisher down, is blocked, or is used against it, nothing could be
+updated - not even to a version that knows somewhere else. So the
+publisher MAY post a **list of release sources** in its releases
+channel, with the subject `Unseenet release sources` and the body
+
+```
+Unseenet release sources
+
+{"files":["http://<onion>/releases/{repo}/{tag}/{name}"],
+ "index":["https://pypi.org/simple/"],"updated":"2026-11-02T20:00:00Z","v":1}
+
+Unseenet release signature
+key: ed25519:...
+signature: ...
+```
+
+- `files`: where a release file is, in the order to try, as templates
+  with `{repo}`, `{tag}` and `{name}`;
+- `index`: package indexes for servers (the first the index, the others
+  extra ones);
+- `updated`: the time of the list; a newer valid list replaces an older
+  one, never the reverse;
+- each address is `https://`, or `http://` to an onion address (Tor
+  encrypts and authenticates those); at most 16 of each.
+
+The JSON is canonical (keys sorted, no spaces), and the signature is
+over `Unseenet release sources\n` followed by it, made as a release
+signature (section 9) by the publisher. Servers and clients keep the
+newest valid list they have seen, so that a list posted while the
+network works still applies when an outside site does not; the
+publisher's built-in sources stay the last resort. The list grants
+nothing over *what* is installed: every file must still match the
+signed checksums (section 6).
 
 # 7. Building One's Own
 
@@ -195,7 +277,10 @@ the bundles first.
 # 9. Domain Separations
 
 UN-RFC 0003 section 3 is extended with `UNSEENET-RELEASE-KEYS-1`, which
-hashes a key list into the next one's `prev`.
+hashes a key list into the next one's `prev`. A list of release sources
+(section 6.3) is signed with the release purpose, over a body that
+begins `Unseenet release sources\n`; no `SHA256SUMS.txt` begins so, and
+neither parses as the other.
 
 # 10. Rationale
 
@@ -220,6 +305,14 @@ hashes a key list into the next one's `prev`.
   it runs, whatever its signatures.
 - **A malicious publisher** chosen by the user is the user's choice; the
   client shows whom it follows, and adding a publisher asks first.
+- **Who runs a server.** Downloads from an outside site right after each
+  release would list the machines that run servers; over Tor (section
+  6.1, item 6) they show only that someone updated.
+- **A false or withheld list of sources** (section 6.3) can send a server
+  or client looking in the wrong place, or keep it on an older list; it
+  cannot make it install anything the publisher did not sign. Withheld
+  posts in the releases channel likewise only delay an update, which the
+  outside sites then provide.
 
 # 12. What Is Autonomous, and What Is Not Yet (Informative)
 
@@ -237,6 +330,8 @@ section 8 is the next step.
 - UN-RFC 0043: a release in a releases channel is valid with the
   signatures of section 4; the channel carries the key list of
   section 3.
+- UN-RFC 0043 section 7.2: the releases channel also carries server
+  releases (section 6.2) and lists of release sources (section 6.3).
 - UN-RFC 0000 section 6: 0062 is added to the index.
 
 # Copyright Notice
