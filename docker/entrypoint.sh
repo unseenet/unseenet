@@ -24,6 +24,12 @@ if [ "$(id -u)" = 0 ]; then
             break
         fi
     done
+    # the stats token for Home Assistant (#873), handed on the same way
+    if [ -n "${UNSEENET_STATS_TOKEN_FILE:-}" ] && [ -r "$UNSEENET_STATS_TOKEN_FILE" ]; then
+        (umask 077 && cat "$UNSEENET_STATS_TOKEN_FILE" > /tmp/unseenet_stats_token)
+        chown unseenet:unseenet /tmp/unseenet_stats_token
+        export UNSEENET_STATS_TOKEN_FILE=/tmp/unseenet_stats_token
+    fi
     exec su-exec unseenet "$0" "$@"
 fi
 
@@ -91,5 +97,12 @@ NO_TOR=""
 [ -n "${UNSEENET_NO_TOR:-}" ] && NO_TOR=--no-tor      # tests only: no onion service
 # Clients reach the node over Tor. UNSEENET_LISTEN=0.0.0.0:1119 also lets containers on
 # the same Docker network in, e.g. a replica beside it (docs/replica.md) - publish no port.
+# UNSEENET_STATS_LISTEN=0.0.0.0:1120 with UNSEENET_STATS_TOKEN_FILE serves the stats to
+# Home Assistant in another container (#873); never over Tor.
+set --
+if [ -n "${UNSEENET_STATS_LISTEN:-}" ]; then
+    set -- --stats-listen "$UNSEENET_STATS_LISTEN"
+    [ -n "${UNSEENET_STATS_TOKEN_FILE:-}" ] && set -- "$@" --stats-token-file "$UNSEENET_STATS_TOKEN_FILE"
+fi
 exec unseenet-node --data "$DATA" --config "$CONFIG" --listen "${UNSEENET_LISTEN:-127.0.0.1:1119}" \
-    --monitor "${UNSEENET_MONITOR:-$DATA/monitor.sock}" $NO_TOR
+    --monitor "${UNSEENET_MONITOR:-$DATA/monitor.sock}" $NO_TOR "$@"

@@ -129,6 +129,8 @@ its own, a replica reaches the network over Tor like any client.
 | `UNSEENET_REPLICA_HOLD` | Changes you want to agree to yourself first, e.g. `removal` |
 | `UNSEENET_REPLICA_GROUP` | Another council registrar than the project's |
 | `UNSEENET_REPLICA_NODES` | Nodes to use, comma separated; by default the known nodes |
+| `UNSEENET_STATS_LISTEN` | Serve the replica's status here too, e.g. `0.0.0.0:1120` for Home Assistant (any start); needs the token below for an address other than the container's own |
+| `UNSEENET_STATS_TOKEN_FILE` | A secret file (mode 600) with the token a client gives first |
 
 **Updating.** A replica in a container does not update itself:
 `docker compose pull && docker compose up -d` gets the newest signed

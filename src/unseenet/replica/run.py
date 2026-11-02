@@ -573,12 +573,39 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         tmp.replace(path)
 
 
+async def serve_stats(rep: "Replica", listen: str, token: str | None = None):
+    """The replica's stats interface (#873), as a node's (``node/stats.py``): ``stats``
+    answers ``{"v": 1, "kind": "replica", "status": ...}`` - what ``status.json`` holds,
+    no secrets - and ``log N`` the last log lines. For Home Assistant and monitors."""
+    from ..node.stats import LOG_LINES, _LogTail, serve_requests
+    tail = _LogTail()
+    logging.getLogger("unseenet").addHandler(tail)
+
+    async def answer(parts: list[str]):
+        if parts[0] == "stats":
+            return {"v": 1, "kind": "replica", "status": rep.status}
+        if parts[0] == "log":
+            n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 100
+            return list(tail.lines)[-min(n, LOG_LINES):]
+        return {"error": "unknown request; try 'stats' or 'log 100'"}
+    return await serve_requests(answer, listen, token)
+
+
 async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float = 300,
-              once: bool = False, ripen_to: int | None = None, **kw) -> None:
-    """Rounds every ``interval`` seconds; the key ripens beside them."""
+              once: bool = False, ripen_to: int | None = None,
+              stats_listen: str | None = None, stats_token: str | None = None, **kw) -> None:
+    """Rounds every ``interval`` seconds; the key ripens beside them. ``stats_listen``:
+    where the stats are served too (with ``stats_token``, also off this computer)."""
     rep = Replica(session, group, **kw)
     stop = asyncio.Event()
     ripening = None
+    stats = None
+    if stats_listen:
+        try:
+            stats = await serve_stats(rep, stats_listen, stats_token)
+            log.info("stats on %s%s", stats_listen, " (with a token)" if stats_token else "")
+        except (OSError, ValueError) as exc:
+            log.error("no stats on %s: %s", stats_listen, exc)
     try:
         while True:
             try:
@@ -597,4 +624,6 @@ async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float 
         stop.set()
         if ripening is not None:
             ripening.cancel()
+        if stats is not None:
+            stats.close()
         await session.close()

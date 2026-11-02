@@ -27,6 +27,12 @@ if [ "$(id -u)" = 0 ]; then
             break
         fi
     done
+    # the stats token for Home Assistant (#873), handed on the same way
+    if [ -n "${UNSEENET_STATS_TOKEN_FILE:-}" ] && [ -r "$UNSEENET_STATS_TOKEN_FILE" ]; then
+        (umask 077 && cat "$UNSEENET_STATS_TOKEN_FILE" > /tmp/unseenet_stats_token)
+        chown unseenet:unseenet /tmp/unseenet_stats_token
+        export UNSEENET_STATS_TOKEN_FILE=/tmp/unseenet_stats_token
+    fi
     exec su-exec unseenet "$0" "$@"
 fi
 
@@ -66,4 +72,10 @@ if [ ! -f "$DATA/replica.vault" ]; then
     set --
 fi
 
-exec unseenet-replica run --passphrase-file "$PW_FILE"
+# UNSEENET_STATS_LISTEN=0.0.0.0:1120 with UNSEENET_STATS_TOKEN_FILE serves the replica's
+# status to Home Assistant in another container (#873); never over Tor.
+if [ -n "${UNSEENET_STATS_LISTEN:-}" ]; then
+    set -- --stats-listen "$UNSEENET_STATS_LISTEN"
+    [ -n "${UNSEENET_STATS_TOKEN_FILE:-}" ] && set -- "$@" --stats-token-file "$UNSEENET_STATS_TOKEN_FILE"
+fi
+exec unseenet-replica run --passphrase-file "$PW_FILE" "$@"
