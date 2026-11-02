@@ -156,3 +156,52 @@ def test_a_node_catching_up_counts_the_chain_from_the_copies():
     for mid in a.store.state_ids(gid):
         b.accept(a.store.get(mid), source="a", from_peer=True)
     assert b.store.manifest(gid).serial == 2
+
+
+def test_a_node_follows_the_root_list_to_its_council(monkeypatch):
+    """#888, UN-RFC 0020 section 10: once the project's ``unseenet.hierarchies`` says
+    ``moved_to`` a list council, the node goes by the newest root list the council's
+    members posted - for blocks across a hierarchy and the network's own groups - and
+    by the project's only until the council has one."""
+    import json
+    from unseenet import hierarchies as hz
+    from unseenet import known_nodes as kn
+    from unseenet.core.groups import make_manifest, manifest_article
+    node = _node()
+    project = crypto.Identity.generate()
+    monkeypatch.setattr(kn, "PROJECT_KEY", project.key_text)
+    old = make_manifest(project, "unseenet.hierarchies", "channel", pow_bits=BITS)
+    monkeypatch.setattr(hz, "HIERARCHIES_GROUP", old.group)
+    node.accept(old.to_bytes())
+    root_old = json.dumps({"v": 1, "updated": "2026-10-31", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"}]})
+    node.accept(new_article(old.group, "root", root_old, from_name="P").finalize(project, BITS).to_bytes())
+
+    ids = [crypto.Identity.generate() for _ in range(2)]
+    members = [Member(i.public_key, T0, True) for i in ids]
+    lb = council_body("unseenet.hierarchies", "channel", seq=1, date=T0, members=members,
+                      fields={"min_pow": 0, "retention_days": 30})
+    lgid = make_council_group_id("unseenet.hierarchies", lb)
+    _post_all(node, ids, lgid, lb)
+    cb = council_body("unseenet.lists", "channel", seq=1, date=T0, members=members,
+                      fields={"min_pow": 0, "retention_days": 30, "lists": {"root": lgid},
+                              "claims": f"unseenet.lists.claims@{ids[0].fingerprint}",
+                              "reports": f"unseenet.lists.reports@{ids[0].fingerprint}"})
+    cgid = make_council_group_id("unseenet.lists", cb)
+    _post_all(node, ids, cgid, cb)
+
+    data = dict(old.raw if hasattr(old, "raw") else json.loads(old.body))
+    data.update({"serial": data["serial"] + 1, "moved_to": cgid, "moved_on": "2026-11-02T12:00:00Z"})
+    node.accept(manifest_article(project, old.group, data, pow_bits=BITS).to_bytes())
+    assert set(node.root_list(project.key_text)) == {"alt"}       # the project's, for now
+    games = ids[1]
+    root_new = json.dumps({"v": 1, "updated": "council 1 day 2026-11-01", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"},
+        {"name": "games", "policy": "governed", "maintainer": games.key_text,
+         "list": f"games.list@{games.fingerprint}", "title": "Games"}]})
+    node.accept(new_article(lgid, "root list", root_new, from_name="R").finalize(ids[0], BITS).to_bytes())
+    root = node.root_list(project.key_text)
+    assert root["games"].maintainer == games.key_text
+    # somebody else's root list in another group is not the council's
+    stranger = crypto.Identity.generate()
+    assert set(node.root_list(stranger.key_text)) != {"alt", "games"}

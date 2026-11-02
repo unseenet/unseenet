@@ -30,9 +30,7 @@ class Carrying:
         cached = getattr(self, "_network", None)
         if cached and time.monotonic() - cached[0] < self.NETWORK_TTL:
             return cached[1]
-        root = self._newest_list(hz.HIERARCHIES_GROUP, PROJECT_KEY,
-                                 lambda body: hz.parse_root_list(body)[1])
-        h = hz.policy_of("unseenet", root if root is not None else hz.builtin_root_list()[1])
+        h = hz.policy_of("unseenet", self.root_list(PROJECT_KEY))
         lst = None
         if h.policy == "governed":
             lst = self._newest_list(h.list, h.maintainer,
