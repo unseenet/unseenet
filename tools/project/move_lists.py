@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Move one of the project's lists to its list council (UN-RFC 0020 section 10, #56).
 
-    python3 tools/project/move_lists.py unseenet.lists@<fp> [--list nodes|root] [--dry-run] [--force]
+    python3 tools/project/move_lists.py unseenet.lists@<fp> [--list nodes|root|entrances] [--dry-run] [--force]
 
 The last step the project key takes in that list. Run it once the list council counts
 (``unseenet council show``), keeps that list, its import is posted, and its replicas have
 posted a list of their own.
 
-It posts a last manifest for the project's group (unseenet.nodes, or unseenet.hierarchies
-for ``--list root``), signed by the project key, with ``moved_to`` (the list council's
+It posts a last manifest for the project's group (unseenet.nodes, unseenet.hierarchies
+for ``--list root``, unseenet.entrances for ``--list entrances``), signed by the project key, with ``moved_to`` (the list council's
 Group ID) and ``moved_on`` (now). Clients that read it take the council's list from then
 on; the old group's lists are read only until the council has one. From then on the
 project key has no part in that list. For the node list, retire the GitHub workflows that
-kept it (node-request, node-health) afterwards.
+kept it (node-request, node-health) afterwards; for the entrance list, entrance-request
+and entrance-health.
 """
 
 from __future__ import annotations
@@ -29,9 +30,10 @@ from unseenet import names as nm
 from unseenet.core import lists as ls
 from unseenet.core.groups import manifest_article
 from unseenet import hierarchies as hz
-from unseenet.known_nodes import NODES_GROUP, parse_node_list
+from unseenet.known_nodes import ENTRANCES_GROUP, NODES_GROUP, parse_entrance_list, parse_node_list
 
-GROUPS = {"nodes": (NODES_GROUP, parse_node_list), "root": (hz.HIERARCHIES_GROUP, hz.parse_root_list)}
+GROUPS = {"nodes": (NODES_GROUP, parse_node_list), "root": (hz.HIERARCHIES_GROUP, hz.parse_root_list),
+          "entrances": (ENTRANCES_GROUP, parse_entrance_list)}
 
 
 async def main() -> None:
