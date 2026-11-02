@@ -134,7 +134,9 @@ systemctl enable --now unseenet-node >/dev/null
 systemctl enable --now unseenet-update@unseenet-node.timer >/dev/null
 echo "Started. Waiting for the onion address (Tor bootstrap can take a minute) ..."
 for _ in $(seq 1 90); do
-  ADDR=$(journalctl -u unseenet-node -o cat --no-pager | grep -o '[a-z2-7]\{56\}\.onion' | tail -1 || true)
+  # only the node's own "reachable at" line: other lines name its peers' onion addresses
+  ADDR=$(journalctl -u unseenet-node -o cat --no-pager | grep 'reachable at' \
+         | grep -o '[a-z2-7]\{56\}\.onion' | tail -1 || true)
   [ -n "$ADDR" ] && break
   sleep 2
 done

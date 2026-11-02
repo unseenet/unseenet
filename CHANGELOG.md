@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **install-node.sh prints the node's own onion address** at the end: it took the newest onion
+  address in the journal, which could be a peer's.
+
 ## [0.7.0] - 2026-11-02
 
 Councils, carrying and finding nodes. Councils own groups together (UN-RFC 0054 Part I),
