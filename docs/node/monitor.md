@@ -86,6 +86,26 @@ printf 'stats\n' | sudo -u unseenet nc -U /home/unseenet/node-data/monitor.sock 
 
 The format is described at the top of `src/unseenet/node/stats.py` (`"v": 1`).
 
+### From another container: with a token
+
+Home Assistant runs in a container of its own, so it cannot reach the socket
+or 127.0.0.1. For it, the node can serve the same interface on a private
+address as well - off by default, and only with a token:
+
+```bash
+openssl rand -hex 24 > stats.token && chmod 600 stats.token
+unseenet-node --data node-data --stats-listen 0.0.0.0:1120 --stats-token-file stats.token
+```
+
+An address other than this computer's is refused without a token, and it is
+never served over Tor. On such a connection the first line must be
+`token <token>`; the node answers `{"ok": true}`, or `{"error": "..."}` and
+closes the connection. After that the requests are as above. In the
+container, `UNSEENET_STATS_LISTEN` and `UNSEENET_STATS_TOKEN_FILE` (a secret
+file, mode 600) do the same; the add-ons use port 1120. A council replica
+serves its status the same way (`unseenet-replica run --stats-listen ...`,
+see [the replica](../replica.md)).
+
 !!! note "Nothing about readers"
     The numbers are counters only. The node does not record who reads what -
     not even which groups or articles are read, only how many articles were

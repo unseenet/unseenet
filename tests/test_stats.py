@@ -182,3 +182,65 @@ async def test_the_operator_is_told_by_their_own_command(tmp_path):
             break
     task.cancel()
     assert out.read_text().splitlines() == ["2 of 2", "3 of 3"]
+
+
+def test_a_private_address_needs_a_token():
+    """#873: for Home Assistant in another container - only with a token, never Tor."""
+    assert st.parse_listen("0.0.0.0:1120", token=True) == ("tcp-any", ("0.0.0.0", 1120))
+    assert st.parse_listen("172.30.32.1:1120", token=True)[0] == "tcp-any"
+    with pytest.raises(ValueError, match="token"):
+        st.parse_listen("172.30.32.1:1120")
+    with pytest.raises(ValueError, match="Tor"):
+        st.parse_listen("a" * 56 + ".onion:1120", token=True)
+
+
+def test_the_token_file(tmp_path):
+    f = tmp_path / "token"
+    f.write_text("short\n")
+    f.chmod(0o600)
+    with pytest.raises(ValueError, match="16"):
+        st.read_token(f)
+    f.write_text("a-long-enough-token-1234\n")
+    assert st.read_token(f) == "a-long-enough-token-1234"
+    if sys.platform != "win32":
+        f.chmod(0o644)
+        with pytest.raises(ValueError, match="600"):
+            st.read_token(f)
+
+
+async def test_stats_with_a_token(tmp_path, monkeypatch):
+    import asyncio
+    node, server, s, gid = await _node_with_traffic(tmp_path, monkeypatch)
+    token = "a-long-enough-token-1234"
+    mon = await st.serve(node.stats, node, "0.0.0.0:0", tmp_path, token)
+    port = mon.sockets[0].getsockname()[1]
+    snap = await st.fetch(f"127.0.0.1:{port}", token=token)
+    assert snap["node"]["key"] == node.key.key_text
+    with pytest.raises(ConnectionError, match="wrong token"):
+        await st.fetch(f"127.0.0.1:{port}", token="not-the-token-at-all")
+    # without the token line, nothing but the refusal, and the connection closes
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(b"stats\n")
+    await writer.drain()
+    assert b"wrong token" in await reader.readline()
+    assert await reader.readline() == b""
+    writer.close()
+    mon.close()
+    await s.close()
+    server.close()
+
+
+async def test_a_replica_serves_its_status(tmp_path):
+    from types import SimpleNamespace
+
+    from unseenet.replica.run import serve_stats
+    rep = SimpleNamespace(status={"role": "shadow", "group": "g"})
+    token = "a-long-enough-token-1234"
+    srv = await serve_stats(rep, "0.0.0.0:0", token)
+    port = srv.sockets[0].getsockname()[1]
+    got = await st.fetch(f"127.0.0.1:{port}", token=token)
+    assert got == {"v": 1, "kind": "replica", "status": {"role": "shadow", "group": "g"}}
+    logging.getLogger("unseenet.replica").warning("a round failed: test")
+    assert any("a round failed" in line for line in await st.fetch(f"127.0.0.1:{port}", "log 5",
+                                                                     token=token))
+    srv.close()

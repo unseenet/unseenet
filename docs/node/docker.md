@@ -62,6 +62,8 @@ edit the file in the volume and restart the container:
 | `UNSEENET_AVATARS` | `no` | `yes`: carry profile pictures |
 | `UNSEENET_SITES` | `no` | `yes`: carry sites, pages that stay ([UN-RFC 0035](../spec/un-rfc-0035.md)) |
 | `UNSEENET_LISTEN` | `127.0.0.1:1119` | Read at every start. `0.0.0.0:1119` lets other containers on the same Docker network use the node, such as a [replica](../replica.md#in-docker) beside it. Publish no port |
+| `UNSEENET_STATS_LISTEN` | (off) | Read at every start. Serve the [stats](monitor.md#from-another-container-with-a-token) here too, e.g. `0.0.0.0:1120` for Home Assistant; another address than the container's own needs the token below |
+| `UNSEENET_STATS_TOKEN_FILE` | (none) | A secret file (mode 600) with the token a client gives first |
 
 ```bash
 docker run --rm -it -v unseenet:/data alpine vi /data/node.toml   # add [[peer]] sections

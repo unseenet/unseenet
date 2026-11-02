@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import hmac
 import ipaddress
 import json
 import logging
@@ -337,10 +338,12 @@ def warnings(snap: dict) -> list[str]:
 
 
 # ----------------------------------------------------------------------
-# The interface: a Unix socket, or 127.0.0.1 (never another address)
+# The interface: a Unix socket, or 127.0.0.1 - or, with a token, a private address for
+# Home Assistant in another container (#873). Never the onion service.
 # ----------------------------------------------------------------------
-def parse_listen(value: str) -> tuple[str, str | int]:
-    """("unix", path) or ("tcp", port) for a loopback address; refuses anything else."""
+def parse_listen(value: str, token: bool = False) -> tuple[str, object]:
+    """("unix", path), ("tcp", port) for a loopback address, or ("tcp-any", (host, port))
+    for another address - only with a token (``token``). Refuses anything else."""
     if value.startswith("unix:") or "/" in value or value.endswith(".sock"):
         return "unix", value.removeprefix("unix:")
     host, _, port = value.rpartition(":")
@@ -349,9 +352,29 @@ def parse_listen(value: str) -> tuple[str, str | int]:
         loopback = host == "localhost" or ipaddress.ip_address(host).is_loopback
     except ValueError:
         loopback = False
-    if not loopback:
-        raise ValueError(f"the stats interface only listens on this computer, not on {host!r}")
-    return "tcp", int(port)
+    if loopback:
+        return "tcp", int(port)
+    if host.endswith(".onion"):
+        raise ValueError("the stats interface is never served over Tor")
+    if not token:
+        raise ValueError(f"the stats interface only listens on this computer, not on "
+                         f"{host!r} - unless it needs a token (--stats-token-file)")
+    return "tcp-any", (host, int(port))
+
+
+MIN_TOKEN = 16
+
+
+def read_token(path: str | Path) -> str:
+    """The token in a secret file: readable by its owner only, at least 16 characters."""
+    path = Path(path)
+    if os.name == "posix" and path.stat().st_mode & 0o077:
+        raise ValueError(f"{path} must be readable by its owner only (chmod 600)")
+    token = path.read_text(encoding="utf-8").strip()
+    if len(token) < MIN_TOKEN or any(c.isspace() for c in token):
+        raise ValueError(f"the token in {path} must be at least {MIN_TOKEN} characters, "
+                         "without spaces")
+    return token
 
 
 # Unix socket paths are limited by sun_path: 104 bytes on macOS and the BSDs,
@@ -359,11 +382,26 @@ def parse_listen(value: str) -> tuple[str, str | int]:
 UNIX_PATH_MAX = 103 if sys.platform == "darwin" or "bsd" in sys.platform else 107
 
 
-async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
-    kind, where = parse_listen(listen)
+async def serve_requests(answer, listen: str, token: str | None = None):
+    """Serve one request per line, one line of JSON each: ``answer(parts)`` gives the
+    reply. With ``token``, the first line must be ``token <token>`` (compared in
+    constant time): ``{"ok": true}``, else ``{"error"}`` and the connection closes."""
+    kind, where = parse_listen(listen, token=token is not None)
+
+    def say(writer, reply) -> None:
+        writer.write(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
+            if token is not None:
+                line = await asyncio.wait_for(reader.readline(), timeout=30)
+                given = line.decode("utf-8", "replace").strip()
+                ok = given.startswith("token ") and hmac.compare_digest(
+                    given[len("token "):].encode(), token.encode())
+                say(writer, {"ok": True} if ok else {"error": "wrong token"})
+                await writer.drain()
+                if not ok:
+                    return
             while True:
                 line = await asyncio.wait_for(reader.readline(), timeout=300)
                 if not line:
@@ -371,19 +409,7 @@ async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
                 parts = line.decode("utf-8", "replace").strip().split()
                 if not parts or len(line) > MAX_REQUEST:
                     continue
-                if parts[0] == "stats":
-                    reply = await stats.snapshot(node, data_dir)
-                elif parts[0] == "seen-contact":              # the operator has looked (#135)
-                    st = contact_state(node, data_dir)
-                    if st:
-                        set_contact_seen(data_dir, st["messages"])
-                    reply = {"ok": True}
-                elif parts[0] == "log":
-                    n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 100
-                    reply = list(stats.log.lines)[-min(n, LOG_LINES):]
-                else:
-                    reply = {"error": "unknown request; try 'stats', 'log 100' or 'seen-contact'"}
-                writer.write(json.dumps(reply, separators=(",", ":")).encode() + b"\n")
+                say(writer, await answer(parts))
                 await writer.drain()
         except (ConnectionError, asyncio.TimeoutError, OSError):
             pass
@@ -402,18 +428,47 @@ async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None):
         finally:
             os.umask(old)
         return server
+    if kind == "tcp-any":
+        return await asyncio.start_server(handle, where[0], where[1])
     return await asyncio.start_server(handle, "127.0.0.1", where)
 
 
-async def fetch(listen: str, request: str = "stats", timeout: float = 10):
-    """Ask a node's stats interface (used by unseenet-monitor and the tests)."""
-    kind, where = parse_listen(listen)
+async def serve(stats: Stats, node, listen: str, data_dir: Path | None = None,
+                token: str | None = None):
+    """The node's stats interface: ``stats``, ``log N`` and ``seen-contact``."""
+    async def answer(parts: list[str]):
+        if parts[0] == "stats":
+            return await stats.snapshot(node, data_dir)
+        if parts[0] == "seen-contact":              # the operator has looked (#135)
+            st = contact_state(node, data_dir)
+            if st:
+                set_contact_seen(data_dir, st["messages"])
+            return {"ok": True}
+        if parts[0] == "log":
+            n = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 100
+            return list(stats.log.lines)[-min(n, LOG_LINES):]
+        return {"error": "unknown request; try 'stats', 'log 100' or 'seen-contact'"}
+    return await serve_requests(answer, listen, token)
+
+
+async def fetch(listen: str, request: str = "stats", timeout: float = 10,
+                token: str | None = None):
+    """Ask a node's (or a replica's) stats interface (unseenet-monitor, the tests)."""
+    kind, where = parse_listen(listen, token=token is not None)
     if kind == "unix":
         conn = asyncio.open_unix_connection(str(where))
+    elif kind == "tcp-any":
+        conn = asyncio.open_connection(where[0], where[1])
     else:
         conn = asyncio.open_connection("127.0.0.1", where)
     reader, writer = await asyncio.wait_for(conn, timeout)
     try:
+        if token is not None:
+            writer.write(f"token {token}\n".encode())
+            await writer.drain()
+            got = json.loads(await asyncio.wait_for(reader.readline(), timeout) or b"{}")
+            if not got.get("ok"):
+                raise ConnectionError(got.get("error", "the token was refused"))
         writer.write(request.encode() + b"\n")
         await writer.drain()
         line = await asyncio.wait_for(reader.readline(), timeout)

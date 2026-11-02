@@ -242,6 +242,15 @@ async def run_node(args) -> None:
             node.stats.note(f"unseenet-node {__version__} started; stats on {where}")
         except (OSError, ValueError, NotImplementedError) as exc:
             print(f"No stats interface ({exc})", file=sys.stderr)
+    private_stats = None
+    if getattr(args, "stats_listen", None):          # for Home Assistant beside it (#873)
+        from ..node.stats import read_token, serve as serve_stats
+        try:
+            token = read_token(args.stats_token_file) if args.stats_token_file else None
+            private_stats = await serve_stats(node.stats, node, args.stats_listen, data, token)
+            print(f"Stats on {args.stats_listen}" + (" (with a token)" if token else ""))
+        except (OSError, ValueError) as exc:
+            print(f"No stats on {args.stats_listen} ({exc})", file=sys.stderr)
 
     tor = None
     socks_port = None
@@ -304,6 +313,8 @@ async def run_node(args) -> None:
     finally:
         if monitor is not None:
             monitor.close()
+        if private_stats is not None:
+            private_stats.close()
         if tor:
             await tor.stop()
 
@@ -321,6 +332,12 @@ def node_main(argv=None) -> None:
                    help="where unseenet-monitor reads this node's stats: a Unix socket "
                         "(default: monitor.sock in --data), 127.0.0.1:PORT, or 'off'. "
                         "Only ever on this computer, never over Tor")
+    p.add_argument("--stats-listen", metavar="HOST:PORT",
+                   help="also serve the stats on this address, e.g. for Home Assistant in "
+                        "another container; an address other than this computer's needs "
+                        "--stats-token-file. Never over Tor")
+    p.add_argument("--stats-token-file", metavar="FILE",
+                   help="a file (mode 600) with the token clients must give first")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--version", action="version", version=f"unseenet-node {__version__}")
     p.add_argument("--drop-group", metavar="GROUP_ID",

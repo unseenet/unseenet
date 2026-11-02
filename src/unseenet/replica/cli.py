@@ -391,8 +391,17 @@ def run_service(args) -> int:
     group = args.group or cfg.get("group") or nm.NAMES_GROUP
     rr.log.info("replica %s for %s", session.identity().key_text, group)
     try:
+        token = None
+        if getattr(args, "stats_token_file", None):         # #873: for Home Assistant
+            from ..node.stats import read_token
+            try:
+                token = read_token(args.stats_token_file)
+            except (OSError, ValueError) as exc:
+                print(f"No stats interface: {exc}")
+                return 1
         asyncio.run(rr.run(session, group=group, interval=args.interval or cfg.get("interval", 300),
-                           once=args.once, state_dir=d, config=lambda: read_config(d)))
+                           once=args.once, state_dir=d, config=lambda: read_config(d),
+                           stats_listen=getattr(args, "stats_listen", None), stats_token=token))
     except KeyboardInterrupt:
         pass
     finally:
@@ -741,6 +750,11 @@ def main(argv=None) -> int:
     s.add_argument("--passphrase-file")
     s.add_argument("--interval", type=int, default=None)
     s.add_argument("--once", action="store_true")
+    s.add_argument("--stats-listen", metavar="HOST:PORT",
+                   help="serve the replica's status for Home Assistant or a monitor; an "
+                        "address other than this computer's needs --stats-token-file")
+    s.add_argument("--stats-token-file", metavar="FILE",
+                   help="a file (mode 600) with the token clients must give first")
     s = sub.add_parser("status", help="how the replica is doing, in plain words")
     s.add_argument("--json", action="store_true")
     s = sub.add_parser("agree", help="let a held change go ahead")

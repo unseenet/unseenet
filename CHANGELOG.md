@@ -31,6 +31,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   and for a genesis who still has to sign), `GET /api/council/hearings` its hearings, and
   `POST /api/council` signs a draft and admits, renounces, resigns, sponsors, unsponsors and
   objects, with the command line's checks - so the graphical and the terminal client can too.
+- **Stats on a private address with a token, for Home Assistant** (#873): `unseenet-node
+  --stats-listen HOST:PORT --stats-token-file FILE` serves the monitor's interface beside the
+  Unix socket, and `unseenet-replica run` does the same with `{"v": 1, "kind": "replica",
+  "status": ...}` and its log. An address other than this computer's needs the token, which a
+  client gives on the first line (compared in constant time); never over Tor. In the images:
+  `UNSEENET_STATS_LISTEN` and `UNSEENET_STATS_TOKEN_FILE`.
 - **DNS answers for hierarchy claims are decided by the replicas together** (#888, UN-RFC 0020
   sections 6.2 and 7): each list council replica asks DNS daily for every top-level domain a
   claim waits on or a hierarchy holds by DNS and puts the keys it found in its report (`dns`);
