@@ -7,6 +7,17 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **The rules for a council's node list** (#56, UN-RFC 0020 sections 6.1, 6.7 and 7):
+  `core/lists.py` computes the node list from public data alone - the nodes' announcements,
+  the daily measurement reports of the council's replicas, passed `list` decisions and the
+  council's list of the day before - so every replica posts the same list, and anybody can
+  check it. A new node needs 5 of 7 days reached and to be connected and complete; a listed
+  node leaves only after 10 days down; `min_software` keeps outdated software off. `list`
+  proposals (UN-RFC 0061) are now checked for their form. The replicas do not measure or
+  post lists yet.
+
 ## [0.7.1] - 2026-11-02
 
 Chains ripened on another machine can be imported, and install-node.sh shows the right
