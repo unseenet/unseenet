@@ -7,7 +7,8 @@ the index and each package - goes over Tor, and nobody can tell from them which
 machine runs a server (#900).
 
 Only ``CONNECT host:443`` is relayed (HTTPS: the TLS stays end to end, between pip and
-the index); anything else is refused. It listens on 127.0.0.1 only.
+the index), and ``host.onion:80`` (an index mirrored on an onion address, which Tor
+encrypts and authenticates, #902); anything else is refused. It listens on 127.0.0.1 only.
 
 Belongs here: the relay. Not here: starting Tor (``core/tor.py``), updating
 (``service_update.py``)."""
@@ -57,7 +58,8 @@ class TorConnect:
             writer.close()
             return
         host, _, port = line[1].rpartition(":")
-        if not host or not port.isdigit() or int(port) not in ALLOWED_PORTS:
+        onion_http = host.endswith(".onion") and port == "80"     # a mirror's index (#902)
+        if not host or not port.isdigit() or (int(port) not in ALLOWED_PORTS and not onion_http):
             writer.write(b"HTTP/1.1 403 Only HTTPS\r\n\r\n")
             writer.close()
             return

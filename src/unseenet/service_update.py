@@ -37,6 +37,11 @@ service's own virtual environment and updates that one:
    (``--node`` for another) - and asks GitHub only when the network has no release
    of its package. The signature and the hashes are checked the same either way.
 
+7. **Sources set in the network** (#902): the newest list of release sources the
+   project key signed (``release_sources.py``), kept in the state so it outlives a
+   network that does not answer, gives the package indexes pip uses and where a wheel
+   that is not on PyPI is fetched from. Without one, PyPI and GitHub.
+
 Turned ``off``, it still looks once a day, and says so in the log when a newer
 release has existed for 30 days.
 
@@ -171,28 +176,16 @@ def from_posts(bodies: list[str], package: str, base: str) -> Release | None:
 
 
 async def _posts_from(address: str, socks: int | None, package: str) -> list[str]:
-    from .core.article import Article
+    """The server posts for ``package`` and the lists of release sources (#902) in
+    unseenet.releases, newest first, through one node."""
+    from . import release_sources as rs
     from .known_nodes import RELEASES_GROUP
     from .nntp import Client
     c = await asyncio.wait_for(Client.connect(address, socks), 120)
     try:
-        _, low, high = await c.group(RELEASES_GROUP)
-        if high < low:
-            return []
-        start = max(low, high - SCAN + 1)
-        wanted = f"Unseenet server {package} "
-        numbers = []
-        for line in await c.multiline(f"HDR Subject {start}-{high}", 225):
-            number, _, subject = line.partition(" ")
-            if subject.startswith(wanted):
-                numbers.append(number)
-        bodies = []
-        for number in reversed(numbers[-20:]):          # the newest first
-            raw = await c.article(number)
-            if raw:
-                with contextlib.suppress(ValueError):
-                    bodies.append(Article.from_bytes(raw).body)
-        return bodies
+        found = await rs.read_group(c, RELEASES_GROUP,
+                                    (f"Unseenet server {package} ", rs.HEAD), scan=SCAN)
+        return [body for bodies in found.values() for body in bodies]
     finally:
         with contextlib.suppress(Exception):
             await c.quit()
@@ -307,11 +300,13 @@ class Machine:
 
     def __init__(self, service: str, venv: Path, check: str | None = None,
                  package: str = CORE, oneshot: bool = False, busy: Path | None = None,
-                 socks_port: int | None = None):
+                 socks_port: int | None = None, sources=None):
         self.service, self.venv, self.check, self.package = service, venv, check, package
         self.oneshot = oneshot     # a service its timer starts now and then (the bots)
         self.busy_file = busy      # there while it must not be restarted (a key ripening)
         self.socks_port = socks_port   # pip over Tor through a local proxy (None: direct)
+        from .release_sources import BUILT_IN
+        self.sources = sources or BUILT_IN   # indexes and file places (#902)
 
     def busy(self, now: float | None = None) -> bool:
         """The service says it must not be restarted now, in a file it keeps fresh."""
@@ -347,12 +342,13 @@ class Machine:
         """pip, as the owner of the environment, with every hash required."""
         workdir.mkdir(parents=True, exist_ok=True)
         req = workdir / "requirements.txt"
-        req.write_bytes(requirements)
+        req.write_bytes(self.localize(requirements, workdir))
         owner = self.venv.stat().st_uid
         os.chown(workdir, owner, -1)
         os.chown(req, owner, -1)
         cmd = [str(self.venv / "bin" / "pip"), "install", "--quiet",
-               "--disable-pip-version-check", "--require-hashes", "-r", str(req)]
+               "--disable-pip-version-check", "--require-hashes", "-r", str(req),
+               *index_args(self.sources.index)]
         if self.socks_port is None:
             r = subprocess.run(cmd, capture_output=True, text=True, user=owner if owner else None)
         else:
@@ -364,6 +360,29 @@ class Machine:
                                    env={**os.environ, "NO_PROXY": "", "no_proxy": ""})
         if r.returncode != 0:
             raise Problem(f"pip failed: {r.stderr.strip()[-800:]}")
+
+    def localize(self, requirements: bytes, workdir: Path) -> bytes:
+        """A package named by its wheel on GitHub (one not on PyPI, the help bot) is
+        fetched from the release sources in their order, checked against its hash, and
+        given to pip as a local file; if none has it, the line stays as it was."""
+        from . import release_sources as rs
+        lines = requirements.decode("utf-8", "replace").splitlines(keepends=True)
+        for n, line in enumerate(lines):
+            m = re.match(r"^(?P<pkg>[A-Za-z0-9_.-]+) @ (?P<url>\S+)(?P<rest>.*?--hash=sha256:"
+                         r"(?P<hash>[0-9a-f]{64}).*)$", line.rstrip("\n"))
+            where = rs.GITHUB_FILE.match(m.group("url")) if m else None
+            if not where:
+                continue
+            dest = workdir / where.group("name")
+            for url in self.sources.file_urls(**where.groupdict()):
+                try:
+                    up.fetch(url, self.socks_port, dest)
+                except up.UpdateError:
+                    continue
+                if hashlib.sha256(dest.read_bytes()).hexdigest() == m.group("hash"):
+                    lines[n] = f"{m.group('pkg')} @ {dest.resolve().as_uri()}{m.group('rest')}\n"
+                    break
+        return "".join(lines).encode()
 
     def restore(self) -> None:
         bad = self.venv.with_name(self.venv.name + ".bad")
@@ -515,6 +534,20 @@ def explain(state: State) -> list[str]:
     return out
 
 
+def index_args(index: tuple[str, ...]) -> list[str]:
+    """pip's index options for the release sources' indexes (#902): the first is the
+    index, the others extra ones; an onion address over plain HTTP is a trusted host
+    (Tor encrypts and authenticates it, and every file must match its hash anyway)."""
+    from urllib.parse import urlsplit
+    out: list[str] = []
+    for i, url in enumerate(index):
+        out += ["--index-url" if i == 0 else "--extra-index-url", url]
+        host = urlsplit(url).hostname or ""
+        if url.startswith("http://") and host.endswith(".onion"):
+            out += ["--trusted-host", host]
+    return out
+
+
 DIRECT_ENV = "UNSEENET_UPDATE_DIRECT"
 SYSTEM_TOR = 9050
 
@@ -569,11 +602,24 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
     """One run, over Tor unless ``direct`` (or the environment) says otherwise: what the
     update timers of nodes, replicas, registrars and the other services run."""
     def work(socks_port: int | None) -> str:
-        return run(Machine(service, venv, check, package, oneshot, busy, socks_port), state,
-                   find=lambda: newest_release(
-                       lambda u: up.fetch(u, socks_port), package=package, repo=repo,
-                       network=lambda: posts_in_network(package, socks_port, node), say=say),
-                   say=say, at_once=at_once)
+        from . import release_sources as rs
+        machine = Machine(service, venv, check, package, oneshot, busy, socks_port)
+        seen: list[list[str]] = []
+
+        def network() -> list[str]:
+            if not seen:
+                seen.append(posts_in_network(package, socks_port, node))
+            return seen[0]
+
+        def find() -> Release:
+            try:
+                return newest_release(lambda u: up.fetch(u, socks_port), package=package,
+                                      repo=repo, network=network, say=say)
+            finally:     # the newest list of sources, kept for when the network is gone (#902)
+                machine.sources = rs.newest(seen[0] if seen else [], state.data.get("sources"))
+                if machine.sources.updated:
+                    state.data["sources"] = machine.sources.to_dict()
+        return run(machine, state, find=find, say=say, at_once=at_once)
     return _with_tor(socks, direct or direct_by_env(), work)
 
 

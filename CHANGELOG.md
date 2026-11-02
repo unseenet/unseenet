@@ -17,6 +17,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Where releases are fetched from is set in the network** (#902): the project key signs a list
+  of release sources - where release files are (templates with `{repo}`, `{tag}`, `{name}`;
+  `https://` or onion addresses) and the package indexes servers install from - and posts it in
+  `unseenet.releases` (`tools/project/release_sources.py`). Servers (`unseenet-service-update`)
+  and clients (`unseenet update`) use the newest valid list and keep it, the servers in their
+  updater's state and sticks in `data/release-sources.json`, so it is still there when GitHub
+  or the network is not. The list grants nothing over what is installed - every file must still
+  match the signed checksums - and GitHub and PyPI stay the last resort. pip may use an index on
+  an onion address; a wheel not on PyPI is fetched from the sources in their order.
 - **Servers learn of releases through the network** (#901): `tools/project/sign_release.py` also
   posts each server release - the core's and every service's - in `unseenet.releases`, with its
   signed checksums, the signature and the requirements (packed), and `unseenet-service-update`
