@@ -151,8 +151,9 @@ class Machine:
     """The service, its virtual environment and systemd."""
 
     def __init__(self, service: str, venv: Path, check: str | None = None,
-                 package: str = CORE):
+                 package: str = CORE, oneshot: bool = False):
         self.service, self.venv, self.check, self.package = service, venv, check, package
+        self.oneshot = oneshot     # a service its timer starts now and then (the bots)
 
     @property
     def prev(self) -> Path:
@@ -198,7 +199,16 @@ class Machine:
         shutil.rmtree(bad, ignore_errors=True)
 
     def restart(self) -> None:
+        if self.oneshot:           # its timer starts the new version next time
+            return
         subprocess.run(["systemctl", "restart", self.service], capture_output=True)
+
+    def imports(self) -> bool:
+        """The installed package loads in its environment."""
+        module = self.package.replace("-", "_")
+        r = subprocess.run([str(self.venv / "bin" / "python"), "-c", f"import {module}"],
+                           capture_output=True, text=True)
+        return r.returncode == 0
 
     def _show(self) -> tuple[str, int]:
         r = subprocess.run(["systemctl", "show", "-p", "ActiveState", "-p", "NRestarts",
@@ -233,7 +243,10 @@ class Machine:
 
     def healthy(self, within: float = HEALTHY_WITHIN, stay: float = STAY_UP,
                 sleep: Callable[[float], None] = time.sleep) -> bool:
-        """Up for ``stay`` seconds without a restart, and answering, within ``within``."""
+        """Up for ``stay`` seconds without a restart, and answering, within ``within``.
+        A oneshot service is not running between its runs: there it must load."""
+        if self.oneshot:
+            return self.imports()
         start = time.monotonic()
         up_since, restarts = None, None
         while time.monotonic() - start < within:
@@ -333,6 +346,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--venv", default=sys.prefix, help="its virtual environment (default: this one)")
     p.add_argument("--check", help="where the service answers: tcp:host:port (NNTP; a node: "
                    "tcp:127.0.0.1:1119) or http://host:port/path")
+    p.add_argument("--oneshot", action="store_true",
+                   help="a service its own timer starts (the bots): not restarted; the new "
+                        "version must load")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
@@ -352,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Updating a service needs root (it restarts the service).")
         return 1
     try:
-        what = run(Machine(a.service, Path(a.venv), a.check, a.package), state,
+        what = run(Machine(a.service, Path(a.venv), a.check, a.package, a.oneshot), state,
                    find=lambda: newest_release(package=a.package, repo=a.repo), at_once=a.now)
     except (Problem, up.UpdateError, OSError) as exc:
         print(f"could not look for updates: {exc}")

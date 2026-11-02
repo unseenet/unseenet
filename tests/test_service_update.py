@@ -206,3 +206,17 @@ def test_cli_refuses_other_packages(capsys, tmp_path):
     assert su.main(["run", "--service", "x", "--package", "requests",
                     "--state", str(tmp_path)]) == 1
     assert "not an Unseenet package" in capsys.readouterr().out
+
+
+def test_a_oneshot_service_is_not_restarted_and_must_load(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(su.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or
+                        type("R", (), {"returncode": 0 if "import unseenet_bots" in cmd[-1] else 1,
+                                       "stdout": "", "stderr": ""})())
+    m = su.Machine("unseenet-bots", tmp_path, package="unseenet-bots", oneshot=True)
+    m.restart()
+    assert calls == []                                       # its timer runs it
+    assert m.healthy()
+    assert calls[-1][-1] == "import unseenet_bots"
+    m = su.Machine("unseenet-x", tmp_path, package="unseenet-x", oneshot=True)
+    assert not m.healthy()
