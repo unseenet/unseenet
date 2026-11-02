@@ -349,10 +349,102 @@ def test_offline_zip_must_be_for_this_kind(keys, tmp_path, capsys):
     assert (media / "windows-x86_64/unseenet.exe").read_text() == "new exe"
 
 
-def test_a_graphical_stick_is_not_updated_with_these_releases(tmp_path, capsys):
-    """unseenet-gui's builds carry the graphical client: unseenet's zips would remove it."""
-    media = stick(tmp_path, OLD)
-    (media / "README-graphical.txt").write_text("graphical")
+def gui_zip(tmp_path: Path, files: dict[str, str], version: str = "9.1.0",
+            plat: str = "linux-x86_64") -> Path:
+    """An unseenet-gui portable build, as unseenet-portable's build_graphical.py makes it."""
+    g = update.GRAPHICAL_CLIENT
+    files = {**files, g.version_file: version + "\n"}
+    files[g.files_list] = "\n".join(sorted([*files, g.files_list])) + "\n"
+    z = tmp_path / f"unseenet-gui-{version}-{plat}.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        for name, text in files.items():
+            zf.writestr(f"{update.TOP}/{name}", text)
+    return z
+
+
+BOTH = {   # one folder with the terminal and the graphical client, sharing data/ (#264)
+    "UNSEENET-PORTABLE": "", update.VERSION_FILE: V_OLD,
+    update.FILES_LIST: "UNSEENET-VERSION\nlinux-x86_64/unseenet\nLICENSES/tor.txt\n",
+    "linux-x86_64/unseenet": "old terminal", "LICENSES/tor.txt": "tor",
+    "README-graphical.txt": "graphical", "UNSEENET-GUI-VERSION": "9.0.0",
+    "UNSEENET-GUI-FILES": "UNSEENET-GUI-VERSION\ngui-linux-x86_64/unseenet-gui\n"
+                          "gui-linux-x86_64/old.so\nLICENSES/tor.txt\nREADME-graphical.txt\n",
+    "gui-linux-x86_64/unseenet-gui": "old gui", "gui-linux-x86_64/old.so": "gone",
+    "data/unseenet.vault": "secret",
+}
+
+
+def test_the_graphical_client_is_updated_on_its_own(tmp_path):
+    media = stick(tmp_path, BOTH)
+    g = update.GRAPHICAL_CLIENT
+    assert update.stick_kind(media, g) == "linux-x86_64"
+    assert update.stick_version(media, g) == "9.0.0"
+    z = gui_zip(tmp_path, {"gui-linux-x86_64/unseenet-gui": "new gui",
+                           "README-graphical.txt": "graphical"})
+    update.apply(media, z, say=lambda _: None, product=g)
+    assert (media / "gui-linux-x86_64/unseenet-gui").read_text() == "new gui"
+    assert not (media / "gui-linux-x86_64/old.so").exists()
+    assert (media / "LICENSES/tor.txt").exists()            # the terminal client lists it
+    assert (media / "linux-x86_64/unseenet").read_text() == "old terminal"
+    assert update.stick_version(media) == V_OLD              # the terminal's, untouched
+    assert update.stick_version(media, g) == "9.1.0"
+    assert (media / "data/unseenet.vault").read_text() == "secret"
+    assert update.unfinished(media, g) is None
+
+
+def test_the_terminal_client_leaves_the_graphical_one(tmp_path):
+    media = stick(tmp_path, BOTH)
+    files = {update.VERSION_FILE: V_NEW + "\n", "linux-x86_64/unseenet": "new terminal"}
+    files[update.FILES_LIST] = "\n".join(sorted([*files, update.FILES_LIST])) + "\n"
+    z = tmp_path / f"unseenet-{V_NEW}-linux-x86_64.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        for name, text in files.items():
+            zf.writestr(f"{update.TOP}/{name}", text)
+    update.apply(media, z, say=lambda _: None)
+    assert (media / "linux-x86_64/unseenet").read_text() == "new terminal"
+    assert (media / "LICENSES/tor.txt").exists()            # the graphical client lists it
+    assert (media / "gui-linux-x86_64/unseenet-gui").read_text() == "old gui"
+
+
+def test_which_product_a_folder_is(tmp_path):
+    gui_only = stick(tmp_path / "g", {"UNSEENET-PORTABLE": "", "README-graphical.txt": "",
+                                      "gui-windows-x86_64/x.dll": ""})
+    assert update.product_of(gui_only) is update.GRAPHICAL_CLIENT
+    assert update.stick_kind(gui_only, update.GRAPHICAL_CLIENT) == "windows-x86_64"
+    assert update.stick_version(gui_only, update.GRAPHICAL_CLIENT) == "0"   # first builds had none
+    both = stick(tmp_path / "b", BOTH)
+    assert update.product_of(both) is update.TERMINAL
+    assert update.product_of(both, "gui") is update.GRAPHICAL_CLIENT
+    sums = {"unseenet-0.8.0-linux-x86_64.zip": "a", "unseenet-gui-0.7.0-linux-x86_64.zip": "b",
+            "unseenet-0.8.0-usb.zip": "c"}
+    assert update.versions_in(sums) == {"unseenet": "0.8.0", "unseenet-gui": "0.7.0"}
+    assert update.asset_in(sums, "linux-x86_64", update.GRAPHICAL_CLIENT) == (
+        "unseenet-gui-0.7.0-linux-x86_64.zip", "0.7.0")
+    assert update.asset_in(sums, "linux-x86_64") == ("unseenet-0.8.0-linux-x86_64.zip", "0.8.0")
+
+
+def test_command_updates_a_graphical_folder(keys, tmp_path, monkeypatch, capsys):
+    project, _ = keys
+    media = stick(tmp_path, {k: v for k, v in BOTH.items()
+                             if not k.startswith(("UNSEENET-VERSION", "UNSEENET-FILES", "linux-"))})
+    z = gui_zip(tmp_path, {"gui-linux-x86_64/unseenet-gui": "new gui"})
+    t = tmp_path / "unseenet-9.5.0-linux-x86_64.zip"
+    t.write_bytes(b"the terminal client's zip, beside it in the same release")
+    sums = sums_for(t, z)
+    served = {update.SUMS: sums, update.SIG: update.signature_text(sums, project).encode(),
+              z.name: z.read_bytes()}
+
+    def fake_fetch(url, socks_port, dest=None, progress=None):
+        data = served[url.rsplit("/", 1)[1]]
+        if dest is None:
+            return data
+        dest.write_bytes(data)
+        return b""
+
+    monkeypatch.setattr(update, "fetch", fake_fetch)
     with pytest.raises(SystemExit) as exit_:
         update.main(["--media", str(media), "--yes", "--no-tor"])
-    assert exit_.value.code == 2 and "graphical client" in capsys.readouterr().err
+    assert exit_.value.code == 0
+    out = capsys.readouterr().out
+    assert "Unseenet graphical 9.0.0" in out and "Unseenet graphical 9.1.0" in out
+    assert (media / "gui-linux-x86_64/unseenet-gui").read_text() == "new gui"
