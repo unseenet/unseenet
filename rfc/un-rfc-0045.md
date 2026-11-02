@@ -225,6 +225,15 @@ manifest MUST then set `automatic: true`, and clients SHOULD say so when
 they show a hidden post. Following an automatic issuer is a choice like
 any other.
 
+Some articles are the same text from several keys on purpose, and an
+automatic issuer MUST NOT count them as a wave: in a council group (UN-RFC
+0054), the posts of the council's current members - their identical
+copies of each council manifest (section 5 there), the lists a list
+council's replicas compute alike (UN-RFC 0020 section 8), the seconds of
+a proposal (UN-RFC 0061). The members answer for those through the
+council. Posts by anybody else in a council's open groups are judged as
+any.
+
 # 9. Rationale
 
 **Why a group per issuer, not one shared group.** A shared report group
