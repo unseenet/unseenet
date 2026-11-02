@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`, and DNS answers are decided by the replicas together (6.2, 7); entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`, and DNS answers are decided by the replicas together (6.2, 7); entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), the council as maintainer of `unseenet`, scribes (6.4) and the sources list (6.8) follow (#56, #861)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -93,12 +93,12 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 
 | Field     | Type     | Req. | Meaning                                              |
 |-----------|----------|------|------------------------------------------------------|
-| `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …}` |
+| `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …, "sources": …}` |
 | `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
 | `announce` | object  | for `entrances` | Where entries announce themselves, by kind, e.g. `{"entrances": …, "gateways": …}`: an `open` council group of the council (section 5.1); `gateways` is the gateway directory (UN-RFC 0038 section 6.1) |
 | `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
-| `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
+| `publishers` | array of Group IDs | for `scribes`, `sources` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps, and whose files the sources list says where to find (section 6.8) |
 | `import`  | string   | no   | `sha256:` and the hex SHA-256 of the import's body (section 9); genesis only |
 | `imports` | object   | no   | For a list added later, its import by kind, e.g. `{"root": "sha256:…"}`; set by the `manifest` proposal that adds the list (section 9) |
 
@@ -372,8 +372,9 @@ with exactly one of:
 | `reserve`   | a top-level name                         | Adds it to the reserved names (section 6.2) |
 | `unreserve` | a top-level name                         | Takes it off them again                  |
 | `set`       | `{<parameter>: <number>, ...}`           | Changes parameters of this section       |
+| `sources`   | `{"files": [...], "index": [...]}`       | Replaces the release sources (section 6.8) |
 
-`<kind>` is `nodes`, `root`, `entrances` or `scribes`; the entry is the
+`<kind>` is `nodes`, `root`, `entrances`, `scribes` or `sources`; the entry is the
 entry's key, for `root` the top-level name, and for an imported
 entrance its `url` or `onion`. The parameters, with
 their values until a decision sets them, and the values allowed:
@@ -392,6 +393,41 @@ their values until a decision sets them, and the values allowed:
 Decisions apply in the order of the day they apply on and then of the
 proposal's id. `min_software` is a field of the council manifest and is
 changed by a `manifest` proposal.
+
+## 6.8 Release Sources
+
+Release files and package indexes live on outside sites - GitHub, PyPI,
+GitLab, Codeberg. If one is taken down, blocked or used against the
+network, somebody must be able to say where to look instead, and that
+must not be one key. The **sources list** says, for the publishers in
+the council's `publishers`, where their release files and the package
+index are:
+
+```
+{"v": 1, "updated": "council <seq> day <date>",
+ "files": ["https://github.com/unseenet/{repo}/releases/download/{tag}/{name}", ...],
+ "index": ["https://pypi.org/simple/", ...]}
+```
+
+`files` and `index` are as in UN-RFC 0062 section 6.3: templates with
+`{repo}`, `{tag}` and `{name}`, in the order to try, each `https://` or
+`http://` to an onion address, at most 16 of each. Several sites at once
+are the point: when one falls away, the next is already there.
+
+Nothing is measured. The list is the import (section 9) with the passed
+`sources` decisions applied (section 6.7), the newest last; every
+replica computes and posts it as any list (section 8). A source is added
+or taken away only by a proposal with a hearing (UN-RFC 0061). When a
+source is taken down, an urgent proposal (UN-RFC 0061 section 7) puts
+another in its place within three days; until then the scribes and the
+mirroring entrances carry the releases (UN-RFC 0062 section 6.3).
+
+The list grants nothing over *what* is installed: every file must match
+the publisher's signed checksums (UN-RFC 0062 section 4), wherever it
+came from. It only decides where clients and servers look - which is
+why it is the council's and not one key's: a stolen key that sent every
+update past a site that logs who fetches would undo what fetching over
+Tor protects (UN-RFC 0062 section 6.1).
 
 # 7. Measurements
 
@@ -485,12 +521,20 @@ client:
 
 - the council group `unseenet.lists@<fp>`;
 - the list groups that succeed `unseenet.nodes`, `unseenet.hierarchies`
-  and `unseenet.entrances`, and a new list group `unseenet.scribes`,
-  whose `publishers` is the project's releases channel;
+  and `unseenet.entrances`, and new list groups `unseenet.scribes` and
+  `unseenet.sources`, whose `publishers` is the project's releases
+  channel; the import of `sources` is the reference client's built-in
+  sources (GitHub and PyPI);
 - the claims group `unseenet.lists.claims@<fp>` and the reports group
   `unseenet.lists.reports@<fp>`;
 - its groups for proposals, talk, log and its room under
   `unseenet.council.*` (UN-RFC 0061 section 3).
+
+The project's own list of release sources in its releases channel
+(UN-RFC 0062 section 6.3) ends with a last list, signed by the project
+key, whose `moved_to` names the list council: from then on clients and
+servers take the council's sources list, and the project key no longer
+says where releases are.
 
 The old groups get a last manifest each, signed by the project key, with
 `moved_to` (the list council's Group ID) and `moved_on`, as the
@@ -592,6 +636,10 @@ it.
 - UN-RFC 0043 section 8.1: entries gain `key` and `publisher`.
 - UN-RFC 0055 section 4: `unseenet.scribes.announce` and
   `unseenet.scribes` are infrastructure groups.
+- UN-RFC 0062 section 6.3: the council's sources list (section 6.8)
+  comes first, for the publishers it names, and replaces the project
+  key's list; a list of sources gains `moved_to`.
+- UN-RFC 0055 section 4: `unseenet.sources` is an infrastructure group.
 - UN-RFC 0000 section 6: the title of 0020 becomes "Lists Kept by
   Councils".
 

@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; choosing publishers (section 6) follows
+Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; choosing publishers (section 6), the order of sources and `moved_to` (6.3) follow
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures
@@ -252,12 +252,34 @@ signature: ...
 
 The JSON is canonical (keys sorted, no spaces), and the signature is
 over `Unseenet release sources\n` followed by it, made as a release
-signature (section 9) by the publisher. Servers and clients keep the
+signature (section 9) by the publisher's keys, as many as the key list's
+threshold for `stable` (sections 3 and 4) - the same as a release, since
+whoever says where to fetch decides who sees the fetching. A list MAY
+have `moved_to`, the Group ID of a list council: from then on the
+council's sources list (UN-RFC 0020 section 6.8) takes its place, and
+later lists of the publisher are not used. Servers and clients keep the
 newest valid list they have seen, so that a list posted while the
-network works still applies when an outside site does not; the
-publisher's built-in sources stay the last resort. The list grants
-nothing over *what* is installed: every file must still match the
+network works still applies when an outside site does not. The list
+grants nothing over *what* is installed: every file must still match the
 signed checksums (section 6).
+
+A client or server looks for a release's files, over Tor (section 6.1),
+in this order:
+
+1. the sources list of a list council that names the publisher in its
+   `publishers` (UN-RFC 0020 section 6.8);
+2. the publisher's own list, as above;
+3. the scribes on that council's scribe list that hold the release
+   (UN-RFC 0020 section 6.4), and entrances on its entrance list that
+   mirror releases at `/mirror/<channel>/<name>`, one chosen at random
+   each time.
+
+The large sites come first, as they carry the load best; scribes and
+mirrors are often run by volunteers, at home, and are there for when the
+sites are gone or blocked - which is why releases must be on them before
+that happens. A publisher's built-in sources are only where a new client
+starts, until it has read item 1 or 2; a publisher with neither has its
+releases found on scribes and mirrors only.
 
 # 7. Building One's Own
 
