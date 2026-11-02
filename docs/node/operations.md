@@ -29,6 +29,11 @@ the run. So nobody watching GitHub or PyPI after a release can tell which
 machines run a node. Without Tor it does not update, unless you set
 `UNSEENET_UPDATE_DIRECT=1`.
 
+It learns of a release from the network first (#901): the project posts each
+server release - its signed checksums and requirements - in `unseenet.releases`,
+and the updater reads it from the node itself. It asks GitHub only when the
+network has none.
+
 Turned off, it still looks, and writes a warning in its log when a newer
 release has been out for 30 days. To update by hand then:
 

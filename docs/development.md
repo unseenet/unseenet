@@ -400,7 +400,9 @@ one node at a time.
    each release carries `SHA256SUMS.txt` and
    `<package>-<version>-server-requirements.txt`, and servers running that service
    update to it once it is signed: `tools/project/sign_release.py --repo
-   unseenet-gateway v0.6.0` (#827).
+   unseenet-gateway v0.6.0` (#827). Server releases are posted in
+   `unseenet.releases` too, which servers read before they ask GitHub (#901);
+   `--post` posts a release that was signed before.
 6. `.github/workflows/announce.yml` posts the release notes to
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.
