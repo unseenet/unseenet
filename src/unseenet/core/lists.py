@@ -470,3 +470,75 @@ def updated_day(updated: str) -> tuple[int, date] | None:
         return int(m.group(1)), date.fromisoformat(m.group(2))
     except ValueError:
         return None
+
+
+# --- canaries: connected and complete (UN-RFC 0021, section 7) --------------------
+
+CANARY_PREFIX = "canary "
+
+
+def canary_subject(node_key: str, day: date) -> str:
+    return f"{CANARY_PREFIX}{node_key[8:24]} {day.isoformat()}"
+
+
+def canary_body(node_key: str, day: date, nonce: str) -> str:
+    """A canary for the node ``node_key``, posted to that node alone on ``day``. The
+    nonce makes every canary a new article (UN-RFC 0021 section 4)."""
+    return canonical_json({"v": 1, "node": node_key, "date": day.isoformat(),
+                           "nonce": nonce}) + "\n"
+
+
+def read_canary(body: str, day: date) -> str | None:
+    """The node key a canary of ``day`` was posted to, or None. The caller checks that
+    a member of the council signed it, in the council's reports group."""
+    try:
+        d = parse_canonical_json(body)
+    except Exception:
+        return None
+    if not isinstance(d, dict) or d.get("v") != 1 or d.get("date") != day.isoformat():
+        return None
+    node = d.get("node")
+    return node if isinstance(node, str) and node.startswith("ed25519:") else None
+
+
+@dataclass
+class Reading:
+    """What one replica read from one node today."""
+    seen: set[str] = field(default_factory=set)       # node keys whose canary of yesterday it has
+    groups: set[str] = field(default_factory=set)     # its ordinary groups (LIST ACTIVE)
+    patterns: list[str] = field(default_factory=list)  # what its announcement says it carries
+
+
+def connection_verdicts(readings: dict[str, Reading], posted: set[str],
+                        network=()) -> tuple[set[str], set[str]]:
+    """(disconnected, incomplete) among the nodes that answered today (UN-RFC 0021
+    sections 5 and 6). ``posted``: the node keys this replica posted a canary to
+    yesterday - only those can be judged on whether their canary got out.
+
+    A node is **connected** when its canary of yesterday reached more than half of
+    the nodes that answered, and it has every canary that did. A group is carried by
+    the network when more than half of the connected nodes list it; a connected node
+    is **complete** when it lists every such group its own ``carries`` names, and every
+    one of the network's own groups (UN-RFC 0055 section 4)."""
+    answered = len(readings)
+    if not answered or not posted:
+        return set(), set()
+    reach = {k: sum(k in r.seen for r in readings.values()) for k in posted}
+    in_network = {k for k, n in reach.items() if 2 * n > answered}
+    disconnected = {k for k, r in readings.items()
+                    if (k in posted and k not in in_network) or (in_network - r.seen)}
+    connected = [k for k in readings if k not in disconnected]
+    incomplete: set[str] = set()
+    if connected:
+        count: dict[str, int] = {}
+        for k in connected:
+            for g in readings[k].groups:
+                count[g] = count.get(g, 0) + 1
+        carried = {g for g, n in count.items() if 2 * n > len(connected)}
+        own = set(network)
+        for k in connected:
+            r = readings[k]
+            wanted = {g for g in carried if ca.matches(r.patterns, ca.group_name(g))}
+            if (wanted | (own & carried)) - r.groups:
+                incomplete.add(k)
+    return disconnected, incomplete
