@@ -326,6 +326,10 @@ def client_main(argv=None) -> None:
     s.add_argument("--state", help="where the chain is kept for --key-file (default: next to it)")
     s.add_argument("--node", action="append", help="a node to publish to (with --publish)")
     s.add_argument("--publish", action="store_true", help="post the ripe@ manifest when done")
+    s.add_argument("--import", dest="import_file", metavar="FILE",
+                   help="take over a chain ripened elsewhere with --public-key (its state "
+                        "file), if it is further; with --key-file or the vault (stop the "
+                        "service first), then --publish")
 
     s = sub.add_parser("serve", help="offer the local client API (UN-RFC 0046) to a front end "
                                      "or a program on this computer")

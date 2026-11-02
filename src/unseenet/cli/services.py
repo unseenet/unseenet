@@ -22,6 +22,9 @@ async def ripen_command(args) -> None:
     if not rp.available():
         sys.exit("key ripening needs chiavdf (pip install chiavdf)")
     if getattr(args, "public_key", None):
+        if getattr(args, "import_file", None):
+            sys.exit("--import takes the chain to where the key is: --key-file or the vault, "
+                     "not --public-key")
         return _ripen_public(args)
     if args.key_file:
         from ..core.poster import PosterError, load_key
@@ -40,6 +43,8 @@ async def ripen_command(args) -> None:
     for address in args.node or []:
         s.add_node(address)
     name = args.identity
+    if getattr(args, "import_file", None):
+        return await _ripen_import(s, name, args)
     start, t0 = time.monotonic(), s.ripening(name).t
     print(f"{s.identity(name).key_text}: level {_lv(s.ripening(name).level)}, t = {t0:,}")
     while True:
@@ -61,6 +66,58 @@ async def ripen_command(args) -> None:
         print(f"published {s.ripe_group(name)}")
     await s.close()
 
+
+
+def chain_from_file(path: Path, key_text: str):
+    """The chain for ``key_text`` in a state file that ``unseenet ripen --public-key``
+    wrote (or a service's state file): ``data.ripening[key].segments``."""
+    import json
+    from ..core import ripening as rp
+    try:
+        d = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        sys.exit(f"cannot read {path}: {exc}")
+    entry = (d.get("data", d).get("ripening") or {}).get(key_text)
+    if not entry:
+        keys = ", ".join(sorted((d.get("data", d).get("ripening") or {}))) or "none"
+        sys.exit(f"{path} has no chain for {key_text} (it has: {keys})")
+    try:
+        return rp.Chain([rp.Segment.from_dict(s) for s in entry.get("segments", [])])
+    except (KeyError, TypeError, ValueError, rp.RipeningError) as exc:
+        sys.exit(f"{path}: not a chain: {exc}")
+
+
+async def _ripen_import(s, name, args) -> None:
+    """``unseenet ripen --import FILE``: take over a chain ripened on another machine
+    from the public key alone (#784, UN-RFC 0025 section 3.3) - checked, and only when
+    it is further than the one kept here - and with ``--publish`` post the ripe@
+    manifest, so the key's other copies take it over too. Stop a service whose vault
+    this is first: it holds the vault while it runs."""
+    from ..client.session import SessionError
+    from ..core import ripening as rp
+    key = s.identity(name).key_text
+    label = name or s.default_identity_name()
+    before = s.ripening(name)
+    chain = chain_from_file(Path(args.import_file), key)
+    try:
+        taken = s.take_ripening(chain, name)
+    except rp.RipeningError as exc:
+        sys.exit(f"{label}: the chain does not check for {key}: {exc}")
+    if taken:
+        print(f"{label}: t {before.t:,} -> {chain.t:,}, level {_lv(before.level)} -> "
+              f"{_lv(chain.level)}", flush=True)
+    else:
+        print(f"{label}: kept the chain here (t {before.t:,}, level {_lv(before.level)}): "
+              f"the one in {args.import_file} is not further", flush=True)
+    for address in args.node or []:
+        s.add_node(address)
+    if args.publish and (taken or rp.level(s.ripening(name).t) != s.published_level(name)):
+        try:
+            await s.publish_ripening(name)
+        except (SessionError, OSError, ConnectionError) as exc:
+            sys.exit(f"could not publish ripe@: {exc}")
+        print(f"{label}: published {s.ripe_group(name)}")
+    await s.close()
 
 async def serve_command(args) -> None:
     """unseenet serve: the local client API (UN-RFC 0046). With ``--key-file`` it
