@@ -52,3 +52,52 @@ async def test_a_timed_out_shielded_command_does_not_leak_its_reply():
             assert (await asyncio.wait_for(ctl.command("GETINFO second"), 5))[0] == "second=a"
         finally:
             await ctl.close()
+
+
+async def fake_onion_tor(knows_pow: bool):
+    """A control port that answers ADD_ONION, with or without the PoW argument
+    (Tor before 0.4.9.2 answers 512 to an argument it does not know)."""
+    seen = []
+
+    async def handle(reader, writer):
+        try:
+            while line := await reader.readline():
+                cmd = line.decode().strip()
+                seen.append(cmd)
+                if "PoWDefensesEnabled" in cmd and not knows_pow:
+                    writer.write(b"512 Unrecognized option PoWDefensesEnabled\r\n")
+                else:
+                    writer.write(b"250-ServiceID=abc\r\n250-PrivateKey=ED25519-V3:k\r\n250 OK\r\n")
+                await writer.drain()
+        except ConnectionError:
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    return server, server.sockets[0].getsockname()[1], seen
+
+
+async def test_the_onion_gets_the_pow_defence_when_tor_has_it():
+    """#869, UN-RFC 0005: ADD_ONION with PoWDefensesEnabled=1; an older Tor answers 512
+    and the service is made without it, and pow_defense says so."""
+    for knows, want in ((True, True), (False, False)):
+        server, port, seen = await fake_onion_tor(knows)
+        async with server:
+            ctl = await TorControl.connect("127.0.0.1", port)
+            try:
+                onion, key = await ctl.add_onion(None, 119, "127.0.0.1:1119", pow=True)
+                assert onion == "abc.onion" and key == "ED25519-V3:k"
+                assert ctl.pow_defense is want
+                assert "PoWDefensesEnabled=1 Port=119,127.0.0.1:1119" in seen[0]
+                assert len(seen) == (1 if knows else 2) and "PoW" not in seen[-1] or knows
+            finally:
+                await ctl.close()
+    server, port, seen = await fake_onion_tor(True)
+    async with server:
+        ctl = await TorControl.connect("127.0.0.1", port)
+        try:
+            await ctl.add_onion(None, 119, "127.0.0.1:1119")            # not asked for
+            assert "PoW" not in seen[0] and ctl.pow_defense is False
+        finally:
+            await ctl.close()

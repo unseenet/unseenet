@@ -92,6 +92,7 @@ def load_node_config(path: Path | None):
                       carries=_carries(path, node.get("carries", ["*"])),   # UN-RFC 0055
                       announce=bool(node.get("announce", True)),
                       auto_peers=_auto_peers(path, node.get("auto_peers", 3)),
+                      pow_defense=bool(node.get("pow_defense", True)),
                       ripen_to=int(node.get("ripen_to", 1)),
                       operator=data.get("operator", {}),
                       max_clients=_max_clients(path, data.get("limits", {}).get("max_clients", "auto")),
@@ -246,7 +247,12 @@ async def run_node(args) -> None:
         key_file = data / "onion_key.vault"
         key = unseal(key_file.read_bytes(), passphrase).decode() if key_file.exists() else None
         target = "127.0.0.1" if host in ("0.0.0.0", "", "::", "[::]") else host   # Tor needs one address
-        onion, new_key = await tor.control.add_onion(key, 119, f"{target}:{port}")
+        onion, new_key = await tor.control.add_onion(key, 119, f"{target}:{port}",
+                                                     pow=config.pow_defense)
+        node.stats.pow_defense = tor.control.pow_defense
+        if config.pow_defense and not tor.control.pow_defense:
+            print("Tor is too old for the onion service's proof-of-work defence (it needs "
+                  "0.4.9.2); the node runs without it", file=sys.stderr)
         if new_key:
             key_file.write_bytes(seal(new_key.encode(), passphrase, **_kdf()))
             key_file.chmod(0o600)

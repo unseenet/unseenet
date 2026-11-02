@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Security
+
+- **Nodes turn on Tor's proof-of-work defence for their onion service** (#869, UN-RFC 0005):
+  under a flood of connections Tor asks new clients for a small proof of work and serves those
+  who pay first, so the node stays reachable. On by default (`pow_defense` in `node.toml`); it
+  needs Tor 0.4.9.2 or newer over the control port, and with an older Tor the node starts
+  without it, says so, and the monitor warns.
+
 ### Added
 
 - **The rules for a council's node list** (#56, UN-RFC 0020 sections 6.1, 6.7 and 7):

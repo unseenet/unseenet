@@ -48,6 +48,7 @@ groups = "*"
 | `announce` | `true` | Announce the node in the network, so people can find it, see [below](#announce-being-found). |
 | `ripen_to` | `1` | How far the node ripens its own key before it announces itself. |
 | `auto_peers` | `3` | Also pull from this many nodes the node finds announced, chosen at random and changed daily, so it gets the network's posts without agreed peers. `0`: only the peers below. See [Peers found by themselves](#peers-found-by-themselves). |
+| `pow_defense` | `true` | Turn on Tor's proof-of-work defence for the node's onion service: under a flood of connections, Tor asks new clients for a small proof of work and serves those who pay it first, so the node stays reachable ([UN-RFC 0005](https://unseenet.org/spec/un-rfc-0005/)). Needs Tor 0.4.9.2 or newer; with an older Tor the node runs without it and the monitor says so. |
 | `test_addresses` | `false` | For a test network: allow peers at a public address over plain TCP, which hides nothing. Not needed for your own nodes on your own network. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
 | `excludes` | `""` | Groups this node does not carry by choice, as a [wildmat](#wildmats), see below. |

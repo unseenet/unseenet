@@ -111,6 +111,7 @@ class Stats:
         self.peers: dict[str, PeerStats] = {}
         self.log = _LogTail()
         self.tor = None                            # the node's TorProcess, if any
+        self.pow_defense = None                    # the onion's PoW defence: on, off, unknown
         self.onion: str | None = None
         self._lock = asyncio.Lock()
 
@@ -189,7 +190,7 @@ class Stats:
         except ValueError:
             progress = 0
         return {"state": "running", "bootstrap": progress,
-                "summary": fields.get("SUMMARY", "").strip('"')}
+                "summary": fields.get("SUMMARY", "").strip('"'), "pow_defense": self.pow_defense}
 
     async def snapshot(self, node, data_dir: Path | None = None) -> dict:
         async with self._lock:
@@ -319,6 +320,9 @@ def warnings(snap: dict) -> list[str]:
         out.append("Tor is not running: the node cannot be reached")
     elif tor.get("state") == "running" and tor.get("bootstrap", 100) < 100:
         out.append(f"Tor is still starting ({tor['bootstrap']}%)")
+    if tor.get("state") == "running" and tor.get("pow_defense") is False:
+        out.append("The onion service runs without Tor's proof-of-work defence against "
+                   "floods: update Tor to 0.4.9.2 or newer, or check pow_defense in node.toml")
     day = 24 * 3600
     for p in snap["peers"]:
         if p["last_error"] and (not p["last_sent"] or p["last_error_at"] - p["last_sent"] > day) \
