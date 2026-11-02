@@ -22,6 +22,14 @@ service's own virtual environment and updates that one:
    must stay up for a minute within 10 minutes (and answer, with ``--check``);
    otherwise the copy is put back, the service restarted, and that version skipped.
 
+5. **Over Tor** (#900): the checksums, the requirements and every package pip fetches
+   go through Tor - a Tor already running on 127.0.0.1:9050 (``--socks`` for another
+   port), else one it starts for the run - so nobody watching GitHub or PyPI can tell
+   from the downloads after a release which machines run a server, or where. pip gets
+   a local proxy (``torconnect.py``). ``--direct`` (or ``UNSEENET_UPDATE_DIRECT=1``,
+   e.g. in ``/etc/unseenet-update/<service>.env``) downloads without Tor; without it,
+   no Tor means no update, never a quiet fallback.
+
 Turned ``off``, it still looks once a day, and says so in the log when a newer
 release has existed for 30 days.
 
@@ -164,10 +172,12 @@ class Machine:
     """The service, its virtual environment and systemd."""
 
     def __init__(self, service: str, venv: Path, check: str | None = None,
-                 package: str = CORE, oneshot: bool = False, busy: Path | None = None):
+                 package: str = CORE, oneshot: bool = False, busy: Path | None = None,
+                 socks_port: int | None = None):
         self.service, self.venv, self.check, self.package = service, venv, check, package
         self.oneshot = oneshot     # a service its timer starts now and then (the bots)
         self.busy_file = busy      # there while it must not be restarted (a key ripening)
+        self.socks_port = socks_port   # pip over Tor through a local proxy (None: direct)
 
     def busy(self, now: float | None = None) -> bool:
         """The service says it must not be restarted now, in a file it keeps fresh."""
@@ -207,10 +217,17 @@ class Machine:
         owner = self.venv.stat().st_uid
         os.chown(workdir, owner, -1)
         os.chown(req, owner, -1)
-        r = subprocess.run([str(self.venv / "bin" / "pip"), "install", "--quiet",
-                            "--disable-pip-version-check", "--require-hashes",
-                            "-r", str(req)],
-                           capture_output=True, text=True, user=owner if owner else None)
+        cmd = [str(self.venv / "bin" / "pip"), "install", "--quiet",
+               "--disable-pip-version-check", "--require-hashes", "-r", str(req)]
+        if self.socks_port is None:
+            r = subprocess.run(cmd, capture_output=True, text=True, user=owner if owner else None)
+        else:
+            from .torconnect import TorConnectThread
+            with TorConnectThread(self.socks_port) as port:
+                r = subprocess.run([*cmd, "--proxy", f"http://127.0.0.1:{port}", "--timeout", "120",
+                                    "--retries", "8"],
+                                   capture_output=True, text=True, user=owner if owner else None,
+                                   env={**os.environ, "NO_PROXY": "", "no_proxy": ""})
         if r.returncode != 0:
             raise Problem(f"pip failed: {r.stderr.strip()[-800:]}")
 
@@ -364,6 +381,66 @@ def explain(state: State) -> list[str]:
     return out
 
 
+DIRECT_ENV = "UNSEENET_UPDATE_DIRECT"
+SYSTEM_TOR = 9050
+
+
+def _listening(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+def _with_tor(socks: int | None, direct: bool, work: Callable[[int | None], str]) -> str:
+    """Run ``work`` with a SOCKS port: none when direct, the given or the system's Tor,
+    else a Tor started for this run. Problem when there is no Tor."""
+    if direct:
+        return work(None)
+    if socks is not None:
+        if not _listening(socks):
+            raise Problem(f"no Tor on 127.0.0.1:{socks} (--direct updates without Tor)")
+        return work(socks)
+    if _listening(SYSTEM_TOR):
+        return work(SYSTEM_TOR)
+    import asyncio
+    import tempfile
+
+    from .core.tor import TorError, TorProcess
+
+    async def own() -> str:
+        with tempfile.TemporaryDirectory(prefix="unseenet-service-update-tor-") as tmp:
+            try:
+                tor = TorProcess(Path(tmp), TorProcess.find_binary())
+                await tor.start()
+            except TorError as exc:
+                raise Problem(f"could not start Tor: {exc} (--direct updates without Tor)") from exc
+            try:
+                return await asyncio.to_thread(work, tor.socks_port)
+            finally:
+                await tor.stop()
+    return asyncio.run(own())
+
+
+def direct_by_env() -> bool:
+    return os.environ.get(DIRECT_ENV, "").strip().lower() in ("1", "yes", "true", "on")
+
+
+def update_service(service: str, venv: Path, state: State, *, check: str | None = None,
+                   package: str = CORE, repo: str | None = None, oneshot: bool = False,
+                   busy: Path | None = None, socks: int | None = None, direct: bool = False,
+                   at_once: bool = False, say: Callable[[str], None] = print) -> str:
+    """One run, over Tor unless ``direct`` (or the environment) says otherwise: what the
+    update timers of nodes, replicas, registrars and the other services run."""
+    def work(socks_port: int | None) -> str:
+        return run(Machine(service, venv, check, package, oneshot, busy, socks_port), state,
+                   find=lambda: newest_release(lambda u: up.fetch(u, socks_port),
+                                               package=package, repo=repo),
+                   say=say, at_once=at_once)
+    return _with_tor(socks, direct or direct_by_env(), work)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="unseenet-service-update", description=__doc__.split("\n\n")[0])
     p.add_argument("action", choices=("run", "status", "on", "off"))
@@ -380,6 +457,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--busy", type=Path,
                    help="a file the service keeps fresh while it must not be restarted "
                         "(a key ripening): the update waits")
+    p.add_argument("--direct", action="store_true",
+                   help=f"download without Tor (also {DIRECT_ENV}=1); by default everything "
+                        "goes over Tor")
+    p.add_argument("--socks", type=int, help=f"Tor's SOCKS port on 127.0.0.1 (default: {SYSTEM_TOR} "
+                   "if a Tor listens there, else one is started for the run)")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
@@ -399,9 +481,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Updating a service needs root (it restarts the service).")
         return 1
     try:
-        what = run(Machine(a.service, Path(a.venv), a.check, a.package, a.oneshot,
-                           a.busy), state,
-                   find=lambda: newest_release(package=a.package, repo=a.repo), at_once=a.now)
+        what = update_service(a.service, Path(a.venv), state, check=a.check, package=a.package,
+                              repo=a.repo, oneshot=a.oneshot, busy=a.busy, socks=a.socks,
+                              direct=a.direct, at_once=a.now)
     except (Problem, up.UpdateError, OSError) as exc:
         print(f"could not look for updates: {exc}")
         return 1

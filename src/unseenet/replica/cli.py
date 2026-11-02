@@ -646,7 +646,7 @@ def update(args) -> int:
         state = su.State.load(su.STATE_ROOT / SERVICE / "state.json")
         state.note(off=channel == "off")
         try:
-            what = su.run(su.Machine(SERVICE, Path(sys.prefix)), state)
+            what = su.update_service(SERVICE, Path(sys.prefix), state)   # over Tor (#900)
         except (su.Problem, su.up.UpdateError, OSError) as exc:
             print(f"could not look for updates: {exc}")
             return 1

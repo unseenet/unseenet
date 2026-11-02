@@ -343,6 +343,10 @@ replica that is simply switched off is removed after 90 days of silence;
 | What the update did | `/opt/unseenet-replica/bin/unseenet-service-update status --service unseenet-replica` |
 | Stop updating by itself | `--channel off` at setup; it then only warns in its log when a release has been out 30 days |
 
+An update downloads everything over Tor (#900), so the downloads after a release
+do not show which machines run a replica. `UNSEENET_UPDATE_DIRECT=1` in the
+service's environment downloads without Tor.
+
 **Back up** `/var/lib/unseenet-replica/replica.vault` and
 `/etc/unseenet-replica/passphrase`. Together they are the replica: with them it
 can move to another machine (install, stop the service, put both files back,
