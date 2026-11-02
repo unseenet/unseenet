@@ -59,6 +59,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   object --lists` speak in the list council. Clients take the council's root list once
   `unseenet.hierarchies` says `moved_to`; `tools/project/move_lists.py --list root` posts that.
   `unseenet-replica sign` now moves the replica's registrar only for a registrar's genesis.
+- **Nodes follow the root list to its council too** (#888, UN-RFC 0020 section 10): once
+  `unseenet.hierarchies` says `moved_to` a list council, a node takes the newest root list the
+  council's members posted, for maintainers' blocks across a hierarchy and for the network's
+  own groups - the project's only until the council has one.
 
 ## [0.7.1] - 2026-11-02
 

@@ -32,10 +32,7 @@ class Blocks:
         if cached and time.monotonic() - cached[0] < self.BLOCKS_TTL:
             return cached[1]
         from ...known_nodes import PROJECT_KEY
-        root = self._newest_list(hz.HIERARCHIES_GROUP, PROJECT_KEY,
-                                 lambda body: hz.parse_root_list(body)[1])
-        if root is None:
-            root = hz.builtin_root_list()[1]
+        root = self.root_list(PROJECT_KEY)
         lists: dict = {"unseenet": hz.builtin_checkgroups()}
         h = hz.policy_of(name.split(".")[0], root)
         for _ in range(hz.MAX_DEPTH + 1):
@@ -55,6 +52,58 @@ class Blocks:
         result = hz.blocks_for(name, root, lists)
         self._blocks[name] = (time.monotonic(), result)
         return result
+
+    def root_list(self, project_key: str) -> dict:
+        """The root list this node goes by: the project's, or once the project's group
+        says it moved to a list council (``moved_to``, UN-RFC 0020 section 10) the newest
+        a member of that council posted - the project's only until the council has one -
+        or the one shipped with this version."""
+        from ... import hierarchies as hz
+        parse = lambda body: hz.parse_root_list(body)[1]     # noqa: E731
+        root = None
+        m = self.store.manifest(hz.HIERARCHIES_GROUP)
+        moved = (m.raw or {}).get("moved_to") if m is not None and \
+            crypto.key_to_text(m.owner) == project_key else None
+        if isinstance(moved, str) and moved != hz.HIERARCHIES_GROUP:
+            root = self._council_list(moved, "root", parse)
+        if root is None:
+            root = self._newest_list(hz.HIERARCHIES_GROUP, project_key, parse)
+        return root if root is not None else hz.builtin_root_list()[1]
+
+    def _council_list(self, council: str, kind: str, parse):
+        """The newest ``kind`` list a list council's members posted (UN-RFC 0020 section
+        8), by the day in its ``updated``; None while the council does not count here or
+        has posted none."""
+        from ...core import lists as ls
+        chain = self.store.council_chain(council)
+        cur = chain.current
+        if cur is None or chain.disputed:
+            return None
+        try:
+            lc = ls.list_council(cur.data)
+        except ls.ListProblem:
+            return None
+        if lc is None or kind not in lc.lists:
+            return None
+        group, members = lc.lists[kind], set(cur.keys)
+        best = None
+        for n in self.store.numbers(group):
+            found = self.store.by_number(group, n)
+            if not found:
+                continue
+            try:
+                art = Article.from_bytes(found[1])
+                if art.control or art.author_key not in members:
+                    continue
+                value = parse(art.body)
+                day = ls.updated_day(json.loads(art.body).get("updated", ""))
+                date = parse_date(art["Date"])
+            except (ArticleError, ValueError, KeyError, TypeError, AttributeError,
+                    crypto.CryptoError):
+                continue
+            if day and (best is None or (day[1], date) > best[0]):
+                best = ((day[1], date), value)
+        return best[1] if best else None
 
     def _newest_list(self, group_id: str | None, owner: str | None, parse):
         """The newest valid list posted in a channel group by its owner or posters."""
