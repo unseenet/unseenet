@@ -164,20 +164,61 @@ def signature_text(sums: bytes, identity: crypto.Identity) -> str:
             f"signature: {identity.sign_text(PURPOSE_RELEASE, sums)}\n")
 
 
-def check_signature(sums: bytes, sig: str, channel: str) -> str:
-    """The key that signed ``sums`` if it is trusted for ``channel``; UpdateError otherwise."""
-    fields = dict(line.split(": ", 1) for line in sig.splitlines() if ": " in line)
-    key, signature = fields.get("key", "").strip(), fields.get("signature", "").strip()
-    if key not in TRUSTED.get(channel, ()):
-        raise UpdateError(f"{SIG} is signed by a key not trusted for {channel}: {key or '-'}")
-    try:
-        good = crypto.verify(crypto.key_from_text(key), PURPOSE_RELEASE, sums,
-                             crypto.sig_from_text(signature))
-    except crypto.CryptoError as exc:
-        raise UpdateError(f"{SIG}: {exc}") from exc
+def signature_blocks(sig: str) -> list[tuple[str, str]]:
+    """(key, signature) of each block of a SHA256SUMS.txt.sig (UN-RFC 0062 section 4:
+    one or more, separated by an empty line)."""
+    out = []
+    for block in re.split(r"\n\s*\n", sig.replace("\r\n", "\n")):
+        fields = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+        key, signature = fields.get("key", "").strip(), fields.get("signature", "").strip()
+        if key or signature:
+            out.append((key, signature))
+    return out
+
+
+def add_signature(sig: str | None, sums: bytes, identity: crypto.Identity) -> str:
+    """``sig`` with this key's block added (once): signers sign one after another."""
+    blocks = [b for b in re.split(r"\n\s*\n", (sig or "").strip()) if b.strip()]
+    if any(k == identity.key_text for k, _ in signature_blocks(sig or "")):
+        return "\n\n".join(blocks) + "\n"
+    return "\n".join(b.rstrip("\n") + "\n" for b in blocks + [signature_text(sums, identity)])
+
+
+def check_signature(sums: bytes, sig: str, channel: str, keys=None) -> str:
+    """The first key that signed ``sums`` if, with the others, enough keys trusted for
+    ``channel`` signed it (``keys``: the publisher's key list, UN-RFC 0062 section 3 -
+    by default the pinned one, which before key lists is the project key alone); else
+    UpdateError. Development builds may also be signed by the CI keys."""
+    from . import release_keys as rk
+    kl = keys or rk.first()
+    if kl.seq == 0:                                # no key list yet: as before
+        trusted, need, ci = set(TRUSTED.get(channel, ())), 1, set()
+    else:
+        ci = (set(TRUSTED.get("dev", ())) - set(TRUSTED.get("stable", ()))
+              if channel == "dev" else set())
+        trusted, need = set(kl.keys) | ci, kl.threshold_for(channel)
+    good: list[str] = []
+    blocks = signature_blocks(sig)
+    for key, signature in blocks:
+        if key not in trusted or key in good:
+            continue
+        try:
+            ok = crypto.verify(crypto.key_from_text(key), PURPOSE_RELEASE, sums,
+                               crypto.sig_from_text(signature))
+        except crypto.CryptoError as exc:
+            raise UpdateError(f"{SIG}: {exc}") from exc
+        if not ok:
+            raise UpdateError(f"the signature on {SUMS} is wrong: it was changed after signing")
+        good.append(key)
     if not good:
-        raise UpdateError(f"the signature on {SUMS} is wrong: it was changed after signing")
-    return key
+        key = blocks[0][0] if blocks else ""
+        raise UpdateError(f"{SIG} is signed by a key not trusted for {channel}: {key or '-'}")
+    if set(good) & ci:
+        need = 1                                   # a CI build: its own key is enough
+    if len(good) < need:
+        raise UpdateError(f"{SIG} has {len(good)} of the {need} signatures {channel} "
+                          f"releases need")
+    return good[0]
 
 
 def parse_sums(sums: bytes) -> dict[str, str]:
@@ -300,6 +341,7 @@ def release_urls(channel: str, name: str, version: str | None = None,
 
 
 SOURCES_FILE = "data/release-sources.json"      # the newest list seen, on the stick (#902)
+KEYS_FILE = "data/release-keys.json"            # the newest key list counted (UN-RFC 0062, #822)
 
 
 def kept_sources(media: Path):
@@ -321,8 +363,26 @@ def keep_sources(media: Path, sources) -> None:
         pass
 
 
+def kept_keys(media: Path) -> str | None:
+    """The newest key list counted on this stick before (its body)."""
+    try:
+        return json.loads((media / KEYS_FILE).read_text()).get("body")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def keep_keys(media: Path, kl) -> None:
+    if not kl.seq or kl.body == kept_keys(media):
+        return
+    try:
+        (media / KEYS_FILE).parent.mkdir(parents=True, exist_ok=True)
+        (media / KEYS_FILE).write_text(json.dumps({"body": kl.body}))
+    except OSError:
+        pass
+
+
 def from_github(channel: str, what: str, socks_port: int | None,
-                product: Product = TERMINAL) -> tuple[list[Release], list[str]]:
+                product: Product = TERMINAL, keys=None) -> tuple[list[Release], list[str]]:
     """The signed releases for ``what`` in every release repo, and what went wrong where.
 
     Each build repo signs the sums of its own files, so a repo without ``what`` is no
@@ -333,7 +393,7 @@ def from_github(channel: str, what: str, socks_port: int | None,
         try:
             sums = fetch(release_url(channel, SUMS, repo=repo), socks_port)
             sig = fetch(release_url(channel, SIG, repo=repo), socks_port).decode("utf-8", "replace")
-            found.append(check_release(sums, sig, channel, what, product))
+            found.append(check_release(sums, sig, channel, what, product, keys))
         except UpdateError as exc:
             problems.append(f"{urlsplit(repo).path.strip('/')}: {exc}")
     return found, ([] if found else problems)
@@ -597,9 +657,10 @@ class Release:
 
 
 def check_release(sums: bytes, sig: str, channel: str, what: str = "x86_64-update",
-                  product: Product = TERMINAL) -> Release:
-    """What a release's signed checksums offer; UpdateError unless the signature is good."""
-    signer = check_signature(sums, sig, channel)
+                  product: Product = TERMINAL, keys=None) -> Release:
+    """What a release's signed checksums offer; UpdateError unless enough of the
+    publisher's keys (``keys``, UN-RFC 0062) signed them."""
+    signer = check_signature(sums, sig, channel, keys)
     table = parse_sums(sums)
     name, version = asset_in(table, what, product)
     return Release(channel, version, name, table[name], signer,
@@ -676,6 +737,8 @@ async def from_network(socks_port: int) -> tuple[list[str], list[str]]:
             continue
         try:
             releases = await _newest_bodies(c, RELEASES_GROUP, 30)
+            from . import release_keys as rk     # the key list's chain (UN-RFC 0062 3)
+            releases += await rk.read_votes(c, RELEASES_GROUP)
             try:                         # and the newest lists of release sources (#902)
                 from . import release_sources as rs
                 releases += (await rs.read_group(c, RELEASES_GROUP, (rs.HEAD,), limit=3))[rs.HEAD]
@@ -780,12 +843,21 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         print(f"Looking for the newest {args.channel} release (GitHub and the network) ...")
         found: list[Release] = []
         problems: list[str] = []
-        on_github, missed = from_github(args.channel, what, socks_port, product)
-        found += on_github
-        problems += [f"GitHub {m}" for m in missed]
+        from . import release_keys as rk
         onions: list[str] = []
+        bodies: list = []
         if socks_port:
             bodies, onions = asyncio.run(from_network(socks_port))
+        keys, fork = rk.newest(rk.votes_of(bodies), kept_keys(media))
+        if fork:
+            raise UpdateError("the publisher's key list has forked (two lists with one number): "
+                              "no update until you choose whom to trust (UN-RFC 0062 section 3)")
+        keep_keys(media, keys)
+        on_github, missed = from_github(args.channel, what, socks_port, product, keys)
+        found += on_github
+        problems += [f"GitHub {m}" for m in missed]
+        if socks_port:
+            bodies = [b for b in bodies if isinstance(b, str)]
             from . import release_sources as rs
             sources = rs.newest(bodies, kept_sources(media).to_dict())
             keep_sources(media, sources)
@@ -793,7 +865,8 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
                 post = parse_release_post(body)
                 if post and post[0] == args.channel:
                     try:
-                        found.append(check_release(post[1], post[2], args.channel, what, product))
+                        found.append(check_release(post[1], post[2], args.channel, what, product,
+                                                   keys))
                     except UpdateError:
                         continue                 # not signed by a key this channel trusts
             if not bodies:

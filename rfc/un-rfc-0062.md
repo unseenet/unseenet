@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 6.1 to 6.3 (one signer, the project key; key lists and thresholds, sections 3 and 4, follow)
+Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; choosing publishers (section 6) follows
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures
