@@ -319,20 +319,15 @@ class ListDuties:
         self.s.save()
 
     async def _imported(self, chain: cn.Chain, lc: ls.ListCouncil) -> dict[str, dict]:
-        """The genesis import (section 9): the node list in the council group whose
-        Message-ID the genesis manifest names, posted by a member."""
+        """The genesis import (section 9): an article in the council group, posted by a
+        member, whose body has the hash the genesis manifest names."""
         if not lc.import_id:
             return {}
         members = {crypto.key_to_text(k) for k in chain.current.keys}
         for m in await self.s.fetch_group(chain.current.group_id):
-            if m.message_id == lc.import_id and m.author_key in members and m.readable:
-                try:
-                    data = json.loads(m.body)
-                    nodes = data.get("nodes", data)
-                    return {n["node_key"]: n for n in nodes.get("nodes", [])
-                            if isinstance(n, dict) and n.get("node_key")}
-                except (ValueError, AttributeError, TypeError):
-                    return {}
+            if (m.readable and m.author_key in members and m.body
+                    and ls.import_hash(m.body) == lc.import_id):
+                return ls.imported_nodes(m.body)
         return {}
 
 

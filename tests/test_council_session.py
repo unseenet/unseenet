@@ -159,3 +159,37 @@ async def test_a_registrar_council_drafted_by_its_founder(net, tmp_path, capsys)
     claims = d["also"][0]["group"]
     assert claims.startswith("unseenet.names.claims@") and m.data["claims"] == claims
     assert not (await f.council_copies(d["group"]))          # not a member: nothing posted
+
+
+async def test_a_list_council_with_its_import(net, tmp_path, capsys):
+    """``council create --lists nodes --groups --import nodes.json``: a list council
+    (UN-RFC 0020 sections 4, 9, 10) - its node list, reports and claims groups in the
+    draft, and the import named by its hash, posted in the council group on signing."""
+    from unseenet.core import lists as ls
+    a, b = net("a"), net("b")
+    nodes = tmp_path / "nodes.json"
+    nodes.write_text(json.dumps({"v": 1, "updated": "2026-10-17", "nodes": [
+        {"name": "n1", "address": "a" * 56 + ".onion", "node_key": "ed25519:" + "k" * 52}]}))
+    draft = tmp_path / "unseenet.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="unseenet.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=True, lists="nodes", import_file=str(nodes)))
+    capsys.readouterr()
+    d = json.loads(draft.read_text())
+    m = CouncilManifest.from_body(d["group"], d["body"])
+    lc = ls.list_council(m.data)
+    assert lc.lists["nodes"].startswith("unseenet.nodes@")
+    assert lc.reports.startswith("unseenet.lists.reports@")
+    assert lc.claims.startswith("unseenet.lists.claims@")
+    assert {"proposals", "talk", "log"} <= set(m.data)
+    (post,) = d["posts"]
+    assert post["group"] == d["group"] and ls.import_hash(post["body"]) == lc.import_id
+    assert set(ls.imported_nodes(post["body"])) == {"ed25519:" + "k" * 52}
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    assert (await a.council_chain(d["group"])).current is not None
+    bodies = [x.body for x in await a.fetch_group(d["group"]) if x.readable]
+    assert sum(ls.import_hash(x) == lc.import_id for x in bodies if x) == 1   # the last signer's

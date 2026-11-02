@@ -63,7 +63,7 @@ async def world(tmp_path, monkeypatch):
     server.close()
 
 
-async def found_lists(sessions, when, public=False):
+async def found_lists(sessions, when, public=False, imported=None):
     keys = [s.identity().key_text for s in sessions]
     a = sessions[0]
     groups = {}
@@ -79,9 +79,15 @@ async def found_lists(sessions, when, public=False):
     fields = {"min_pow": 0, "lists": {"nodes": groups["nodes"]}, "claims": groups["claims"],
               "reports": groups["reports"], "min_software": {"unseenet": "0.1.0"}}
     fields.update({k: groups[k] for k in ("proposals", "talk", "log") if k in groups})
+    imp = None
+    if imported is not None:                             # section 9
+        imp = ls.import_body({"nodes": imported})
+        fields["import"] = ls.import_hash(imp)
     gid, body = a.council_genesis("unseenet.lists", "channel", keys, fields=fields, date=when)
     for s in sessions:
         await s.council_sign(gid, body)
+    if imp:
+        await sessions[-1].post(gid, ls.IMPORT_SUBJECT, imp)
     return gid, groups
 
 
@@ -168,3 +174,24 @@ async def test_a_list_decision_takes_a_node_off(world):
     assert f"hearing {pid} closed" in logged
     # the registrar's own state was not touched
     assert "list_decisions" not in reps[2].st
+
+
+async def test_an_imported_node_stays_until_it_announces(world):
+    """Section 9: the genesis import keeps a node listed that has not announced itself
+    yet; one that is announced and measured is listed by the rules beside it."""
+    node, ann, addr, clock, sessions = world
+    old = {"name": "old", "address": "b" * 56 + ".onion", "node_key": "ed25519:" + "q" * 52}
+    gid, groups = await found_lists(sessions, clock[0] - timedelta(hours=21),
+                                    imported={"v": 1, "updated": "2026-10-17", "nodes": [old]})
+    announce(node, ann, addr, clock[0] - timedelta(hours=1))
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for _ in range(3):
+        for r in reps:
+            await r.run_once()
+        clock[0] += timedelta(days=1)
+    newest = [m for m in await sessions[0].fetch_group(groups["nodes"]) if m.readable][-1]
+    assert [n["node_key"] for n in json.loads(newest.body)["nodes"]] == [old["node_key"]]
+    assert reps[0].st["lists"]["verdicts"][old["node_key"]].startswith("imported at the genesis")

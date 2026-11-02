@@ -198,6 +198,29 @@ replica re-issues the old group's certificates that were valid at the genesis,
 and the old group's owner posts a last manifest pointing to the council
 (`tools/project/move_registrar.py`).
 
+### A list council
+
+The same replica, with the same key, can also be a member of a council that
+keeps lists - which nodes a new client starts with, and later the root list of
+hierarchies, entrances and scribes ([UN-RFC 0020](https://unseenet.org/spec/un-rfc-0020/)).
+Nobody decides those by hand: once a day each replica reaches every announced
+node over Tor, posts what it found, and computes the list by rules every replica
+applies alike. Only removing an entry for abuse, or changing a rule's numbers,
+is a proposal with a public hearing.
+
+```bash
+unseenet council create unseenet.lists --without-me --groups --lists nodes \
+    --import nodes.json \
+    --member ed25519:<replica 1> --member ed25519:<replica 2> --member ed25519:<replica 3> \
+    --founding 3 --founder ed25519:<founder> --min-level 3
+```
+
+`--lists` names the lists it keeps and adds the groups for them, for the
+replicas' daily reports and for hierarchy claims. `--import` is the list it
+starts from: entries in it stay for 180 days, so their operators have time to
+announce their nodes. Sign it on each replica as above; the replica then works
+for both councils. `unseenet-replica status` tells how its last list round went.
+
 ## Holding
 
 The replica posts every change the rules call for by itself; that is what keeps

@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); the genesis tooling, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -97,7 +97,7 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
 | `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
 | `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
-| `import`  | string   | no   | Message-ID of the import (section 9); genesis only   |
+| `import`  | string   | no   | `sha256:` and the hex SHA-256 of the import's body (section 9); genesis only |
 
 Each list group is a `channel` council group with the same council, so
 that the members' replicas, and nobody else, post the lists. Everything
@@ -382,10 +382,14 @@ section 12).
 
 # 9. Founding a List Council (Informative)
 
-A list council starts from the lists as they are. The genesis manifest's
-`import` names an article in the council group holding the current lists
-(for the project: `nodes.json`, `hierarchies.json` and the entrance
-list), posted with identical bodies by the founding members.
+A list council starts from the lists as they are. The import is an
+article in the council group with `Subject: import` whose body is
+canonical JSON `{"v": 1, "nodes": <node list>, ...}` - the lists by kind
+as they are (for the project: `nodes.json`, `hierarchies.json` and the
+entrance list). The genesis manifest's `import` names it by the SHA-256
+of its body, not by Message-ID: the group exists only once the genesis
+counts, so the import is posted after it, and any founding member's copy
+with that body is the import.
 
 An imported entry stays for 180 days without meeting the rules, so that
 operators and maintainers have time to announce and claim. After that
@@ -407,8 +411,11 @@ client:
 - its groups for proposals, talk, log and its room under
   `unseenet.council.*` (UN-RFC 0061 section 3).
 
-The old groups get a last list each, saying where the lists went, and are
-read until their last list is a year old. From then on the project key
+The old groups get a last manifest each, signed by the project key, with
+`moved_to` (the list council's Group ID) and `moved_on`, as the
+project's registrar moved (UN-RFC 0054 section 14). A client that reads
+it takes the council's list from then on - the newest a member posted -
+and keeps the old group's list only until the council has one. From then on the project key
 has no part in the lists. The files in the repository become snapshots,
 refreshed from the network before each release, so that a new client has
 somewhere to start before it reaches the network. Changes go through the
