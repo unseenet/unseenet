@@ -496,6 +496,17 @@ class NodesMixin:
                 self.cache.pop(RELEASES_GROUP, None)
                 self._raw.pop(RELEASES_GROUP, None)
                 self._high.pop(RELEASES_GROUP, None)
+        from ... import release_keys as rk         # the key list's chain (UN-RFC 0062 3)
+        votes = [(m.author_key, m.body) for m in messages
+                 if m.readable and getattr(m, "author_key", None)
+                 and (getattr(m, "subject", "") or "").startswith(rk.SUBJECT + " ")]
+        keys, fork = rk.newest(votes, (self.data.get("release_keys") or {}).get("body"))
+        if fork:
+            self.data["release_keys_fork"] = True
+            self.save()
+            return None                  # no update from a forked publisher
+        if keys.seq and keys.body != (self.data.get("release_keys") or {}).get("body"):
+            self.data["release_keys"] = {"body": keys.body}
         best = dict(self.data.get("releases") or {})
         for m in messages:
             post = update.parse_release_post(m.body) if m.readable else None
@@ -503,7 +514,7 @@ class NodesMixin:
                 continue
             channel, sums, sig = post
             try:
-                update.check_signature(sums, sig, channel)
+                update.check_signature(sums, sig, channel, keys)
             except update.UpdateError:
                 continue
             versions = update.versions_in(update.parse_sums(sums))

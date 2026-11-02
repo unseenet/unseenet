@@ -23,6 +23,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   the root list goes by what more than half of the members that asked found, on settled days,
   so one replica's wrong answer no longer splits the root list. A claim waits until a member
   has asked, and so do later claims on the name.
+- **Key lists and two signatures for releases** (#822, UN-RFC 0062 sections 3-4): a publisher's
+  keys are a chain of `release-keys <seq>` lists in its releases channel, the first pinned in
+  the client (`unseenet.release_keys`), each later one counting when the threshold of the keys
+  before it posted it; two with one number are a fork, and nothing updates from that publisher.
+  `SHA256SUMS.txt.sig` may hold several signature blocks, and sticks, clients and servers need
+  the list's threshold of them (development builds still take the CI key alone). Each keeps
+  the newest list it counted. `tools/project/release_keys.py` makes reserve keys and lists and
+  posts them; `sign_release.py --seed-file` adds a reserve key's signature. Until the project's
+  first list is pinned, releases are checked as before.
 - **Where releases are fetched from is set in the network** (#902): the project key signs a list
   of release sources - where release files are (templates with `{repo}`, `{tag}`, `{name}`;
   `https://` or onion addresses) and the package indexes servers install from - and posts it in

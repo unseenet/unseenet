@@ -153,17 +153,20 @@ def parse_server_post(body: str) -> dict | None:
             "name": lines[k][:-len(PACKED)], "requirements": req}
 
 
-def from_posts(bodies: list[str], package: str, base: str) -> Release | None:
-    """The newest valid stable release of ``package`` among the posts."""
+def from_posts(bodies: list[str], package: str, base: str, keys=None) -> Release | None:
+    """The newest valid stable release of ``package`` among the posts, signed by enough
+    of the publisher's keys (``keys``, UN-RFC 0062; by default the pinned list)."""
     best: Release | None = None
     for body in bodies:
+        if not isinstance(body, str):
+            continue
         post = parse_server_post(body)
         if not post or post["package"] != package or post["channel"] != "stable":
             continue
         try:
-            up.check_signature(post["sums"], post["sig"], "stable")
+            up.check_signature(post["sums"], post["sig"], "stable", keys)
         except up.UpdateError:
-            continue                     # not signed by the project key: ignored
+            continue                     # not signed by enough of the keys: ignored
         listed = up.parse_sums(post["sums"])
         name, req = post["name"], post["requirements"]
         version = requirements_version(name, package)
@@ -185,7 +188,9 @@ async def _posts_from(address: str, socks: int | None, package: str) -> list[str
     try:
         found = await rs.read_group(c, RELEASES_GROUP,
                                     (f"Unseenet server {package} ", rs.HEAD), scan=SCAN)
-        return [body for bodies in found.values() for body in bodies]
+        from . import release_keys as rk     # and the key list's chain (UN-RFC 0062 3)
+        return ([body for bodies in found.values() for body in bodies]
+                + await rk.read_votes(c, RELEASES_GROUP, scan=SCAN))
     finally:
         with contextlib.suppress(Exception):
             await c.quit()
@@ -215,13 +220,22 @@ def posts_in_network(package: str, socks: int | None, node: str | None = None) -
 def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
                    package: str = CORE, repo: str | None = None,
                    network: Callable[[], list[str]] | None = None,
-                   say: Callable[[str], None] = lambda _: None) -> Release:
+                   say: Callable[[str], None] = lambda _: None,
+                   keys: dict | None = None) -> Release:
     """The newest stable release of ``package`` that servers can take: signed by the
     project key, and with a server requirements file matching its checksums. From the
     posts in the network when ``network`` gives any (#901), else from GitHub."""
+    from . import release_keys as rk
     base = repo_url(repo or package)
+    kl, fork = rk.newest(rk.votes_of(network() if network is not None else []),
+                         (keys or {}).get("body"))
+    if fork:
+        raise Problem("the publisher's key list has forked (two lists with one number): no "
+                      "update until the operator acts (UN-RFC 0062 section 3)")
+    if keys is not None and kl.seq:
+        keys["body"] = kl.body                    # kept: counted from it next time
     if network is not None:
-        found = from_posts(network(), package, base)
+        found = from_posts(network(), package, base, kl)
         if found is not None:
             say(f"found {package} {found.version} in the network")
             return found
@@ -229,7 +243,7 @@ def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
     sums = fetch(up.release_url("stable", up.SUMS, repo=base))
     sig = fetch(up.release_url("stable", up.SIG, repo=base)).decode("utf-8", "replace")
     try:
-        up.check_signature(sums, sig, "stable")
+        up.check_signature(sums, sig, "stable", kl)
     except up.UpdateError as exc:
         raise Problem(str(exc)) from exc
     listed = up.parse_sums(sums)
@@ -614,9 +628,11 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
         def find() -> Release:
             try:
                 return newest_release(lambda u: up.fetch(u, socks_port), package=package,
-                                      repo=repo, network=network, say=say)
+                                      repo=repo, network=network, say=say,
+                                      keys=state.data.setdefault("release_keys", {}))
             finally:     # the newest list of sources, kept for when the network is gone (#902)
-                machine.sources = rs.newest(seen[0] if seen else [], state.data.get("sources"))
+                machine.sources = rs.newest([b for b in (seen[0] if seen else [])
+                                             if isinstance(b, str)], state.data.get("sources"))
                 if machine.sources.updated:
                     state.data["sources"] = machine.sources.to_dict()
         return run(machine, state, find=find, say=say, at_once=at_once)

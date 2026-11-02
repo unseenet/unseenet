@@ -404,6 +404,15 @@ one node at a time.
    `unseenet.releases` too, which servers read before they ask GitHub (#901);
    `--post` posts a release that was signed before.
 
+   Once the project has a key list (UN-RFC 0062, #822), a stable release needs two
+   signatures of its three keys: run `sign_release.py <tag>` with the vault, then
+   `sign_release.py --seed-file <reserve key> <tag>` with a reserve key; it is
+   posted once both are on. Setting it up: `tools/project/release_keys.py new-key`
+   twice (each on its own removable medium), `release_keys.py make --keys <project>
+   <reserve1> <reserve2> --threshold 2 --channel dev=1`, the body into
+   `PROJECT_FIRST` in `src/unseenet/release_keys.py` by pull request, the reserve
+   keys as posters of `unseenet.releases`, and `release_keys.py post` it.
+
    Where releases are fetched from is set in the network too (#902):
    `tools/project/release_sources.py post sources.json` signs and posts a list
    of release sources (file addresses and package indexes). Servers and clients

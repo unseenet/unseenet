@@ -4,6 +4,7 @@
     python tools/project/sign_release.py v0.6.1
     python tools/project/sign_release.py --repo unseenet-gateway v0.6.0
     python tools/project/sign_release.py --post v0.7.1      (a release signed before: post it)
+    python tools/project/sign_release.py --seed-file /media/reserve1/key v0.8.0  (a reserve key)
 
 Since 0.6 a release is built in two repositories, each with its own SHA256SUMS.txt
 (#546): unseenet-portable (the zips for folders and USB sticks) and
@@ -25,7 +26,14 @@ Server releases (the core's and each service's) are posted in unseenet.releases 
 (#901): the checksums, the signature and the requirements, which servers read through
 the network before they ask GitHub.
 
-Sticks on the stable channel accept only this signature (unseenet.update).
+Once the project has a key list (UN-RFC 0062 sections 3-5, ``release_keys.py``), a
+stable release needs the threshold of its keys - two of the project key and the two
+reserve keys. Signers sign one after another: each run adds its key's block to
+SHA256SUMS.txt.sig and uploads it again; ``--seed-file`` signs with a reserve key kept
+offline (its seed, from ``release_keys.py new-key``) instead of the vault's. The release
+is posted in unseenet.releases once it has enough signatures.
+
+Until then sticks on the stable channel accept only the project key (unseenet.update).
 Run it again after files were added to the release: the sums change, and
 the old signature no longer fits.
 """
@@ -79,6 +87,13 @@ def main() -> None:
     args = sys.argv[1:]
     post_signed = "--post" in args          # post a release that is signed already (#901)
     args = [a for a in args if a != "--post"]
+    signer = None                           # a reserve key, from its seed (UN-RFC 0062)
+    if "--seed-file" in args:
+        i = args.index("--seed-file")
+        from unseenet.core.crypto import Identity
+        signer = Identity.from_seed(bytes.fromhex(Path(args[i + 1]).read_text().strip()))
+        del args[i:i + 2]
+        print(f"Signing with {signer.key_text}")
     repos = REPOS
     package = "unseenet"
     if len(args) == 3 and args[0] == "--repo":
@@ -97,8 +112,6 @@ def main() -> None:
             print(f"{repo}: no {tag} release yet - run this again when it is out.")
         elif update.SUMS not in names:
             print(f"{repo}: {tag} has no {update.SUMS} yet - its build is still running?")
-        elif update.SIG in names and not post_signed:
-            print(f"{repo}: {tag} is signed already (--post posts it in unseenet.releases).")
         else:
             todo.append((repo, what, update.SIG in names))
     if not todo:
@@ -119,19 +132,33 @@ def main() -> None:
             if s is None:
                 s = open_owner_session()
                 identity = s.identity()
-            if signed:                             # --post: the signature it has
+            old = None
+            if signed:                             # the signatures it has
                 gh(repo, "release", "download", tag, "-p", update.SIG, "-D", str(d))
-                sig = (d / update.SIG).read_text()
-            else:
-                sig = update.signature_text(sums, identity)
-            if what == SERVER:
-                update.check_signature(sums, sig, "stable")     # as servers will check it
-            else:
-                update.check_release(sums, sig, "stable", what)  # as sticks will check it
-            if not signed:
+                old = (d / update.SIG).read_text()
+            sig = old if post_signed else update.add_signature(old, sums, signer or identity)
+            try:
+                if what == SERVER:
+                    update.check_signature(sums, sig, "stable")     # as servers will check it
+                else:
+                    update.check_release(sums, sig, "stable", what)  # as sticks will check it
+                complete = True
+            except update.UpdateError as exc:
+                if "signatures" not in str(exc):
+                    raise
+                complete = False
+                print(f"{repo} {tag}: {exc} - sign it with the next key "
+                      "(--seed-file <a reserve key>).")
+            if sig != old:
                 (d / update.SIG).write_text(sig)
                 gh(repo, "release", "upload", tag, str(d / update.SIG), "--clobber")
                 print(f"Signed: {update.SIG} is on {repo} {tag}.")
+            elif not post_signed:
+                print(f"{repo}: {tag} is signed by this key already "
+                      "(--post posts it in unseenet.releases).")
+                continue
+            if not complete:
+                continue
             if what == SERVER:                     # servers read it in the network (#901)
                 from unseenet import service_update as su
                 gh(repo, "release", "download", tag, "-p", name, "-D", str(d))
