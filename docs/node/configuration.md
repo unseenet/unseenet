@@ -48,6 +48,8 @@ groups = "*"
 | `announce` | `true` | Announce the node in the network, so people can find it, see [below](#announce-being-found). |
 | `ripen_to` | `1` | How far the node ripens its own key before it announces itself. |
 | `auto_peers` | `3` | Also pull from this many nodes the node finds announced, chosen at random and changed daily, so it gets the network's posts without agreed peers. `0`: only the peers below. See [Peers found by themselves](#peers-found-by-themselves). |
+| `welcome_new` | `true` | Besides those, also pull from one node that announced itself for the first time in the last week, so new nodes are part of the network at once. |
+| `spread` | `"auto"` | Send what this node's own readers post to the announced nodes it pulls from: `"auto"` when no `[[peer]]` takes pushes from it (a new node), `"on"`, `"off"`. |
 | `pow_defense` | `true` | Turn on Tor's proof-of-work defence for the node's onion service: under a flood of connections, Tor asks new clients for a small proof of work and serves those who pay it first, so the node stays reachable ([UN-RFC 0005](https://unseenet.org/spec/un-rfc-0005/)). Needs Tor 0.4.9.2 or newer; with an older Tor the node runs without it and the monitor says so. |
 | `test_addresses` | `false` | For a test network: allow peers at a public address over plain TCP, which hides nothing. Not needed for your own nodes on your own network. |
 | `new_groups` | `"accept"` | Which **new** groups this node carries, see below. |
@@ -376,7 +378,14 @@ first that each answers with the key it announced, picks new ones every day
 or when one stops answering, and checks everything it pulls like any other
 article. Those nodes see this node's announcement and pull from it too, so a
 new node gets the network's posts, and passes its own on, without anybody
-setting up a peer. Agreed peers are still worth having: they push new posts
+setting up a peer.
+
+A new node does not wait to be found. Until it has a `[[peer]]` that takes
+pushes from it, it sends what its own readers post - and its own
+announcement - straight to the nodes it pulls from, which pass it on
+(`spread`). And every node keeps one place for a node that announced itself
+for the first time in the last week (`welcome_new`), so a new node is pulled
+from by others as soon as its announcement arrives. Agreed peers are still worth having: they push new posts
 at once instead of within the hour, and they are kept whatever happens to
 the announcements ([UN-RFC 0055](../spec/un-rfc-0055.md) section 5.5).
 

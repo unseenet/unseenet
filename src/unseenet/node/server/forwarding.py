@@ -36,6 +36,30 @@ class Forwarding:
         for event in self._listeners:
             event.set()
 
+    def spreads(self) -> bool:
+        """Whether what this node's readers post goes to the announced nodes it pulls from
+        (#230): ``spread`` "on", or "auto" when no configured peer takes pushes from it -
+        a new node, which nobody pulls from yet."""
+        mode = self.config.spread
+        return mode == "on" or (mode == "auto" and not any(p.groups for p in self.config.peers))
+
+    def _spread_local(self, art: Article) -> None:
+        """Queue an article this node's own readers posted - its own announcement and
+        ripening chain included - for the announced nodes it pulls from (``Spreader``)."""
+        if not self.spreads() or self.report_hidden(art.message_id):
+            return
+        manifest = self.store.manifest(art.group)
+        if manifest is not None and manifest.local:
+            return                       # local groups never leave this node (UN-RFC 0009, 4)
+        now = time.time()
+        if art.get("Key-Ripening") and not self._is_ripe_group(art):
+            m = self.store.manifest(make_group_id(rp.GROUP_NAME, art.author_key))
+            if m is not None:                    # first, so they can check the article
+                self.store.enqueue(SPREAD_QUEUE, m.message_id, now - 0.001)
+        self.store.enqueue(SPREAD_QUEUE, art.message_id, now)
+        for event in self._listeners:
+            event.set()
+
     def offer(self, peer_name: str, message_ids: list[str]) -> int:
         """Queue articles a reconciliation showed ``peer_name`` lacks, for its feeder
         (UN-RFC 0040 section 4.3: offered with CHECK/TAKETHIS). Returns how many."""

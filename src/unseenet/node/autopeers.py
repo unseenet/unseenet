@@ -21,7 +21,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from ..core import announcements as an
@@ -39,6 +39,8 @@ AUTO_PEERS = 3            # announced nodes pulled from at once, by default
 SWAP_EVERY = 86400.0      # choose again once a day
 FAILS = 3                 # failed pulls in a row before a node is swapped out
 SHUN = 86400.0            # a node that answered with the wrong key is left out this long
+WELCOME = timedelta(days=7)        # #230: a node first announced this lately is new ...
+HISTORY = timedelta(days=25)       # ... if we hold announcements this old (it renews in 20)
 
 
 def held_announcements(node: Node) -> list[an.Announcement]:
@@ -56,6 +58,19 @@ def held_announcements(node: Node) -> list[an.Announcement]:
         except (ArticleError, an.AnnouncementProblem, KeyError, ValueError):
             continue
     return out
+
+
+def newcomers(node: Node, now: datetime) -> set[str]:
+    """Keys of nodes whose first announcement we hold is from the last week (#230) - only
+    when we hold announcements old enough to tell (a node renews within 20 days, so an
+    older node has an earlier one here)."""
+    first: dict[str, datetime] = {}
+    for a in held_announcements(node):
+        if a.key not in first or a.date < first[a.key]:
+            first[a.key] = a.date
+    if not first or now - min(first.values()) < HISTORY:
+        return set()
+    return {k for k, d in first.items() if now - d <= WELCOME}
 
 
 def candidates(node: Node, now: datetime, shunned=frozenset()) -> list[tuple[an.Announcement, str]]:
@@ -103,6 +118,7 @@ class AutoPeers:
         self.fails: dict[str, int] = {}
         self.shunned: dict[str, float] = {}
         self.chosen_at = 0.0
+        self.welcome: str | None = None            # #230: the newcomer pulled from too
 
     def _shunned(self) -> set[str]:
         t = time.time()
@@ -118,9 +134,22 @@ class AutoPeers:
             self.chosen, self.chosen_at = {}, time.time()
         self.chosen = {k: pool[k] for k in self.chosen
                        if k in pool and self.fails.get(k, 0) < FAILS}
+        new = newcomers(self.node, now) if self.node.config.welcome_new else set()
+        if self.welcome is not None and (self.welcome not in self.chosen or self.welcome not in new):
+            self.chosen.pop(self.welcome, None)
+            self.welcome = None
+        if self.welcome is None and self.count:
+            fresh = [k for k in pool if k in new]
+            if fresh:                  # #230: a place for a new node, beside the others
+                self.welcome = random.choice(fresh)
+                self.chosen[self.welcome] = pool[self.welcome]
+                self.fails.pop(self.welcome, None)
+                log.info("pulling from new node %s (%s) too", pool[self.welcome][0].name,
+                         self.welcome)
+        regular = [k for k in self.chosen if k != self.welcome]
         rest = [k for k in pool if k not in self.chosen]
         random.shuffle(rest)
-        for k in rest[:max(0, self.count - len(self.chosen))]:
+        for k in rest[:max(0, self.count - len(regular))]:
             self.chosen[k] = pool[k]
             self.fails.pop(k, None)
             log.info("pulling from announced node %s (%s) too", pool[k][0].name, k)

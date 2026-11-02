@@ -80,6 +80,7 @@ class PeerConfig:
 
 
 BLOB_WAIT_SECONDS = 600.0      # UN-RFC 0027 6.3: forward without the blobs after this
+SPREAD_QUEUE = "~spread"       # #230: what our readers posted, for the announced nodes we pull from
 POST_PAST = timedelta(hours=1)  # UN-RFC 0049 3.2: a POST's Date at most this far back
 BACKFILL_MAX = 5000            # #543: stored articles whose files are fetched per start
 
@@ -107,6 +108,12 @@ class NodeConfig:
     ripen_to: int = 1
     # UN-RFC 0055 section 5.5: also pull from this many announced nodes (0: only peers)
     auto_peers: int = 3
+    # ... and, besides those, from one node that announced itself for the first time lately,
+    # so a new node is pulled from at once (#230)
+    welcome_new: bool = True
+    # #230: send what this node's own readers post to the announced nodes it pulls from -
+    # "auto": when no configured peer takes pushes from it; "on"; "off"
+    spread: str = "auto"
     pow_defense: bool = True             # Tor's proof-of-work defence for the onion (UN-RFC 0005)
     pull_interval: float = 3600.0        # seconds between catch-up pulls (UN-RFC 0017)
     honour_blocks: bool = False          # UN-RFC 0018 section 8.2: maintainers' blocks
