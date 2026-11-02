@@ -40,8 +40,11 @@ async def test_sharing_through_the_api(tmp_path, monkeypatch):
     assert api.share(gid, {"id": mid, "notify": False})["job"]
     assert await _until(lambda: owner.my_shares(mid))
     assert list(owner.my_shares(mid)) == [feed]
-    shares = [m for m in owner.cache.get(feed, {}).values() if m.kind == "share"]
-    assert shares and shares[0].share_of == mid
+
+    def cached_shares():        # the share article reaches the cache after my_shares (#845)
+        return [m for m in owner.cache.get(feed, {}).values() if m.kind == "share"]
+    assert await _until(cached_shares)
+    assert cached_shares()[0].share_of == mid
 
     got = await api.share_target(mid, gid)
     assert got["state"] == "ok" and got["message"]["subject"] == "Mit marsvin"
