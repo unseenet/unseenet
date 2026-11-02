@@ -39,9 +39,12 @@ PARAMS = {
     "grace_days": 10,           # 6.1: a listed entry leaves after this many days down
     "import_days": 180,         # 9: an imported entry stays this long without the rules
     "max_per_operator": 0,      # 12: entries per operator key; 0 is no limit
+    "entrance_days": 14,        # 6.3: an entrance is new on the list after this many good days
+    "release_days": 7,          # 6.3: ... serving its publisher's newest release this soon
 }
 PARAM_LIMITS = {"announce_days": (7, 90), "window_days": (3, 30), "need_days": (1, 30),
-                "grace_days": (3, 60), "import_days": (0, 730), "max_per_operator": (0, 200)}
+                "grace_days": (3, 60), "import_days": (0, 730), "max_per_operator": (0, 200),
+                "entrance_days": (3, 60), "release_days": (1, 60)}
 
 
 class ListProblem(ValueError):
@@ -60,6 +63,7 @@ class ListCouncil:
     publishers: tuple[str, ...] = ()
     import_id: str | None = None
     imports: dict[str, str] = field(default_factory=dict)   # kind -> import hash, added later
+    announce: dict[str, str] = field(default_factory=dict)  # kind -> open announcement group
 
 
 def _group(g, what: str) -> str:
@@ -97,9 +101,15 @@ def list_council(data: dict) -> ListCouncil | None:
     if not isinstance(imports, dict) or not set(imports) <= set(LIST_KINDS) or not all(
             isinstance(v, str) and _HASH.fullmatch(v) for v in imports.values()):
         raise ListProblem("imports maps list kinds to sha256:<hex> of an import's body")
+    announce = data.get("announce", {})
+    if not isinstance(announce, dict) or not set(announce) <= {"entrances"}:
+        raise ListProblem("announce maps entrances to its announcement group")
+    if "entrances" in lists and "entrances" not in announce:
+        raise ListProblem("a council with an entrance list names where entrances announce")
     return ListCouncil(lists, _group(data.get("claims"), "claims"),
                        _group(data.get("reports"), "reports"), dict(soft),
-                       tuple(_group(p, "publishers") for p in pubs), imp, dict(imports))
+                       tuple(_group(p, "publishers") for p in pubs), imp, dict(imports),
+                       {k: _group(v, f"announce.{k}") for k, v in announce.items()})
 
 
 _HASH = re.compile(r"sha256:[0-9a-f]{64}")
@@ -195,6 +205,7 @@ class Report:
     incomplete: frozenset[str] = frozenset()
     software: dict = field(default_factory=dict, compare=False)
     files: tuple = ()
+    served: dict = field(default_factory=dict, compare=False)   # entrance key -> version
     date: datetime | None = None           # the article's Date
     message_id: str = ""
 
@@ -211,7 +222,7 @@ def _keys(v, what: str) -> list[str]:
 
 
 def report_body(day: date, reached, missed, *, disconnected=(), incomplete=(),
-                software: dict | None = None, files=()) -> str:
+                software: dict | None = None, files=(), served: dict | None = None) -> str:
     body: dict = {"v": 1, "date": day.isoformat(), "reached": _keys(list(reached), "reached"),
                   "missed": _keys(list(missed), "missed")}
     if disconnected:
@@ -222,6 +233,8 @@ def report_body(day: date, reached, missed, *, disconnected=(), incomplete=(),
         body["software"] = {k: str(v)[:MAX_SOFTWARE] for k, v in sorted(software.items())}
     if files:
         body["files"] = list(files)
+    if served:
+        body["served"] = {k: str(v)[:MAX_SOFTWARE] for k, v in sorted(served.items())}
     return canonical_json(body) + "\n"
 
 
@@ -255,8 +268,12 @@ def parse_report(body: str, *, key: str, date: datetime, message_id: str = "") -
     files = d.get("files", [])
     if not isinstance(files, list):
         raise ListProblem("files is a list")
+    served = d.get("served", {})
+    if not isinstance(served, dict) or not set(served) <= reached or not all(
+            isinstance(v, str) and len(v) <= MAX_SOFTWARE for v in served.values()):
+        raise ListProblem("served maps entrance keys it reached to the signed version they serve")
     return Report(key, day, frozenset(reached), frozenset(missed), frozenset(disc),
-                  frozenset(inc), dict(soft), tuple(files), date, message_id)
+                  frozenset(inc), dict(soft), tuple(files), dict(served), date, message_id)
 
 
 class Measurements:
@@ -286,6 +303,11 @@ class Measurements:
 
     def reported(self, d: date, key: str) -> bool:
         return any(key in r.reached or key in r.missed for r in self.by_day.get(d, ()))
+
+    def served(self, d: date, key: str) -> list[str]:
+        """The signed versions replicas found an entrance serving unchanged on day ``d``
+        (section 6.3)."""
+        return sorted({r.served[key] for r in self.by_day.get(d, ()) if key in r.served})
 
     def software(self, d: date, key: str) -> str | None:
         """What the entry said it runs on day ``d``: the highest version any replica

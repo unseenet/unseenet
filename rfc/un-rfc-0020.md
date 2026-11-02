@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; DNS answers decided by the replicas together, the council as maintainer of `unseenet`, entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the rules of the entrance list (5.1, 6.3) and the report's `served`; replicas measuring entrances, DNS answers decided by the replicas together, the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -96,6 +96,7 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 | `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …}` |
 | `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
+| `announce` | object  | for `entrances` | Where entries announce themselves, by kind, e.g. `{"entrances": …}`: an `open` council group of the council (section 5.1) |
 | `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
 | `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
 | `import`  | string   | no   | `sha256:` and the hex SHA-256 of the import's body (section 9); genesis only |
@@ -114,10 +115,28 @@ key, and anybody can repeat its work - and, as a shadow, prove it can
 
 Nodes announce themselves as UN-RFC 0055 section 5 says, signed with
 their node key, in `unseenet.nodes.announce`. Entrances announce
-themselves the same way in `unseenet.entrances.announce`, with the
-entrance's information (UN-RFC 0043 section 4.3), its open-web and onion
-addresses and its operator's promise of UN-RFC 0043 section 5, signed
-with the entrance's key. Scribes announce themselves in
+themselves in the open group the council's `announce` names for
+`entrances`, so that the council, not the project key, owns the door.
+The announcement has `Subject: entrance <name>`, `Content-Type:
+application/json`, is signed with the entrance's key, and has a
+canonical JSON body:
+
+| Field         | Req.        | Meaning                                          |
+|---------------|-------------|--------------------------------------------------|
+| `v`           | yes         | `1`                                              |
+| `publisher`   | yes         | The releases channel (UN-RFC 0062) whose web client it serves |
+| `date`        | yes         | The article's `Date`, RFC 3339 in UTC            |
+| `url`         | one of both | Its open-web address, `https://host/`            |
+| `onion`       | one of both | Its onion address, `<56 base32>.onion`           |
+| `name`, `operator`, `contact`, `description` | no | As in UN-RFC 0043 section 8.1 |
+
+By announcing, the operator promises UN-RFC 0043 section 5. The
+entrance's information (UN-RFC 0043 section 4.3) names the same key in
+`key`, so that nobody can announce somebody else's entrance. Any
+publisher may be named: the council does not choose which clients are
+served, only checks that what is served is what its publisher signed;
+a council that names `publishers` lists only entrances serving one of
+them. Scribes announce themselves in
 `unseenet.scribes.announce` with their onion address, the publishers
 they keep and, optionally, `name`, `operator` and `contact` as for
 entrances, signed with the scribe's key. An announcement is current for
@@ -225,10 +244,41 @@ item 2, handles them for names.
 
 ## 6.3 Entrances
 
-An entrance is on the entrance list under the rules of section 6.1, with
-"reached" meaning that a replica fetched its page over Tor and the
-release it serves matches a valid signed release (UN-RFC 0043 section
-7.6, UN-RFC 0062).
+A replica reaches an entrance over Tor, at its onion address if it has
+one, else at its open-web address. It counts as reached when its
+`/.well-known/unseenet-entrance` names the announced key, and as
+**serving** version `v` when, in addition, its `version.json` says `v`,
+`v` is a release post of the announced publisher (UN-RFC 0043 section
+7.2) - read by the replica from the network, signed by the channel's
+owner or a poster it lists - and every file the post names has the
+SHA-256 the post gives. The report says so in `served` (section 7).
+
+A **good day** for an entrance is a completed UTC day on which at least
+one replica found it serving a release no older than the publisher's
+newest release that had been out for 7 days (`release_days`) by the end
+of that day: an entrance must follow its publisher, but has a week to do
+so.
+
+An entrance is on the entrance list when
+
+1. its announcement is current (section 5.1);
+2. its publisher has at least one release, and is one of the council's
+   `publishers` if the council names any;
+3. its software is not below the minimum (section 6.5); and
+4. each of the last 14 completed UTC days (`entrance_days`) was a good
+   day - all of them, not 5 of 7 as for a node, since a visitor trusts
+   an entrance with the code they run.
+
+A listed entrance leaves after `grace_days` reported days without a good
+day, as a node does (section 6.1), and only a decision of the council
+removes it otherwise (section 6.7). At most `max_per_operator` per
+operator, and at most 200, those already listed first. The entrance
+list is a JSON object `{"v": 1, "updated": "...", "entrances": [...]}`;
+each entry has the fields of UN-RFC 0043 section 8.1 and the entrance's
+`key` and `publisher`, which clients that do not know them ignore.
+Imported entries (section 9), which have no key, stay for `import_days`
+unless the same entrance (by `url` or `onion`) is listed by the rules,
+and a decision removes one by its `url` or `onion`.
 
 ## 6.4 Scribes
 
@@ -315,7 +365,8 @@ with exactly one of:
 | `set`       | `{<parameter>: <number>, ...}`           | Changes parameters of this section       |
 
 `<kind>` is `nodes`, `root`, `entrances` or `scribes`; the entry is the
-entry's key, or for `root` the top-level name. The parameters, with
+entry's key, for `root` the top-level name, and for an imported
+entrance its `url` or `onion`. The parameters, with
 their values until a decision sets them, and the values allowed:
 
 | Parameter          | Value | Allowed | Meaning                                   |
@@ -326,6 +377,8 @@ their values until a decision sets them, and the values allowed:
 | `grace_days`       | 10    | 3-60    | Days down before a listed entry leaves    |
 | `import_days`      | 180   | 0-730   | How long an imported entry stays (section 9) |
 | `max_per_operator` | 0     | 0-200   | Entries per operator key; 0 is no limit (section 12) |
+| `entrance_days`    | 14    | 3-60    | Good days in a row before an entrance is listed (6.3) |
+| `release_days`     | 7     | 1-60    | How soon an entrance must serve a new release (6.3) |
 
 Decisions apply in the order of the day they apply on and then of the
 proposal's id. `min_software` is a field of the council manifest and is
@@ -346,6 +399,7 @@ Each replica posts one `report <date>` article per UTC day in the
 | `incomplete` | array of keys | no | Connected but not complete (UN-RFC 0021 section 7) |
 | `software` | object       | no   | For keys it reached, the software they stated (section 6.5) |
 | `files`   | array         | no   | Whole files fetched from scribes: `{"scribe": key, "file": path, "ok": bool}` |
+| `served`  | object        | no   | For entrances it reached, the signed version it found each serving unchanged (section 6.3) |
 
 A report is about a completed UTC day and is posted on that day or the
 next; of one replica's reports for one day, the newest counts. Only the
@@ -523,10 +577,11 @@ it.
 - UN-RFC 0055 section 8: the rules left to this document are those of
   section 6.
 - UN-RFC 0043 section 4.3: the entrance information gains `software`,
-  as in UN-RFC 0011 (section 6.5).
-- UN-RFC 0055 section 4: `unseenet.entrances.announce`,
-  `unseenet.scribes.announce` and `unseenet.scribes` are infrastructure
-  groups.
+  as in UN-RFC 0011 (section 6.5), and `key`, the key it announces
+  itself with (section 5.1).
+- UN-RFC 0043 section 8.1: entries gain `key` and `publisher`.
+- UN-RFC 0055 section 4: `unseenet.scribes.announce` and
+  `unseenet.scribes` are infrastructure groups.
 - UN-RFC 0000 section 6: the title of 0020 becomes "Lists Kept by
   Councils".
 

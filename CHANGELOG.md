@@ -17,6 +17,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The rules for a council's entrance list** (#861, UN-RFC 0020 sections 5.1, 6.3 and 7):
+  `core/entrances.py` reads an entrance's announcement - signed with the entrance's key,
+  naming the publisher whose web client it serves, any publisher - and that publisher's
+  signed release posts, and computes the entrance list. An entrance is listed after 14 good
+  days in a row: days on which a replica found it serving a signed release, unchanged, no
+  older than the publisher's newest that has been out for 7 days. A listed entrance has the
+  nodes' grace; a decision removes one; imported entrances stay for 180 days. Reports gain
+  `served`. The replicas do not measure entrances yet.
 - **The rules for a council's node list** (#56, UN-RFC 0020 sections 6.1, 6.7 and 7):
   `core/lists.py` computes the node list from public data alone - the nodes' announcements,
   the daily measurement reports of the council's replicas, passed `list` decisions and the
