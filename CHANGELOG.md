@@ -23,6 +23,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   it reaches every announced node over Tor, checks its node key, posts canaries and reads
   yesterday's (UN-RFC 0021), and posts `report <date>`; then it computes the node list for the
   day before yesterday and posts it when it changed. `unseenet-replica status` says how it went.
+- **A list council decides in public** (#56, UN-RFC 0061, UN-RFC 0020 section 6.7): its replicas
+  keep its proposals, talk and log groups and its hearings, as the names council's do, on their
+  own part of the replica's state. A `list` proposal that passes - `remove` or `restore` an
+  entry, `reserve` a name, `set` a parameter - is applied to the lists from the day it applies.
 
 ## [0.7.1] - 2026-11-02
 
