@@ -131,9 +131,11 @@ def test_a_replica_updates_through_it(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "read_config", lambda d: {"channel": "stable"})
     monkeypatch.setattr(su, "STATE_ROOT", tmp_path)
     seen = []
-    monkeypatch.setattr(su, "run", lambda m, st: seen.append((m.service, st.data["off"])) or "current")
+    monkeypatch.setattr(su, "run", lambda m, st, **kw: seen.append((m.service, st.data["off"],
+                                                                     m.socks_port)) or "current")
+    monkeypatch.setattr(su, "_listening", lambda port: port == su.SYSTEM_TOR)
     assert cli.update(SimpleNamespace(dir=str(tmp_path))) == 0
-    assert seen == [(cli.SERVICE, False)]
+    assert seen == [(cli.SERVICE, False, su.SYSTEM_TOR)]           # over Tor (#900)
 
 
 def _service_release(monkeypatch, package="unseenet-gateway", version="0.6.0"):

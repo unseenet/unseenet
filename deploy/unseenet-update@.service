@@ -1,6 +1,7 @@
 # Updates the service named after the @ (unseenet-node, unseenet-registrar) from the
 # newest signed stable release (UN-RFC 0062 section 6.1, #827). Root, since it restarts
-# the service; pip itself runs as the owner of the environment.
+# the service; pip itself runs as the owner of the environment. Every download goes over
+# Tor (#900); UNSEENET_UPDATE_DIRECT=1 in the env file below downloads without it.
 # Turn it off with:  sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update off --service unseenet-node
 # (it then only tells you, in the log, when a release has been out for 30 days).
 [Unit]

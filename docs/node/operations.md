@@ -21,6 +21,13 @@ A node installed with `install-node.sh` updates itself
 | Its log | `journalctl -u unseenet-update@unseenet-node` |
 | Update now, without the delay | `sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update run --service unseenet-node --check tcp:127.0.0.1:1119 --now` |
 | Turn it off | `sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update off --service unseenet-node` |
+| Download without Tor | `UNSEENET_UPDATE_DIRECT=1` in `/etc/unseenet-update/unseenet-node.env` |
+
+Everything an update downloads - the signed checksums and every package - goes
+over Tor (#900): a Tor on 127.0.0.1:9050 if there is one, else one started for
+the run. So nobody watching GitHub or PyPI after a release can tell which
+machines run a node. Without Tor it does not update, unless you set
+`UNSEENET_UPDATE_DIRECT=1`.
 
 Turned off, it still looks, and writes a warning in its log when a newer
 release has been out for 30 days. To update by hand then:

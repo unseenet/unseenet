@@ -17,6 +17,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Servers update over Tor** (#900): `unseenet-service-update` fetches the signed checksums,
+  the requirements and every package pip installs over Tor (a Tor on 127.0.0.1:9050, `--socks`,
+  or one it starts for the run; pip gets a local CONNECT proxy, `unseenet.torconnect`). So the
+  downloads after a release no longer show GitHub, PyPI or anyone watching them which machines
+  run a server, or where. `--direct` or `UNSEENET_UPDATE_DIRECT=1` downloads without Tor;
+  otherwise no Tor means no update. Replicas' own `update` goes the same way.
 - **The graphical client's folders can update themselves** (#264): `unseenet update` knows two
   products in a folder - the terminal client (`unseenet-<version>-<kind>.zip`) and the graphical
   client (`unseenet-gui-<version>-<kind>.zip`, in the same signed `SHA256SUMS.txt`) - each with
