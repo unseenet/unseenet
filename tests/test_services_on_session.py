@@ -199,6 +199,45 @@ async def test_ripening_from_the_public_key_alone(tmp_path, monkeypatch, capsys)
     server.close()
 
 
+
+async def test_a_chain_ripened_elsewhere_is_imported_and_published(tmp_path, monkeypatch, capsys):
+    """#784: the ripening machine computes from the public key alone; where the secret is,
+    --import takes the chain over (only if it is further, after checking it) into a
+    service's existing state - its other state kept - and --publish posts ripe@."""
+    from unseenet.cli import ripen_command
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node, server, addr = await _node()
+    ident = crypto.Identity.generate()
+    key = tmp_path / "gw.key"
+    key.write_text(ident.seed.hex())
+    service = Session.from_key(ident, str(key) + ".state.json", status=lambda *_: None)
+    service.data["mine"] = "kept"                         # the service's own state
+    service.save()
+    await service.close()
+    far = tmp_path / "ripener.state.json"                 # the ripening machine's file
+    await ripen_command(argparse.Namespace(to=1, public_key=ident.key_text, state=str(far),
+                                           key_file=None, node=None, publish=False,
+                                           identity=None, vault=None, import_file=None))
+    common = dict(to=0, key_file=str(key), state=None, node=[addr], public_key=None,
+                  identity=None, vault=None, import_file=str(far))
+    await ripen_command(argparse.Namespace(publish=True, **common))
+    out = capsys.readouterr().out
+    assert "-> 1" in out.replace("level None", "level -") and "published ripe@" in out
+    s = Session.from_key(ident, str(key) + ".state.json", status=lambda *_: None)
+    assert s.ripening().level == 1 and s.data.get("mine") == "kept"
+    assert node.store.manifest(make_group_id(rp.GROUP_NAME, ident.public_key)) is not None
+    await s.close()
+    await ripen_command(argparse.Namespace(publish=False, **common))       # not further
+    assert "kept the chain here" in capsys.readouterr().out
+    other = crypto.Identity.generate()                                      # another key's file
+    bad = tmp_path / "other.state.json"
+    await ripen_command(argparse.Namespace(to=0, public_key=other.key_text, state=str(bad),
+                                           key_file=None, node=None, publish=False,
+                                           identity=None, vault=None, import_file=None))
+    with pytest.raises(SystemExit, match="no chain for"):
+        await ripen_command(argparse.Namespace(publish=False, **{**common, "import_file": str(bad)}))
+    server.close()
+
 async def test_poster_ripens_and_posts_through_session(tmp_path, monkeypatch):
     """core.poster.Poster (the bots' API) posts through Session.post_article (#287)."""
     from unseenet.core.poster import Poster

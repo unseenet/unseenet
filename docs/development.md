@@ -163,6 +163,13 @@ postage and retries are the same code everywhere:
 - At setup: `unseenet ripen --key-file KEY --to 0 --node HOST --publish`
   (7-11 minutes to level 0). Computing needs only the public key, so it can
   run on a faster machine; only `--publish` signs.
+- Ripened on another machine (#784): there `unseenet ripen --public-key KEY
+  --to 4 --state FILE`; where the secret is, with the service stopped,
+  `unseenet ripen --import FILE --key-file KEY --publish` (or `--vault V
+  --identity NAME` for a vault). The chain is checked and taken over only if it
+  is further than the service's own; the rest of a service's state is kept, and
+  `--publish` lets its other copies take it over too. Run it again as the other
+  machine reaches each level.
 
 A key kept offline (a gateway's group key, the project key) only signs
 manifests now and then: ripen it to level 0 once; the tool that brings it

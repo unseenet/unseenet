@@ -314,14 +314,30 @@ class RipeningMixin:
             return False
         try:
             chain = rp.Chain.from_manifest(m.raw["ripening"])
-            if chain.t <= self.ripening(name).t:
-                return False
-            rp.verify(pk, chain)
         except rp.RipeningError:
             return False
+        return self.take_ripening(chain, name, published=True)
+
+    def take_ripening(self, chain: rp.Chain, name: str | None = None,
+                      published: bool = False) -> bool:
+        """Take over ``chain`` for this identity when it is further than the one kept
+        here, after checking it: a chain from its ``ripe@`` group, or one ripened on
+        another machine from the public key alone (``unseenet ripen --import``, #784).
+        True when it was taken over; False when the one here is as far or further.
+        Raises ``RipeningError`` for a chain that is not this key's or does not check."""
+        name = name or self.default_identity_name()
+        if chain.t <= self.ripening(name).t:
+            return False
+        try:
+            rp.verify(self.identity(name).public_key, chain)
+        except rp.RipeningError:
+            if published:
+                return False
+            raise
         entry = self._ripening_entry(name)
         entry["segments"] = [s.to_dict() for s in chain.segments]
-        entry["published"] = chain.t
+        if published:
+            entry["published"] = chain.t
         self.save()
         self.emit(ev.Ripening(self.identity(name).key_text, chain.t, rp.level(chain.t),
                               rp.next_threshold(chain.t)))

@@ -7,6 +7,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **`unseenet ripen --import FILE`** (#784, UN-RFC 0025 section 3.3): hand a chain ripened on
+  another machine from the public key alone (`--public-key ... --state FILE`) to where the
+  key is - a key file's state or a vault's identity - checked, and taken over only if it is
+  further; the service's other state is kept. `--publish` posts its ripe@ manifest, so the
+  key's other copies take it over too. Stop a service whose vault it is first.
+
 ### Fixed
 
 - **install-node.sh prints the node's own onion address** at the end: it took the newest onion
