@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0055                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - sections 2-7 (5.5 too) (the clients' side in the core and its local API; the clients' screens follow); the council's node list follows (#56)
+Implemented: unseenet 0.7.0; partly - sections 2-7 (5.5 too) (the clients' side in the core and its local API; the clients' screens follow); the council's node list follows (#56)
 Updates: 0001, 0005, 0010, 0011, 0018, 0021
 
                Unseenet: What a Node Carries
