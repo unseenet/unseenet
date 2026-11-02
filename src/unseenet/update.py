@@ -286,9 +286,39 @@ def release_url(channel: str, name: str, version: str | None = None, repo: str =
     return f"{repo}/releases/latest/download/{name}"
 
 
-def release_urls(channel: str, name: str, version: str | None = None) -> list[str]:
-    """``name`` in each of RELEASE_REPOS, in the order they are tried."""
-    return [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
+def release_urls(channel: str, name: str, version: str | None = None,
+                 sources=None) -> list[str]:
+    """Where ``name`` is, in the order tried: the release sources the network gave (#902),
+    in each of RELEASE_REPOS, then GitHub's addresses for each."""
+    out = []
+    if sources is not None and (version or channel == "dev"):
+        tag = "dev" if channel == "dev" else f"v{version}"
+        for repo in RELEASE_REPOS:
+            out += sources.file_urls(urlsplit(repo).path.rsplit("/", 1)[1], tag, name)
+    out += [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
+    return list(dict.fromkeys(out))
+
+
+SOURCES_FILE = "data/release-sources.json"      # the newest list seen, on the stick (#902)
+
+
+def kept_sources(media: Path):
+    """The newest list of release sources: the one kept on the stick, or the built-in."""
+    from . import release_sources as rs
+    try:
+        return rs.newest([], json.loads((media / SOURCES_FILE).read_text()))
+    except (OSError, ValueError):
+        return rs.BUILT_IN
+
+
+def keep_sources(media: Path, sources) -> None:
+    if not sources.updated:
+        return
+    try:
+        (media / SOURCES_FILE).parent.mkdir(parents=True, exist_ok=True)
+        (media / SOURCES_FILE).write_text(json.dumps(sources.to_dict(), indent=1))
+    except OSError:
+        pass
 
 
 def from_github(channel: str, what: str, socks_port: int | None,
@@ -646,6 +676,11 @@ async def from_network(socks_port: int) -> tuple[list[str], list[str]]:
             continue
         try:
             releases = await _newest_bodies(c, RELEASES_GROUP, 30)
+            try:                         # and the newest lists of release sources (#902)
+                from . import release_sources as rs
+                releases += (await rs.read_group(c, RELEASES_GROUP, (rs.HEAD,), limit=3))[rs.HEAD]
+            except Exception:  # noqa: BLE001 - an older node without HDR: the posts above
+                pass
             onions = []
             for body in await _newest_bodies(c, ENTRANCES_GROUP, 3):
                 try:
@@ -751,6 +786,9 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         onions: list[str] = []
         if socks_port:
             bodies, onions = asyncio.run(from_network(socks_port))
+            from . import release_sources as rs
+            sources = rs.newest(bodies, kept_sources(media).to_dict())
+            keep_sources(media, sources)
             for body in bodies:
                 post = parse_release_post(body)
                 if post and post[0] == args.channel:
@@ -778,7 +816,7 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
     with tempfile.TemporaryDirectory(prefix="unseenet-update-") as tmp:
         zip_path = args.zip or Path(tmp) / rel.zip_name
         if not args.zip:
-            sources = release_urls(args.channel, rel.zip_name, rel.version)
+            sources = release_urls(args.channel, rel.zip_name, rel.version, kept_sources(media))
             if socks_port and onions:
                 sources += [base + MIRROR_PATH.format(channel=args.channel, name=rel.zip_name)
                             for base in mirrors_with(onions, args.channel, rel.release or rel.version,

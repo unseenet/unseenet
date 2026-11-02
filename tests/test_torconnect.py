@@ -100,3 +100,23 @@ def test_pip_gets_the_proxy(tmp_path, monkeypatch):
     assert calls[-1][calls[-1].index("--proxy") + 1] == "http://127.0.0.1:4321"
     su.Machine("x", venv).install(b"x==1\n", tmp_path / "work")
     assert "--proxy" not in calls[-1]                     # --direct
+
+
+async def test_an_onion_index_over_plain_http():
+    echo = await _echo_server()
+    asked: list = []
+    socks = await _socks_server(echo.sockets[0].getsockname()[1], asked)
+    async with torconnect.TorConnect(socks.sockets[0].getsockname()[1]) as port:
+        onion = "a" * 56 + ".onion"
+        r, w = await asyncio.open_connection("127.0.0.1", port)
+        w.write(f"CONNECT {onion}:80 HTTP/1.1\r\n\r\n".encode())
+        await w.drain()
+        assert (await r.readuntil(b"\r\n\r\n")).startswith(b"HTTP/1.1 200")
+        w.close()
+        r, w = await asyncio.open_connection("127.0.0.1", port)
+        w.write(b"CONNECT pypi.org:80 HTTP/1.1\r\n\r\n")         # not an onion: no plain http
+        await w.drain()
+        assert b"403" in await r.read(100)
+        w.close()
+    echo.close()
+    socks.close()

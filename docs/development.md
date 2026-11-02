@@ -403,6 +403,13 @@ one node at a time.
    unseenet-gateway v0.6.0` (#827). Server releases are posted in
    `unseenet.releases` too, which servers read before they ask GitHub (#901);
    `--post` posts a release that was signed before.
+
+   Where releases are fetched from is set in the network too (#902):
+   `tools/project/release_sources.py post sources.json` signs and posts a list
+   of release sources (file addresses and package indexes). Servers and clients
+   use the newest list and keep it, so post a new one before a source goes away
+   when you can. It grants nothing over what is installed: every file must
+   still match the signed checksums.
 6. `.github/workflows/announce.yml` posts the release notes to
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.
