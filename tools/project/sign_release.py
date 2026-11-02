@@ -35,13 +35,11 @@ from unseenet import update
 from unseenet.core.article import new_article
 from unseenet.known_nodes import RELEASES_GROUP
 
+SERVER = "server-requirements"   # the core release's server requirements (#827)
 REPOS = {"unseenet/unseenet-portable": "linux-x86_64",       # the zip that names the version
          "unseenet/unseenet-bootable": "x86_64-update",
          # the core: the servers' requirements, which self-updating servers take (#827)
          "unseenet/unseenet": SERVER}
-
-
-SERVER = "server-requirements"
 
 
 def server_requirements(sums: dict[str, str]) -> tuple[str, str]:

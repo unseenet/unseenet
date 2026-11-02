@@ -2,6 +2,7 @@
 
 import getpass
 import importlib
+import importlib.util
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -313,3 +314,27 @@ async def test_create_groups_removes_a_group_the_project_moved(setup):
     await c.quit()
     assert code == 411 and "removed" in text
     await run("create_groups")                       # nothing more to remove
+
+
+# --- every tool loads: a name used before it is defined is found here, not when the
+# owner runs it on release day (sign_release.py, 0.7.0) ----------------------------------
+
+TOOL_FILES = sorted(TOOLS.glob("*.py"))
+
+
+def _load(path, monkeypatch):
+    monkeypatch.syspath_prepend(str(path.parent))      # as when run: their helpers beside them
+    spec = importlib.util.spec_from_file_location(f"tool_{path.stem}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)                    # top level only: main() is not run
+    return module
+
+
+@pytest.mark.parametrize("path", TOOL_FILES, ids=[p.name for p in TOOL_FILES])
+def test_every_project_tool_loads(path, monkeypatch):
+    _load(path, monkeypatch)
+
+
+def test_sign_release_covers_the_core(monkeypatch):
+    module = _load(TOOLS / "sign_release.py", monkeypatch)
+    assert module.REPOS["unseenet/unseenet"] == module.SERVER
