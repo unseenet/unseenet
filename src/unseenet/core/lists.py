@@ -26,6 +26,7 @@ from .announcements import Announcement
 from .groups import canonical_json, parse_canonical_json, split_group_id
 
 LIST_KINDS = ("nodes", "root", "entrances", "scribes")
+ANNOUNCE_KINDS = {"entrances", "gateways"}   # 5.1; gateways: the directory (UN-RFC 0038 6.1)
 REPORT_PREFIX = "report "
 MAX_NODES = 200                              # UN-RFC 0010 section 2
 MAX_REPORT_KEYS = 1000
@@ -102,8 +103,8 @@ def list_council(data: dict) -> ListCouncil | None:
             isinstance(v, str) and _HASH.fullmatch(v) for v in imports.values()):
         raise ListProblem("imports maps list kinds to sha256:<hex> of an import's body")
     announce = data.get("announce", {})
-    if not isinstance(announce, dict) or not set(announce) <= {"entrances"}:
-        raise ListProblem("announce maps entrances to its announcement group")
+    if not isinstance(announce, dict) or not set(announce) <= ANNOUNCE_KINDS:
+        raise ListProblem("announce maps entrances, gateways to their announcement groups")
     if "entrances" in lists and "entrances" not in announce:
         raise ListProblem("a council with an entrance list names where entrances announce")
     return ListCouncil(lists, _group(data.get("claims"), "claims"),

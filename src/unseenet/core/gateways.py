@@ -1,6 +1,8 @@
 """The gateway directory (UN-RFC 0038 section 6): who runs gateways, and what to invite.
 
-Gateways announce themselves in ``unseenet.gateways``. Each announcement is a
+Gateways announce themselves in ``unseenet.gateways`` - or, once its manifest says
+``moved_to`` (UN-RFC 0020 section 10), in the directory it names, which a list council
+keeps (``directory_of``). Each announcement is a
 signed JSON article; the newest one per key counts, and announcements older
 than 30 days are not shown, so gateways that stop drop out by themselves. A
 gatewayed group is active while one of its gateways announces it (section 7).
@@ -93,6 +95,22 @@ def current(articles, *, now: datetime | None = None) -> list[GatewayAnnouncemen
         if a.key not in newest or a.date > newest[a.key].date:
             newest[a.key] = a
     return sorted(newest.values(), key=lambda a: (a.name.lower(), a.key))
+
+
+def directory_of(manifest_data: dict | None, group: str = DIRECTORY_GROUP) -> str:
+    """Where the directory is: ``group``, or the open group its manifest - signed by the
+    owner its Group ID names, which the caller has checked - says it moved to (UN-RFC
+    0020 section 10, UN-RFC 0038 section 6.1). The new directory is a list council's
+    group (its ``announce.gateways``); nothing else about it changes."""
+    moved = (manifest_data or {}).get("moved_to")
+    if isinstance(moved, str) and moved != group:
+        from .groups import split_group_id
+        try:
+            split_group_id(moved)
+            return moved
+        except ValueError:
+            pass
+    return group
 
 
 def active_groups(announcements: list[GatewayAnnouncement]) -> dict[str, list[str]]:

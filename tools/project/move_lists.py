@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Move one of the project's lists to its list council (UN-RFC 0020 section 10, #56).
 
-    python3 tools/project/move_lists.py unseenet.lists@<fp> [--list nodes|root|entrances] [--dry-run] [--force]
+    python3 tools/project/move_lists.py unseenet.lists@<fp> [--list nodes|root|entrances|gateways] [--dry-run] [--force]
 
 The last step the project key takes in that list. Run it once the list council counts
 (``unseenet council show``), keeps that list, its import is posted, and its replicas have
@@ -14,6 +14,11 @@ on; the old group's lists are read only until the council has one. From then on 
 project key has no part in that list. For the node list, retire the GitHub workflows that
 kept it (node-request, node-health) afterwards; for the entrance list, entrance-request
 and entrance-health.
+
+``--list gateways`` moves the gateway directory (UN-RFC 0038 section 6.1): unseenet.gateways
+gets ``moved_to`` naming the council's open directory (its ``announce.gateways``, made with
+``unseenet council add-directory``) - the directory itself, not the council, since anybody
+announces there and nothing needs counting. Clients and gateways read and post there.
 """
 
 from __future__ import annotations
@@ -28,12 +33,13 @@ from _owner import open_owner_session, post_everywhere
 
 from unseenet import names as nm
 from unseenet.core import lists as ls
+from unseenet.core.gateways import DIRECTORY_GROUP
 from unseenet.core.groups import manifest_article
 from unseenet import hierarchies as hz
 from unseenet.known_nodes import ENTRANCES_GROUP, NODES_GROUP, parse_entrance_list, parse_node_list
 
 GROUPS = {"nodes": (NODES_GROUP, parse_node_list), "root": (hz.HIERARCHIES_GROUP, hz.parse_root_list),
-          "entrances": (ENTRANCES_GROUP, parse_entrance_list)}
+          "entrances": (ENTRANCES_GROUP, parse_entrance_list), "gateways": (DIRECTORY_GROUP, None)}
 
 
 async def main() -> None:
@@ -60,7 +66,15 @@ async def main() -> None:
     if chain.current is None and not args.force:
         sys.exit(f"{args.council} does not count yet: not every founding member has posted "
                  "its copy of the genesis (unseenet council show ...). --force to go on anyway.")
-    if chain.current is not None:
+    target = args.council
+    if args.list == "gateways":                  # an open directory, not a list
+        lc = ls.list_council(chain.current.data) if chain.current is not None else None
+        target = (lc.announce.get("gateways") if lc is not None else None) or ""
+        if not target:
+            sys.exit(f"{args.council} keeps no gateway directory yet (unseenet council "
+                     "add-directory ... gateways, and its proposal)")
+        print(f"{args.council}: gateway directory {target}")
+    elif chain.current is not None:
         lc = ls.list_council(chain.current.data)
         if lc is None or args.list not in lc.lists:
             sys.exit(f"{args.council} keeps no {args.list} list")
@@ -70,9 +84,9 @@ async def main() -> None:
             sys.exit(f"The council's replicas have not posted a {args.list} list yet (the first "
                      "comes two days after it was added). --force to go on anyway.")
     data = dict(current)
-    data.update({"serial": int(current["serial"]) + 1, nm.MOVED_TO: args.council,
+    data.update({"serial": int(current["serial"]) + 1, nm.MOVED_TO: target,
                  nm.MOVED_ON: nm.rfc3339(datetime.now(timezone.utc))})
-    print(f"{group}: manifest serial {data['serial']}, moved_to {args.council}")
+    print(f"{group}: manifest serial {data['serial']}, moved_to {target}")
     if args.dry_run:
         print("--dry-run: nothing posted.")
         return
@@ -82,7 +96,8 @@ async def main() -> None:
     entry["manifest"] = data
     s.save()
     await s.close()
-    print(f"Done. Clients take the council's {args.list} list from now on.")
+    print(f"Done. Clients take the council's {args.list} "
+          f"{'directory' if args.list == 'gateways' else 'list'} from now on.")
 
 
 if __name__ == "__main__":

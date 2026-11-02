@@ -318,3 +318,36 @@ async def test_an_entrance_announces_itself(net, tmp_path, capsys):
         await cli.c_council(App(e), Namespace(
             json=True, identity=None, what="announce-entrance", council=gid, onion=None,
             url=None, publisher=None, name=None, operator=None, contact=None, description=None))
+
+
+async def test_a_list_council_adds_the_gateway_directory(net, tmp_path, capsys):
+    """``council add-directory <council> gateways``: an open data group of the council
+    where gateways announce themselves (UN-RFC 0038 section 6.1), and the change naming
+    it in ``announce``."""
+    from unseenet.core import lists as ls
+    from unseenet.core import proposals as pr
+    a, b = net("a"), net("b")
+    draft = tmp_path / "unseenet.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="unseenet.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=True, lists="nodes", import_file=None))
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    gid = json.loads(draft.read_text())["group"]
+    out = tmp_path / "gw.council.json"
+    await cli.c_council(App(a), Namespace(json=True, identity=None, what="add-directory",
+                                          council=gid, kind="gateways", out=str(out)))
+    capsys.readouterr()
+    d = json.loads(out.read_text())
+    m = CouncilManifest.from_body(d["group"], d["body"])
+    assert d["group"].startswith("unseenet.gateways@") and m.type == "open"
+    assert m.data["view"] == "data"
+    change = json.loads(out.with_name("unseenet.gateways.change.json").read_text())
+    assert change["manifest"]["fields"]["announce"] == {"gateways": d["group"]}
+    pr.make_proposal(gid, 1, change, "the council keeps the gateway directory")
+    cur = (await a.council_chain(gid)).current
+    lc = ls.list_council({**cur.data, **change["manifest"]["fields"]})
+    assert lc.announce["gateways"] == d["group"]
