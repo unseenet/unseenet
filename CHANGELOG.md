@@ -7,6 +7,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-02
+
+Chains ripened on another machine can be imported, and install-node.sh shows the right
+address. Works with 0.7.0 nodes and clients; nothing to update first.
+
 ### Added
 
 - **`unseenet ripen --import FILE`** (#784, UN-RFC 0025 section 3.3): hand a chain ripened on
@@ -2476,7 +2481,8 @@ First public release. Pre-alpha: expect breaking changes.
   cache, so saved posts can be read without a connection.
 - `unseenet`: command line client.
 
-[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/unseenet/unseenet/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/unseenet/unseenet/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/unseenet/unseenet/compare/v0.6.9...v0.7.0
 [0.6.9]: https://github.com/unseenet/unseenet/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/unseenet/unseenet/compare/v0.6.7...v0.6.8
