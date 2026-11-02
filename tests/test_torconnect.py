@@ -93,7 +93,7 @@ def test_pip_gets_the_proxy(tmp_path, monkeypatch):
         def __exit__(self, *a):
             pass
     monkeypatch.setattr(torconnect, "TorConnectThread", FakeThread)
-    monkeypatch.setattr(su.os, "chown", lambda *a: None)
+    monkeypatch.setattr(su.os, "chown", lambda *a: None, raising=False)   # Windows has none
     venv = tmp_path / "venv"
     venv.mkdir()
     su.Machine("x", venv, socks_port=9050).install(b"x==1\n", tmp_path / "work")
