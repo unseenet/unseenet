@@ -43,7 +43,7 @@ tui = ["unseenet-tui>=0.1"]          # the terminal client, its own package (#54
 monitor = ["textual>=0.80"]
 # telling a text's language better than the small words alone, ~170 MB (#686, core.language)
 language = ["lingua-language-detector>=2.2"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "textual>=0.80", "aiohttp>=3.9"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-timeout>=2.2", "textual>=0.80", "aiohttp>=3.9"]
 
 [project.scripts]
 unseenet = "unseenet.cli:client_main"
@@ -71,5 +71,8 @@ unseenet = ["nodes.json", "entrances.json", "hierarchies.json", "checkgroups.jso
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# A test that hangs fails after 2 minutes, with the stacks of every thread, instead of
+# the CI job being stopped with no log (macOS, Nov 2026); the slowest takes about 11 s.
+timeout = 120
 testpaths = ["tests"]
 pythonpath = ["src"]
