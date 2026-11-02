@@ -17,6 +17,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A new node is part of the network at once** (#230, UN-RFC 0055 section 5.5): a node that
+  no configured peer takes pushes from sends what its own readers post - its announcement and
+  ripening chain included - to the announced nodes it pulls from, which pass it on
+  (`spread = "auto"`); and every node also pulls from one node that announced itself for the
+  first time in the last week (`welcome_new`). Before, a new node got the network's posts but
+  its own stayed on it until somebody happened to pull from it. Nodes with peers do as before.
 - **The gateway directory can move to a list council** (#861, UN-RFC 0038 section 6.1):
   `unseenet council add-directory <council> gateways` makes the council's open directory
   (`announce.gateways` in its manifest), `tools/project/move_lists.py --list gateways` points

@@ -33,6 +33,12 @@ def _auto_peers(path, value) -> int:
     return value
 
 
+def _spread(path, value) -> str:
+    if value not in ("auto", "on", "off"):
+        sys.exit(f"{path}: spread is \"auto\", \"on\" or \"off\", not {value!r}")
+    return value
+
+
 def load_node_config(path: Path | None):
     """Read ``node.toml`` into a ``NodeConfig``, checking every section - ``[node]``,
     ``[[peer]]``, ``[limits]``, ``[operator]``, ``[blobs]``, ``[refusals]`` - so a mistake stops the node at
@@ -92,6 +98,8 @@ def load_node_config(path: Path | None):
                       carries=_carries(path, node.get("carries", ["*"])),   # UN-RFC 0055
                       announce=bool(node.get("announce", True)),
                       auto_peers=_auto_peers(path, node.get("auto_peers", 3)),
+                      welcome_new=bool(node.get("welcome_new", True)),          # #230
+                      spread=_spread(path, node.get("spread", "auto")),
                       pow_defense=bool(node.get("pow_defense", True)),
                       ripen_to=int(node.get("ripen_to", 1)),
                       operator=data.get("operator", {}),
@@ -274,8 +282,12 @@ async def run_node(args) -> None:
             Announcer(node, data, f"onion:{onion}", ripen_to=config.ripen_to).run_forever()))
     if tor is not None and config.auto_peers:  # UN-RFC 0055 5.5: peers found by themselves
         from ..node.autopeers import AutoPeers
-        feeders.append(asyncio.create_task(
-            AutoPeers(node, socks_port, config.auto_peers).run_forever()))
+        from ..node.spreading import Spreader
+        autopeers = AutoPeers(node, socks_port, config.auto_peers)
+        feeders.append(asyncio.create_task(autopeers.run_forever()))
+        if config.spread != "off":             # #230: our readers' posts out to them too
+            feeders.append(asyncio.create_task(
+                Spreader(node, autopeers, socks_port).run_forever()))
     if config.blobs is not None:               # blobs follow their article (UN-RFC 0027, 6.3)
         from ..node.blobfetch import BlobFollower
         feeders.append(asyncio.create_task(BlobFollower(node, socks_port).run_forever()))

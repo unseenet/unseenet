@@ -42,6 +42,8 @@ class Accepting:
                 self._hold(raw, source, from_peer)
             raise
         self.stats.accepted_one(how or ("peer" if from_peer else "client"))
+        if not from_peer and how in (None, "client"):
+            self._spread_local(art)                # #230: out to announced nodes too
         self._reports_arrived(art)                 # UN-RFC 0045 section 6
         self._release_held(art.message_id)
         if art.control == ["manifest"]:

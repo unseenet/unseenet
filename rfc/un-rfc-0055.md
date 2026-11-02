@@ -284,10 +284,23 @@ needs no agreement: it uses reader commands, which every node answers
    postage, ripening, its own rules - and is not passed on any
    differently.
 5. The operator MAY set the number, and 0 turns it off.
+6. Besides those, a node SHOULD pull from one node whose first
+   announcement it holds is less than 7 days old, when it holds
+   announcements old enough to tell (25 days: a node renews within
+   20), so that a new node is pulled from as soon as its announcement
+   arrives.
+7. A node that no configured peer takes pushes from SHOULD send what
+   its own readers posted - its own announcement and ripening chain
+   included - to the nodes it pulls from, with MODE STREAM, CHECK and
+   TAKETHIS (RFC 4644), after the check of item 2. They take it as
+   from any node that pushes (UN-RFC 0005 section 5), unless they take
+   pushes only from their peers.
 
 Nodes that find each other this way pull from each other, so articles
-go both ways without anybody pushing. Pushing (UN-RFC 0005 section 5.1)
-stays between configured peers.
+go both ways, and a new node's own announcement and posts reach the
+network at once, without anybody arranging a peering. Pushing
+between operators who agree (UN-RFC 0005 section 5.1) is still the
+fastest and steadiest way.
 
 # 6. Peering
 
