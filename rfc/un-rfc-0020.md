@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the rules of section 6.1, measurement reports and `list` decisions (section 6.7) as functions every replica shares; replicas measuring and posting the lists, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it; applying `list` decisions, the genesis tooling, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -346,6 +346,17 @@ Replicas see the network from different places and may disagree for a
 day. Rule 6.1 item 3 needs one replica to have reached a node, and the
 grace takes a node off only when none has, so one replica with a bad
 connection can neither keep a dead node on nor take a live one off.
+
+**Canaries.** A replica judges "connected" and "complete" as UN-RFC 0021
+sections 5 and 6 say, with its own canaries: once a day it posts a
+canary (UN-RFC 0021 section 4) to each node it reached, to that node
+alone, in the council's `reports` group - a channel council group, so
+only members post there - and the next day reads which canaries of the
+day before each node has. The nodes it judges among are the announced
+nodes that answered it, not only the listed ones. A node is complete
+when it lists every group carried by the network that its `carries`
+names, and every one of the network's own groups (UN-RFC 0055
+section 4).
 
 After 3 days with no replica reaching a listed node, the replica whose
 key sorts first among those reporting sends a notice to the inbox of the

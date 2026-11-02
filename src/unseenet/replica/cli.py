@@ -163,6 +163,17 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
         out.append(f"Proposal {pid} waits for more members to post it ({len(p.get('by', []))} "
                    f"so far{', you did' if mine else ''}). To join:  "
                    f"sudo unseenet-replica second {pid}")
+    lst = st.get("lists")
+    if lst:
+        out.append(f"It also works for the list council {lst.get('group', cfg.get('lists', '?'))}.")
+        if lst.get("note"):
+            out.append(f"  {lst['note'][0].upper()}{lst['note'][1:]}.")
+        if lst.get("members"):
+            out.append(f"  It measured the {lst.get('announced', 0)} announced node(s) last on "
+                       f"{lst.get('measured') or 'no day yet'}; the node list it computed last "
+                       f"({lst.get('computed') or 'none yet'}) holds {lst.get('listed', 0)}.")
+        if lst.get("error"):
+            out.append(f"  Its last list round failed: {lst['error']}")
     if cfg.get("hold"):
         out.append(f"You hold: {', '.join(cfg['hold'])} (they wait for you to agree).")
     if cfg.get("resign"):
@@ -512,7 +523,11 @@ def sign(args) -> int:
         return 1
     for x in [*draft.get("also", []), {"group": gid, "body": body}]:
         _queue(d, {"kind": "council_sign", "group": x["group"], "body": x["body"]})
-    if cfg.get("group") != gid:
+    if "lists" in m.data:                         # a list council: beside the registrar
+        if cfg.get("lists") != gid:
+            cfg["lists"] = gid
+            write_config(d, cfg)
+    elif cfg.get("group") != gid:
         cfg["moved_from"] = cfg.get("moved_from") or cfg.get("group") or nm.NAMES_GROUP
         cfg["group"] = gid
         write_config(d, cfg)

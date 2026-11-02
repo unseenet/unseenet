@@ -17,6 +17,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   node leaves only after 10 days down; `min_software` keeps outdated software off. `list`
   proposals (UN-RFC 0061) are now checked for their form. The replicas do not measure or
   post lists yet.
+- **Replicas keep a list council's node list** (#56, UN-RFC 0020 sections 7 and 8): the same
+  `unseenet-replica` - one key, one service - can be a member of a list council beside the
+  names council (`lists` in its config, set when it signs that council's genesis). Once a day
+  it reaches every announced node over Tor, checks its node key, posts canaries and reads
+  yesterday's (UN-RFC 0021), and posts `report <date>`; then it computes the node list for the
+  day before yesterday and posts it when it changed. `unseenet-replica status` says how it went.
 
 ## [0.7.1] - 2026-11-02
 

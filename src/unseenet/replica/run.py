@@ -32,6 +32,7 @@ from ..core.article import new_article
 from ..core.groups import make_group_id
 from ..registrar import Registrar, dig_txt
 from . import rules
+from .lists import ListDuties
 from .public import PublicDuties
 
 log = logging.getLogger("unseenet.replica")
@@ -42,7 +43,7 @@ TWIN_WINDOW = timedelta(days=30)        # articles looked at for another user of
 HOLDABLE = ("admission", "promotion", "removal", "proposal")   # section 13 (0061: proposals)
 
 
-class Replica(PublicDuties):
+class Replica(PublicDuties, ListDuties):
     """A replica of the council registrar ``group``. ``hold``: the kinds of change the
     operator agrees to first (section 13); ``state_dir``: where ``status.json`` goes."""
 
@@ -158,6 +159,11 @@ class Replica(PublicDuties):
             self._write_status()
             return self.status
         await self._outbox()                   # what the operator said with the member key,
+        try:                                   # a list council, beside (UN-RFC 0020)
+            await self._lists_round(cfg, now)
+        except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError) as exc:
+            log.warning("list council round failed: %s", exc)
+            self.status.setdefault("lists", {})["error"] = str(exc)
         if cur is None:                        # the genesis copy among it (cli: sign)
             self.status["note"] = "the council does not count yet (its genesis is not signed by all)"
             self._write_status()

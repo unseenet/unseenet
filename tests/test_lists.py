@@ -226,3 +226,23 @@ def test_same_inputs_same_list_and_its_updated_field():
     assert ls.updated_day("2026-10-17") is None
     from unseenet.known_nodes import parse_node_list
     assert [n.node_key for n in parse_node_list(a)[1]] == sorted([k, j])
+
+
+def test_canaries_and_connection_verdicts():
+    a, b, c, d = key(1), key(2), key(3), key(4)
+    body = ls.canary_body(a, TODAY, "bm9uY2U")
+    assert ls.read_canary(body, TODAY) == a and ls.read_canary(body, TODAY + DAY) is None
+    assert ls.canary_subject(a, TODAY).startswith("canary ")
+    R = ls.Reading
+    every = {"alt.x@abcdefghijklmnop", "dk.y@abcdefghijklmnop"}
+    readings = {a: R({a, b, c}, set(every), ["*"]),
+                b: R({a, b, c}, set(every), ["*"]),
+                c: R({a, b, c}, {"alt.x@abcdefghijklmnop"}, ["*"]),     # lacks dk.y
+                d: R({d}, set(every), ["*"])}                           # an island
+    disc, inc = ls.connection_verdicts(readings, {a, b, c, d})
+    assert disc == {d} and inc == {c}
+    # a node that carries only alt.* is complete without dk.y
+    readings[c].patterns = ["alt.*"]
+    assert ls.connection_verdicts(readings, {a, b, c, d})[1] == set()
+    # nothing posted yesterday: no verdict
+    assert ls.connection_verdicts(readings, set()) == (set(), set())
