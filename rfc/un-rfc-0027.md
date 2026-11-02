@@ -578,6 +578,15 @@ existence.
   MUST NOT decode them automatically from authors the user has chosen to
   ignore, and SHOULD let the user turn automatic display off.
 
+A client in a web browser cannot start a process. There the separate
+process is a worker of its own (a Web Worker) that holds nothing but the
+file: never the vault, the keys or the client's other state. The worker
+decodes with the browser's own image decoder and saves the picture again
+from its pixels only, and the client gives up on it after a time limit.
+The checks of this section (type from the content, the size limits)
+stay in the client. A client that has no such way MUST NOT show the
+picture rather than decode it in the client itself.
+
 A terminal client SHOULD show images with a terminal graphics protocol
 (sixel, kitty, iTerm2) when the terminal supports one, and otherwise
 show the alternative text, type and size, with a way to save the file.

@@ -15,6 +15,12 @@ decoded at all: a PDF is offered as a file to save, never opened.
 ``picture`` and ``picture_async`` are what clients call; ``python -m
 unseenet.client.decode`` is the process itself (in a portable build, the program run
 with ``--unseenet-decode-picture``, see ``run_if_asked``).
+
+Where no process can be started - the client in a browser, on Pyodide - the platform
+gives its own way to decode apart from the client: a front end sets ``elsewhere`` to
+an async function ``(octets, media_type) -> Picture`` (the web client: the browser's
+own decoder in a worker that never sees the vault). Without one, a picture there is
+not shown (``DecodeError``), never decoded in the client itself.
 """
 
 from __future__ import annotations
@@ -36,6 +42,17 @@ SHOWN = {"image/png": "PNG", "image/jpeg": "JPEG", "image/gif": "GIF", "image/we
 
 class DecodeError(ValueError):
     """The file cannot be shown as a picture; the text is for people."""
+
+
+NO_PROCESS = "pictures cannot be shown here"
+
+# A platform's own way to decode apart from the client, where it cannot start a
+# process (see the module's text): async (octets, media_type) -> Picture.
+elsewhere = None
+
+
+def _no_process() -> bool:
+    return sys.platform in ("emscripten", "wasi")
 
 
 @dataclass(frozen=True)
@@ -104,27 +121,57 @@ def picture(octets: bytes, declared: str | None = None) -> Picture:
     """``octets`` decoded and saved again in a separate, limited process. ``declared``
     is the type the post gives; it must match the content. ``DecodeError`` otherwise."""
     media_type = _check(octets, declared)
+    if _no_process():
+        raise DecodeError(NO_PROCESS)
     try:
-        done = subprocess.run(_command(), input=octets, capture_output=True, timeout=TIMEOUT,
+        done = subprocess.run(_command(), input=octets, capture_output=True, timeout=TIMEOUT, check=False,
                               **_flags())
     except subprocess.TimeoutExpired:
         raise DecodeError("this picture took too long to read") from None
+    except (OSError, NotImplementedError):
+        raise DecodeError(NO_PROCESS) from None
     return _answer(done.returncode, done.stdout, done.stderr, media_type)
 
 
 async def picture_async(octets: bytes, declared: str | None = None) -> Picture:
     """``picture`` without blocking the event loop."""
     media_type = _check(octets, declared)
-    proc = await asyncio.create_subprocess_exec(
-        *_command(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE, **_flags())
+    if elsewhere is not None:
+        return await _decoded_elsewhere(octets, media_type)
+    if _no_process():
+        raise DecodeError(NO_PROCESS)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *_command(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE, **_flags())
+    except (OSError, NotImplementedError):
+        raise DecodeError(NO_PROCESS) from None
     try:
         out, err = await asyncio.wait_for(proc.communicate(octets), TIMEOUT)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         raise DecodeError("this picture took too long to read") from None
     return _answer(proc.returncode, out, err, media_type)
+
+
+async def _decoded_elsewhere(octets: bytes, media_type: str) -> Picture:
+    """``elsewhere`` asked, held to the same rules: in time, a picture in a type that
+    can be shown, and no larger than ``MAX_PIXELS``."""
+    try:
+        got = await asyncio.wait_for(elsewhere(octets, media_type), TIMEOUT)
+    except TimeoutError:
+        raise DecodeError("this picture took too long to read") from None
+    except DecodeError:
+        raise
+    except Exception:  # noqa: BLE001 - whatever the platform raises
+        raise DecodeError("this picture could not be read") from None
+    if (not isinstance(got, Picture) or got.media_type not in SHOWN
+            or got.width <= 0 or got.height <= 0):
+        raise DecodeError("this picture could not be read")
+    if got.width * got.height > MAX_PIXELS:
+        raise DecodeError("this picture is too large to show (over 50 megapixels)")
+    return got
 
 
 # --- the decoding process --------------------------------------------------------
