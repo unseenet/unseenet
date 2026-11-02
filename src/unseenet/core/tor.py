@@ -109,6 +109,7 @@ class TorControl:
     """Async client for the Tor control protocol (subset)."""
 
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self.pow_defense = False           # whether add_onion turned the PoW defence on
         self.reader, self.writer = reader, writer
         # One command at a time: replies carry no id, so two commands in flight
         # on the one connection would read each other's replies (issue #127).
@@ -150,17 +151,31 @@ class TorControl:
         await self.command(f"AUTHENTICATE {cookie_path.read_bytes().hex()}")
 
     async def add_onion(self, key: str | None, virtual_port: int, target: str,
-                        discard: bool = False) -> tuple[str, str | None]:
+                        discard: bool = False, pow: bool = False) -> tuple[str, str | None]:
         """Create an onion service. ``key`` is 'ED25519-V3:<b64>' or None for a new one.
 
         Returns (service_id, private_key_or_None). The key is handed to Tor over the
         control port only, so Tor never writes it to disk (UN-RFC 0007, section 3).
         ``discard``: a new key that nobody keeps, not even us - a one-time service
-        (UN-RFC 0050 section 3.3).
+        (UN-RFC 0050 section 3.3). ``pow``: turn on the onion service's proof-of-work
+        defence against floods (UN-RFC 0005); a Tor too old for it over the control port
+        (before 0.4.9.2) answers 512, and the service is made without it -
+        ``pow_defense`` says which.
         """
         keyspec = key or "NEW:ED25519-V3"
         flags = " Flags=DiscardPK" if key is not None or discard else ""
-        reply = await self.command(f"ADD_ONION {keyspec}{flags} Port={virtual_port},{target}")
+        self.pow_defense = False
+        reply = None
+        if pow:
+            try:
+                reply = await self.command(f"ADD_ONION {keyspec}{flags} PoWDefensesEnabled=1 "
+                                           f"Port={virtual_port},{target}")
+                self.pow_defense = True
+            except TorError as exc:
+                if not str(exc).startswith("512"):
+                    raise
+        if reply is None:
+            reply = await self.command(f"ADD_ONION {keyspec}{flags} Port={virtual_port},{target}")
         service_id = private = None
         for item in reply:
             if item.startswith("ServiceID="):

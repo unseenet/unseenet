@@ -115,6 +115,13 @@ def test_warnings():
     assert any("peer p: unreachable" in x for x in w)
     assert any("5000 articles waiting" in x for x in w)
     assert any("MB free" in x for x in w)
+    # #869: an onion without Tor's proof-of-work defence is worth a look; on or unknown is not
+    base = {"node": {"uptime": 3600}, "peers": [], "store": {}}
+    off = st.warnings({**base, "tor": {"state": "running", "bootstrap": 100, "pow_defense": False}})
+    assert any("proof-of-work" in x for x in off)
+    for v in (True, None):
+        assert not st.warnings({**base, "tor": {"state": "running", "bootstrap": 100,
+                                                "pow_defense": v}})
 
 
 def test_a_unix_socket_path_that_is_too_long_is_refused():
