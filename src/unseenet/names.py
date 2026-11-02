@@ -415,24 +415,27 @@ LATE_COMMIT = timedelta(hours=1)           # a commit seen when its Date is olde
 LAPSE_SETTLE = timedelta(hours=1)          # wait this long after the 7 days for a late reveal
 
 
-def commit_value(nonce: bytes, claim_body: str) -> str:
+def commit_value(nonce: bytes, claim_body: str, *, parse=None, ds: str = DS_COMMIT) -> str:
     """``c = b64(H(DS || nonce || claim))``; ``claim`` is the canonical JSON of the claim
-    body (UN-RFC 0019 section 6.1), without a line end."""
+    body (UN-RFC 0019 section 6.1), without a line end. ``parse`` and ``ds``: another kind
+    of claim made the same way, such as a hierarchy claim (UN-RFC 0020 section 5.2)."""
     if len(nonce) != NONCE_SIZE:
         raise NameProblem("a commit's nonce is 32 octets")
-    claim = canonical_json(parse_claim(claim_body))
-    return b64(H(DS(DS_COMMIT) + nonce + claim.encode("utf-8")))
+    claim = canonical_json((parse or parse_claim)(claim_body))
+    return b64(H(DS(ds) + nonce + claim.encode("utf-8")))
 
 
-def make_commit(claim_body: str, nonce: bytes | None = None) -> tuple[str, bytes]:
+def make_commit(claim_body: str, nonce: bytes | None = None, *, parse=None,
+                ds: str = DS_COMMIT) -> tuple[str, bytes]:
     """The body of a commit for ``claim_body``, and the nonce to keep for the reveal."""
     import secrets
     nonce = nonce if nonce is not None else secrets.token_bytes(NONCE_SIZE)
-    return canonical_json({"commit": commit_value(nonce, claim_body), "v": 1}) + "\n", nonce
+    c = commit_value(nonce, claim_body, parse=parse, ds=ds)
+    return canonical_json({"commit": c, "v": 1}) + "\n", nonce
 
 
-def make_reveal(claim_body: str, nonce: bytes, reply_inbox: str) -> str:
-    return canonical_json({"claim": parse_claim(claim_body), "nonce": b64(nonce),
+def make_reveal(claim_body: str, nonce: bytes, reply_inbox: str, *, parse=None) -> str:
+    return canonical_json({"claim": (parse or parse_claim)(claim_body), "nonce": b64(nonce),
                            "reply_inbox": reply_inbox, "v": 1}) + "\n"
 
 
@@ -458,7 +461,7 @@ class Reveal:
     reply_inbox: str
 
 
-def parse_reveal(body: str) -> Reveal:
+def parse_reveal(body: str, *, parse=None) -> Reveal:
     try:
         data = parse_canonical_json(body if body.endswith("\n") else body + "\n")
     except ValueError as exc:
@@ -471,7 +474,7 @@ def parse_reveal(body: str) -> Reveal:
     except ValueError as exc:
         raise NameProblem("the reveal's nonce is not base64") from exc
     claim = canonical_json(data["claim"]) + "\n"
-    parse_claim(claim)
+    (parse or parse_claim)(claim)
     from .core.groups import split_group_id
     try:
         split_group_id(data["reply_inbox"])
@@ -506,7 +509,8 @@ class PublicClaim:
         return (self.date, self.id)
 
 
-def reveal_counts(commit: PublicClaim, reveal: Post) -> Reveal | None:
+def reveal_counts(commit: PublicClaim, reveal: Post, *, parse=None,
+                  ds: str = DS_COMMIT) -> Reveal | None:
     """Section 8 step 2: the reveal counts if its author is the commit's, it is posted
     no earlier than an hour and no later than seven days after the commit's Date, and
     its claim and nonce give the commit's ``c``."""
@@ -515,15 +519,15 @@ def reveal_counts(commit: PublicClaim, reveal: Post) -> Reveal | None:
     if not commit.date + REVEAL_AFTER <= reveal.date <= commit.date + REVEAL_WITHIN:
         return None
     try:
-        r = parse_reveal(reveal.body)
-        if commit_value(r.nonce, r.claim_body) != commit.commit:
+        r = parse_reveal(reveal.body, parse=parse)
+        if commit_value(r.nonce, r.claim_body, parse=parse, ds=ds) != commit.commit:
             return None
     except NameProblem:
         return None
     return r
 
 
-def read_public_claims(posts: list[Post]) -> list[PublicClaim]:
+def read_public_claims(posts: list[Post], *, parse=None, ds: str = DS_COMMIT) -> list[PublicClaim]:
     """Every commit in the claims group, in the order of section 8 (by Date, then
     Message-ID), each with the first reveal that counts for it (by its Date, then
     Message-ID)."""
@@ -540,7 +544,7 @@ def read_public_claims(posts: list[Post]) -> list[PublicClaim]:
         c = commits.get(p.subject[len(REVEAL_PREFIX):].strip())
         if c is None or c.revealed is not None:
             continue
-        r = reveal_counts(c, p)
+        r = reveal_counts(c, p, parse=parse, ds=ds)
         if r is not None:
             c.claim_body, c.reply_inbox, c.revealed = r.claim_body, r.reply_inbox, p.date
     return sorted(commits.values(), key=lambda c: c.order)

@@ -36,6 +36,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   `unseenet.nodes` manifest says `moved_to` a list council, clients take the newest node list its
   members posted, and the old one only until there is one. `tools/project/move_lists.py` posts
   that last manifest with the project key.
+- **The rules for hierarchy claims and the root list** (#56, UN-RFC 0020 sections 5.2 and 6.2):
+  `core/hierarchy_claims.py`. A top-level hierarchy is claimed with a commit and a reveal, as a
+  name is; the first counting claim gets it for a year, renewed by its maintainer; a name equal
+  to a top-level domain goes only to a key its registry names in DNS (`_unseenet.nic.<tld>`);
+  reserved names are never granted; a key holds at most three and must be ripened to the
+  council's level. Names' commit and reveal now take another kind of claim too.
 
 ## [0.7.1] - 2026-11-02
 
