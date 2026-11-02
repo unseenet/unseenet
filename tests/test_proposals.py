@@ -104,7 +104,7 @@ def test_objections_and_the_outcome():
 
 def test_urgent_needs_two_thirds_and_lasts_three_days():
     ids, gid, chain = council(3)
-    pid, body = pr.make_proposal(gid, 1, {"list": {"remove": "x"}}, "harm now", urgent=True)
+    pid, body = pr.make_proposal(gid, 1, {"list": {"remove": {"list": "nodes", "entry": "ed25519:x"}}}, "harm now", urgent=True)
     t0 = G + 10 * DAY
     act = talk(ids, t0 - DAY)
     two = [item(f"p{k}", f"proposal {pid}", i, t0, body) for k, i in enumerate(ids[:2])]

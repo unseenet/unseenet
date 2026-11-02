@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: -
+Implemented: unseenet main (unreleased); partly - the rules of section 6.1, measurement reports and `list` decisions (section 6.7) as functions every replica shares; replicas measuring and posting the lists, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -162,8 +162,9 @@ A node is on the node list when
    groups and the endorsed groups of `unseenet.*` (UN-RFC 0055 section 4);
 3. at least one replica reached it and it authenticated with its node key
    (UN-RFC 0016) on at least 5 of the last 7 completed UTC days; and
-4. it is connected in the sense of UN-RFC 0021, counted over the groups
-   it carries.
+4. on the last day a replica reached it, at least one replica found it
+   connected and complete (UN-RFC 0021 sections 5 and 6), counted over
+   the groups it carries.
 
 Its list entry takes `address` and `addresses` from the announcement
 (UN-RFC 0064 section 4). Replicas reach it on its `onion:` address: while
@@ -173,9 +174,13 @@ node gives them but not measured, and a node whose `address` is not an
 2.2) is never listed.
 
 It leaves the list when one of these stops holding, with one grace: a
-listed node is only taken off for item 3 when, for each of the last 10
-completed days, at least one replica reported on it and none reached it
-(section 7). It comes back by itself when the rules hold again.
+listed node is only taken off for items 3 and 4 when, for each of the
+last 10 completed days, at least one replica reported on it and none
+reached it connected and complete (section 7, UN-RFC 0021 section 7). A
+day no replica reported on does not count either way. It comes back by
+itself when the rules hold again. Of the entries that meet the rules,
+those already listed come first when a limit applies (at most 200,
+UN-RFC 0010 section 2, and any per-operator limit, section 12).
 
 ## 6.2 Hierarchies
 
@@ -285,6 +290,36 @@ number in this section on its own judgement. Those are proposals with a
 hearing (UN-RFC 0061). An urgent proposal (UN-RFC 0061 section 7) can
 take an entry off within three days when it harms people.
 
+## 6.7 List Decisions
+
+The `list` change of a proposal (UN-RFC 0061 section 4) is an object
+with exactly one of:
+
+| Change      | Value                                    | Effect                                   |
+|-------------|------------------------------------------|------------------------------------------|
+| `remove`    | `{"list": <kind>, "entry": <key or name>}` | The entry is not on that list, whatever the rules say |
+| `restore`   | the same                                 | Undoes a `remove`; the rules decide again |
+| `reserve`   | a top-level name                         | Adds it to the reserved names (section 6.2) |
+| `unreserve` | a top-level name                         | Takes it off them again                  |
+| `set`       | `{<parameter>: <number>, ...}`           | Changes parameters of this section       |
+
+`<kind>` is `nodes`, `root`, `entrances` or `scribes`; the entry is the
+entry's key, or for `root` the top-level name. The parameters, with
+their values until a decision sets them, and the values allowed:
+
+| Parameter          | Value | Allowed | Meaning                                   |
+|--------------------|-------|---------|-------------------------------------------|
+| `announce_days`    | 30    | 7-90    | How long an announcement is current (5.1) |
+| `window_days`      | 7     | 3-30    | The days item 3 of section 6.1 looks at   |
+| `need_days`        | 5     | 1-30    | On how many of them a replica must have reached it |
+| `grace_days`       | 10    | 3-60    | Days down before a listed entry leaves    |
+| `import_days`      | 180   | 0-730   | How long an imported entry stays (section 9) |
+| `max_per_operator` | 0     | 0-200   | Entries per operator key; 0 is no limit (section 12) |
+
+Decisions apply in the order of the day they apply on and then of the
+proposal's id. `min_software` is a field of the council manifest and is
+changed by a `manifest` proposal.
+
 # 7. Measurements
 
 Each replica posts one `report <date>` article per UTC day in the
@@ -296,7 +331,16 @@ Each replica posts one `report <date>` article per UTC day in the
 | `date`    | string        | yes  | The UTC day, `YYYY-MM-DD`                 |
 | `reached` | array of keys | yes  | Node, entrance and scribe keys that answered and authenticated |
 | `missed`  | array of keys | yes  | Those that did not                        |
+| `disconnected` | array of keys | no | Reached but not connected (UN-RFC 0021 section 7) |
+| `incomplete` | array of keys | no | Connected but not complete (UN-RFC 0021 section 7) |
+| `software` | object       | no   | For keys it reached, the software they stated (section 6.5) |
 | `files`   | array         | no   | Whole files fetched from scribes: `{"scribe": key, "file": path, "ok": bool}` |
+
+A report is about a completed UTC day and is posted on that day or the
+next; of one replica's reports for one day, the newest counts. Only the
+reports of the council's members count. Where replicas heard different
+software from one entry on one day, the highest version counts, so that
+one replica cannot take an entry off by misreporting it.
 
 Replicas see the network from different places and may disagree for a
 day. Rule 6.1 item 3 needs one replica to have reached a node, and the
@@ -310,7 +354,8 @@ node's operator, if its announcement names one.
 # 8. Computing and Publishing the Lists
 
 Each list is a function of the inputs of section 5 up to the end of a
-UTC day. Every replica computes it once a day, and posts it to its list
+UTC day, and of the council's own list of the day before, which says
+who keeps a place under the grace of section 6.1. Every replica computes it once a day, and posts it to its list
 group when it changes and at least monthly (UN-RFC 0010 section 3). The
 list's `updated` field is `council <seq> day <date>`: the council
 manifest and the day it was computed from. Replicas that have seen the

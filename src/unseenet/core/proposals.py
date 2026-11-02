@@ -62,6 +62,12 @@ def _proposal_data(council, seq, change, reason, days, urgent) -> dict:
         raise ProposalProblem(f"change is one of {', '.join(CHANGE_KINDS)}")
     if "manifest" in change:
         check_manifest_change(change["manifest"])
+    if "list" in change:
+        from .lists import ListProblem, check_list_change
+        try:
+            check_list_change(change["list"])
+        except ListProblem as exc:
+            raise ProposalProblem(str(exc)) from exc
     if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_REASON:
         raise ProposalProblem(f"a reason of 1 to {MAX_REASON} characters")
     data = {"change": change, "council": council, "reason": reason, "seq": seq, "v": 1}
