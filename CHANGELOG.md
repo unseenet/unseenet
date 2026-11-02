@@ -23,6 +23,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   (`spread = "auto"`); and every node also pulls from one node that announced itself for the
   first time in the last week (`welcome_new`). Before, a new node got the network's posts but
   its own stayed on it until somebody happened to pull from it. Nodes with peers do as before.
+- **Every Unseenet service can update itself** (#827, UN-RFC 0062 section 6.1):
+  `unseenet-service-update --package unseenet-gateway` (or `-entrance`, `-watchman`,
+  `-bots`, `-helpbot`) takes the newest signed release from that service's own repository,
+  as nodes and replicas already do from the core's; `--check http://host:port/path` checks
+  a service that answers over HTTP, and `--oneshot` one its own timer starts (the bots), and `--busy FILE` waits while the service must not be restarted (a key ripening). `tools/project/sign_release.py --repo <service> <tag>`
+  signs such a release. Without `--package` it does exactly as before.
 - **The gateway directory can move to a list council** (#861, UN-RFC 0038 section 6.1):
   `unseenet council add-directory <council> gateways` makes the council's open directory
   (`announce.gateways` in its manifest), `tools/project/move_lists.py --list gateways` points

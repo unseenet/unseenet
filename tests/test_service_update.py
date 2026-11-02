@@ -134,3 +134,116 @@ def test_a_replica_updates_through_it(tmp_path, monkeypatch):
     monkeypatch.setattr(su, "run", lambda m, st: seen.append((m.service, st.data["off"])) or "current")
     assert cli.update(SimpleNamespace(dir=str(tmp_path))) == 0
     assert seen == [(cli.SERVICE, False)]
+
+
+def _service_release(monkeypatch, package="unseenet-gateway", version="0.6.0"):
+    key = crypto.Identity.generate()
+    monkeypatch.setattr(up, "TRUSTED", {"stable": (key.key_text,)})
+    name = f"{package}-{version}-server-requirements.txt"
+    req = (f"unseenet==0.8.0 --hash=sha256:{'a' * 64}\n"
+           f"{package}=={version} --hash=sha256:{'b' * 64}\n").encode()
+    sums = f"{hashlib.sha256(req).hexdigest()}  {name}\n".encode()
+    files = {up.SUMS: sums, up.SIG: up.signature_text(sums, key).encode(), name: req}
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return files[url.rsplit("/", 1)[1]]
+    return fetch, asked
+
+
+def test_any_service_from_its_own_repository(monkeypatch):
+    fetch, asked = _service_release(monkeypatch)
+    rel = su.newest_release(fetch, package="unseenet-gateway")
+    assert rel.version == "0.6.0"
+    assert all(u.startswith("https://github.com/unseenet/unseenet-gateway/releases/") for u in asked)
+    # the core does not take a service's requirements as its own, nor the reverse
+    fetch, _ = _service_release(monkeypatch)
+    with pytest.raises(su.Problem, match="no server requirements"):
+        su.newest_release(fetch)
+    fetch, _ = _service_release(monkeypatch, package="unseenet-gateway")
+    with pytest.raises(su.Problem, match="no server requirements"):
+        su.newest_release(fetch, package="unseenet-watchman")
+    fetch, asked = _service_release(monkeypatch, package="unseenet-bots")
+    su.newest_release(fetch, package="unseenet-bots", repo="someone/fork")
+    assert asked[0].startswith("https://github.com/someone/fork/")
+    with pytest.raises(su.Problem, match="not a repository"):
+        su.repo_url("a/b/../c?x")
+
+
+def test_requirements_names():
+    assert su.requirements_version("unseenet-0.8.0-server-requirements.txt", "unseenet") == "0.8.0"
+    assert su.requirements_version("unseenet-gateway-0.6.0-server-requirements.txt",
+                                   "unseenet") is None                  # not a version
+    assert su.requirements_version("unseenet-gateway-0.6.0rc1-server-requirements.txt",
+                                   "unseenet-gateway") == "0.6.0rc1"
+    assert su.requirements_version("unseenet-gateway-0.6.0.tar.gz", "unseenet-gateway") is None
+
+
+def test_http_check(tmp_path):
+    import http.server
+    import threading
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200 if self.path == "/ok" else 500)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        assert su.Machine("x", tmp_path, f"http://127.0.0.1:{port}/ok").answers()
+        assert not su.Machine("x", tmp_path, f"http://127.0.0.1:{port}/bad").answers()
+        assert not su.Machine("x", tmp_path, "http://127.0.0.1:9/").answers()
+    finally:
+        srv.shutdown()
+
+
+def test_cli_refuses_other_packages(capsys, tmp_path):
+    assert su.main(["run", "--service", "x", "--package", "requests",
+                    "--state", str(tmp_path)]) == 1
+    assert "not an Unseenet package" in capsys.readouterr().out
+
+
+def test_a_oneshot_service_is_not_restarted_and_must_load(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(su.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or
+                        type("R", (), {"returncode": 0 if "import unseenet_bots" in cmd[-1] else 1,
+                                       "stdout": "", "stderr": ""})())
+    m = su.Machine("unseenet-bots", tmp_path, package="unseenet-bots", oneshot=True)
+    m.restart()
+    assert calls == []                                       # its timer runs it
+    assert m.healthy()
+    assert calls[-1][-1] == "import unseenet_bots"
+    m = su.Machine("unseenet-x", tmp_path, package="unseenet-x", oneshot=True)
+    assert not m.healthy()
+
+
+def test_waits_while_the_service_is_busy(tmp_path):
+    import os
+    busy = tmp_path / "busy"
+    st = su.State.load(tmp_path / "state.json")
+    rel = lambda: su.Release("0.7.0", b"unseenet==0.7.0 --hash=sha256:x\n")  # noqa: E731
+    m = FakeMachine()
+    m.busy = lambda: su.Machine("x", tmp_path, busy=busy).busy()
+    busy.write_text("ripening")
+    assert su.run(m, st, rel, say=lambda _: None, at_once=True) == "waiting" and m.did == []
+    old = busy.stat().st_mtime - su.BUSY_FOR - 1               # left over: not busy
+    os.utime(busy, (old, old))
+    assert su.run(m, st, rel, say=lambda _: None, at_once=True) == "updated"
+
+
+def test_a_service_not_on_pypi_names_its_own_wheel():
+    base = "https://github.com/unseenet/unseenet-helpbot"
+    wheel = f"{base}/releases/download/v0.6.0/unseenet_helpbot-0.6.0-py3-none-any.whl"
+    assert su.names_itself(f"x==1 --hash=sha256:a\nunseenet-helpbot @ {wheel} --hash=sha256:b\n",
+                           "unseenet-helpbot", "0.6.0", base)
+    other = wheel.replace("unseenet/unseenet-helpbot", "someone/else")
+    assert not su.names_itself(f"unseenet-helpbot @ {other} --hash=sha256:b\n",
+                               "unseenet-helpbot", "0.6.0", base)
+    older = wheel.replace("0.6.0", "0.5.0")
+    assert not su.names_itself(f"unseenet-helpbot @ {older} --hash=sha256:b\n",
+                               "unseenet-helpbot", "0.6.0", base)
