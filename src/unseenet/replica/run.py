@@ -32,6 +32,7 @@ from ..core.article import new_article
 from ..core.groups import make_group_id
 from ..registrar import Registrar, dig_txt
 from . import rules
+from .entrances import EntranceDuties
 from .lists import ListDuties
 from .public import PublicDuties
 
@@ -43,7 +44,7 @@ TWIN_WINDOW = timedelta(days=30)        # articles looked at for another user of
 HOLDABLE = ("admission", "promotion", "removal", "proposal")   # section 13 (0061: proposals)
 
 
-class Replica(PublicDuties, ListDuties):
+class Replica(PublicDuties, ListDuties, EntranceDuties):
     """A replica of the council registrar ``group``. ``hold``: the kinds of change the
     operator agrees to first (section 13); ``state_dir``: where ``status.json`` goes."""
 

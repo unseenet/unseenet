@@ -96,8 +96,8 @@ class ListDuties:
         except ls.ListProblem as exc:
             out["note"] = f"the list council's manifest is not usable: {exc}"
             return
-        if lc is None or "nodes" not in lc.lists:
-            out["note"] = "the council keeps no node list"
+        if lc is None:
+            out["note"] = "the council keeps no lists"
             return
         st = self._lists_state()
         await self._lists_public(chain, cfg, now, out)
@@ -107,11 +107,14 @@ class ListDuties:
         await self._measure(lc, members, announcements, today, now)
         await self._compute_and_post(lc, chain, members, announcements, today, now)
         await self._root_round(lc, chain, members, today, now)
+        await self._entrances_round(lc, chain, members, today - timedelta(days=LIST_LAG), now)
         out.update({"members": len(members), "announced": len({a.key for a in announcements}),
                     "measured": st["measured"], "computed": st["computed"],
                     "listed": st.get("listed", 0),
                     "root": (st.get("root") or {}).get("computed"),
-                    "granted": (st.get("root") or {}).get("granted")})
+                    "granted": (st.get("root") or {}).get("granted"),
+                    "entrances": (st.get("entrances") or {}).get("listed"),
+                    "entrances_day": (st.get("entrances") or {}).get("computed")})
 
     async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict) -> None:
         """The list council's proposals, hearings and log (UN-RFC 0061), by the same code
@@ -166,8 +169,9 @@ class ListDuties:
                 canaries.append(m)
         return reports, canaries
 
-    async def _read_lists(self, group: str, members: set[str]) -> list[tuple]:
-        """The node lists the members posted: (day, seq, body, node keys, Date)."""
+    async def _read_lists(self, group: str, members: set[str], kind: str = "nodes") -> list[tuple]:
+        """The lists the members posted: (day, seq, body, the entries' keys, Date)."""
+        field_ = {"nodes": "node_key", "entrances": "key"}.get(kind)
         out = []
         for m in await self.s.fetch_group(group):
             if not (m.readable and m.author_key in members and m.date):
@@ -176,7 +180,8 @@ class ListDuties:
             # out addresses it cannot use, which must not change who keeps a place
             try:
                 data = json.loads(m.body)
-                keys = {str(n["node_key"]) for n in data.get("nodes", [])}
+                keys = ({str(n[field_]) for n in data.get(kind, []) if field_ in n}
+                        if field_ else set())
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
             got = ls.updated_day(str(data.get("updated", "")))
@@ -213,8 +218,10 @@ class ListDuties:
             if soft:
                 software[key] = soft
         disconnected, incomplete = ls.connection_verdicts(readings, posted, network_groups())
-        body = ls.report_body(today, reached, missed, disconnected=disconnected,
-                              incomplete=incomplete, software=software)
+        e_reached, e_missed, served, e_soft = await self._measure_entrances(lc, now)
+        body = ls.report_body(today, reached | e_reached, missed | e_missed,
+                              disconnected=disconnected, incomplete=incomplete,
+                              software={**software, **e_soft}, served=served)
         await self._post_list_json(lc.reports, ls.report_subject(today), body)
         # today's canaries, each to its node alone, for tomorrow's reading
         sent = []
@@ -293,7 +300,7 @@ class ListDuties:
                                 announcements, today: date, now: datetime) -> None:
         st = self._lists_state()
         day = today - timedelta(days=LIST_LAG)
-        if st["computed"] == day.isoformat():
+        if st["computed"] == day.isoformat() or "nodes" not in lc.lists:
             return
         cur = chain.current
         reports, _ = await self._read_reports(lc)

@@ -65,6 +65,19 @@ def council_parsers(sub) -> None:
     p.add_argument("--import", dest="import_file", default=None, metavar="FILE",
                    help="the list it starts from (for root: a hierarchies.json)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
+    p = t.add_parser("announce-entrance",
+                     help="announce a web entrance to a list council, signed with this "
+                          "identity's key, which the entrance names (UN-RFC 0020 section 5.1)")
+    p.add_argument("council", help="the list council, e.g. unseenet.lists@<fp>")
+    p.add_argument("--onion", default=None, help="the entrance's onion address")
+    p.add_argument("--url", default=None, help="its open-web address, https://host/")
+    p.add_argument("--publisher", default=None,
+                   help="the releases channel whose web client it serves "
+                        "(default: the project's, unseenet.releases)")
+    p.add_argument("--name", default=None, help="a short label, at most 64 characters")
+    p.add_argument("--operator", default=None, help="your name or identity key")
+    p.add_argument("--contact", default=None, help="how to reach you, at most 120 characters")
+    p.add_argument("--description", default=None, help="at most 200 characters, shown to users")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
     p.add_argument("draft", help="the draft file you were given")
     p.add_argument("--yes", action="store_true", help="do not ask")
@@ -184,6 +197,12 @@ async def c_council(app: App, args) -> None:
                                          fields={"title": "Measurements and canaries"}, **common)
                 also.append({"group": g, "body": b})
                 fields.update({"lists": lists, "reports": g})
+                if "entrances" in lists:                 # section 5.1: where entrances announce
+                    g, b = s.council_genesis(f"{prefix}.entrances.announce", "open", members,
+                                             fields={"title": "Entrances announce themselves"},
+                                             **common)
+                    also.append({"group": g, "body": b})
+                    fields["announce"] = {"entrances": g}
                 args.claims = True                       # hierarchy claims (section 5.2)
                 if getattr(args, "import_file", None):
                     body = ls.import_body({"nodes": json.loads(
@@ -239,6 +258,12 @@ async def c_council(app: App, args) -> None:
                                      min_level=cur.min_level)
             fields = {"lists": {**lc.lists, args.kind: g}}
             draft = {"v": 1, "group": g, "body": b}
+            if args.kind == "entrances":                 # section 5.1: where entrances announce
+                ag, ab = s.council_genesis(f"{prefix}.entrances.announce", "open", members,
+                                           fields={"title": "Entrances announce themselves"},
+                                           min_level=cur.min_level)
+                draft["also"] = [{"group": ag, "body": ab}]
+                fields["announce"] = {**lc.announce, "entrances": ag}
             if getattr(args, "import_file", None):
                 imp = ls.import_body({args.kind: json.loads(
                     Path(args.import_file).read_text(encoding="utf-8"))})
@@ -260,6 +285,34 @@ async def c_council(app: App, args) -> None:
                     "3. When the hearing has passed, the replicas keep the list."]
             emit(args, "\n".join(text), {"group": g, "draft": str(out),
                                          "change": str(change_file)})
+        elif what == "announce-entrance":                # UN-RFC 0020 section 5.1
+            from datetime import datetime, timezone
+
+            from ..core import entrances as en
+            from ..core import lists as ls
+            from ..known_nodes import RELEASES_GROUP
+            cur = (await s.council_chain(args.council)).current
+            lc = ls.list_council(cur.data) if cur is not None else None
+            group = lc.announce.get("entrances") if lc is not None else None
+            if not group:
+                raise SessionError(f"{args.council} keeps no entrance list")
+            name = args.name or (args.url or args.onion or "")[:64]
+            try:
+                body = en.make_body(args.publisher or RELEASES_GROUP,
+                                    datetime.now(timezone.utc), url=args.url, onion=args.onion,
+                                    name=name, operator=args.operator, contact=args.contact,
+                                    description=args.description)
+            except en.EntranceProblem as exc:
+                raise SessionError(str(exc)) from exc
+            mid = await s.post(group, en.subject(name), body, content_type="application/json")
+            key = s.identity().key_text
+            emit(args, "\n".join([
+                f"Announced in {group} ({mid}).", "",
+                "The entrance must name this key in /.well-known/unseenet-entrance:",
+                f"  ENTRANCE_KEY={key}",
+                "The replicas check it every day; after 14 good days in a row it is listed.",
+                "Announce again within 30 days, or when anything here changes."]),
+                {"group": group, "posted": mid, "key": key})
         elif what == "sign":
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
             gid, body = draft["group"], draft["body"]

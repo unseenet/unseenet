@@ -63,13 +63,15 @@ async def world(tmp_path, monkeypatch):
     server.close()
 
 
-async def found_lists(sessions, when, public=False, imported=None, root=None):
+async def found_lists(sessions, when, public=False, imported=None, root=None, entrances=False):
     keys = [s.identity().key_text for s in sessions]
     a = sessions[0]
     groups = {}
     parts = [("claims", "open"), ("reports", "channel"), ("nodes", "channel")]
     if root is not None:
         parts.append(("hierarchies", "channel"))
+    if entrances:                                        # section 6.3
+        parts += [("entrances", "channel"), ("entrances.announce", "open")]
     if public:                                           # UN-RFC 0061 section 3
         parts += [("proposals", "open"), ("talk", "open"), ("log", "channel")]
     for part, kind in parts:
@@ -83,6 +85,9 @@ async def found_lists(sessions, when, public=False, imported=None, root=None):
         lists["root"] = groups["hierarchies"]
     fields = {"min_pow": 0, "lists": lists, "claims": groups["claims"],
               "reports": groups["reports"], "min_software": {"unseenet": "0.1.0"}}
+    if entrances:
+        lists["entrances"] = groups["entrances"]
+        fields["announce"] = {"entrances": groups["entrances.announce"]}
     fields.update({k: groups[k] for k in ("proposals", "talk", "log") if k in groups})
     imp = None
     if imported is not None or root is not None:         # section 9
@@ -245,3 +250,72 @@ async def test_the_replicas_keep_the_root_list(world, tmp_path):
     assert got["alt"].policy == "free" and got["usenet"].policy == "reserved"
     assert status["lists"]["granted"] == 2
     await user.close()
+
+
+async def test_the_replicas_list_an_entrance_serving_its_publishers_release(world, monkeypatch):
+    """Section 6.3: an entrance announces itself naming its publisher; the replicas
+    fetch it over Tor (here: a fake web), check every file against the publisher's
+    signed release post, and list it after 14 good days. One that changes a file does
+    not get on."""
+    import hashlib
+
+    import unseenet.replica.entrances as rent
+    from unseenet.core import entrances as en
+    node, ann, addr, clock, sessions = world
+    gid, groups = await found_lists(sessions, clock[0] - timedelta(hours=21), entrances=True)
+    # a publisher's releases channel, and its release post of the web client
+    publisher = crypto.Identity.generate()
+    channel = make_manifest(publisher, "acme.releases", "channel", pow_bits=8)
+    node.store.add(channel, channel.to_bytes())
+    node.store.set_manifest(Manifest.from_article(channel))
+    files = {"index.html": b"<html>hello</html>", "app.js": b"console.log(1)"}
+    sums = "\n".join(f"{hashlib.sha256(v).hexdigest()}  {k}" for k, v in files.items())
+    rel = new_article(channel.group, "Unseenet web client 1.0", f"Unseenet web client 1.0\n\n{sums}\n",
+                      now=clock[0] - timedelta(hours=20), from_name="Acme").finalize(publisher, 8)
+    node.store.add(rel, rel.to_bytes())
+    # two entrances: a good one and one that changes a file
+    good, bad = crypto.Identity.generate(), crypto.Identity.generate()
+    web = {}
+    for ident, onion, js in ((good, "g" * 56 + ".onion", files["app.js"]),
+                             (bad, "b" * 56 + ".onion", b"steal()")):
+        base = f"http://{onion}/"
+        web[base + ".well-known/unseenet-entrance"] = json.dumps(
+            {"key": ident.key_text, "software": "unseenet-entrance 0.5.0"}).encode()
+        web[base + "version.json"] = b'{"version": "1.0"}'
+        web[base + "index.html"] = files["index.html"]
+        web[base + "app.js"] = js
+        body = en.make_body(channel.group, clock[0] - timedelta(hours=2), onion=onion,
+                            name=onion[:4], operator="@op")
+        art = new_article(groups["entrances.announce"], en.subject(onion[:4]), body,
+                          now=clock[0] - timedelta(hours=2), from_name=onion[:4],
+                          extra=[("Content-Type", "application/json")]).finalize(ident, 8)
+        node.store.add(art, art.to_bytes())
+
+    async def fake_fetch(self, url, limit):
+        if url not in web:
+            raise ValueError("404")
+        return web[url]
+    monkeypatch.setattr(rent.EntranceDuties, "_fetch_entrance", fake_fetch)
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for _ in range(17):
+        for r in reps:
+            status = await r.run_once()
+        clock[0] += timedelta(days=1)
+    reports = [m for m in await sessions[0].fetch_group(groups["reports"])
+               if (m.subject or "").startswith(ls.REPORT_PREFIX)]
+    last = ls.parse_report(reports[-1].body, key=reports[-1].author_key, date=reports[-1].date)
+    assert good.key_text in last.reached and bad.key_text in last.reached
+    assert last.served == {good.key_text: "1.0"}
+    assert last.software[good.key_text] == "unseenet-entrance 0.5.0"
+    posted = [m for m in await sessions[0].fetch_group(groups["entrances"]) if m.readable]
+    newest = json.loads(posted[-1].body)
+    assert [e["key"] for e in newest["entrances"]] == [good.key_text]
+    assert newest["entrances"][0]["publisher"] == channel.group
+    verdicts = reps[0].st["lists"]["entrances"]["verdicts"]
+    assert "all are needed" in verdicts[bad.key_text]
+    assert status["lists"]["entrances"] == 1
+    from unseenet.replica.cli import explain
+    assert "entrance list it computed last" in "\n".join(explain(status, {"lists": gid}))

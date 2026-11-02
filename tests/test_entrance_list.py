@@ -91,6 +91,7 @@ def test_an_announcement_round_trips_and_is_checked():
     body = en.make_body(PUB, at(TODAY), onion=onion(1))
     with pytest.raises(en.EntranceProblem):                # dated otherwise than its article
         en.parse(body, key=key(1), date=at(TODAY, 15))
+    assert en.parse(body, key=key(1), date=at(TODAY) + timedelta(minutes=10)).onion == onion(1)
 
 
 def test_info_must_name_the_announced_key():
