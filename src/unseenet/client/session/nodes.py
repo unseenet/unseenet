@@ -433,12 +433,20 @@ class NodesMixin:
         return True
 
     async def _council_node_list(self, council: str):
-        """(Date, updated, nodes) of the newest node list a list council's members posted
-        (UN-RFC 0020 section 8), or None while the council does not count or has none.
-        Replicas that read the same post the same list; the newest day counts."""
+        """(Date, updated, nodes) of the newest node list a list council's members
+        posted (UN-RFC 0020 section 8), or None."""
+        from ...known_nodes import parse_node_list
+        got = await self._council_list(council, "nodes", parse_node_list)
+        return None if got is None else (got[0], got[1][0], got[1][1])
+
+    async def _council_list(self, council: str, kind: str, parse):
+        """(Date, parsed, body) of the newest ``kind`` list (``nodes``, ``root``) that a
+        list council's members posted (UN-RFC 0020 section 8), or None while the council
+        does not count or has none. Replicas that read the same post the same list; the
+        newest day counts. ``parse`` reads a body and returns a value whose first item is
+        the list's ``updated``."""
         from ...core import crypto
         from ...core import lists as ls
-        from ...known_nodes import parse_node_list
         chain = await self.council_chain(council)
         cur = chain.current
         if cur is None or chain.disputed:
@@ -447,9 +455,9 @@ class NodesMixin:
             lc = ls.list_council(cur.data)
         except ls.ListProblem:
             return None
-        if lc is None or "nodes" not in lc.lists:
+        if lc is None or kind not in lc.lists:
             return None
-        group = lc.lists["nodes"]
+        group = lc.lists[kind]
         members = {crypto.key_to_text(k) for k in cur.keys}
         subscribed = group in self.data["subscribed"]
         try:
@@ -464,13 +472,13 @@ class NodesMixin:
             if not (m.readable and m.author_key in members and m.date):
                 continue
             try:
-                updated, nodes = parse_node_list(m.body)
-            except ValueError:
+                value = parse(m.body)
+            except (ValueError, KeyError, TypeError):
                 continue
-            day = ls.updated_day(updated)
+            day = ls.updated_day(value[0])
             rank = (day[1] if day else None, m.date)
             if day and (best is None or rank > best[0]):
-                best = (rank, updated, nodes)
+                best = (rank, value, m.body)
         return None if best is None else (best[0][1], best[1], best[2])
 
     async def refresh_releases(self) -> dict | None:

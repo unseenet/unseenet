@@ -221,6 +221,26 @@ starts from: entries in it stay for 180 days, so their operators have time to
 announce their nodes. Sign it on each replica as above; the replica then works
 for both councils. `unseenet-replica status` tells how its last list round went.
 
+A list council can take on more lists later. For the root list of hierarchies,
+which anybody claims as names are claimed:
+
+```bash
+unseenet council add-list unseenet.lists@<fp> root --import hierarchies.json
+```
+
+It writes the draft of the new list group, which each replica signs as above,
+and the change to the council's manifest. One member proposes it and the others
+second it; after its public hearing the replicas keep the list:
+
+```bash
+sudo unseenet-replica propose --lists --change-file unseenet.hierarchies.change.json \
+    --reason "the council keeps the root list"
+sudo unseenet-replica second --lists <id>      # on the other replicas
+```
+
+`--lists` on `propose`, `second`, `talk` and `object` speaks in the list
+council instead of the registrar's.
+
 ## Holding
 
 The replica posts every change the rules call for by itself; that is what keeps

@@ -63,11 +63,13 @@ async def world(tmp_path, monkeypatch):
     server.close()
 
 
-async def found_lists(sessions, when, public=False, imported=None):
+async def found_lists(sessions, when, public=False, imported=None, root=None):
     keys = [s.identity().key_text for s in sessions]
     a = sessions[0]
     groups = {}
     parts = [("claims", "open"), ("reports", "channel"), ("nodes", "channel")]
+    if root is not None:
+        parts.append(("hierarchies", "channel"))
     if public:                                           # UN-RFC 0061 section 3
         parts += [("proposals", "open"), ("talk", "open"), ("log", "channel")]
     for part, kind in parts:
@@ -76,12 +78,15 @@ async def found_lists(sessions, when, public=False, imported=None):
         for s in sessions:
             await s.council_sign(g, body)
         groups[part] = g
-    fields = {"min_pow": 0, "lists": {"nodes": groups["nodes"]}, "claims": groups["claims"],
+    lists = {"nodes": groups["nodes"]}
+    if root is not None:
+        lists["root"] = groups["hierarchies"]
+    fields = {"min_pow": 0, "lists": lists, "claims": groups["claims"],
               "reports": groups["reports"], "min_software": {"unseenet": "0.1.0"}}
     fields.update({k: groups[k] for k in ("proposals", "talk", "log") if k in groups})
     imp = None
-    if imported is not None:                             # section 9
-        imp = ls.import_body({"nodes": imported})
+    if imported is not None or root is not None:         # section 9
+        imp = ls.import_body({k: v for k, v in (("nodes", imported), ("root", root)) if v})
         fields["import"] = ls.import_hash(imp)
     gid, body = a.council_genesis("unseenet.lists", "channel", keys, fields=fields, date=when)
     for s in sessions:
@@ -195,3 +200,48 @@ async def test_an_imported_node_stays_until_it_announces(world):
     newest = [m for m in await sessions[0].fetch_group(groups["nodes"]) if m.readable][-1]
     assert [n["node_key"] for n in json.loads(newest.body)["nodes"]] == [old["node_key"]]
     assert reps[0].st["lists"]["verdicts"][old["node_key"]].startswith("imported at the genesis")
+
+
+async def test_the_replicas_keep_the_root_list(world, tmp_path):
+    """Sections 5.2 and 6.2: a user claims a hierarchy with a commit and a reveal in the
+    claims group; the replicas post the same root list - the import's entries and the
+    new grant."""
+    from unseenet import hierarchies as hz
+    from unseenet import names as nm
+    from unseenet.core import hierarchy_claims as hc
+    node, ann, addr, clock, sessions = world
+    project = crypto.Identity.generate()
+    root = {"v": 1, "updated": "2026-10-31", "hierarchies": [
+        {"name": "unseenet", "policy": "governed", "maintainer": project.key_text,
+         "list": f"unseenet.checkgroups@{project.fingerprint}", "title": "The Unseenet project"},
+        {"name": "alt", "policy": "free", "title": "Anything goes"},
+        {"name": "usenet", "policy": "reserved", "title": "Usenet"}]}
+    gid, groups = await found_lists(sessions, clock[0] - timedelta(hours=21), root=root)
+    user = Session(Vault.open(tmp_path / "user.vault", "pw", **KDF), status=lambda *_: None)
+    user.new_identity("user", "User")
+    user.add_node(addr)
+    me = user.identity()
+    claim = hc.make_claim("claim", "games", list=f"games.list@{me.fingerprint}", title="Games")
+    commit, nonce = hc.make_commit(claim)
+    cid = await user.post(groups["claims"], nm.COMMIT_SUBJECT, commit)
+    clock[0] += timedelta(hours=2)
+    await user.post(groups["claims"], nm.reveal_subject(cid),
+                    hc.make_reveal(claim, nonce, f"inbox@{me.fingerprint}"))
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    tlds=lambda: {"dk", "com"}, dns_txt=lambda n: [],
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for _ in range(3):
+        for r in reps:
+            status = await r.run_once()
+        clock[0] += timedelta(days=1)
+    posted = [m for m in await sessions[0].fetch_group(groups["hierarchies"]) if m.readable]
+    assert posted and {m.author_key for m in posted} <= {s.identity().key_text for s in sessions}
+    assert len({m.body for m in posted}) == 1                 # the same list from all three
+    _, got = hz.parse_root_list(posted[-1].body)
+    assert got["games"].maintainer == me.key_text and got["games"].policy == "governed"
+    assert got["unseenet"].maintainer == project.key_text
+    assert got["alt"].policy == "free" and got["usenet"].policy == "reserved"
+    assert status["lists"]["granted"] == 2
+    await user.close()

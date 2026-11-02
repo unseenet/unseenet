@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2) as functions every replica shares; replicas keeping the root list, the council as maintainer of `unseenet`, entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients follow the root list's `moved_to`; nodes reading the council's root list, the council as maintainer of `unseenet`, entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -99,6 +99,7 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 | `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
 | `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
 | `import`  | string   | no   | `sha256:` and the hex SHA-256 of the import's body (section 9); genesis only |
+| `imports` | object   | no   | For a list added later, its import by kind, e.g. `{"root": "sha256:…"}`; set by the `manifest` proposal that adds the list (section 9) |
 
 Each list group is a `channel` council group with the same council, so
 that the members' replicas, and nobody else, post the lists. Everything
@@ -400,6 +401,12 @@ entrance list). The genesis manifest's `import` names it by the SHA-256
 of its body, not by Message-ID: the group exists only once the genesis
 counts, so the import is posted after it, and any founding member's copy
 with that body is the import.
+
+A list the council takes on later is added by a `manifest` proposal
+(UN-RFC 0061) that sets `lists` with the new list group - a council
+group of the same members - and `imports` with the hash of that list's
+import, posted in the council group by a member. Its import is held as
+the genesis import is, from the date of the manifest that added it.
 
 An imported entry stays for 180 days without meeting the rules, so that
 operators and maintainers have time to announce and claim. After that

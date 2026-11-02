@@ -138,3 +138,59 @@ async def test_the_list_moves_to_a_list_council(tmp_path, monkeypatch):
     for s in (r1, r2, me):
         await s.close()
     server.close()
+
+
+async def test_the_root_list_moves_to_a_list_council(tmp_path, monkeypatch):
+    """UN-RFC 0020 section 10 for the root list: once ``unseenet.hierarchies`` says it
+    moved to a list council, clients take the council's root list."""
+    from unseenet import hierarchies as hz
+    from unseenet.client import naming
+    from unseenet.core.groups import manifest_article
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    project = crypto.Identity.generate()
+    manifest = make_manifest(project, "unseenet.hierarchies", "channel", pow_bits=8)
+    node.accept(manifest.to_bytes())
+    monkeypatch.setattr(kn, "PROJECT_KEY", project.key_text)
+    monkeypatch.setattr(hz, "HIERARCHIES_GROUP", manifest.group)
+    old = json.dumps({"v": 1, "updated": "2026-10-31", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"}]})
+    node.accept(new_article(manifest.group, "Root list", old, from_name="Unseenet")
+                .finalize(project, 8).to_bytes())
+
+    def session(name):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", **KDF), status=lambda *_: None)
+        s.new_identity(name, name)
+        s.add_node(addr)
+        return s
+    r1, r2, me = session("r1"), session("r2"), session("me")
+    keys = [r1.identity().key_text, r2.identity().key_text]
+    groups = {}
+    for part in ("claims", "reports", "nodes", "hierarchies"):
+        g, b = r1.council_genesis(f"unseenet.lists.{part}", "open" if part == "claims" else "channel",
+                                  keys, fields={"min_pow": 0})
+        for s in (r1, r2):
+            await s.council_sign(g, b)
+        groups[part] = g
+    gid, body = r1.council_genesis("unseenet.lists", "channel", keys, fields={
+        "min_pow": 0, "lists": {"nodes": groups["nodes"], "root": groups["hierarchies"]},
+        "claims": groups["claims"], "reports": groups["reports"]})
+    for s in (r1, r2):
+        await s.council_sign(gid, body)
+    data = json.loads(manifest.body)
+    data.update({"serial": data["serial"] + 1, "moved_to": gid, "moved_on": "2026-11-02T12:00:00Z"})
+    node.accept(manifest_article(project, manifest.group, data, pow_bits=8).to_bytes())
+    assert set(await naming.read_root_list(me)) == {"alt"}           # the old one, for now
+    new = json.dumps({"v": 1, "updated": "council 1 day 2026-11-01", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"},
+        {"name": "games", "policy": "governed", "maintainer": r1.identity().key_text,
+         "list": f"games.list@{r1.identity().fingerprint}", "title": "Games"}]})
+    await r2.post(groups["hierarchies"], "root list 2026-11-01", new)
+    assert set(await naming.read_root_list(me)) == {"alt", "games"}
+    await naming.refresh(me)
+    assert "games" in naming.root_list(me)
+    for s in (r1, r2, me):
+        await s.close()
+    server.close()

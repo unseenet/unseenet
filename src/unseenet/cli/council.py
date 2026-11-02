@@ -58,6 +58,13 @@ def council_parsers(sub) -> None:
                         "in the council group by every member (UN-RFC 0020 section 9)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
+    p = t.add_parser("add-list", help="a list council keeps one more list (UN-RFC 0020): the "
+                                      "draft of its group and the change to propose")
+    p.add_argument("council", help="the list council, e.g. unseenet.lists@<fp>")
+    p.add_argument("kind", choices=("root", "entrances", "scribes"))
+    p.add_argument("--import", dest="import_file", default=None, metavar="FILE",
+                   help="the list it starts from (for root: a hierarchies.json)")
+    p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
     p.add_argument("draft", help="the draft file you were given")
     p.add_argument("--yes", action="store_true", help="do not ask")
@@ -213,6 +220,46 @@ async def c_council(app: App, args) -> None:
                 if await _post_once_counting(s, gid, draft):
                     text.append("The council counts, and its import is posted.")
             emit(args, "\n".join(text), {"group": gid, "draft": str(out), "posted": mid})
+        elif what == "add-list":                         # UN-RFC 0020 sections 9, 10
+            from ..core import lists as ls
+            chain = await s.council_chain(args.council)
+            cur = chain.current
+            if cur is None:
+                raise SessionError(f"{args.council} does not count (unseenet council show)")
+            lc = ls.list_council(cur.data)
+            if lc is None:
+                raise SessionError(f"{args.council} is not a list council")
+            if args.kind in lc.lists:
+                raise SessionError(f"{args.council} keeps a {args.kind} list already")
+            members = [crypto.key_to_text(k) for k in cur.keys]
+            prefix = cur.name.rsplit(".", 1)[0] if "." in cur.name else cur.name
+            name = f"{prefix}.{ls.LIST_LABELS[args.kind]}"
+            g, b = s.council_genesis(name, "channel", members,
+                                     fields={"title": f"The {args.kind} list"},
+                                     min_level=cur.min_level)
+            fields = {"lists": {**lc.lists, args.kind: g}}
+            draft = {"v": 1, "group": g, "body": b}
+            if getattr(args, "import_file", None):
+                imp = ls.import_body({args.kind: json.loads(
+                    Path(args.import_file).read_text(encoding="utf-8"))})
+                fields["imports"] = {**lc.imports, args.kind: ls.import_hash(imp)}
+                draft["posts"] = [{"group": args.council, "subject": ls.IMPORT_SUBJECT,
+                                   "body": imp}]
+            change = {"manifest": {"fields": fields}}
+            out = Path(args.out or f"{name}.council.json")
+            out.write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n",
+                           encoding="utf-8")
+            change_file = out.with_name(f"{name}.change.json")
+            change_file.write_text(json.dumps(change, indent=2, sort_keys=True) + "\n",
+                                   encoding="utf-8")
+            text = [f"Draft of {g} written to {out}, and the change to {change_file}.", "",
+                    "1. Each member signs the draft:  sudo unseenet-replica sign " + out.name,
+                    "2. One member proposes the change, and the others second it:",
+                    f"     sudo unseenet-replica propose --lists --change-file {change_file.name} "
+                    f'--reason "the council keeps the {args.kind} list"',
+                    "3. When the hearing has passed, the replicas keep the list."]
+            emit(args, "\n".join(text), {"group": g, "draft": str(out),
+                                         "change": str(change_file)})
         elif what == "sign":
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
             gid, body = draft["group"], draft["body"]

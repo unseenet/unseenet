@@ -42,6 +42,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   to a top-level domain goes only to a key its registry names in DNS (`_unseenet.nic.<tld>`);
   reserved names are never granted; a key holds at most three and must be ripened to the
   council's level. Names' commit and reveal now take another kind of claim too.
+- **Replicas keep the root list, and clients follow it** (#56, UN-RFC 0020 sections 6.2, 9, 10):
+  a list council with a `root` list reads the hierarchy claims, checks DNS where a name is a
+  top-level domain, and posts the root list when it changes; `unseenet-replica status` says
+  how many hierarchies it grants. `unseenet council add-list <council> root --import
+  hierarchies.json` writes the draft of the list group and the manifest change that adds it
+  (a list added later has its own import, `imports`); `unseenet-replica propose|second|talk|
+  object --lists` speak in the list council. Clients take the council's root list once
+  `unseenet.hierarchies` says `moved_to`; `tools/project/move_lists.py --list root` posts that.
+  `unseenet-replica sign` now moves the replica's registrar only for a registrar's genesis.
 
 ## [0.7.1] - 2026-11-02
 

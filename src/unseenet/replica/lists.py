@@ -30,6 +30,8 @@ from ..core import announcements as an
 from ..core import carrying as ca
 from ..core import council as cn
 from ..core import crypto
+from .. import names as nm
+from ..core import hierarchy_claims as hc
 from ..core import lists as ls
 from ..core.article import new_article
 from ..core.encoding import b64
@@ -104,9 +106,12 @@ class ListDuties:
         today = _day(now)
         await self._measure(lc, members, announcements, today, now)
         await self._compute_and_post(lc, chain, members, announcements, today, now)
+        await self._root_round(lc, chain, members, today, now)
         out.update({"members": len(members), "announced": len({a.key for a in announcements}),
                     "measured": st["measured"], "computed": st["computed"],
-                    "listed": st.get("listed", 0)})
+                    "listed": st.get("listed", 0),
+                    "root": (st.get("root") or {}).get("computed"),
+                    "granted": (st.get("root") or {}).get("granted")})
 
     async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict) -> None:
         """The list council's proposals, hearings and log (UN-RFC 0061), by the same code
@@ -171,8 +176,8 @@ class ListDuties:
             # out addresses it cannot use, which must not change who keeps a place
             try:
                 data = json.loads(m.body)
-                keys = {str(n["node_key"]) for n in data["nodes"]}
-            except (ValueError, KeyError, TypeError):
+                keys = {str(n["node_key"]) for n in data.get("nodes", [])}
+            except (ValueError, KeyError, TypeError, AttributeError):
                 continue
             got = ls.updated_day(str(data.get("updated", "")))
             if got is None:
@@ -298,19 +303,14 @@ class ListDuties:
             return
         before = [x for x in posted if x[0] < day]
         previous = before[-1][3] if before else set()
-        imported = await self._imported(chain, lc)
+        imp = await self._import_body(chain, lc, "nodes")
+        imported = ls.imported_nodes(imp) if imp else {}
         body, verdicts = ls.node_list(
             day=day, seq=cur.seq, announcements=announcements,
             measurements=ls.Measurements(reports, members), network=network_groups(),
             previous=previous, council=lc, decisions=self._list_decisions(day),
             imported=imported, genesis=genesis)
-        newest = posted[-1] if posted else None
-        if newest is None or newest[2] != body and newest[0] <= day or (
-                newest[2] == body and now - newest[4] > REPOST_AFTER):
-            if newest is not None and newest[0] == day and newest[2] != body:
-                log.warning("list council: the newest node list for %s differs from this "
-                            "replica's; posting its own again (section 8)", day)
-            await self._post_list_json(lc.lists["nodes"], f"node list {day.isoformat()}", body)
+        if await self._maybe_post(lc.lists["nodes"], "node list", day, body, posted, now):
             log.info("list council: posted the node list for %s (%d node(s))", day,
                      sum(v.listed for v in verdicts.values()))
         st["computed"] = day.isoformat()
@@ -318,17 +318,101 @@ class ListDuties:
         st["verdicts"] = {k: v.why for k, v in sorted(verdicts.items())}
         self.s.save()
 
-    async def _imported(self, chain: cn.Chain, lc: ls.ListCouncil) -> dict[str, dict]:
-        """The genesis import (section 9): an article in the council group, posted by a
-        member, whose body has the hash the genesis manifest names."""
-        if not lc.import_id:
-            return {}
+    async def _maybe_post(self, group: str, what: str, day: date, body: str, posted: list,
+                          now: datetime) -> bool:
+        """Post a computed list when it differs from the newest posted, or that one is a
+        month old; post it again when the newest for the same day differs (section 8)."""
+        newest = posted[-1] if posted else None
+        if newest is not None and not (newest[2] != body and newest[0] <= day or (
+                newest[2] == body and now - newest[4] > REPOST_AFTER)):
+            return False
+        if newest is not None and newest[0] == day and newest[2] != body:
+            log.warning("list council: the newest %s for %s differs from this replica's; "
+                        "posting its own again (section 8)", what, day)
+        await self._post_list_json(group, f"{what} {day.isoformat()}", body)
+        return True
+
+    async def _import_body(self, chain: cn.Chain, lc: ls.ListCouncil, kind: str) -> str | None:
+        """The import a list of ``kind`` starts from (section 9): an article in the council
+        group, posted by a member, whose body has the hash the council's manifest names."""
+        want = ls.import_for(lc, kind)
+        if not want:
+            return None
         members = {crypto.key_to_text(k) for k in chain.current.keys}
         for m in await self.s.fetch_group(chain.current.group_id):
             if (m.readable and m.author_key in members and m.body
-                    and ls.import_hash(m.body) == lc.import_id):
-                return ls.imported_nodes(m.body)
-        return {}
+                    and ls.import_hash(m.body) == want):
+                return m.body
+        return None
+
+    # --- the root list (sections 5.2, 6.2) -------------------------------------------------
+
+    async def _root_round(self, lc: ls.ListCouncil, chain: cn.Chain, members: set[str],
+                          today: date, now: datetime) -> None:
+        """Read the hierarchy claims, check DNS where a name is a top-level domain, and
+        post the root list for the day before yesterday when it changed."""
+        if "root" not in lc.lists:
+            return
+        rs = self._lists_state().setdefault("root", {})
+        for k, empty in (("computed", None), ("dns", {}), ("dns_ok", {})):
+            rs.setdefault(k, empty)
+        day = today - timedelta(days=LIST_LAG)
+        added = next((m.date for m in chain.counted if "root" in (m.data.get("lists") or {})),
+                     chain.counted[0].date)
+        if rs["computed"] == day.isoformat() or day < _day(added):
+            return
+        tlds = self.reg.tlds()
+        if tlds is None:
+            self.status.setdefault("lists", {})["root_note"] = "the list of top-level domains is not known yet"
+            return
+        posts = [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
+                 for m in await self.s.fetch_group(lc.claims)
+                 if m.readable and m.author_key and m.date]
+        until = hc.end_of(day)
+        ready, _ = nm.ready_claims([c for c in hc.read_claims(posts) if c.date < until], until)
+        for c in ready:
+            if c.id not in rs["dns"] and hc.needs_dns(c.claim_body, tlds):
+                name = hc.parse_claim(c.claim_body)["name"]
+                rs["dns"][c.id] = self._dns_names(name, hc.dns_key(c.claim_body, c.sender))
+        await self.refresh_levels({c.sender for c in ready})
+        level = {c.sender: self.level_of(c.sender) for c in ready}
+        imp = await self._import_body(chain, lc, "root")
+        imported = ls.imported_root(imp) if imp else {}
+        dec = self._list_decisions(day)
+        reserved = {n for n, h in imported.items() if h.policy == "reserved"} | dec.reserved
+
+        def apply(gone):
+            return hc.apply_claims(ready, until=until, genesis=added, imported=imported,
+                                   reserved=reserved, removed=dec.removed["root"], tlds=set(tlds),
+                                   level=level, min_level=chain.current.min_level,
+                                   dns=rs["dns"], dns_gone=gone)
+        state = apply(set())
+        for name, g in state.grants.items():          # TLD grants: their record, again
+            if g.expires is None:
+                last = rs["dns_ok"].get(name)
+                if last is None or now - nm.parse_rfc3339(last) > timedelta(days=7):
+                    if self._dns_names(name, g.maintainer):
+                        rs["dns_ok"][name] = nm.rfc3339(now)
+                    elif last is None:
+                        rs["dns_ok"][name] = nm.rfc3339(g.granted or now)
+        gone = {n for n, last in rs["dns_ok"].items()
+                if now - nm.parse_rfc3339(last) > hc.DNS_GONE}
+        state = apply(gone)
+        body = hc.root_list(day, chain.current.seq, state, imported, reserved)
+        posted = await self._read_lists(lc.lists["root"], members)
+        if await self._maybe_post(lc.lists["root"], "root list", day, body, posted, now):
+            log.info("list council: posted the root list for %s (%d granted)", day,
+                     len(state.grants))
+        rs["computed"] = day.isoformat()
+        rs["granted"] = len(state.grants)
+        rs["why"] = dict(list(state.why.items())[-50:])
+        self.s.save()
+
+    def _dns_names(self, tld: str, key: str) -> bool:
+        try:
+            return nm.dns_record_value(key) in self.reg.dns_txt(nm.tld_record_name(tld))
+        except Exception:  # noqa: BLE001 - no answer is not a yes
+            return False
 
 
 def _canary_in(raw: bytes | None, group: str, members: set[str], day: date) -> str | None:
