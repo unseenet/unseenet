@@ -27,6 +27,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   keep its proposals, talk and log groups and its hearings, as the names council's do, on their
   own part of the replica's state. A `list` proposal that passes - `remove` or `restore` an
   entry, `reserve` a name, `set` a parameter - is applied to the lists from the day it applies.
+- **`unseenet council create --lists nodes --import nodes.json`** (#56, UN-RFC 0020 sections 4,
+  9 and 10): the draft for a list council - its list groups, reports and claims groups, and the
+  import of the lists it starts from, named by the hash of its body and posted in the council
+  group once the genesis counts. `unseenet-replica sign` queues the import too. The guide for
+  replica operators has a section on it.
+- **Clients follow the node list to its council** (#56, UN-RFC 0020 section 10): when the project's
+  `unseenet.nodes` manifest says `moved_to` a list council, clients take the newest node list its
+  members posted, and the old one only until there is one. `tools/project/move_lists.py` posts
+  that last manifest with the project key.
 
 ## [0.7.1] - 2026-11-02
 

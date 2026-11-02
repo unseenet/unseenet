@@ -523,6 +523,9 @@ def sign(args) -> int:
         return 1
     for x in [*draft.get("also", []), {"group": gid, "body": body}]:
         _queue(d, {"kind": "council_sign", "group": x["group"], "body": x["body"]})
+    for x in draft.get("posts", []):                  # the import (UN-RFC 0020 section 9)
+        _queue(d, {"group": x["group"], "subject": x["subject"], "body": x["body"],
+                   "content_type": "application/json"})
     if "lists" in m.data:                         # a list council: beside the registrar
         if cfg.get("lists") != gid:
             cfg["lists"] = gid

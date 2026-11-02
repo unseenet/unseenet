@@ -50,6 +50,12 @@ def council_parsers(sub) -> None:
                    help="you write the draft but are not a member (the members are --member)")
     p.add_argument("--claims", action="store_true",
                    help="also its claims group, for a council registrar (UN-RFC 0054 section 8)")
+    p.add_argument("--lists", default=None, metavar="KINDS",
+                   help="a list council (UN-RFC 0020): the lists it keeps, e.g. nodes or "
+                        "nodes,root; also makes its reports and claims groups")
+    p.add_argument("--import", dest="import_file", default=None, metavar="FILE",
+                   help="with --lists: the node list it starts from (a nodes.json), posted "
+                        "in the council group by every member (UN-RFC 0020 section 9)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p.add_argument("--sign", action="store_true", help="also post your own copy now")
     p = t.add_parser("sign", help="post your own copy of a council draft, after seeing it")
@@ -110,6 +116,17 @@ def _describe(m, me: bytes) -> list[str]:
     return lines
 
 
+async def _post_once_counting(s, gid: str, draft: dict) -> bool:
+    """Post a draft's ``posts`` (a list council's import) once the council counts - the
+    group exists only then. One member's copy is enough; the replicas' outboxes try again
+    until theirs is in. True when posted now."""
+    if not draft.get("posts") or (await s.council_chain(gid)).current is None:
+        return False
+    for x in draft["posts"]:
+        await s.post(x["group"], x["subject"], x["body"])
+    return True
+
+
 async def c_council(app: App, args) -> None:
     """``unseenet council create|sign|show``: see ``unseenet council -h``."""
     from ..client.session import SessionError
@@ -141,6 +158,31 @@ async def c_council(app: App, args) -> None:
                                              fields=extra, **common)
                     also.append({"group": g, "body": b})
                     fields[part] = g
+            posts = []
+            if getattr(args, "lists", None):             # UN-RFC 0020 sections 4 and 10
+                from ..core import lists as ls
+                kinds = [k.strip() for k in args.lists.split(",") if k.strip()]
+                bad = [k for k in kinds if k not in ls.LIST_KINDS]
+                if bad or not kinds:
+                    raise SessionError(f"--lists takes some of {', '.join(ls.LIST_KINDS)}")
+                prefix = args.name.rsplit(".", 1)[0] if "." in args.name else args.name
+                lists = {}
+                for kind in kinds:
+                    g, b = s.council_genesis(f"{prefix}.{ls.LIST_LABELS[kind]}", "channel",
+                                             members, fields={"title": f"The {kind} list"},
+                                             **common)
+                    also.append({"group": g, "body": b})
+                    lists[kind] = g
+                g, b = s.council_genesis(f"{args.name}.reports", "channel", members,
+                                         fields={"title": "Measurements and canaries"}, **common)
+                also.append({"group": g, "body": b})
+                fields.update({"lists": lists, "reports": g})
+                args.claims = True                       # hierarchy claims (section 5.2)
+                if getattr(args, "import_file", None):
+                    body = ls.import_body({"nodes": json.loads(
+                        Path(args.import_file).read_text(encoding="utf-8"))})
+                    fields["import"] = ls.import_hash(body)
+                    posts.append({"subject": ls.IMPORT_SUBJECT, "body": body})
             if getattr(args, "claims", False):           # UN-RFC 0054 section 8
                 from ..names import CLAIM_POW
                 g, b = s.council_genesis(f"{args.name}.claims", "open", members,
@@ -154,6 +196,8 @@ async def c_council(app: App, args) -> None:
             draft = {"v": 1, "group": gid, "body": body}
             if also:
                 draft["also"] = also
+            if posts:                                    # in the council group, once it counts
+                draft["posts"] = [{"group": gid, **x} for x in posts]
             out.write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n",
                            encoding="utf-8")
             text = [f"Draft written to {out}.", "",
@@ -166,6 +210,8 @@ async def c_council(app: App, args) -> None:
                     await s.council_sign(x["group"], x["body"])
                 mid = await s.council_sign(gid, body)
                 text.append("Your own copy is posted.")
+                if await _post_once_counting(s, gid, draft):
+                    text.append("The council counts, and its import is posted.")
             emit(args, "\n".join(text), {"group": gid, "draft": str(out), "posted": mid})
         elif what == "sign":
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
@@ -181,6 +227,7 @@ async def c_council(app: App, args) -> None:
             for x in draft.get("also", []):          # the room (UN-RFC 0054 section 21)
                 await s.council_sign(x["group"], x["body"])
             mid = await s.council_sign(gid, body)
+            await _post_once_counting(s, gid, draft)  # the import (UN-RFC 0020 section 9)
             emit(args, f"Posted your copy ({mid}). Check with: unseenet council show {gid}",
                  {"group": gid, "posted": mid})
         elif what == "show":

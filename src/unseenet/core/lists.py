@@ -90,11 +90,41 @@ def list_council(data: dict) -> ListCouncil | None:
     if "scribes" in lists and not pubs:
         raise ListProblem("a council with a scribe list names its publishers")
     imp = data.get("import")
-    if imp is not None and not isinstance(imp, str):
-        raise ListProblem("import is a Message-ID")
+    if imp is not None and not (isinstance(imp, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", imp)):
+        raise ListProblem("import is sha256:<hex> of the import's body")
     return ListCouncil(lists, _group(data.get("claims"), "claims"),
                        _group(data.get("reports"), "reports"), dict(soft),
                        tuple(_group(p, "publishers") for p in pubs), imp)
+
+
+# --- the genesis import (section 9) --------------------------------------------
+
+IMPORT_SUBJECT = "import"
+LIST_LABELS = {"nodes": "nodes", "root": "hierarchies", "entrances": "entrances",
+               "scribes": "scribes"}
+
+
+def import_body(lists: dict) -> str:
+    """The import article's body: the lists as they are, by kind (``{"nodes": <a node
+    list of UN-RFC 0010>, ...}``)."""
+    if not isinstance(lists, dict) or not set(lists) <= set(LIST_KINDS):
+        raise ListProblem(f"an import holds some of {', '.join(LIST_KINDS)}")
+    return canonical_json({"v": 1, **lists}) + "\n"
+
+
+def import_hash(body: str) -> str:
+    import hashlib
+    return "sha256:" + hashlib.sha256(body.rstrip("\n").encode("utf-8")).hexdigest()
+
+
+def imported_nodes(body: str) -> dict[str, dict]:
+    """The node entries of an import, by node key."""
+    try:
+        d = parse_canonical_json(body)
+        nodes = d["nodes"]["nodes"]
+    except Exception:
+        return {}
+    return {n["node_key"]: n for n in nodes if isinstance(n, dict) and isinstance(n.get("node_key"), str)}
 
 
 # --- versions (section 6.5) ----------------------------------------------------

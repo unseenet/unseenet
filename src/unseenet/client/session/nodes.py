@@ -418,6 +418,11 @@ class NodesMixin:
                 continue
             if best is None or (m.date and (best[0] is None or m.date > best[0])):
                 best = (m.date, updated, nodes)
+        moved = manifest.get("moved_to")              # UN-RFC 0020 section 10: to a council
+        if isinstance(moved, str) and moved != NODES_GROUP:
+            council = await self._council_node_list(moved)
+            if council is not None:
+                best = council
         if best is None:
             return False
         new = {"updated": best[1], "nodes": [asdict(n) for n in best[2]]}
@@ -426,6 +431,47 @@ class NodesMixin:
         self.data["known_nodes"] = new
         self.save()
         return True
+
+    async def _council_node_list(self, council: str):
+        """(Date, updated, nodes) of the newest node list a list council's members posted
+        (UN-RFC 0020 section 8), or None while the council does not count or has none.
+        Replicas that read the same post the same list; the newest day counts."""
+        from ...core import crypto
+        from ...core import lists as ls
+        from ...known_nodes import parse_node_list
+        chain = await self.council_chain(council)
+        cur = chain.current
+        if cur is None or chain.disputed:
+            return None
+        try:
+            lc = ls.list_council(cur.data)
+        except ls.ListProblem:
+            return None
+        if lc is None or "nodes" not in lc.lists:
+            return None
+        group = lc.lists["nodes"]
+        members = {crypto.key_to_text(k) for k in cur.keys}
+        subscribed = group in self.data["subscribed"]
+        try:
+            messages = await self.fetch_group(group)
+        finally:
+            if not subscribed:
+                self.cache.pop(group, None)
+                self._raw.pop(group, None)
+                self._high.pop(group, None)
+        best = None
+        for m in messages:
+            if not (m.readable and m.author_key in members and m.date):
+                continue
+            try:
+                updated, nodes = parse_node_list(m.body)
+            except ValueError:
+                continue
+            day = ls.updated_day(updated)
+            rank = (day[1] if day else None, m.date)
+            if day and (best is None or rank > best[0]):
+                best = (rank, updated, nodes)
+        return None if best is None else (best[0][1], best[1], best[2])
 
     async def refresh_releases(self) -> dict | None:
         """Read the newest signed releases from unseenet.releases (#264) and return
