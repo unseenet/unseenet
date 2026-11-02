@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2) as functions every replica shares; replicas keeping the root list, the council as maintainer of `unseenet`, entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -22,7 +22,8 @@ them from public data by rules anybody can check:
 - a node is listed when it announces itself, carries what it must and is
   measured as connected;
 - a free top-level hierarchy goes to the first claim, and one named
-  after a domain or a country code only to whoever proves it in DNS;
+  after a top-level domain (`dk`, `com`) only to whoever its registry
+  names in DNS;
 - an entrance is listed like a node;
 - a scribe is listed when it serves the source of the current signed
   releases (section 6.4).
@@ -133,12 +134,16 @@ council's claims group, by the claiming key. The claim body is
 | `action`  | string   | yes  | `claim`, `renew`, `change` or `release`        |
 | `name`    | string   | yes  | The top-level name, e.g. `games`               |
 | `list`    | Group ID | for `claim`, `change` | The hierarchy list group; its fingerprint is the claiming key's |
-| `title`   | string   | for `claim` | Up to 100 characters                     |
-| `charter` | string   | no   | Up to 2000 characters                          |
+| `title`   | string   | for `claim` | Up to 64 characters (the root list's title, UN-RFC 0018 section 4.1) |
+| `charter` | string   | no   | Up to 200 characters (the root list's description) |
 | `maintainer` | key string | for `change` | A new maintainer key            |
 
 The claiming key MUST be ripened to the council's `min_level` (UN-RFC
-0025), and a key holds at most 3 top-level hierarchies.
+0025), and a key holds at most 3 top-level hierarchies. A name is
+lowercase letters, digits and hyphens, at most 32 characters. The commit
+is made as a name's (UN-RFC 0054 section 8), with the domain separation
+`UNSEENET-HIERARCHY-COMMIT-1` in place of the names', so that a commit
+for a hierarchy can never count as one for a name.
 
 ## 5.3 Measurements
 
@@ -191,13 +196,18 @@ The root list follows from the claims, in the order of their commits:
 - **`unseenet`** has the list council itself as maintainer. Its
   hierarchy list is posted by the replicas, and endorsing or retiring a
   group in it is a proposal with a hearing (UN-RFC 0061); every node
-  carries the endorsed groups (UN-RFC 0055 section 4.1).
-- **A name equal to a country-code top-level domain, or to a domain
-  name's first label where that domain is registered** (`dk`,
-  `torproject`) goes only to a claim whose key the domain names in DNS,
-  as UN-RFC 0019 section 6.4 proves a domain for a name. Such a grant is
-  renewed when the DNS record is checked again, monthly; it lapses when
-  the record is gone for 30 days.
+  carries the endorsed groups (UN-RFC 0055 section 4.1). (Until the root
+  list can name a council as maintainer, `unseenet` keeps its imported
+  entry, held as any imported hierarchy.)
+- **A name equal to a top-level domain** (`dk`, `com`, `microsoft`) goes
+  only to a claim whose key the TLD's registry names in DNS, at
+  `_unseenet.nic.<tld>`, as for names (UN-RFC 0019 section 4.5). Such a
+  grant does not expire by time; it is checked again monthly and lapses
+  when the record has been gone for 30 days. Other names - also those
+  equal to the first label of a registered domain, which nearly every
+  word is - go to the first claim; a name that belongs to somebody
+  outside the network (`torproject`) is protected by being reserved, by
+  a `reserve` decision (section 6.7).
 - **Any other free name** goes to the first counting claim. The grant
   lasts one year from its commit and is renewed by a `renew` claim from
   the maintainer; it lapses when it is not renewed, or when the
@@ -441,9 +451,12 @@ bridge needs no key, since the announcement is already signed.
   judgement and that everybody can check. Commit and reveal stop anyone
   from seeing a claim and getting ahead of it; ripened keys, a limit per
   key and yearly renewal make squatting cost something and not last.
-- **Why DNS for `dk.*` and `torproject.*`?** Those names already belong
-  to somebody outside the network, and DNS is how the world says who.
-  It is the same proof names use (UN-RFC 0019).
+- **Why DNS for `dk.*`, and only for top-level domains?** A TLD already
+  belongs to its registry, and DNS is how the world says who. It is the
+  same proof names use (UN-RFC 0019). Almost every word is the first
+  label of some registered domain, so asking DNS for those would leave
+  no free names; the few that matter, such as `torproject`, are
+  reserved instead.
 - **Why measure, not trust?** A node that answers, carries the network's
   own groups and is connected is useful to a new client, whoever runs
   it. A node that does not is not, whatever anybody promises.
