@@ -17,6 +17,14 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Replicas keep a council's entrance list** (#861, UN-RFC 0020 sections 5.1, 6.3, 8):
+  once a day each replica fetches every announced entrance over Tor - its
+  `/.well-known/unseenet-entrance` must name the key it announced with - and checks every
+  file of the version it serves against its publisher's signed release post, read from the
+  publisher's releases channel; the findings go in the same daily report as the nodes'. The
+  replicas post the entrance list as they post the node list. `unseenet council create
+  --lists ...,entrances` and `add-list ... entrances` also make the open group where
+  entrances announce themselves, and `unseenet council announce-entrance` announces one.
 - **The rules for a council's entrance list** (#861, UN-RFC 0020 sections 5.1, 6.3 and 7):
   `core/entrances.py` reads an entrance's announcement - signed with the entrance's key,
   naming the publisher whose web client it serves, any publisher - and that publisher's

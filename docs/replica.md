@@ -241,6 +241,22 @@ sudo unseenet-replica second --lists <id>      # on the other replicas
 `--lists` on `propose`, `second`, `talk` and `object` speaks in the list
 council instead of the registrar's.
 
+The entrance list is added the same way (`add-list ... entrances --import
+entrances.json`). Its draft has a second group beside the list: an open group
+where entrances announce themselves. An operator announces an entrance with an
+identity of its own, whose key the entrance names as `ENTRANCE_KEY`:
+
+```bash
+unseenet --identity my-entrance council announce-entrance unseenet.lists@<fp> \
+    --url https://web.example/ --onion <56 letters>.onion --operator @me
+```
+
+`--publisher` names the releases channel whose web client the entrance serves;
+any publisher will do, the project's is the default. Each day the replicas fetch
+the entrance over Tor and check every file it serves against that publisher's
+signed release post. After 14 good days in a row - and serving a new release
+within 7 days of it appearing - it is listed.
+
 ## Holding
 
 The replica posts every change the rules call for by itself; that is what keeps

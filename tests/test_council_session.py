@@ -233,3 +233,88 @@ async def test_a_list_council_adds_the_root_list(net, tmp_path, capsys):
     cur = (await a.council_chain(gid)).current
     lc = ls.list_council({**cur.data, **fields})
     assert set(lc.lists) == {"nodes", "root"} and ls.import_for(lc, "root") == fields["imports"]["root"]
+
+
+async def test_a_list_council_adds_the_entrance_list(net, tmp_path, capsys):
+    """``council add-list <council> entrances``: the list group and, beside it, the open
+    group where entrances announce themselves (UN-RFC 0020 section 5.1), both in the
+    draft; the change names them in ``lists`` and ``announce``."""
+    from unseenet.core import lists as ls
+    from unseenet.core import proposals as pr
+    a, b = net("a"), net("b")
+    draft = tmp_path / "unseenet.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="unseenet.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=True, lists="nodes", import_file=None))
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    gid = json.loads(draft.read_text())["group"]
+    out = tmp_path / "unseenet.entrances.council.json"
+    await cli.c_council(App(a), Namespace(json=True, identity=None, what="add-list",
+                                          council=gid, kind="entrances", import_file=None,
+                                          out=str(out)))
+    capsys.readouterr()
+    d = json.loads(out.read_text())
+    assert d["group"].startswith("unseenet.entrances@")
+    (also,) = d["also"]
+    assert also["group"].startswith("unseenet.entrances.announce@")
+    assert CouncilManifest.from_body(also["group"], also["body"]).type == "open"
+    change = json.loads(out.with_name("unseenet.entrances.change.json").read_text())
+    fields = change["manifest"]["fields"]
+    assert fields["lists"]["entrances"] == d["group"]
+    assert fields["announce"] == {"entrances": also["group"]}
+    pr.make_proposal(gid, 1, change, "the council keeps the entrance list")
+    cur = (await a.council_chain(gid)).current
+    lc = ls.list_council({**cur.data, **fields})
+    assert set(lc.lists) == {"nodes", "entrances"} and lc.announce["entrances"] == also["group"]
+
+
+async def test_a_list_council_created_with_entrances(net, tmp_path, capsys):
+    from unseenet.core import lists as ls
+    a, b = net("a"), net("b")
+    draft = tmp_path / "x.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="x.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=False,
+        groups=False, lists="nodes,entrances", import_file=None))
+    capsys.readouterr()
+    d = json.loads(draft.read_text())
+    lc = ls.list_council(CouncilManifest.from_body(d["group"], d["body"]).data)
+    assert lc.announce["entrances"].startswith("x.entrances.announce@")
+    assert lc.announce["entrances"] in {x["group"] for x in d["also"]}
+
+
+async def test_an_entrance_announces_itself(net, tmp_path, capsys):
+    """``council announce-entrance``: the operator's entrance key posts its announcement
+    in the council's announcement group (UN-RFC 0020 section 5.1)."""
+    from unseenet.core import entrances as en
+    a, b, e = net("a"), net("b"), net("e")
+    draft = tmp_path / "x.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="x.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=False, lists="nodes,entrances", import_file=None))
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    gid = json.loads(draft.read_text())["group"]
+    onion = "e" * 56 + ".onion"
+    await cli.c_council(App(e), Namespace(
+        json=True, identity=None, what="announce-entrance", council=gid, onion=onion,
+        url="https://web.example/", publisher=None, name="web", operator="@e",
+        contact=None, description="A test entrance"))
+    out = json.loads(capsys.readouterr().out)
+    assert out["key"] == e.identity().key_text
+    (m,) = [x for x in await a.fetch_group(out["group"]) if x.readable]
+    got = en.parse(m.body, key=m.author_key, date=m.date)
+    assert got.key == e.identity().key_text and got.onion == onion
+    assert got.publisher.startswith("unseenet.releases@") and got.description == "A test entrance"
+    with pytest.raises(SystemExit):
+        await cli.c_council(App(e), Namespace(
+            json=True, identity=None, what="announce-entrance", council=gid, onion=None,
+            url=None, publisher=None, name=None, operator=None, contact=None, description=None))

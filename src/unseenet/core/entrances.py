@@ -32,6 +32,7 @@ MAX_CONTACT = 120
 MAX_DESCRIPTION = 200
 MAX_OPERATOR = 100
 STALE = timedelta(days=30)                # UN-RFC 0020 section 5.1
+DATE_SLACK = timedelta(minutes=11)        # a Date is rounded down to 10 minutes
 URL = re.compile(r"^https://[a-z0-9.-]+(:\d{1,5})?/$")
 ONION = re.compile(r"^[a-z2-7]{56}\.onion$")
 RELEASE_FIRST = re.compile(r"^Unseenet web client (\S+)\s*$")
@@ -77,7 +78,10 @@ class Entrance:
 
 
 def _rfc3339(when: datetime) -> str:
-    return when.astimezone(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """As an article's ``Date`` is written: down to 10 minutes (``article.format_date``)."""
+    when = when.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    when = when.replace(minute=when.minute - when.minute % 10)
+    return when.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _text(d: dict, k: str, limit: int) -> str | None:
@@ -99,7 +103,7 @@ def make_body(publisher: str, date: datetime, *, url: str | None = None,
         if v:
             d[k] = v
     body = canonical_json(d) + "\n"
-    parse(body, key="ed25519:" + "a" * 52, date=date.replace(microsecond=0))
+    parse(body, key="ed25519:" + "a" * 52, date=date)
     return body
 
 
@@ -127,7 +131,7 @@ def parse(body: str, *, key: str, date: datetime, message_id: str = "") -> Entra
             tzinfo=timezone.utc)
     except ValueError as exc:
         raise EntranceProblem("no date") from exc
-    if abs(said - date) > timedelta(minutes=1):
+    if abs(said - date) > DATE_SLACK:
         raise EntranceProblem("its date is not the article's Date")
     url, onion = d.get("url"), d.get("onion")
     if url is not None and not (isinstance(url, str) and URL.match(url)):

@@ -175,6 +175,9 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
         if lst.get("root"):
             out.append(f"  The root list it computed last ({lst['root']}) grants "
                        f"{lst.get('granted', 0)} hierarchies.")
+        if lst.get("entrances_day"):
+            out.append(f"  The entrance list it computed last ({lst['entrances_day']}) holds "
+                       f"{lst.get('entrances') or 0}.")
         if lst.get("root_note"):
             out.append(f"  Root list: {lst['root_note']}.")
         if lst.get("error"):
