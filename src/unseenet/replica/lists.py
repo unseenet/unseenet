@@ -34,7 +34,7 @@ from ..core import lists as ls
 from ..core.article import new_article
 from ..core.encoding import b64
 from ..core.groups import is_key_bound
-from ..known_nodes import NODES_ANNOUNCE_GROUP, parse_node_list
+from ..known_nodes import NODES_ANNOUNCE_GROUP
 from ..nntp import strip_reader_headers
 
 log = logging.getLogger("unseenet.replica")
@@ -98,6 +98,7 @@ class ListDuties:
             out["note"] = "the council keeps no node list"
             return
         st = self._lists_state()
+        await self._lists_public(chain, cfg, now, out)
         members = {crypto.key_to_text(k) for k in cur.keys}
         announcements = await self._read_announcements()
         today = _day(now)
@@ -106,6 +107,28 @@ class ListDuties:
         out.update({"members": len(members), "announced": len({a.key for a in announcements}),
                     "measured": st["measured"], "computed": st["computed"],
                     "listed": st.get("listed", 0)})
+
+    async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict) -> None:
+        """The list council's proposals, hearings and log (UN-RFC 0061), by the same code
+        as the registrar's, on this council's own part of the state: what it signed,
+        held, logged and decided is kept apart from the registrar's."""
+        sub = self._lists_state().setdefault("public", {})
+        for k, empty in (("signed", []), ("held", {}), ("logged", []), ("hearings_done", []),
+                         ("applying", None), ("list_decisions", [])):
+            sub.setdefault(k, empty)
+        agreed = self.agreed(cfg)                       # from the replica's own state
+        st, status = self.st, self.status
+        self.st, self.status = sub, out
+        try:
+            await self._public(chain, now, agreed)
+        finally:
+            self.st, self.status = st, status
+        out["decisions"] = len(sub["list_decisions"])
+
+    def _list_decisions(self, day: date) -> ls.DecisionState:
+        sub = self._lists_state().get("public", {})
+        return ls.decisions_until([ls.Decision(date.fromisoformat(a), i, c)
+                                   for a, i, c in sub.get("list_decisions", [])], day)
 
     # --- reading ----------------------------------------------------------------------------
 
@@ -144,15 +167,18 @@ class ListDuties:
         for m in await self.s.fetch_group(group):
             if not (m.readable and m.author_key in members and m.date):
                 continue
+            # read as the council wrote it, not as a client would use it: a client leaves
+            # out addresses it cannot use, which must not change who keeps a place
             try:
-                updated, nodes = parse_node_list(m.body)
-            except ValueError:
+                data = json.loads(m.body)
+                keys = {str(n["node_key"]) for n in data["nodes"]}
+            except (ValueError, KeyError, TypeError):
                 continue
-            got = ls.updated_day(updated)
+            got = ls.updated_day(str(data.get("updated", "")))
             if got is None:
                 continue
             seq, day = got
-            out.append((day, seq, m.body.rstrip("\n") + "\n", {n.node_key for n in nodes}, m.date))
+            out.append((day, seq, m.body.rstrip("\n") + "\n", keys, m.date))
         return sorted(out, key=lambda x: (x[0], x[4]))
 
     # --- measuring (section 7, UN-RFC 0021) --------------------------------------------------
@@ -276,7 +302,8 @@ class ListDuties:
         body, verdicts = ls.node_list(
             day=day, seq=cur.seq, announcements=announcements,
             measurements=ls.Measurements(reports, members), network=network_groups(),
-            previous=previous, council=lc, imported=imported, genesis=genesis)
+            previous=previous, council=lc, decisions=self._list_decisions(day),
+            imported=imported, genesis=genesis)
         newest = posted[-1] if posted else None
         if newest is None or newest[2] != body and newest[0] <= day or (
                 newest[2] == body and now - newest[4] > REPOST_AFTER):

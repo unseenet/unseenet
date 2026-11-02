@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it; applying `list` decisions, the genesis tooling, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); the genesis tooling, hierarchy claims (6.2), entrances (6.3) and scribes (6.4) follow (#56)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils

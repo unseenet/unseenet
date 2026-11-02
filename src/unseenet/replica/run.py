@@ -69,6 +69,7 @@ class Replica(PublicDuties, ListDuties):
                            ("mine_since", None), ("twin", None)):
             st.setdefault(key, empty)
         self.st = st
+        self._own_st = st          # the replica's own state, whichever council a round is on
         self._watch_own_posts()
         self._levels = levels
         self._level_cache: dict[str, tuple[int, int | None]] = {}
@@ -86,7 +87,7 @@ class Replica(PublicDuties, ListDuties):
 
         async def sending(art, *args, **kw):
             if art.get("Author-Key") == me:
-                self.st["mine"][art.message_id] = nm.rfc3339(self.now())
+                self._own_st["mine"][art.message_id] = nm.rfc3339(self.now())
             return await send(art, *args, **kw)
         self.s._send_article = sending
 

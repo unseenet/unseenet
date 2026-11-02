@@ -116,6 +116,8 @@ class PublicDuties:
                           "state": out.state, "objections": out.objections,
                           "active": out.active, "closes": nm.rfc3339(out.closes),
                           "urgent": p.urgent})
+            if out.state == "passed" and p.kind == "list" and out.applies <= now:
+                self._record_list_decision(out.applies, p)    # every member computes lists
             if not full:
                 continue
             await self._log(logbook, f"hearing {p.id} open",
@@ -131,12 +133,14 @@ class PublicDuties:
             if out.state not in ("passed", "failed") or p.id in done:
                 continue
             note = ""
-            if out.state == "passed" and p.kind not in pr.APPLIED_KINDS:
+            if out.state == "passed" and p.kind not in pr.APPLIED_KINDS and p.kind != "list":
                 note = (f" This software cannot apply a {p.kind} change yet; it is recorded "
                         "here and applied when it can.")
             await self._log(logbook, f"hearing {p.id} closed",
                             f"{out.objections} objections from ripened keys against "
                             f"{out.active} active members: the proposal {out.state}.{note}\n")
+            if p.kind == "list" and out.state == "passed" and out.applies > now:
+                continue                                     # recorded once it applies
             if out.state == "failed" or p.kind not in pr.APPLIED_KINDS:
                 self.st["hearings_done"] = (self.st["hearings_done"] + [p.id])[-500:]
                 continue
@@ -187,6 +191,15 @@ class PublicDuties:
             log.info("applied proposal %s", p.id)
         self.st["applying"] = {"id": p.id, "seq": m.seq,
                                "body": hashlib.sha256(body.encode()).hexdigest()}
+
+    def _record_list_decision(self, applies: datetime, p: pr.Proposal) -> None:
+        """A passed ``list`` proposal, kept as a decision of UN-RFC 0020 section 6.7 for
+        the lists this council computes (``replica/lists.py``)."""
+        decs = self.st.setdefault("list_decisions", [])
+        if p.id not in {d[1] for d in decs}:
+            decs.append([applies.date().isoformat(), p.id, p.change["list"]])
+            log.info("list decision %s applies from %s: %s", p.id, applies.date(),
+                     json.dumps(p.change["list"], sort_keys=True))
 
     # --- the log (section 8) ------------------------------------------------------------------
 
