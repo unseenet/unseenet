@@ -25,6 +25,7 @@ The code follows the sections of UN-RFC 0046, one file each:
     rules.py      4.20 your own rules (UN-RFC 0051)
     reports.py    spam reports: issuers, hidden posts, issuing (UN-RFC 0045)
     teams.py      team inboxes: reading with others, readers, invitations (UN-RFC 0047)
+    councils.py   councils: showing one, its hearings, signing and acting (UN-RFC 0054, 0061)
     events.py     5    events over the WebSocket
 
 A new request goes in the file of its section (and a route in ``server.py``); a new
@@ -144,11 +145,12 @@ from .teams import Teams  # noqa: E402
 from .content_labels import ContentLabels  # noqa: E402
 from .group_emoji import GroupEmoji  # noqa: E402
 from .shares import Shares  # noqa: E402
+from .councils import Councils  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, DeviceUnlock, State, Groups, Writing, People, Running, Identity, Articles,
                Files, Pictures, Addresses, Feeds, Pages, Nodes, AnnouncedNodes, Recovery, Copying, Rules,
-               Reports, Teams, ContentLabels, GroupEmoji, Shares):
+               Reports, Teams, ContentLabels, GroupEmoji, Shares, Councils):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

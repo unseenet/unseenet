@@ -1264,6 +1264,33 @@ the poster's side only; readers never fetch.
   false): whether cards are made at all; off by default in the bootable
   client.
 
+## 4.26 Councils
+
+Councils (UN-RFC 0054) and their hearings (UN-RFC 0061), as the command
+line shows and acts on them:
+
+- `GET /api/council?group=`: the current manifest in plain fields -
+  `name`, `type`, `title`, `seq`, `date`, `members` (each `key`, `full`,
+  `joined`, `by_founder`, `you`), `full`, `min_level`, `sponsors`,
+  `max_probation`, `founding` (`founder`, `you`, `until`, `size`,
+  `renounced`, `lasts`) or null, `room`, `claims`, `proposals`, `you`
+  (`"full member"`, `"member on probation"` or null), `kind` and
+  `disputed` - with `counts` true. For a genesis not every member has
+  posted, `counts` is false and `missing` holds the keys still to sign.
+  404 when no node of the user's holds a council manifest for the group.
+- `GET /api/council/hearings?group=`: `{"group", "hearings"}`, each
+  `{"id", "kind", "change", "reason", "urgent", "state", "objections",
+  "active", "closes", "applies"}`.
+- `POST /api/council` `{"group", "action", ...}`: `sign` with `body`
+  (and `also`, the draft's other groups) posts the user's copy after the
+  checks that say why it would not count; `admit` and `renounce` (the
+  founder), `resign` (a member), `sponsor` and `unsponsor` (a full
+  member) with `key`; `object` with `key` (a shadow's or member's key, or
+  a proposal's id) and `reason`, `withdraw` to take an objection to a
+  proposal back. It answers `{"posted", "text", "council"}`: `text` is
+  for people. A front end MUST say before `resign` and `renounce` that
+  they cannot be undone, and before `object` that the reason is public.
+
 # 5. Events
 
 `GET /api/events` is a WebSocket (subprotocols `unseenet` and the token,
