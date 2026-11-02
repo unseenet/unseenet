@@ -219,9 +219,10 @@ class ListDuties:
                 software[key] = soft
         disconnected, incomplete = ls.connection_verdicts(readings, posted, network_groups())
         e_reached, e_missed, served, e_soft = await self._measure_entrances(lc, now)
+        dns = await self._dns_answers(lc, now)
         body = ls.report_body(today, reached | e_reached, missed | e_missed,
                               disconnected=disconnected, incomplete=incomplete,
-                              software={**software, **e_soft}, served=served)
+                              software={**software, **e_soft}, served=served, dns=dns)
         await self._post_list_json(lc.reports, ls.report_subject(today), body)
         # today's canaries, each to its node alone, for tomorrow's reading
         sent = []
@@ -354,6 +355,48 @@ class ListDuties:
 
     # --- the root list (sections 5.2, 6.2) -------------------------------------------------
 
+    async def _dns_answers(self, lc: ls.ListCouncil, now: datetime) -> dict[str, list[str]]:
+        """For the day's report (#888): the keys ``_unseenet.nic.<tld>`` names, for every
+        top-level domain a revealed claim waits on and every hierarchy granted by DNS.
+        The root list goes by what most replicas found, not by one replica's answer."""
+        if "root" not in lc.lists:
+            return {}
+        tlds = self.reg.tlds()
+        if tlds is None:
+            return {}
+        rs = self._lists_state().setdefault("root", {})
+        decided = rs.get("dns", {})
+        ask = set(rs.get("tld_grants", {}))
+        posts = [nm.Post(m.message_id, m.subject or "", m.author_key, m.date, m.body)
+                 for m in await self.s.fetch_group(lc.claims)
+                 if m.readable and m.author_key and m.date]
+        for c in hc.read_claims(posts):
+            if (c.claim_body is not None and c.id not in decided
+                    and hc.needs_dns(c.claim_body, tlds)):
+                ask.add(hc.parse_claim(c.claim_body)["name"])
+        out = {}
+        for tld in sorted(ask)[:ls.MAX_DNS_NAMES]:
+            out[tld] = self._dns_keys(tld)
+        return out
+
+    def _dns_keys(self, tld: str) -> list[str]:
+        """The keys a TLD's record names now (none when there is no answer)."""
+        prefix = nm.dns_record_value("")
+        try:
+            values = self.reg.dns_txt(nm.tld_record_name(tld))
+        except Exception:  # noqa: BLE001 - no answer names nobody
+            return []
+        keys = set()
+        for v in values:
+            k = v[len(prefix):].strip() if v.startswith(prefix) else ""
+            try:
+                crypto.key_from_text(k)
+            except Exception:  # noqa: BLE001 - not a key: not counted
+                continue
+            keys.add(k)
+        return sorted(keys)[:ls.MAX_DNS_KEYS]
+
+
     async def _root_round(self, lc: ls.ListCouncil, chain: cn.Chain, members: set[str],
                           today: date, now: datetime) -> None:
         """Read the hierarchy claims, check DNS where a name is a top-level domain, and
@@ -377,10 +420,18 @@ class ListDuties:
                  if m.readable and m.author_key and m.date]
         until = hc.end_of(day)
         ready, _ = nm.ready_claims([c for c in hc.read_claims(posts) if c.date < until], until)
-        for c in ready:
+        reports = ls.Measurements((await self._read_reports(lc))[0], members)
+        for c in ready:                    # what most replicas found, on a settled day (#888)
             if c.id not in rs["dns"] and hc.needs_dns(c.claim_body, tlds):
                 name = hc.parse_claim(c.claim_body)["name"]
-                rs["dns"][c.id] = self._dns_names(name, hc.dns_key(c.claim_body, c.sender))
+                key = hc.dns_key(c.claim_body, c.sender)
+                d = _day(c.revealed or c.date)
+                while d <= day:
+                    found = reports.dns_names(d, name, key)
+                    if found is not None:
+                        rs["dns"][c.id] = found
+                        break
+                    d += timedelta(days=1)
         await self.refresh_levels({c.sender for c in ready})
         level = {c.sender: self.level_of(c.sender) for c in ready}
         imp = await self._import_body(chain, lc, "root")
@@ -394,17 +445,21 @@ class ListDuties:
                                    level=level, min_level=chain.current.min_level,
                                    dns=rs["dns"], dns_gone=gone)
         state = apply(set())
-        for name, g in state.grants.items():          # TLD grants: their record, again
+        for name, g in state.grants.items():          # TLD grants: their record, every day
             if g.expires is None:
-                last = rs["dns_ok"].get(name)
-                if last is None or now - nm.parse_rfc3339(last) > timedelta(days=7):
-                    if self._dns_names(name, g.maintainer):
-                        rs["dns_ok"][name] = nm.rfc3339(now)
-                    elif last is None:
-                        rs["dns_ok"][name] = nm.rfc3339(g.granted or now)
-        gone = {n for n, last in rs["dns_ok"].items()
-                if now - nm.parse_rfc3339(last) > hc.DNS_GONE}
+                entry = rs["dns_ok"].get(name)
+                if not isinstance(entry, list) or entry[0] != g.maintainer:
+                    entry = [g.maintainer, _day(g.granted or added).isoformat()]
+                d = date.fromisoformat(entry[1]) + timedelta(days=1)
+                while d <= day:
+                    if reports.dns_names(d, name, g.maintainer):
+                        entry[1] = d.isoformat()
+                    d += timedelta(days=1)
+                rs["dns_ok"][name] = entry
+        gone = {n for n, e in rs["dns_ok"].items() if isinstance(e, list)
+                and day - date.fromisoformat(e[1]) > hc.DNS_GONE}
         state = apply(gone)
+        rs["tld_grants"] = {n: g.maintainer for n, g in state.grants.items() if g.expires is None}
         body = hc.root_list(day, chain.current.seq, state, imported, reserved)
         posted = await self._read_lists(lc.lists["root"], members)
         if await self._maybe_post(lc.lists["root"], "root list", day, body, posted, now):
@@ -414,12 +469,6 @@ class ListDuties:
         rs["granted"] = len(state.grants)
         rs["why"] = dict(list(state.why.items())[-50:])
         self.s.save()
-
-    def _dns_names(self, tld: str, key: str) -> bool:
-        try:
-            return nm.dns_record_value(key) in self.reg.dns_txt(nm.tld_record_name(tld))
-        except Exception:  # noqa: BLE001 - no answer is not a yes
-            return False
 
 
 def _canary_in(raw: bytes | None, group: str, members: set[str], day: date) -> str | None:

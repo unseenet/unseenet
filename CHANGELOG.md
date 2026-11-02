@@ -17,6 +17,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **DNS answers for hierarchy claims are decided by the replicas together** (#888, UN-RFC 0020
+  sections 6.2 and 7): each list council replica asks DNS daily for every top-level domain a
+  claim waits on or a hierarchy holds by DNS and puts the keys it found in its report (`dns`);
+  the root list goes by what more than half of the members that asked found, on settled days,
+  so one replica's wrong answer no longer splits the root list. A claim waits until a member
+  has asked, and so do later claims on the name.
 - **Where releases are fetched from is set in the network** (#902): the project key signs a list
   of release sources - where release files are (templates with `{repo}`, `{tag}`, `{name}`;
   `https://` or onion addresses) and the package indexes servers install from - and posts it in
