@@ -31,6 +31,8 @@ REPORT_PREFIX = "report "
 MAX_NODES = 200                              # UN-RFC 0010 section 2
 MAX_REPORT_KEYS = 1000
 MAX_SOFTWARE = 100
+MAX_DNS_NAMES = 64                 # top-level domains a report gives DNS answers for (#888)
+MAX_DNS_KEYS = 8                   # keys one TLD's record may name, as reported
 
 # Section 6: the parameters a ``set`` decision may change, and their values until then.
 PARAMS = {
@@ -209,6 +211,7 @@ class Report:
     served: dict = field(default_factory=dict, compare=False)   # entrance key -> version
     date: datetime | None = None           # the article's Date
     message_id: str = ""
+    dns: dict = field(default_factory=dict, compare=False)   # TLD -> keys its record named
 
 
 def report_subject(day: date) -> str:
@@ -223,7 +226,8 @@ def _keys(v, what: str) -> list[str]:
 
 
 def report_body(day: date, reached, missed, *, disconnected=(), incomplete=(),
-                software: dict | None = None, files=(), served: dict | None = None) -> str:
+                software: dict | None = None, files=(), served: dict | None = None,
+                dns: dict | None = None) -> str:
     body: dict = {"v": 1, "date": day.isoformat(), "reached": _keys(list(reached), "reached"),
                   "missed": _keys(list(missed), "missed")}
     if disconnected:
@@ -236,6 +240,8 @@ def report_body(day: date, reached, missed, *, disconnected=(), incomplete=(),
         body["files"] = list(files)
     if served:
         body["served"] = {k: str(v)[:MAX_SOFTWARE] for k, v in sorted(served.items())}
+    if dns:
+        body["dns"] = _dns(dns)
     return canonical_json(body) + "\n"
 
 
@@ -274,7 +280,25 @@ def parse_report(body: str, *, key: str, date: datetime, message_id: str = "") -
             isinstance(v, str) and len(v) <= MAX_SOFTWARE for v in served.values()):
         raise ListProblem("served maps entrance keys it reached to the signed version they serve")
     return Report(key, day, frozenset(reached), frozenset(missed), frozenset(disc),
-                  frozenset(inc), dict(soft), tuple(files), dict(served), date, message_id)
+                  frozenset(inc), dict(soft), tuple(files), dict(served), date, message_id,
+                  dns=_dns(d.get("dns", {})))
+
+
+_TLD = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+
+
+def _dns(v) -> dict[str, list[str]]:
+    """A report's ``dns`` (#888): for each top-level domain the replica asked that day,
+    the keys ``_unseenet.nic.<tld>`` named - an empty list when it named none."""
+    if not isinstance(v, dict) or len(v) > MAX_DNS_NAMES or not all(
+            isinstance(t, str) and _TLD.match(t) for t in v):
+        raise ListProblem("dns maps top-level domains to the keys their record named")
+    out = {}
+    for t, keys in sorted(v.items()):
+        if not isinstance(keys, list) or len(keys) > MAX_DNS_KEYS:
+            raise ListProblem("dns maps top-level domains to the keys their record named")
+        out[t] = _keys(keys, "dns")
+    return out
 
 
 class Measurements:
@@ -293,6 +317,15 @@ class Measurements:
         self.by_day: dict[date, list[Report]] = {}
         for (_, d), r in sorted(best.items()):
             self.by_day.setdefault(d, []).append(r)
+
+    def dns_names(self, d: date, tld: str, key: str) -> bool | None:
+        """Whether the replicas found, on day ``d``, that ``tld``'s record names ``key``:
+        more than half of the members that asked said so (UN-RFC 0020 section 6.2, #888).
+        None when no member asked that day."""
+        asked = [r for r in self.by_day.get(d, ()) if tld in r.dns]
+        if not asked:
+            return None
+        return 2 * sum(1 for r in asked if key in r.dns[tld]) > len(asked)
 
     def reached(self, d: date, key: str) -> bool:
         return any(key in r.reached for r in self.by_day.get(d, ()))

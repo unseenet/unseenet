@@ -159,8 +159,9 @@ def apply_claims(claims: list[nm.PublicClaim], *, until: datetime, genesis: date
 
     ``imported``: the root list the council started from; its governed entries are held
     as if claimed on the ``genesis`` date. ``dns``: for each claim that needs it, by
-    commit id, whether the TLD's record named the right key when a replica checked it.
-    ``dns_gone``: TLD names whose record has been gone for 30 days."""
+    commit id, whether the TLD's record named the right key, as the replicas found it
+    together; a claim that has no answer yet waits, and so does every later claim on its
+    name. ``dns_gone``: TLD names whose record has been gone for 30 days."""
     st = RootState()
     for name, h in imported.items():
         if h.policy == "governed":
@@ -170,6 +171,7 @@ def apply_claims(claims: list[nm.PublicClaim], *, until: datetime, genesis: date
 
     def held_by(key: str) -> int:
         return sum(1 for g in st.grants.values() if g.maintainer == key)
+    waiting: set[str] = set()                      # names whose DNS answer is not in
 
     for c in claims:
         if c.claim_body is None or c.date >= until:
@@ -183,6 +185,10 @@ def apply_claims(claims: list[nm.PublicClaim], *, until: datetime, genesis: date
 
         def no(why):
             st.why[c.id] = f"{action} {name}: {why}"
+
+        if name in waiting:
+            no("an earlier claim on the name waits for DNS answers")
+            continue
 
         if action == "claim":
             if name in reserved or name in removed:
@@ -202,6 +208,10 @@ def apply_claims(claims: list[nm.PublicClaim], *, until: datetime, genesis: date
                 no("the list group is not the claiming key's")
                 continue
             tld = name in tlds
+            if tld and c.id not in dns:
+                waiting.add(name)
+                no("waits for the replicas' DNS answers")
+                continue
             if tld and not dns.get(c.id):
                 no(f"{nm.tld_record_name(name)} does not name the key")
                 continue
@@ -218,6 +228,10 @@ def apply_claims(claims: list[nm.PublicClaim], *, until: datetime, genesis: date
             new = d["maintainer"]
             if _fp_of(d["list"]) != crypto.fingerprint(crypto.key_from_text(new)):
                 no("the list group is not the new maintainer's")
+                continue
+            if name in tlds and c.id not in dns:
+                waiting.add(name)
+                no("waits for the replicas' DNS answers")
                 continue
             if name in tlds and not dns.get(c.id):
                 no(f"{nm.tld_record_name(name)} does not name the new maintainer")

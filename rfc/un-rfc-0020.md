@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`; entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), DNS answers decided by the replicas together, the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`, and DNS answers are decided by the replicas together (6.2, 7); entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -239,8 +239,17 @@ The root list follows from the claims, in the order of their commits:
   blocks across it, only each group owner's rules (UN-RFC 0018
   section 8.3).
 
-Decisions that depend on DNS are handled as UN-RFC 0054 section 12,
-item 2, handles them for names.
+Decisions that depend on DNS are made by the replicas together, not by
+one replica's answer. Every day each replica asks DNS for every
+top-level domain that a revealed claim waits on and every hierarchy
+granted by DNS, and puts what it found in its report (`dns`, section 7).
+A record **names** a key on a day when more than half of the members
+that asked that day found it. A `claim` or `change` that needs DNS is
+decided by the first day, from the day of its reveal, on which any
+member asked; until then it waits, and so does every later claim on the
+name. A grant by DNS lapses when no day in the last 30 found its record
+naming the maintainer. Only settled days count - the root list is for
+the day before yesterday - so every replica decides alike.
 
 ## 6.3 Entrances
 
@@ -400,6 +409,7 @@ Each replica posts one `report <date>` article per UTC day in the
 | `software` | object       | no   | For keys it reached, the software they stated (section 6.5) |
 | `files`   | array         | no   | Whole files fetched from scribes: `{"scribe": key, "file": path, "ok": bool}` |
 | `served`  | object        | no   | For entrances it reached, the signed version it found each serving unchanged (section 6.3) |
+| `dns`     | object        | no   | For each top-level domain it asked that day (section 6.2), the keys `_unseenet.nic.<tld>` named, at most 8; `[]` when it named none. At most 64 domains |
 
 A report is about a completed UTC day and is posted on that day or the
 next; of one replica's reports for one day, the newest counts. Only the
@@ -533,8 +543,8 @@ bridge needs no key, since the announcement is already signed.
   renewal. A squatted name that harms people can be released by an
   urgent proposal.
 - **DNS.** A domain's DNS can be changed by whoever controls the domain,
-  and read wrongly by one replica; decisions depending on DNS follow the
-  registrar's handling (UN-RFC 0054 section 12, item 2).
+  and read wrongly by one replica; decisions depending on DNS go by what
+  most replicas found (section 6.2), so one wrong answer changes nothing.
 - **Stolen member key.** The thief can post a list that differs from the
   rules. Honest replicas repost theirs and the difference shows in the
   log; the member's own rules remove the key (UN-RFC 0054 section 12,

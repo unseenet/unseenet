@@ -100,7 +100,8 @@ def test_a_tld_name_needs_its_registry_in_dns():
     c, p = posts_for(a, hc.make_claim("claim", "dk", list=list_of(a, "dk"), title="Danmark"), G)
     assert hc.needs_dns(hc.make_claim("claim", "dk", list=list_of(a, "dk"), title="Danmark"),
                         {"dk"})
-    assert "nic.dk" in run(p).why[c]
+    assert "nic.dk" in run(p, dns={c: False}).why[c]
+    assert "waits" in run(p).why[c]                              # no answer yet (#888)
     st = run(p, dns={c: True}, until=G + 800 * DAY)
     assert st.grants["dk"].expires is None and "dk" in st.grants   # held while DNS says so
     assert "dk" not in run(p, dns={c: True}, dns_gone={"dk"}).grants
@@ -137,3 +138,19 @@ def test_the_root_list_with_the_import():
     assert root["nic"].policy == "reserved"
     # the imported governed entry lapses a year after the genesis unless renewed
     assert "unseenet" not in run(p, imported=imported, until=G + 366 * DAY).grants
+
+
+def test_a_claim_without_its_dns_answer_waits_and_so_do_later_ones():
+    """#888: the replicas have not answered yet - the claim is neither granted nor
+    refused, and a later claim on the name does not get it in between."""
+    a, b = ident(), ident()
+    c1, p1 = posts_for(a, hc.make_claim("claim", "dk", list=list_of(a, "dk"), title="A"), G)
+    c2, p2 = posts_for(b, hc.make_claim("claim", "dk", list=list_of(b, "dk"), title="B"), G + DAY)
+    st = run(p1 + p2, dns={c2: True})
+    assert "dk" not in st.grants
+    assert "waits" in st.why[c1] and "waits" in st.why[c2]
+    assert run(p1 + p2, dns={c1: True, c2: True}).grants["dk"].maintainer == a.key_text
+    assert run(p1 + p2, dns={c1: False, c2: True}).grants["dk"].maintainer == b.key_text
+    # an answer that does not count does not hold others up: a stranger's claim on a held name
+    c3, p3 = posts_for(b, hc.make_claim("claim", "dk", list=list_of(b, "dk"), title="B"), G + 2 * DAY)
+    assert "held by" in run(p1 + p3, dns={c1: True}).why[c3]

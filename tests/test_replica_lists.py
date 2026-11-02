@@ -252,6 +252,55 @@ async def test_the_replicas_keep_the_root_list(world, tmp_path):
     await user.close()
 
 
+async def test_dns_answers_are_decided_by_the_replicas_together(world, tmp_path):
+    """#888 (UN-RFC 0020 section 6.2): a claim of a name equal to a top-level domain.
+    One replica's DNS says no; the other two find the key. Each puts what it found in
+    its daily report, and all three post the same root list, granting by the majority."""
+    from unseenet import hierarchies as hz
+    from unseenet import names as nm
+    from unseenet.core import hierarchy_claims as hc
+    node, ann, addr, clock, sessions = world
+    root = {"v": 1, "updated": "2026-10-31", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"}]}
+    gid, groups = await found_lists(sessions, clock[0] - timedelta(hours=21), root=root)
+    user = Session(Vault.open(tmp_path / "user.vault", "pw", **KDF), status=lambda *_: None)
+    user.new_identity("user", "User")
+    user.add_node(addr)
+    me = user.identity()
+    claim = hc.make_claim("claim", "dk", list=f"dk.list@{me.fingerprint}", title="Danmark")
+    commit, nonce = hc.make_commit(claim)
+    cid = await user.post(groups["claims"], nm.COMMIT_SUBJECT, commit)
+    clock[0] += timedelta(hours=2)
+    await user.post(groups["claims"], nm.reveal_subject(cid),
+                    hc.make_reveal(claim, nonce, f"inbox@{me.fingerprint}"))
+    record = [nm.dns_record_value(me.key_text), "v=spf1 -all"]
+    answers = [lambda n: record if n == nm.tld_record_name("dk") else [],
+               lambda n: record if n == nm.tld_record_name("dk") else [],
+               lambda n: []]                                   # this one's DNS says no
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    tlds=lambda: {"dk", "com"}, dns_txt=answers[k],
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for _ in range(5):
+        for r in reps:
+            await r.run_once()
+        clock[0] += timedelta(days=1)
+    reports = [ls.parse_report(m.body, key=m.author_key, date=m.date)
+               for m in await sessions[0].fetch_group(groups["reports"])
+               if (m.subject or "").startswith(ls.REPORT_PREFIX)]
+    assert {tuple(r.dns.get("dk", ["?"])) for r in reports} == {(me.key_text,), ()}
+    posted = [m for m in await sessions[0].fetch_group(groups["hierarchies"]) if m.readable]
+    by_day = {}
+    for m in posted:
+        by_day.setdefault(json.loads(m.body)["updated"], set()).add(m.body)
+    assert posted and all(len(b) == 1 for b in by_day.values()), by_day   # all three alike
+    _, got = hz.parse_root_list(posted[-1].body)
+    assert got["dk"].maintainer == me.key_text
+    assert all(r.st["lists"]["root"]["tld_grants"] == {"dk": me.key_text} for r in reps)
+    await user.close()
+
+
 async def test_the_replicas_list_an_entrance_serving_its_publishers_release(world, monkeypatch):
     """Section 6.3: an entrance announces itself naming its publisher; the replicas
     fetch it over Tor (here: a fake web), check every file against the publisher's
