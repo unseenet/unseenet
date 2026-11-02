@@ -249,3 +249,77 @@ def test_a_service_not_on_pypi_names_its_own_wheel():
     older = wheel.replace("0.6.0", "0.5.0")
     assert not su.names_itself(f"unseenet-helpbot @ {older} --hash=sha256:b\n",
                                "unseenet-helpbot", "0.6.0", base)
+
+
+# --- the releases in the network (#901) ----------------------------------------------------
+
+def _post(monkeypatch, package="unseenet-gateway", version="0.6.0", signer=None):
+    key = crypto.Identity.generate()
+    monkeypatch.setattr(up, "TRUSTED", {"stable": (key.key_text,)})
+    name = f"{package}-{version}-server-requirements.txt"
+    req = (f"unseenet==0.8.0 --hash=sha256:{'a' * 64}\n" * 300
+           + f"{package}=={version} --hash=sha256:{'b' * 64}\n").encode()
+    sums = f"{hashlib.sha256(req).hexdigest()}  {name}\n".encode()
+    sig = up.signature_text(sums, signer or key)
+    return su.server_post(package, version, sums, sig, name, req), req
+
+
+def test_a_server_release_post_round_trips(monkeypatch):
+    from unseenet.core.article import MAX_SIZE
+    (subject, body), req = _post(monkeypatch)
+    assert subject == "Unseenet server unseenet-gateway 0.6.0"
+    assert len(body) < MAX_SIZE // 2                          # packed
+    post = su.parse_server_post(body)
+    assert post["package"] == "unseenet-gateway" and post["requirements"] == req
+    assert su.parse_server_post("Unseenet 0.8.0, stable\n\nSHA256SUMS.txt:\nx\n") is None
+
+
+def test_the_network_comes_first_and_github_after(monkeypatch):
+    (_, body), req = _post(monkeypatch)
+    asked = []
+    rel = su.newest_release(lambda u: asked.append(u) or b"", package="unseenet-gateway",
+                            network=lambda: [body])
+    assert rel.version == "0.6.0" and rel.requirements == req and asked == []   # no GitHub
+    fetch, asked = _service_release(monkeypatch)
+    rel = su.newest_release(fetch, package="unseenet-gateway", network=lambda: [])
+    assert rel.version == "0.6.0" and asked                                       # GitHub
+
+
+def test_posts_that_do_not_check_out_are_ignored(monkeypatch):
+    stranger = crypto.Identity.generate()
+    (_, forged), _ = _post(monkeypatch, signer=stranger)
+    assert su.from_posts([forged], "unseenet-gateway", su.repo_url("unseenet-gateway")) is None
+    (_, body), _ = _post(monkeypatch)
+    assert su.from_posts([body], "unseenet-watchman", su.repo_url("unseenet-watchman")) is None
+    post = su.parse_server_post(body)
+    changed = su.server_post("unseenet-gateway", "0.6.0", post["sums"], post["sig"], post["name"],
+                             post["requirements"] + b"evil==1\n")[1]
+    assert su.from_posts([changed], "unseenet-gateway", su.repo_url("unseenet-gateway")) is None
+
+
+def test_the_newest_post_wins(monkeypatch):
+    key = crypto.Identity.generate()
+    monkeypatch.setattr(up, "TRUSTED", {"stable": (key.key_text,)})
+    bodies = []
+    for version in ("0.6.0", "0.6.2", "0.6.1"):
+        name = f"unseenet-gateway-{version}-server-requirements.txt"
+        req = f"unseenet-gateway=={version} --hash=sha256:{'b' * 64}\n".encode()
+        sums = f"{hashlib.sha256(req).hexdigest()}  {name}\n".encode()
+        bodies.append(su.server_post("unseenet-gateway", version, sums,
+                                     up.signature_text(sums, key), name, req)[1])
+    assert su.from_posts(bodies, "unseenet-gateway", su.repo_url("unseenet-gateway")).version == "0.6.2"
+
+
+def test_which_node_is_read(monkeypatch):
+    asked = []
+
+    async def posts_from(address, socks, package):
+        asked.append(address)
+        return ["x"]
+    monkeypatch.setattr(su, "_posts_from", posts_from)
+    monkeypatch.setattr(su, "_listening", lambda port: port == 1119)
+    assert su.posts_in_network("unseenet", None) == ["x"] and asked == [su.LOCAL_NODE]
+    monkeypatch.setattr(su, "_listening", lambda port: False)
+    assert su.posts_in_network("unseenet", None) == []         # no Tor, no node here: none
+    su.posts_in_network("unseenet", 9050)
+    assert asked[-1].endswith(".onion") or ":" in asked[-1]    # a known node, over Tor

@@ -30,6 +30,13 @@ service's own virtual environment and updates that one:
    e.g. in ``/etc/unseenet-update/<service>.env``) downloads without Tor; without it,
    no Tor means no update, never a quiet fallback.
 
+6. **From the network first** (#901): the owner posts each server release in
+   ``unseenet.releases`` (``tools/project/sign_release.py``): the signed checksums,
+   their signature and the requirements. The updater reads them through a node - the
+   one on this machine (127.0.0.1:1119) if there is one, else the known nodes over Tor
+   (``--node`` for another) - and asks GitHub only when the network has no release
+   of its package. The signature and the hashes are checked the same either way.
+
 Turned ``off``, it still looks once a day, and says so in the log when a newer
 release has existed for 30 days.
 
@@ -39,6 +46,8 @@ State: ``/var/lib/unseenet-update/<service>/state.json``; the copy is ``<venv>.p
 from __future__ import annotations
 
 import argparse
+import asyncio
+import contextlib
 import hashlib
 import json
 import os
@@ -94,11 +103,136 @@ def requirements_version(name: str, package: str) -> str | None:
     return version if VERSION.fullmatch(version) else None
 
 
+# --- the releases in the network (#901) -------------------------------------------------
+
+POST_HEAD = re.compile(r"^Unseenet server (?P<package>unseenet(?:-[a-z0-9]+)*) "
+                       r"(?P<version>[0-9][0-9A-Za-z.+]*), (?P<channel>stable|dev)$")
+PACKED = " (gzip, base64):"
+SCAN = 400                    # the newest articles of unseenet.releases looked through
+LOCAL_NODE = "127.0.0.1:1119"
+
+
+def server_post(package: str, version: str, sums: bytes, sig: str, req_name: str,
+                req: bytes, channel: str = "stable") -> tuple[str, str]:
+    """(subject, body) of the post in unseenet.releases that carries a server release:
+    the signed checksums, their signature and the requirements (packed: with every hash
+    the file is tens of kilobytes). Nothing in it is trusted until the signature is
+    checked; the requirements must match the signed sums."""
+    import base64
+    import gzip
+    packed = base64.encodebytes(gzip.compress(req, 9, mtime=0)).decode()
+    body = (f"Unseenet server {package} {version}, {channel}\n\n{up.SUMS}:\n{sums.decode()}"
+            f"\n{up.SIG}:\n{sig.rstrip()}\n\n{req_name}{PACKED}\n{packed}")
+    return f"Unseenet server {package} {version}", body
+
+
+def parse_server_post(body: str) -> dict | None:
+    """The parts of such a post, or None for anything else."""
+    import base64
+    import binascii
+    import gzip
+    lines = body.replace("\r\n", "\n").split("\n")
+    m = POST_HEAD.match(lines[0]) if lines else None
+    if not m or f"{up.SUMS}:" not in lines or f"{up.SIG}:" not in lines:
+        return None
+    i, j = lines.index(f"{up.SUMS}:"), lines.index(f"{up.SIG}:")
+    k = next((n for n, line in enumerate(lines) if line.endswith(PACKED)), None)
+    if k is None or not i < j < k:
+        return None
+    try:
+        req = gzip.decompress(base64.b64decode("".join(lines[k + 1:]), validate=False))
+    except (binascii.Error, OSError, EOFError):
+        return None
+    return {**m.groupdict(), "sums": ("\n".join(lines[i + 1:j]).strip("\n") + "\n").encode(),
+            "sig": "\n".join(lines[j + 1:k]).strip("\n") + "\n",
+            "name": lines[k][:-len(PACKED)], "requirements": req}
+
+
+def from_posts(bodies: list[str], package: str, base: str) -> Release | None:
+    """The newest valid stable release of ``package`` among the posts."""
+    best: Release | None = None
+    for body in bodies:
+        post = parse_server_post(body)
+        if not post or post["package"] != package or post["channel"] != "stable":
+            continue
+        try:
+            up.check_signature(post["sums"], post["sig"], "stable")
+        except up.UpdateError:
+            continue                     # not signed by the project key: ignored
+        listed = up.parse_sums(post["sums"])
+        name, req = post["name"], post["requirements"]
+        version = requirements_version(name, package)
+        if (not version or listed.get(name) != hashlib.sha256(req).hexdigest()
+                or not names_itself(req.decode("utf-8", "replace"), package, version, base)):
+            continue
+        if best is None or up.version_key(version) > up.version_key(best.version):
+            best = Release(version, req)
+    return best
+
+
+async def _posts_from(address: str, socks: int | None, package: str) -> list[str]:
+    from .core.article import Article
+    from .known_nodes import RELEASES_GROUP
+    from .nntp import Client
+    c = await asyncio.wait_for(Client.connect(address, socks), 120)
+    try:
+        _, low, high = await c.group(RELEASES_GROUP)
+        if high < low:
+            return []
+        start = max(low, high - SCAN + 1)
+        wanted = f"Unseenet server {package} "
+        numbers = []
+        for line in await c.multiline(f"HDR Subject {start}-{high}", 225):
+            number, _, subject = line.partition(" ")
+            if subject.startswith(wanted):
+                numbers.append(number)
+        bodies = []
+        for number in reversed(numbers[-20:]):          # the newest first
+            raw = await c.article(number)
+            if raw:
+                with contextlib.suppress(ValueError):
+                    bodies.append(Article.from_bytes(raw).body)
+        return bodies
+    finally:
+        with contextlib.suppress(Exception):
+            await c.quit()
+
+
+def posts_in_network(package: str, socks: int | None, node: str | None = None) -> list[str]:
+    """The posts for ``package`` in unseenet.releases, through ``node``, else the node on
+    this machine, else the known nodes (over Tor only: without Tor, none)."""
+    if node:
+        nodes = [node]
+    elif _listening(int(LOCAL_NODE.rsplit(":", 1)[1])):
+        nodes = [LOCAL_NODE]
+    elif socks is not None:
+        from .known_nodes import builtin_list
+        nodes = [n.address for n in builtin_list()[1]]
+        nodes = random.sample(nodes, min(len(nodes), 5))
+    else:
+        return []
+    for address in nodes:
+        try:
+            return asyncio.run(_posts_from(address, socks, package))
+        except Exception:  # noqa: BLE001 - the next node; GitHub after the last
+            continue
+    return []
+
+
 def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
-                   package: str = CORE, repo: str | None = None) -> Release:
+                   package: str = CORE, repo: str | None = None,
+                   network: Callable[[], list[str]] | None = None,
+                   say: Callable[[str], None] = lambda _: None) -> Release:
     """The newest stable release of ``package`` that servers can take: signed by the
-    project key, and with a server requirements file matching its checksums."""
+    project key, and with a server requirements file matching its checksums. From the
+    posts in the network when ``network`` gives any (#901), else from GitHub."""
     base = repo_url(repo or package)
+    if network is not None:
+        found = from_posts(network(), package, base)
+        if found is not None:
+            say(f"found {package} {found.version} in the network")
+            return found
+        say(f"no release of {package} in the network; asking GitHub")
     sums = fetch(up.release_url("stable", up.SUMS, repo=base))
     sig = fetch(up.release_url("stable", up.SIG, repo=base)).decode("utf-8", "replace")
     try:
@@ -430,13 +564,15 @@ def direct_by_env() -> bool:
 def update_service(service: str, venv: Path, state: State, *, check: str | None = None,
                    package: str = CORE, repo: str | None = None, oneshot: bool = False,
                    busy: Path | None = None, socks: int | None = None, direct: bool = False,
+                   node: str | None = None,
                    at_once: bool = False, say: Callable[[str], None] = print) -> str:
     """One run, over Tor unless ``direct`` (or the environment) says otherwise: what the
     update timers of nodes, replicas, registrars and the other services run."""
     def work(socks_port: int | None) -> str:
         return run(Machine(service, venv, check, package, oneshot, busy, socks_port), state,
-                   find=lambda: newest_release(lambda u: up.fetch(u, socks_port),
-                                               package=package, repo=repo),
+                   find=lambda: newest_release(
+                       lambda u: up.fetch(u, socks_port), package=package, repo=repo,
+                       network=lambda: posts_in_network(package, socks_port, node), say=say),
                    say=say, at_once=at_once)
     return _with_tor(socks, direct or direct_by_env(), work)
 
@@ -462,6 +598,8 @@ def main(argv: list[str] | None = None) -> int:
                         "goes over Tor")
     p.add_argument("--socks", type=int, help=f"Tor's SOCKS port on 127.0.0.1 (default: {SYSTEM_TOR} "
                    "if a Tor listens there, else one is started for the run)")
+    p.add_argument("--node", help="read the releases in the network through this node "
+                   f"(default: {LOCAL_NODE} if a node runs here, else the known nodes over Tor)")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
@@ -483,7 +621,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         what = update_service(a.service, Path(a.venv), state, check=a.check, package=a.package,
                               repo=a.repo, oneshot=a.oneshot, busy=a.busy, socks=a.socks,
-                              direct=a.direct, at_once=a.now)
+                              direct=a.direct, node=a.node, at_once=a.now)
     except (Problem, up.UpdateError, OSError) as exc:
         print(f"could not look for updates: {exc}")
         return 1

@@ -17,6 +17,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Servers learn of releases through the network** (#901): `tools/project/sign_release.py` also
+  posts each server release - the core's and every service's - in `unseenet.releases`, with its
+  signed checksums, the signature and the requirements (packed), and `unseenet-service-update`
+  reads them through the node on the machine (127.0.0.1:1119), else the known nodes over Tor
+  (`--node` for another), asking GitHub only when the network has none. The signature and the
+  hashes are checked the same either way. `sign_release.py --post <tag>` posts a release signed
+  before.
 - **Servers update over Tor** (#900): `unseenet-service-update` fetches the signed checksums,
   the requirements and every package pip installs over Tor (a Tor on 127.0.0.1:9050, `--socks`,
   or one it starts for the run; pip gets a local CONNECT proxy, `unseenet.torconnect`). So the

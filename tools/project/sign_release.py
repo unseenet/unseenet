@@ -3,6 +3,7 @@
 
     python tools/project/sign_release.py v0.6.1
     python tools/project/sign_release.py --repo unseenet-gateway v0.6.0
+    python tools/project/sign_release.py --post v0.7.1      (a release signed before: post it)
 
 Since 0.6 a release is built in two repositories, each with its own SHA256SUMS.txt
 (#546): unseenet-portable (the zips for folders and USB sticks) and
@@ -19,7 +20,10 @@ take (unseenet.service_update, #827).
 ``--repo NAME`` signs one service's release instead (a gateway, an entrance, a
 watchman, the bots, the help bot - each released with its own version): its
 ``<package>-<version>-server-requirements.txt``, which that service's servers take.
-Nothing is posted for those: servers read them on GitHub.
+
+Server releases (the core's and each service's) are posted in unseenet.releases too
+(#901): the checksums, the signature and the requirements, which servers read through
+the network before they ask GitHub.
 
 Sticks on the stable channel accept only this signature (unseenet.update).
 Run it again after files were added to the release: the sums change, and
@@ -73,6 +77,8 @@ def assets(repo: str, tag: str) -> list[str] | None:
 
 def main() -> None:
     args = sys.argv[1:]
+    post_signed = "--post" in args          # post a release that is signed already (#901)
+    args = [a for a in args if a != "--post"]
     repos = REPOS
     package = "unseenet"
     if len(args) == 3 and args[0] == "--repo":
@@ -91,15 +97,15 @@ def main() -> None:
             print(f"{repo}: no {tag} release yet - run this again when it is out.")
         elif update.SUMS not in names:
             print(f"{repo}: {tag} has no {update.SUMS} yet - its build is still running?")
-        elif update.SIG in names:
-            print(f"{repo}: {tag} is signed already.")
+        elif update.SIG in names and not post_signed:
+            print(f"{repo}: {tag} is signed already (--post posts it in unseenet.releases).")
         else:
-            todo.append((repo, what))
+            todo.append((repo, what, update.SIG in names))
     if not todo:
         return
     s = identity = None
     with tempfile.TemporaryDirectory(prefix="unseenet-sign-") as tmp:
-        for repo, what in todo:
+        for repo, what, signed in todo:
             d = Path(tmp) / repo.split("/")[1]
             d.mkdir()
             gh(repo, "release", "download", tag, "-p", update.SUMS, "-D", str(d))
@@ -113,15 +119,31 @@ def main() -> None:
             if s is None:
                 s = open_owner_session()
                 identity = s.identity()
-            sig = update.signature_text(sums, identity)
+            if signed:                             # --post: the signature it has
+                gh(repo, "release", "download", tag, "-p", update.SIG, "-D", str(d))
+                sig = (d / update.SIG).read_text()
+            else:
+                sig = update.signature_text(sums, identity)
             if what == SERVER:
                 update.check_signature(sums, sig, "stable")     # as servers will check it
             else:
                 update.check_release(sums, sig, "stable", what)  # as sticks will check it
-            (d / update.SIG).write_text(sig)
-            gh(repo, "release", "upload", tag, str(d / update.SIG), "--clobber")
-            print(f"Signed: {update.SIG} is on {repo} {tag}.")
-            if what == SERVER:                     # servers read it there; not for clients
+            if not signed:
+                (d / update.SIG).write_text(sig)
+                gh(repo, "release", "upload", tag, str(d / update.SIG), "--clobber")
+                print(f"Signed: {update.SIG} is on {repo} {tag}.")
+            if what == SERVER:                     # servers read it in the network (#901)
+                from unseenet import service_update as su
+                gh(repo, "release", "download", tag, "-p", name, "-D", str(d))
+                req = (d / name).read_bytes()
+                subject, body = su.server_post(package, version, sums, sig, name, req)
+                art = new_article(RELEASES_GROUP, subject, body, from_name="Unseenet project")
+                art = art.finalize(identity, _owner.POW_BITS)
+                if asyncio.run(post_everywhere([art], session=s)) == 0:
+                    print("No node took the server release in unseenet.releases: run this again "
+                          "later (servers fall back to GitHub meanwhile).")
+                else:
+                    print(f"Posted {package} {version} in unseenet.releases: servers take it from there.")
                 continue
             # and tell the clients through the network (#264): the checksums and the
             # signature, posted by the project key itself in unseenet.releases
