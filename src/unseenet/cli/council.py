@@ -65,6 +65,12 @@ def council_parsers(sub) -> None:
     p.add_argument("--import", dest="import_file", default=None, metavar="FILE",
                    help="the list it starts from (for root: a hierarchies.json)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
+    p = t.add_parser("add-directory", help="a list council keeps an open directory, where "
+                                           "gateways announce themselves (UN-RFC 0038 6.1): "
+                                           "the draft of its group and the change to propose")
+    p.add_argument("council", help="the list council, e.g. unseenet.lists@<fp>")
+    p.add_argument("kind", choices=("gateways",))
+    p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p = t.add_parser("announce-entrance",
                      help="announce a web entrance to a list council, signed with this "
                           "identity's key, which the entrance names (UN-RFC 0020 section 5.1)")
@@ -283,6 +289,36 @@ async def c_council(app: App, args) -> None:
                     f"     sudo unseenet-replica propose --lists --change-file {change_file.name} "
                     f'--reason "the council keeps the {args.kind} list"',
                     "3. When the hearing has passed, the replicas keep the list."]
+            emit(args, "\n".join(text), {"group": g, "draft": str(out),
+                                         "change": str(change_file)})
+        elif what == "add-directory":                    # UN-RFC 0038 section 6.1
+            from ..core import lists as ls
+            cur = (await s.council_chain(args.council)).current
+            lc = ls.list_council(cur.data) if cur is not None else None
+            if lc is None:
+                raise SessionError(f"{args.council} is not a list council that counts")
+            if args.kind in lc.announce:
+                raise SessionError(f"{args.council} keeps a {args.kind} directory already")
+            members = [crypto.key_to_text(k) for k in cur.keys]
+            prefix = cur.name.rsplit(".", 1)[0] if "." in cur.name else cur.name
+            name = f"{prefix}.{args.kind}"
+            g, b = s.council_genesis(name, "open", members, min_level=cur.min_level,
+                                     fields={"title": "Gateways announce themselves",
+                                             "view": "data"})
+            change = {"manifest": {"fields": {"announce": {**lc.announce, args.kind: g}}}}
+            out = Path(args.out or f"{name}.council.json")
+            out.write_text(json.dumps({"v": 1, "group": g, "body": b}, indent=2,
+                                      ensure_ascii=False) + "\n", encoding="utf-8")
+            change_file = out.with_name(f"{name}.change.json")
+            change_file.write_text(json.dumps(change, indent=2, sort_keys=True) + "\n",
+                                   encoding="utf-8")
+            text = [f"Draft of {g} written to {out}, and the change to {change_file}.", "",
+                    "1. Each member signs the draft:  sudo unseenet-replica sign " + out.name,
+                    "2. One member proposes the change, and the others second it:",
+                    f"     sudo unseenet-replica propose --lists --change-file {change_file.name} "
+                    f'--reason "the council keeps the {args.kind} directory"',
+                    "3. When it has passed, the project key points the old directory there:",
+                    f"     python3 tools/project/move_lists.py {args.council} --list {args.kind}"]
             emit(args, "\n".join(text), {"group": g, "draft": str(out),
                                          "change": str(change_file)})
         elif what == "announce-entrance":                # UN-RFC 0020 section 5.1

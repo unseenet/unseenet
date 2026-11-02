@@ -52,13 +52,16 @@ async def c_tor(app: App, args) -> None:
 
 async def c_gateways(app: App, args) -> None:
     """The gateway directory (UN-RFC 0038 section 6): what to invite on other networks."""
-    from ..core.gateways import DIRECTORY_GROUP, current
-    arts = []
-    async with app.connect() as c:
+    from ..core.gateways import DIRECTORY_GROUP, current, directory_of
+    from ..core.groups import Manifest
+
+    async def read(c, group):
+        """(posts, the newest valid manifest's data) of a directory."""
         try:
-            _, low, high = await c.group(args.directory or DIRECTORY_GROUP)
+            _, low, high = await c.group(group)
         except NNTPError:
             sys.exit("The gateway directory is not carried by this node.")
+        posts, best = [], None
         for n in range(low, high + 1):
             raw = await c.article(str(n))
             if raw is None:
@@ -68,7 +71,23 @@ async def c_gateways(app: App, args) -> None:
             except ArticleError:
                 continue
             if not art.control:
-                arts.append(art)
+                posts.append(art)
+            elif art.control == ["manifest"]:
+                try:
+                    art.verify_signature()
+                    m = Manifest.from_article(art)
+                except (ArticleError, ValueError, TypeError, crypto.CryptoError):
+                    continue
+                if m.group_id == group and m.supersedes(best):
+                    best = m
+        return posts, (best.raw if best is not None else None)
+
+    async with app.connect() as c:
+        group = args.directory or DIRECTORY_GROUP
+        arts, manifest = await read(c, group)
+        if not args.directory and directory_of(manifest) != group:
+            group = directory_of(manifest)           # moved to a list council (UN-RFC 0020 10)
+            arts, _ = await read(c, group)
     found = current(arts)
     if args.network:
         found = [a for a in found if any(n.network == args.network for n in a.networks)]

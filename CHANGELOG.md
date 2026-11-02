@@ -17,6 +17,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The gateway directory can move to a list council** (#861, UN-RFC 0038 section 6.1):
+  `unseenet council add-directory <council> gateways` makes the council's open directory
+  (`announce.gateways` in its manifest), `tools/project/move_lists.py --list gateways` points
+  `unseenet.gateways` there with `moved_to`, and `unseenet gateways` follows it. Only the
+  owner changes: anybody announces, and the directory is still not an endorsement.
 - **Replicas keep a council's entrance list** (#861, UN-RFC 0020 sections 5.1, 6.3, 8):
   once a day each replica fetches every announced entrance over Tor - its
   `/.well-known/unseenet-entrance` must name the key it announced with - and checks every

@@ -96,7 +96,7 @@ council manifest has, besides the fields of UN-RFC 0054 and 0061:
 | `lists`   | object   | yes  | Which list group holds which list, e.g. `{"nodes": …, "root": …, "entrances": …, "scribes": …}` |
 | `claims`  | Group ID | yes  | The open claims group for hierarchy claims (section 5.2) |
 | `reports` | Group ID | yes  | Where replicas post measurements (section 7)         |
-| `announce` | object  | for `entrances` | Where entries announce themselves, by kind, e.g. `{"entrances": …}`: an `open` council group of the council (section 5.1) |
+| `announce` | object  | for `entrances` | Where entries announce themselves, by kind, e.g. `{"entrances": …, "gateways": …}`: an `open` council group of the council (section 5.1); `gateways` is the gateway directory (UN-RFC 0038 section 6.1) |
 | `min_software` | object | no | The lowest version of each implementation that may be listed, e.g. `{"unseenet": "0.7.2"}` (section 6.5) |
 | `publishers` | array of Group IDs | for `scribes` | The releases channels (UN-RFC 0062) whose releases a listed scribe keeps |
 | `import`  | string   | no   | `sha256:` and the hex SHA-256 of the import's body (section 9); genesis only |

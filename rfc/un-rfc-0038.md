@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0038                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.4.0, unseenet-gateway 0.1.0
+Implemented: unseenet 0.4.0, unseenet-gateway 0.1.0; partly - section 6.1's move to a list council is in unseenet main (unreleased) and the next unseenet-gateway
 Updates: 0023
 
                  Gateway Cooperation and the Gateway Directory
@@ -142,6 +142,15 @@ manifest has `"view": "data"` (UN-RFC 0008 section 3.1.1). The project's
 directory is `unseenet.gateways` in the `unseenet` hierarchy; clients
 use it unless configured otherwise. Anybody can announce; a directory is
 a list, not an endorsement.
+
+The project's directory can move to a list council (UN-RFC 0020): the
+council makes an `open` council group with `"view": "data"` and names it
+in its manifest's `announce` as `gateways`, and the last manifest of
+`unseenet.gateways`, signed by the project key, names that group in
+`moved_to` (with `moved_on`). From then on clients read, and gateways
+announce in, the group `moved_to` names; the old group's announcements
+are not read. Only the owner changes: anybody announces, nothing is
+measured, and the directory is still not an endorsement.
 
 ## 6.2 Announcement
 
