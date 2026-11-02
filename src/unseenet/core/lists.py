@@ -59,6 +59,7 @@ class ListCouncil:
     min_software: dict[str, str] = field(default_factory=dict)
     publishers: tuple[str, ...] = ()
     import_id: str | None = None
+    imports: dict[str, str] = field(default_factory=dict)   # kind -> import hash, added later
 
 
 def _group(g, what: str) -> str:
@@ -90,11 +91,24 @@ def list_council(data: dict) -> ListCouncil | None:
     if "scribes" in lists and not pubs:
         raise ListProblem("a council with a scribe list names its publishers")
     imp = data.get("import")
-    if imp is not None and not (isinstance(imp, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", imp)):
+    if imp is not None and not (isinstance(imp, str) and _HASH.fullmatch(imp)):
         raise ListProblem("import is sha256:<hex> of the import's body")
+    imports = data.get("imports", {})
+    if not isinstance(imports, dict) or not set(imports) <= set(LIST_KINDS) or not all(
+            isinstance(v, str) and _HASH.fullmatch(v) for v in imports.values()):
+        raise ListProblem("imports maps list kinds to sha256:<hex> of an import's body")
     return ListCouncil(lists, _group(data.get("claims"), "claims"),
                        _group(data.get("reports"), "reports"), dict(soft),
-                       tuple(_group(p, "publishers") for p in pubs), imp)
+                       tuple(_group(p, "publishers") for p in pubs), imp, dict(imports))
+
+
+_HASH = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def import_for(lc: ListCouncil, kind: str) -> str | None:
+    """The hash of the import a list of ``kind`` starts from: the one added with that
+    list (``imports``), else the genesis import."""
+    return lc.imports.get(kind) or lc.import_id
 
 
 # --- the genesis import (section 9) --------------------------------------------
@@ -115,6 +129,16 @@ def import_body(lists: dict) -> str:
 def import_hash(body: str) -> str:
     import hashlib
     return "sha256:" + hashlib.sha256(body.rstrip("\n").encode("utf-8")).hexdigest()
+
+
+def imported_root(body: str):
+    """The root list entries of an import, by name (UN-RFC 0018 section 4)."""
+    from .. import hierarchies as hz
+    try:
+        d = parse_canonical_json(body)
+        return hz.parse_root_list(canonical_json(d["root"]))[1]
+    except Exception:
+        return {}
 
 
 def imported_nodes(body: str) -> dict[str, dict]:

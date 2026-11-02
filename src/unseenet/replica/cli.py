@@ -172,6 +172,11 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
             out.append(f"  It measured the {lst.get('announced', 0)} announced node(s) last on "
                        f"{lst.get('measured') or 'no day yet'}; the node list it computed last "
                        f"({lst.get('computed') or 'none yet'}) holds {lst.get('listed', 0)}.")
+        if lst.get("root"):
+            out.append(f"  The root list it computed last ({lst['root']}) grants "
+                       f"{lst.get('granted', 0)} hierarchies.")
+        if lst.get("root_note"):
+            out.append(f"  Root list: {lst['root_note']}.")
         if lst.get("error"):
             out.append(f"  Its last list round failed: {lst['error']}")
     if cfg.get("hold"):
@@ -467,8 +472,12 @@ def _has_user() -> bool:
         return False
 
 
-def _groups(d: Path) -> tuple[dict, dict]:
+def _groups(d: Path, lists: bool = False) -> tuple[dict, dict]:
+    """The status and the groups of the council the operator speaks in: the registrar's,
+    or with ``--lists`` the list council's (UN-RFC 0020)."""
     st = read_status(d)
+    if lists:
+        st = st.get("lists") or {}
     if not st.get("groups", {}).get("proposals"):
         raise SystemExit("This council has no proposals group, or the replica has not "
                          "finished a round yet (unseenet-replica status).")
@@ -530,7 +539,7 @@ def sign(args) -> int:
         if cfg.get("lists") != gid:
             cfg["lists"] = gid
             write_config(d, cfg)
-    elif cfg.get("group") != gid:
+    elif "claims" in m.data and cfg.get("group") != gid:   # a council registrar it moves to
         cfg["moved_from"] = cfg.get("moved_from") or cfg.get("group") or nm.NAMES_GROUP
         cfg["group"] = gid
         write_config(d, cfg)
@@ -547,7 +556,7 @@ def sign(args) -> int:
 def propose(args) -> int:
     from ..core import proposals as pr
     d = Path(args.dir)
-    st, groups = _groups(d)
+    st, groups = _groups(d, getattr(args, "lists", False))
     if args.change_file:
         change = json.loads(Path(args.change_file).read_text())
     else:
@@ -583,7 +592,7 @@ def propose(args) -> int:
 def second(args) -> int:
     from ..core import proposals as pr
     d = Path(args.dir)
-    st, groups = _groups(d)
+    st, groups = _groups(d, getattr(args, "lists", False))
     p = (st.get("proposals_pending") or {}).get(args.id)
     if p is None:
         raise SystemExit("No such proposal is waiting. See: unseenet-replica status")
@@ -602,7 +611,7 @@ def second(args) -> int:
 
 def talk(args) -> int:
     d = Path(args.dir)
-    _, groups = _groups(d)
+    _, groups = _groups(d, getattr(args, "lists", False))
     if not groups.get("talk"):
         raise SystemExit("This council has no talk group.")
     _queue(d, {"group": groups["talk"], "subject": args.subject, "body": args.text + "\n"})
@@ -614,7 +623,7 @@ def talk(args) -> int:
 def object_(args) -> int:
     from ..core import proposals as pr
     d = Path(args.dir)
-    _, groups = _groups(d)
+    _, groups = _groups(d, getattr(args, "lists", False))
     body = pr.objection_body(args.id, args.reason or "", withdrawn=args.withdraw)
     _queue(d, {"group": groups["proposals"], "subject": f"{pr.OBJECTION} {args.id}",
                "body": body, "content_type": "application/json"})
@@ -733,6 +742,8 @@ def main(argv=None) -> int:
     s.add_argument("--yes", action="store_true")
     sub.add_parser("update", help="update the software (what the daily timer runs)")
     s = sub.add_parser("propose", help="as a member: propose a change (UN-RFC 0061)")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
     s.add_argument("--set", action="append", metavar="FIELD=VALUE",
                    help="a manifest field (title, posters, ...) or min_level, max_probation, "
                         "sponsors; repeat")
@@ -743,6 +754,8 @@ def main(argv=None) -> int:
     s.add_argument("--days", type=int, default=None, help="the hearing, 14 to 60 days")
     s.add_argument("--urgent", action="store_true", help="a 3-day hearing; needs two thirds")
     s = sub.add_parser("second", help="as a member: post a waiting proposal too")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
     s.add_argument("id")
     s.add_argument("--yes", action="store_true")
     s = sub.add_parser("sign", help="post this replica's copy of a new council's genesis "
@@ -750,9 +763,13 @@ def main(argv=None) -> int:
     s.add_argument("draft", help="the draft file from 'unseenet council create'")
     s.add_argument("--yes", action="store_true")
     s = sub.add_parser("talk", help="as a member: post in the council's talk group")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
     s.add_argument("subject")
     s.add_argument("text")
     s = sub.add_parser("object", help="as a member: object to a proposal")
+    s.add_argument("--lists", action="store_true",
+                   help="in the list council (UN-RFC 0020) instead of the registrar's")
     s.add_argument("id")
     s.add_argument("reason", nargs="?", default="")
     s.add_argument("--withdraw", action="store_true", help="take an objection back")

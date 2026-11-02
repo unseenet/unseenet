@@ -78,11 +78,24 @@ def _newest(posts, parse):
     return best
 
 
-async def read_root_list(s: "Session") -> dict[str, hz.Hierarchy] | None:
-    """The newest root list the project has posted (UN-RFC 0018), or None if
-    none could be read. Does not touch the vault; the registrar uses it."""
+async def _root_best(s: "Session"):
+    """(Date, body, (updated, root)) of the root list to use: the project's, or once its
+    group says it moved to a list council (``moved_to``, UN-RFC 0020 section 10), the
+    newest the council's members posted - the project's only until the council has one."""
     best = _newest(await _read(s, hz.HIERARCHIES_GROUP, kn.PROJECT_KEY),
                    lambda body: hz.parse_root_list(body))
+    moved = s.manifest_data(hz.HIERARCHIES_GROUP).get("moved_to")
+    if isinstance(moved, str) and moved != hz.HIERARCHIES_GROUP:
+        got = await s._council_list(moved, "root", hz.parse_root_list)
+        if got is not None:
+            best = (got[0], got[2], got[1])
+    return best
+
+
+async def read_root_list(s: "Session") -> dict[str, hz.Hierarchy] | None:
+    """The newest root list (UN-RFC 0018), or None if none could be read. Does not
+    touch the vault; the registrar uses it."""
+    best = await _root_best(s)
     return best[2][1] if best else None
 
 
@@ -93,8 +106,7 @@ async def refresh(s: "Session") -> bool:
     """
     st = _store(s)
     before = repr(st)
-    posts = await _read(s, hz.HIERARCHIES_GROUP, kn.PROJECT_KEY)
-    best = _newest(posts, lambda body: hz.parse_root_list(body))
+    best = await _root_best(s)
     if best:
         st["root"] = best[1]
     root = root_list(s)

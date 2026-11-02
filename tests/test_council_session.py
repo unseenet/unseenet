@@ -193,3 +193,43 @@ async def test_a_list_council_with_its_import(net, tmp_path, capsys):
     assert (await a.council_chain(d["group"])).current is not None
     bodies = [x.body for x in await a.fetch_group(d["group"]) if x.readable]
     assert sum(ls.import_hash(x) == lc.import_id for x in bodies if x) == 1   # the last signer's
+
+
+async def test_a_list_council_adds_the_root_list(net, tmp_path, capsys):
+    """``council add-list <council> root --import hierarchies.json``: the draft of the new
+    list group, with the import posted in the council's group, and the manifest change
+    (``lists`` and ``imports``) that a member proposes (UN-RFC 0020 sections 9, 10)."""
+    from unseenet.core import lists as ls
+    from unseenet.core import proposals as pr
+    a, b = net("a"), net("b")
+    draft = tmp_path / "unseenet.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="unseenet.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=True, lists="nodes", import_file=None))
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    capsys.readouterr()
+    gid = json.loads(draft.read_text())["group"]
+    root = tmp_path / "hierarchies.json"
+    root.write_text(json.dumps({"v": 1, "updated": "2026-10-31", "hierarchies": [
+        {"name": "alt", "policy": "free", "title": "Anything goes"}]}))
+    out = tmp_path / "unseenet.hierarchies.council.json"
+    await cli.c_council(App(a), Namespace(json=True, identity=None, what="add-list",
+                                          council=gid, kind="root", import_file=str(root),
+                                          out=str(out)))
+    capsys.readouterr()
+    d = json.loads(out.read_text())
+    assert d["group"].startswith("unseenet.hierarchies@")
+    change = json.loads(out.with_name("unseenet.hierarchies.change.json").read_text())
+    fields = change["manifest"]["fields"]
+    assert fields["lists"]["root"] == d["group"] and "nodes" in fields["lists"]
+    (post,) = d["posts"]
+    assert post["group"] == gid and ls.import_hash(post["body"]) == fields["imports"]["root"]
+    assert "alt" in ls.imported_root(post["body"])
+    pr.make_proposal(gid, 1, change, "the council keeps the root list")      # a valid change
+    # the manifest it makes is a list council with both lists
+    cur = (await a.council_chain(gid)).current
+    lc = ls.list_council({**cur.data, **fields})
+    assert set(lc.lists) == {"nodes", "root"} and ls.import_for(lc, "root") == fields["imports"]["root"]
