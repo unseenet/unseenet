@@ -26,6 +26,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   or the network is not. The list grants nothing over what is installed - every file must still
   match the signed checksums - and GitHub and PyPI stay the last resort. pip may use an index on
   an onion address; a wheel not on PyPI is fetched from the sources in their order.
+- **Replicas read through several nodes** (#840, UN-RFC 0054 section 17): the registrar's group,
+  the claims group, the room and the council manifest copies are read through two nodes - on
+  other infrastructure first, by the new `hosting` field of the node list (UN-RFC 0010), else
+  another operator - and the replica uses what either holds, so one node cannot hide a report,
+  a claim or a council copy. `unseenet-replica status` names nodes that disagree (one lacks,
+  for over an hour, articles another holds). `read_through` in `config.json` reads through
+  more. For programs: `Session.read_wide`, `withheld`.
 - **Servers learn of releases through the network** (#901): `tools/project/sign_release.py` also
   posts each server release - the core's and every service's - in `unseenet.releases`, with its
   signed checksums, the signature and the requirements (packed), and `unseenet-service-update`

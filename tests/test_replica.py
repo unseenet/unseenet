@@ -657,3 +657,20 @@ async def test_the_registrar_moves_to_its_council(net, monkeypatch, tmp_path):
     assert set(keys) <= set(names["registrars"])
     got = {nm.parse_certificate(t).name for t in names["certs"]}
     assert "alice" in got and "bob" not in got
+
+
+async def test_a_replica_reads_the_councils_groups_wide(net, monkeypatch):
+    """#840: the registrar group, the claims group and the room are read through several
+    nodes (here, the one there is: the status says so)."""
+    a, b = net.session("a"), net.session("b")
+    group, claims, room = await net.found([a, b], room=True)
+    monkeypatch.setattr(nm, "NAMES_GROUP", group)
+    r = net.replica(a, group)
+    st = await r.run_once()
+    assert set(a._wide_groups()) >= {group, claims, room}
+    assert a._wide_groups()[claims] == run_mod.READ_THROUGH
+    assert st["read_through"]["registrar"] == [net.addr]
+    assert "withheld" not in st
+    r.config = lambda: {"read_through": 3}
+    await r.run_once()
+    assert a._wide_groups()[group] == 3

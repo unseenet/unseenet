@@ -42,6 +42,7 @@ SOFTWARE = f"unseenet-replica {__version__}"
 ALIVE_EVERY = (timedelta(days=7), timedelta(days=29))   # a random time within, section 9
 TWIN_WINDOW = timedelta(days=30)        # articles looked at for another user of the key
 HOLDABLE = ("admission", "promotion", "removal", "proposal")   # section 13 (0061: proposals)
+READ_THROUGH = 2       # nodes each council group is read through (section 17, #840)
 
 
 class Replica(PublicDuties, ListDuties, EntranceDuties):
@@ -77,6 +78,8 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         self.ripen = ripen
         self.config = config
         self.status: dict = {}
+        self.read_through = READ_THROUGH
+        self._read_wide(self.group, self.reg.claims_group)
 
     # --- one key, one replica (section 7) ---------------------------------------------------
 
@@ -139,6 +142,31 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             self.hold = {k for k in cfg["hold"] if k in HOLDABLE}
         return cfg
 
+    # --- withholding (section 17, #840) -----------------------------------------------------
+
+    def _read_wide(self, *groups: str | None) -> None:
+        """Read the council's groups through several nodes and take the union, so that no
+        one node can hide a member's report, a claim or a council copy from this replica."""
+        for g in groups:
+            if g:
+                self.s.read_wide(g, self.read_through)
+
+    def _note_disagreement(self, groups: dict[str, str | None]) -> None:
+        """Note in ``status`` the nodes that lack articles another node holds."""
+        out, through = {}, {}
+        for label, g in groups.items():
+            if not g:
+                continue
+            through[label] = self.s.read_wide_from(g)
+            lacking = self.s.withheld(g)
+            if lacking:
+                out[label] = lacking
+                log.warning("nodes disagree about %s (%s): %s", label, g,
+                            ", ".join(f"{n} lacks {k}" for n, k in sorted(lacking.items())))
+        self.status["read_through"] = through
+        if out:
+            self.status["withheld"] = out
+
     def agreed(self, cfg: dict) -> set[str]:
         return set(self.st["agreed"]) | set(cfg.get("agreed", []))
 
@@ -146,6 +174,9 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         now = self.now()
         today = rules.day_of(now)
         cfg = self._read_config()
+        if cfg.get("read_through"):
+            self.read_through = max(1, int(cfg["read_through"]))
+            self._read_wide(self.group, self.reg.claims_group)
         if not self.st["started"]:
             self.st["started"] = nm.rfc3339(now)
         if not self.st["mine_since"]:
@@ -170,6 +201,7 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             self.status["note"] = "the council does not count yet (its genesis is not signed by all)"
             self._write_status()
             return self.status
+        self._read_wide(cur.room, (cur.data or {}).get("claims"))
         self.reg.shadow = role == "shadow"
         await self.reg.run_once()
         posts = await self.reg.read_public()
@@ -216,6 +248,9 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         await self._room_keys(chain, now)
         await self._public(chain, now, self.agreed(cfg), busy=change is not None)  # UN-RFC 0061
         self.status["held"] = dict(self.st["held"])
+        self._note_disagreement({"registrar": self.group,
+                                 "claims": self.reg.claims_group or (cur.data or {}).get("claims"),
+                                 "room": cur.room})
         self.s.save()
         self._write_status()
         return self.status

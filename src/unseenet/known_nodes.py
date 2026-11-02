@@ -85,6 +85,7 @@ class KnownNode:
     node_key: str = ""
     operator: str = ""
     addresses: tuple = ()        # UN-RFC 0064 section 4: further addresses of this node
+    hosting: str = ""            # where it runs (UN-RFC 0010): other hosting, other infrastructure
 
 
 def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
@@ -109,7 +110,8 @@ def parse_node_list(text: str) -> tuple[str, list[KnownNode]]:
                                addresses=tuple(a.plain() for a in usable[1:]),
                                description=str(item.get("description", ""))[:200],
                                node_key=str(item.get("node_key", ""))[:80],
-                               operator=str(item.get("operator", ""))[:80]))
+                               operator=str(item.get("operator", ""))[:80],
+                               hosting=str(item.get("hosting", ""))[:40]))
     if not nodes:
         raise ValueError("the list has no usable nodes")
     return str(data.get("updated", ""))[:32], nodes
