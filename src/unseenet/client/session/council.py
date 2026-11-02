@@ -59,10 +59,28 @@ class CouncilMixin:
         return None
 
     async def council_copies(self, group_id: str, node: str | None = None) -> list[tuple[bytes, str]]:
-        """(author, body) of every council manifest copy a node holds for the group."""
+        """(author, body) of every council manifest copy a node holds for the group - for a
+        group read wide (``read_wide``, #840) and no ``node`` given, every copy any of
+        that many nodes holds, so that no one node can hide a copy."""
         async def run(c: Client):
             return [(a, b) for a, b, _ in await self._council_copies_on(c, group_id)]
-        return await self._call(run, node or self.node_for(group_id))
+        want = self._wide_groups().get(group_id) if node is None else None
+        if not want or len(self.nodes) < 2:
+            return await self._call(run, node or self.node_for(group_id))
+        out, read, first_error = [], 0, None
+        for address in self.wide_order(group_id):
+            if read >= want:
+                break
+            try:
+                got = await self._call(run, address)
+            except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError) as exc:
+                first_error = first_error or exc
+                continue
+            read += 1
+            out += [x for x in got if x not in out]
+        if not read and first_error is not None:
+            raise first_error
+        return out
 
     async def council_chain(self, group_id: str, node: str | None = None) -> cn.Chain:
         """The council group's chain, counted here from the copies (UN-RFC 0054, 5)."""

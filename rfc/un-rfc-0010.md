@@ -46,6 +46,7 @@ A node entry:
 | `description` | string     | no   | At most 200 characters, shown to users          |
 | `node_key`    | key string | no   | The node's key (UN-RFC 0016)                    |
 | `operator`    | key string | no   | The operator's identity key (UN-RFC 0011)       |
+| `hosting`     | string     | no   | Where the node runs (a provider, a country), at most 40 characters. Nodes with different values are on different infrastructure (UN-RFC 0054 section 17) |
 
 Clients MUST ignore entries whose `address` is not valid, and unknown
 fields, and MUST treat the whole list as invalid only if it is not JSON,

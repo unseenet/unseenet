@@ -182,6 +182,16 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
             out.append(f"  Root list: {lst['root_note']}.")
         if lst.get("error"):
             out.append(f"  Its last list round failed: {lst['error']}")
+    through = st.get("read_through") or {}
+    if through and all(len(v) < 2 for v in through.values()):
+        out.append("It reads the council's groups through one node only: add another node")
+        out.append("(nodes in the config), so that no one node can hide articles from it.")
+    for label, lacking in (st.get("withheld") or {}).items():
+        out.append(f"NODES DISAGREE about the {label} group: "
+                   + ", ".join(f"{n} lacks {k} article(s) another node holds"
+                               for n, k in sorted(lacking.items()))
+                   + ". The replica uses all it found; a node that keeps lacking them may be")
+        out.append("  hiding them (UN-RFC 0054 section 17). Watch it, or stop using it.")
     if cfg.get("hold"):
         out.append(f"You hold: {', '.join(cfg['hold'])} (they wait for you to agree).")
     if cfg.get("resign"):

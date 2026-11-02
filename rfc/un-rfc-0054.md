@@ -559,9 +559,15 @@ hashes, not signatures; every article is still signed as in UN-RFC 0002.
   is no owner to restart it; that is the point.
 - **Withholding.** A node can hide articles from a replica, so that it
   sees a member as silent or a shadow as missing, or a commit as never
-  made. Replicas SHOULD read through several nodes; the 90-day silence
-  rule is long on purpose, and a certificate is judged only once its
-  commit would surely have been seen (section 12, item 1).
+  made. Replicas SHOULD read the registrar's group, the claims group,
+  the room and the council manifest copies through at least two nodes -
+  on different infrastructure where the node list says so (UN-RFC 0010,
+  `hosting`, else another `operator`) - and use the union of what they
+  hold. A replica SHOULD tell its operator when its nodes disagree about
+  what exists: one lacks, for more than an hour, articles another holds
+  (articles older than 30 days may simply have expired on one). The
+  90-day silence rule is long on purpose, and a certificate is judged
+  only once its commit would surely have been seen (section 12, item 1).
 - **Claims are public.** Anybody can now see which key claimed which
   name, including claims that were refused or lapsed. Clients MUST say so
   before sending a claim.

@@ -258,7 +258,8 @@ class ReadingMixin:
         me = self.identity()
         entry = self.group_entry(group_id)
 
-        window = keep and group_id not in self._high and not cache   # first read (#721)
+        window = (keep and group_id not in self._high and not cache   # first read (#721)
+                  and group_id not in self._wide_groups())   # read wide: all of it (#840)
         home = self.node_for(group_id)
         try:
             fetched, high, low = await self._read_range(group_id, entry, self._high.get(group_id, 0),
@@ -284,12 +285,20 @@ class ReadingMixin:
         changed, new = False, 0
         home = self.node_for(group_id)
         came: list[Message] = []                         # what came now (keep=False)
+        wide = group_id in self._wide_groups()
         for n, raw in fetched:
             raw = strip_reader_headers(raw)
+            if wide:
+                self._note_held(group_id, home, raw)
             msg = self._parse(n, raw, group_id, entry, me)
             if msg is None:
                 changed = True     # control article updated group state
                 continue
+            if wide:                                     # came late here: one copy (#840)
+                for k in [k for k, m in cache.items()
+                          if k >= self.NODE_OFFSET and m.message_id == msg.message_id]:
+                    cache.pop(k, None)
+                    raws.pop(k, None)
             raws[n] = raw
             if self._take_reaction(group_id, n, msg):          # UN-RFC 0048: not a post
                 cache.pop(n, None)
@@ -300,10 +309,12 @@ class ReadingMixin:
             came.append(msg)
         if high > self._high.get(group_id, 0):
             self._high[group_id] = high
-        if self.manifest_data(group_id).get("local") and len(self.nodes) > 1:   # #134
+        local = self.manifest_data(group_id).get("local")
+        if (local or wide) and len(self.nodes) > 1:      # #134, #840
             got, more = await self._read_local_elsewhere(
                 group_id, entry, me,
-                lambda since, node: self._read_range(group_id, entry, since, node, skip, False))
+                lambda since, node: self._read_range(group_id, entry, since, node, skip, False),
+                want=None if local else self._wide_groups()[group_id] - 1)
             new += got
             changed = changed or more
         if entry.get("cancels") and self._apply_cancels(group_id):
@@ -471,17 +482,102 @@ class ReadingMixin:
         others = sorted(getattr(self, "_node_high", {}).get(group_id, {}))
         return [home] + [a for a in others if a != home and a in self.nodes]
 
-    async def _read_local_elsewhere(self, group_id: str, entry: dict, me, reader) -> tuple[int, bool]:
-        """Fetch a local group from your other nodes that carry it. Returns (new posts,
-        whether a control article changed the group)."""
+    # --- reading through several nodes (UN-RFC 0054 section 17, withholding; #840) ---
+    WIDE_GRACE = 3600.0               # seconds an article may take to reach another node
+    WIDE_AGE = timedelta(days=30)     # older articles may have expired on one node
+
+    def read_wide(self, group_id: str, nodes: int = 2) -> None:
+        """Read ``group_id`` through ``nodes`` of your nodes, not one, and take the union of
+        what they hold: one node cannot then hide an article from you. Which nodes hold
+        what is noted (``withheld``). For this session; a replica asks it for its groups."""
+        self.__dict__.setdefault("_wide", {})[group_id] = max(1, int(nodes))
+
+    def _wide_groups(self) -> dict[str, int]:
+        return self.__dict__.get("_wide", {})
+
+    def wide_order(self, group_id: str) -> list[str]:
+        """Your nodes in the order a group read wide is read through them: the one it is
+        read from, then nodes on other infrastructure - another ``hosting`` in the
+        known-node list (UN-RFC 0010), else another operator - then the rest."""
+        home = self.node_for(group_id)
+        info = {k.address: k for k in self.known_nodes()}
+
+        def where(a: str) -> str:
+            k = info.get(a)
+            return (k.hosting or k.operator or a) if k else a
+        taken, first, rest = {where(home)} if home else set(), [], []
+        for a in self.nodes:
+            if a == home:
+                continue
+            if where(a) in taken:
+                rest.append(a)
+            else:
+                taken.add(where(a))
+                first.append(a)
+        return ([home] if home else []) + first + rest
+
+    def _note_held(self, group_id: str, node: str, raw: bytes) -> None:
+        """Note that ``node`` holds the article ``raw`` (its Message-ID, its date, and when
+        it was first seen on any node)."""
+        import re
+        import time as _time
+        from email.utils import parsedate_to_datetime
+        head = raw.split(b"\r\n\r\n", 1)[0].split(b"\n\n", 1)[0]
+        mid = re.search(rb"(?mi)^Message-ID:[ \t]*(<[^>\r\n]+>)", head)
+        if not mid:
+            return
+        held = self.__dict__.setdefault("_wide_held", {}).setdefault(group_id, {})
+        first = self.__dict__.setdefault("_wide_first", {}).setdefault(group_id, {})
+        key = mid.group(1).decode("ascii", "replace")
+        if key not in first:
+            date = None
+            d = re.search(rb"(?mi)^Date:[ \t]*([^\r\n]+)", head)
+            if d:
+                try:
+                    date = parsedate_to_datetime(d.group(1).decode("ascii", "replace"))
+                except (TypeError, ValueError):
+                    date = None
+                if date is not None and date.tzinfo is None:
+                    date = date.replace(tzinfo=timezone.utc)
+            first[key] = (_time.time(), date)
+        held.setdefault(node, set()).add(key)
+
+    def withheld(self, group_id: str, now: float | None = None) -> dict[str, int]:
+        """For a group read wide: the nodes that lack articles another of its nodes holds,
+        and how many - nodes disagree about what exists. Articles seen less than
+        ``WIDE_GRACE`` ago are still on their way; those dated over ``WIDE_AGE`` ago may
+        have expired on one node: neither counts."""
+        import time as _time
+        now = _time.time() if now is None else now
+        held = self.__dict__.get("_wide_held", {}).get(group_id, {})
+        first = self.__dict__.get("_wide_first", {}).get(group_id, {})
+        old = datetime.now(timezone.utc) - self.WIDE_AGE
+        due = {k for k, (seen, date) in first.items()
+               if now - seen >= self.WIDE_GRACE and (date is None or date >= old)}
+        out = {node: len(due - ids) for node, ids in held.items()}
+        return {node: n for node, n in out.items() if n}
+
+    def read_wide_from(self, group_id: str) -> list[str]:
+        """The nodes a group read wide was read through, so far."""
+        return sorted(self.__dict__.get("_wide_held", {}).get(group_id, {}))
+
+    async def _read_local_elsewhere(self, group_id: str, entry: dict, me, reader,
+                                    want: int | None = None) -> tuple[int, bool]:
+        """Fetch a local group from your other nodes that carry it - or, for a group read
+        wide (``read_wide``, #840), from ``want`` more of them, chosen to be elsewhere
+        (``wide_order``), noting what each holds. Returns (new posts, whether a control
+        article changed the group)."""
         import time as _time
         absent = self.__dict__.setdefault("_local_absent", {})
         highs = self.__dict__.setdefault("_node_high", {}).setdefault(group_id, {})
         cache, raws = self.cache.setdefault(group_id, {}), self._raw.setdefault(group_id, {})
         home = self.node_for(group_id)
         known = {m.message_id for m in cache.values()}
-        new, changed = 0, False
-        for node in self.nodes:
+        new, changed, read = 0, False, 0
+        order = self.nodes if want is None else self.wide_order(group_id)
+        for node in order:
+            if want is not None and read >= want:
+                break
             if node == home or _time.monotonic() - absent.get((group_id, node), -1e18) < self.LOCAL_ABSENT_SECONDS:
                 continue
             try:
@@ -490,9 +586,12 @@ class ReadingMixin:
                 absent[(group_id, node)] = _time.monotonic()
                 highs.pop(node, None)
                 continue
+            read += 1
             off = self._node_offset(node)
             for n, raw in fetched:
                 raw = strip_reader_headers(raw)
+                if want is not None:
+                    self._note_held(group_id, node, raw)
                 msg = self._parse(off + n, raw, group_id, entry, me)
                 if msg is None:
                     changed = True

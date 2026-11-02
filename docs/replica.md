@@ -115,7 +115,11 @@ starts both: the replica reads and posts through the node beside it, on a
 Docker network of their own with no published port, and the node reaches
 everybody else over Tor. Add other nodes' onion addresses to
 `UNSEENET_REPLICA_NODES` before the first start, comma separated, so that no
-single node can hide claims from your replica. Your replica's posts then
+single node can hide claims from your replica: it reads the council's groups
+through two of its nodes, on different infrastructure where it can, and takes
+what either holds (`read_through` in `config.json` for more). When they
+disagree - one keeps lacking articles another holds - `unseenet-replica
+status` says so. Your replica's posts then
 leave through your node, so whoever watches the node could link the two; on
 its own, a replica reaches the network over Tor like any client.
 
