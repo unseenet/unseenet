@@ -7,6 +7,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pictures where no process can be started** (the client in a browser, UN-RFC 0027
+  section 9.2): `client.decode` now takes the platform's own way to decode apart from the
+  client (`decode.elsewhere`, the web client's picture worker), held to the same time and
+  size limits. Without one the picture is not shown, with a plain `DecodeError`; before,
+  Pyodide's `NotImplementedError` from `subprocess_exec()` got through and was shown where
+  a link card's picture should have been, and pictures in posts and profiles failed.
+
 ### Security
 
 - **Nodes turn on Tor's proof-of-work defence for their onion service** (#869, UN-RFC 0005):
