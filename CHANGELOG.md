@@ -17,6 +17,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Councils in the local client API** (#841, UN-RFC 0046 section 4.26): `GET /api/council` shows
+  a council in plain fields (members, the founding period, your place in it, disputed or not,
+  and for a genesis who still has to sign), `GET /api/council/hearings` its hearings, and
+  `POST /api/council` signs a draft and admits, renounces, resigns, sponsors, unsponsors and
+  objects, with the command line's checks - so the graphical and the terminal client can too.
 - **DNS answers for hierarchy claims are decided by the replicas together** (#888, UN-RFC 0020
   sections 6.2 and 7): each list council replica asks DNS daily for every top-level domain a
   claim waits on or a hierarchy holds by DNS and puts the keys it found in its report (`dns`);
