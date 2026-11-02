@@ -220,3 +220,17 @@ def test_a_oneshot_service_is_not_restarted_and_must_load(tmp_path, monkeypatch)
     assert calls[-1][-1] == "import unseenet_bots"
     m = su.Machine("unseenet-x", tmp_path, package="unseenet-x", oneshot=True)
     assert not m.healthy()
+
+
+def test_waits_while_the_service_is_busy(tmp_path):
+    import os
+    busy = tmp_path / "busy"
+    st = su.State.load(tmp_path / "state.json")
+    rel = lambda: su.Release("0.7.0", b"unseenet==0.7.0 --hash=sha256:x\n")  # noqa: E731
+    m = FakeMachine()
+    m.busy = lambda: su.Machine("x", tmp_path, busy=busy).busy()
+    busy.write_text("ripening")
+    assert su.run(m, st, rel, say=lambda _: None, at_once=True) == "waiting" and m.did == []
+    old = busy.stat().st_mtime - su.BUSY_FOR - 1               # left over: not busy
+    os.utime(busy, (old, old))
+    assert su.run(m, st, rel, say=lambda _: None, at_once=True) == "updated"

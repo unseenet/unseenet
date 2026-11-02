@@ -53,6 +53,7 @@ SPREAD = 48 * 3600            # section 6.1 item 4
 HEALTHY_WITHIN = 600          # item 5: 10 minutes
 STAY_UP = 60                  # up this long, without restarting, counts as up
 NAG_AFTER = 30 * 86400        # when turned off
+BUSY_FOR = 6 * 3600           # a --busy file older than this is left over, not busy
 SUFFIX = "-server-requirements.txt"
 CORE = "unseenet"
 VERSION = re.compile(r"\d+(\.\d+)*([abc]|rc)?\d*")
@@ -151,9 +152,20 @@ class Machine:
     """The service, its virtual environment and systemd."""
 
     def __init__(self, service: str, venv: Path, check: str | None = None,
-                 package: str = CORE, oneshot: bool = False):
+                 package: str = CORE, oneshot: bool = False, busy: Path | None = None):
         self.service, self.venv, self.check, self.package = service, venv, check, package
         self.oneshot = oneshot     # a service its timer starts now and then (the bots)
+        self.busy_file = busy      # there while it must not be restarted (a key ripening)
+
+    def busy(self, now: float | None = None) -> bool:
+        """The service says it must not be restarted now, in a file it keeps fresh."""
+        if self.busy_file is None:
+            return False
+        try:
+            age = (time.time() if now is None else now) - self.busy_file.stat().st_mtime
+        except OSError:
+            return False
+        return age < BUSY_FOR
 
     @property
     def prev(self) -> Path:
@@ -295,6 +307,10 @@ def run(machine: Machine, state: State, find: Callable[[], Release] = newest_rel
         state.save()
         say(f"{rel.version} is out; updating after {time.strftime('%Y-%m-%d %H:%M', time.gmtime(due))} UTC")
         return "waiting"
+    if getattr(machine, "busy", lambda: False)():
+        state.save()
+        say(f"{rel.version} is due, but {have} is busy (it must not be restarted now); later")
+        return "waiting"
     say(f"updating {have} -> {rel.version}")
     machine.copy()
     try:
@@ -349,6 +365,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--oneshot", action="store_true",
                    help="a service its own timer starts (the bots): not restarted; the new "
                         "version must load")
+    p.add_argument("--busy", type=Path,
+                   help="a file the service keeps fresh while it must not be restarted "
+                        "(a key ripening): the update waits")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
@@ -368,7 +387,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Updating a service needs root (it restarts the service).")
         return 1
     try:
-        what = run(Machine(a.service, Path(a.venv), a.check, a.package, a.oneshot), state,
+        what = run(Machine(a.service, Path(a.venv), a.check, a.package, a.oneshot,
+                           a.busy), state,
                    find=lambda: newest_release(package=a.package, repo=a.repo), at_once=a.now)
     except (Problem, up.UpdateError, OSError) as exc:
         print(f"could not look for updates: {exc}")
