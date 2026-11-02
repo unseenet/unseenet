@@ -2,6 +2,7 @@
 """Sign a stable release with the project key, so sticks will update to it.
 
     python tools/project/sign_release.py v0.6.1
+    python tools/project/sign_release.py --repo unseenet-gateway v0.6.0
 
 Since 0.6 a release is built in two repositories, each with its own SHA256SUMS.txt
 (#546): unseenet-portable (the zips for folders and USB sticks) and
@@ -14,6 +15,11 @@ unseenet.releases. The project key never leaves this computer.
 
 It also signs the core release, whose server requirements self-updating servers
 take (unseenet.service_update, #827).
+
+``--repo NAME`` signs one service's release instead (a gateway, an entrance, a
+watchman, the bots, the help bot - each released with its own version): its
+``<package>-<version>-server-requirements.txt``, which that service's servers take.
+Nothing is posted for those: servers read them on GitHub.
 
 Sticks on the stable channel accept only this signature (unseenet.update).
 Run it again after files were added to the release: the sums change, and
@@ -42,12 +48,13 @@ REPOS = {"unseenet/unseenet-portable": "linux-x86_64",       # the zip that name
          "unseenet/unseenet": SERVER}
 
 
-def server_requirements(sums: dict[str, str]) -> tuple[str, str]:
-    """(file name, version) of the core release's server requirements."""
+def server_requirements(sums: dict[str, str], package: str = "unseenet") -> tuple[str, str]:
+    """(file name, version) of a release's server requirements."""
+    from unseenet.service_update import requirements_version
     for name in sums:
-        if name.startswith("unseenet-") and name.endswith("-server-requirements.txt"):
-            return name, name[len("unseenet-"):-len("-server-requirements.txt")]
-    sys.exit(f"{update.SUMS} names no server requirements")
+        if version := requirements_version(name, package):
+            return name, version
+    sys.exit(f"{update.SUMS} names no server requirements of {package}")
 
 
 def gh(repo: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -65,11 +72,20 @@ def assets(repo: str, tag: str) -> list[str] | None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or not sys.argv[1].startswith("v"):
-        sys.exit(__doc__.strip().splitlines()[2].strip())
-    tag = sys.argv[1]
+    args = sys.argv[1:]
+    repos = REPOS
+    package = "unseenet"
+    if len(args) == 3 and args[0] == "--repo":
+        package = args[1].rpartition("/")[2]
+        if not package.startswith("unseenet-"):
+            sys.exit(f"not an Unseenet service: {args[1]}")
+        repos = {f"unseenet/{package}": SERVER}
+        args = args[2:]
+    if len(args) != 1 or not args[0].startswith("v"):
+        sys.exit("\n".join(x.strip() for x in __doc__.strip().splitlines()[2:4]))
+    tag = args[0]
     todo = []
-    for repo, what in REPOS.items():
+    for repo, what in repos.items():
         names = assets(repo, tag)
         if names is None:
             print(f"{repo}: no {tag} release yet - run this again when it is out.")
@@ -88,7 +104,8 @@ def main() -> None:
             d.mkdir()
             gh(repo, "release", "download", tag, "-p", update.SUMS, "-D", str(d))
             sums = (d / update.SUMS).read_bytes()
-            name, version = (server_requirements(update.parse_sums(sums)) if what == SERVER
+            name, version = (server_requirements(update.parse_sums(sums), package)
+                             if what == SERVER
                              else update.asset_in(update.parse_sums(sums), what))
             if version != tag[1:]:
                 sys.exit(f"{repo}: {update.SUMS} lists {name}, not version {tag[1:]}")

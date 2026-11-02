@@ -3,14 +3,18 @@
     unseenet-service-update run    --service unseenet-node [--check tcp:127.0.0.1:1119]
     unseenet-service-update status --service unseenet-node
     unseenet-service-update off    --service unseenet-node      (and ``on``)
+    unseenet-service-update run    --service unseenet-gateway --package unseenet-gateway
 
-What the update timer of a node, a replica or a registrar runs, as root. It runs from
-the service's own virtual environment and updates that one:
+What the update timer of a node, a replica, a registrar - or any other Unseenet
+service: a gateway, an entrance, a watchman, a bot - runs, as root. It runs from the
+service's own virtual environment and updates that one:
 
 1. **Only signed.** It reads the newest stable release's ``SHA256SUMS.txt`` and its
    signature (the project key, as sticks do) and takes the release's
-   ``unseenet-<version>-server-requirements.txt``: every package with its hash. pip
-   installs with ``--require-hashes``, so nothing else gets in.
+   ``<package>-<version>-server-requirements.txt``: every package with its hash. pip
+   installs with ``--require-hashes``, so nothing else gets in. ``--package`` names the
+   service's package (default ``unseenet``); its releases are in the repository of the
+   same name under github.com/unseenet (``--repo`` for another).
 2. **Never older**, and never a version that broke here before.
 3. **Not all at once.** It waits a random time of up to 48 hours after it first saw
    the release.
@@ -31,6 +35,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import shutil
 import socket
 import subprocess
@@ -48,7 +53,10 @@ SPREAD = 48 * 3600            # section 6.1 item 4
 HEALTHY_WITHIN = 600          # item 5: 10 minutes
 STAY_UP = 60                  # up this long, without restarting, counts as up
 NAG_AFTER = 30 * 86400        # when turned off
-REQUIREMENTS = "unseenet-{version}-server-requirements.txt"
+SUFFIX = "-server-requirements.txt"
+CORE = "unseenet"
+VERSION = re.compile(r"\d+(\.\d+)*([abc]|rc)?\d*")
+PACKAGE = re.compile(r"unseenet(-[a-z0-9]+)*")
 
 
 class Problem(Exception):
@@ -61,27 +69,44 @@ class Release:
     requirements: bytes        # checked against the signed sums
 
 
-def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None)) -> Release:
-    """The newest stable release that servers can take: signed by the project key, and
-    with a server requirements file matching its checksums."""
-    sums = fetch(up.release_url("stable", up.SUMS))
-    sig = fetch(up.release_url("stable", up.SIG)).decode("utf-8", "replace")
+def repo_url(repo: str) -> str:
+    """``unseenet/unseenet-gateway`` (or just ``unseenet-gateway``) -> its GitHub URL."""
+    owner, _, name = repo.rpartition("/")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or not re.fullmatch(r"[A-Za-z0-9_.-]*", owner):
+        raise Problem(f"not a repository: {repo}")
+    return f"https://github.com/{owner or 'unseenet'}/{name}"
+
+
+def requirements_version(name: str, package: str) -> str | None:
+    """``unseenet-gateway-0.6.0-server-requirements.txt`` -> ``0.6.0`` for that package."""
+    if not (name.startswith(package + "-") and name.endswith(SUFFIX)):
+        return None
+    version = name[len(package) + 1:-len(SUFFIX)]
+    return version if VERSION.fullmatch(version) else None
+
+
+def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
+                   package: str = CORE, repo: str | None = None) -> Release:
+    """The newest stable release of ``package`` that servers can take: signed by the
+    project key, and with a server requirements file matching its checksums."""
+    base = repo_url(repo or package)
+    sums = fetch(up.release_url("stable", up.SUMS, repo=base))
+    sig = fetch(up.release_url("stable", up.SIG, repo=base)).decode("utf-8", "replace")
     try:
         up.check_signature(sums, sig, "stable")
     except up.UpdateError as exc:
         raise Problem(str(exc)) from exc
     listed = up.parse_sums(sums)
-    names = [n for n in listed if n.startswith("unseenet-") and n.endswith("-server-requirements.txt")]
-    if len(names) != 1:
-        raise Problem("the newest release has no server requirements (it is older than "
-                      "self-updating servers)")
-    name = names[0]
-    version = name[len("unseenet-"):-len("-server-requirements.txt")]
-    req = fetch(up.release_url("stable", name, version))
+    found = {n: v for n in listed if (v := requirements_version(n, package))}
+    if len(found) != 1:
+        raise Problem(f"the newest release of {package} has no server requirements (it is "
+                      "older than self-updating servers)")
+    (name, version), = found.items()
+    req = fetch(up.release_url("stable", name, version, repo=base))
     if hashlib.sha256(req).hexdigest() != listed[name]:
         raise Problem(f"{name} does not match the signed checksums")
-    if f"unseenet=={version} " not in req.decode("utf-8", "replace"):
-        raise Problem(f"{name} does not name unseenet {version}")
+    if f"{package}=={version} " not in req.decode("utf-8", "replace"):
+        raise Problem(f"{name} does not name {package} {version}")
     return Release(version, req)
 
 
@@ -125,8 +150,9 @@ class State:
 class Machine:
     """The service, its virtual environment and systemd."""
 
-    def __init__(self, service: str, venv: Path, check: str | None = None):
-        self.service, self.venv, self.check = service, venv, check
+    def __init__(self, service: str, venv: Path, check: str | None = None,
+                 package: str = CORE):
+        self.service, self.venv, self.check, self.package = service, venv, check, package
 
     @property
     def prev(self) -> Path:
@@ -134,9 +160,14 @@ class Machine:
 
     def installed(self) -> str:
         r = subprocess.run([str(self.venv / "bin" / "python"), "-c",
-                            "import unseenet; print(unseenet.__version__)"],
-                           capture_output=True, text=True)
-        return r.stdout.strip() or __version__
+                            "import importlib.metadata as m, sys; print(m.version(sys.argv[1]))",
+                            self.package], capture_output=True, text=True)
+        version = r.stdout.strip()
+        if not version and self.package == CORE:
+            return __version__
+        if not version:
+            raise Problem(f"{self.package} is not installed in {self.venv}")
+        return version
 
     def copy(self) -> None:
         if self.prev.exists():
@@ -176,9 +207,23 @@ class Machine:
         return f.get("ActiveState", ""), int(f.get("NRestarts", "0") or 0)
 
     def answers(self) -> bool:
-        """``--check tcp:host:port``: it greets as an NNTP server does (``200``/``201``)."""
+        """``--check tcp:host:port``: it greets as an NNTP server does (``200``/``201``);
+        ``--check http://host:port/path``: it answers that with 2xx or 3xx."""
         if not self.check:
             return True
+        if self.check.startswith(("http://", "https://")):
+            import ssl
+            import urllib.error
+            import urllib.request
+            ctx = ssl.create_default_context()
+            ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE   # its own, local
+            try:
+                with urllib.request.urlopen(self.check, timeout=10, context=ctx) as r:
+                    return 200 <= r.status < 400
+            except urllib.error.HTTPError as exc:
+                return 300 <= exc.code < 400
+            except (OSError, ValueError):
+                return False
         host, _, port = self.check.removeprefix("tcp:").rpartition(":")
         try:
             with socket.create_connection((host, int(port)), timeout=10) as s:
@@ -282,8 +327,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="unseenet-service-update", description=__doc__.split("\n\n")[0])
     p.add_argument("action", choices=("run", "status", "on", "off"))
     p.add_argument("--service", required=True, help="the systemd service, e.g. unseenet-node")
+    p.add_argument("--package", default=CORE,
+                   help="the service's package, e.g. unseenet-gateway (default: unseenet)")
+    p.add_argument("--repo", help="where its releases are (default: unseenet/<package>)")
     p.add_argument("--venv", default=sys.prefix, help="its virtual environment (default: this one)")
-    p.add_argument("--check", help="tcp:host:port where the service answers (a node: tcp:127.0.0.1:1119)")
+    p.add_argument("--check", help="where the service answers: tcp:host:port (NNTP; a node: "
+                   "tcp:127.0.0.1:1119) or http://host:port/path")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
@@ -296,11 +345,15 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "status":
         print("\n".join(explain(state)))
         return 0
+    if not PACKAGE.fullmatch(a.package):
+        print(f"not an Unseenet package: {a.package}")
+        return 1
     if os.geteuid() != 0:
         print("Updating a service needs root (it restarts the service).")
         return 1
     try:
-        what = run(Machine(a.service, Path(a.venv), a.check), state, at_once=a.now)
+        what = run(Machine(a.service, Path(a.venv), a.check, a.package), state,
+                   find=lambda: newest_release(package=a.package, repo=a.repo), at_once=a.now)
     except (Problem, up.UpdateError, OSError) as exc:
         print(f"could not look for updates: {exc}")
         return 1

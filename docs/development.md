@@ -395,6 +395,12 @@ one node at a time.
    Intel), unpack and self-test each one, boot the images in QEMU, and make
    that repository's release with `SHA256SUMS.txt`; then sign it with
    `tools/project/sign_release.py`.
+   The other services (the gateway, the entrance, the watchman, the bots, the
+   help bot) are released from their own repositories with their own versions;
+   each release carries `SHA256SUMS.txt` and
+   `<package>-<version>-server-requirements.txt`, and servers running that service
+   update to it once it is signed: `tools/project/sign_release.py --repo
+   unseenet-gateway v0.6.0` (#827).
 6. `.github/workflows/announce.yml` posts the release notes to
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.

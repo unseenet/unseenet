@@ -338,3 +338,13 @@ def test_every_project_tool_loads(path, monkeypatch):
 def test_sign_release_covers_the_core(monkeypatch):
     module = _load(TOOLS / "sign_release.py", monkeypatch)
     assert module.REPOS["unseenet/unseenet"] == module.SERVER
+
+
+def test_sign_release_finds_a_services_requirements(monkeypatch):
+    module = _load(TOOLS / "sign_release.py", monkeypatch)
+    sums = {"unseenet-gateway-0.6.0-server-requirements.txt": "0" * 64,
+            "unseenet_gateway-0.6.0.tar.gz": "1" * 64}
+    assert module.server_requirements(sums, "unseenet-gateway") == (
+        "unseenet-gateway-0.6.0-server-requirements.txt", "0.6.0")
+    with pytest.raises(SystemExit):
+        module.server_requirements(sums)                 # not the core's
