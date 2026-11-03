@@ -44,12 +44,12 @@ async def test_start_from_now_skip_and_keep_nothing(net, monkeypatch):
     await owner.post(gid, "Ny", "spam spam\n")
     await owner.post(gid, "Re: Ny", "svar\n")
     asked = []
-    orig = nntp.Client.article
+    orig = nntp.Client.articles
 
-    async def article(self, ident):
-        asked.append(ident)
-        return await orig(self, ident)
-    monkeypatch.setattr(nntp.Client, "article", article)
+    async def articles(self, idents):
+        asked.extend(idents)
+        return await orig(self, idents)
+    monkeypatch.setattr(nntp.Client, "articles", articles)
     got = await bot.fetch_group(gid, skip=lambda h: h["Subject"].startswith("Re:"), keep=False)
     assert [m.subject for m in got] == ["Ny"]                     # nothing old, the reply skipped
     assert len(asked) == 1                                          # fetched: only that one

@@ -16,6 +16,8 @@ from .. import session as _s   # names tests patch on the module, read at call t
 
 
 class ReadingMixin:
+    reading_now: str | None = None      # the group a client has open: read first (#916)
+
     def subscribe(self, group_id: str, on: bool = True, node: str | None = None) -> None:
         """Follow a group (or stop, ``on=False``). It is read on ``node`` if given, else on
         the default node. Emits ``GroupsChanged`` when the list changed."""
@@ -46,14 +48,17 @@ class ReadingMixin:
         async def run(c: Client) -> tuple[dict, int]:
             count, low, high = await c.group(group_id)
             best: dict = {}
-            for n in range(low, min(high, low + max_heads - 1) + 1):
-                try:
-                    head = await c.multiline(f"HEAD {n}", 221)
-                except NNTPError:
+            numbers = list(range(low, min(high, low + max_heads - 1) + 1))
+            wanted = []
+            for i in range(0, len(numbers), self.FETCH_BATCH):       # pipelined (#916)
+                chunk = numbers[i:i + self.FETCH_BATCH]
+                for n, head in zip(chunk, await c.heads([str(n) for n in chunk])):
+                    if head and any(h.lower().replace(" ", "") == "control:manifest"
+                                    for h in head):
+                        wanted.append(n)
+            for raw in await c.articles([str(n) for n in wanted]):
+                if raw is None:
                     continue
-                if not any(h.lower().replace(" ", "") == "control:manifest" for h in head):
-                    continue
-                raw = await c.article(str(n))
                 try:
                     m = Manifest.from_article(Article.from_bytes(raw))
                 except (ArticleError, ValueError, TypeError):
@@ -352,6 +357,7 @@ class ReadingMixin:
     # Reading a group is planned in one call to the node and its articles fetched in turns
     # of FETCH_BATCH, each its own call: the node is free between them, so opening a group,
     # its emoji or a picture never waits minutes behind a large group being read (#721).
+    # Each turn is pipelined, one round trip over Tor rather than one per article (#916).
     FETCH_BATCH = 50
     NEW_GROUP_WINDOW = 300     # a group first read with more: its newest, older ones later
     OLDER_BATCH = 200          # older articles read with each later refresh
@@ -412,12 +418,8 @@ class ReadingMixin:
                     await c.group(group_id)          # another call may have chosen another
                 except NNTPError as exc:
                     raise SessionError("group not carried by this node") from exc
-                got = []
-                for n in chunk:
-                    raw = await c.article(str(n))
-                    if raw is not None:
-                        got.append((n, raw))
-                return got
+                raws = await c.articles([str(n) for n in chunk])     # one round trip (#916)
+                return [(n, raw) for n, raw in zip(chunk, raws) if raw is not None]
             try:
                 fetched += await self._call(run, node)
             except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError):

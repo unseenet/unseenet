@@ -233,6 +233,8 @@ class Groups:
             return self._timeline_group(s, rules=not show_all)
         if gid.startswith(TAGGED):                  # everything with a tag (UN-RFC 0052)
             return self._tagged_group(s, gid)
+        if gid != FOR_YOU and not gid.startswith(CONTACT):
+            s.reading_now = gid                   # fetched first by a refresh (#916)
         if (gid not in s.data["subscribed"] and gid != FOR_YOU and not gid.startswith(CONTACT)
                 and not s.cache.get(gid) and gid not in self._looking):
             # read without following (#506): fetched now, a GroupUpdated when it is here
