@@ -859,7 +859,7 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         if socks_port:
             bodies = [b for b in bodies if isinstance(b, str)]
             from . import release_sources as rs
-            sources = rs.newest(bodies, kept_sources(media).to_dict())
+            sources = rs.newest(bodies, kept_sources(media).to_dict(), keys)
             keep_sources(media, sources)
             for body in bodies:
                 post = parse_release_post(body)

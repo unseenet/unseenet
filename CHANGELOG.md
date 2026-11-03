@@ -26,6 +26,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The list of release sources is signed like a release, and can move to a council** (#917,
+  UN-RFC 0062 section 6.3): it needs the key list's threshold of signatures (`release_sources.py
+  post` signs with the vault, `sign --seed-file` adds a reserve key's), and `post --moved-to
+  <council>` makes the project's last list - after it, its later lists are not used, and the list
+  council's sources list takes their place.
 - **A council member's work from the command line** (#874, part 1): `unseenet-replica members`
   (members and candidates: reports, agreeing days, level, sponsors, objections), `hearings`
   (with their counts, and proposals waiting to be seconded), `read talk|log`, `reply <id>`, and

@@ -21,6 +21,13 @@ release sources** and posts it in ``unseenet.releases``::
 - ``index``: package indexes for pip (PyPI's simple API, or a mirror of it); the first is
   the index, the others extra ones.
 - ``updated``: the newest valid list wins; an older one never replaces it.
+- ``moved_to`` (optional): the Group ID of a list council that keeps the sources from
+  now on (UN-RFC 0020 section 6.8). From the first such list on, the publisher's later
+  lists are not used.
+
+The list is signed like a release: by as many of the publisher's keys as its key list's
+threshold for ``stable`` (UN-RFC 0062 sections 3, 4 and 6.3), since whoever says where to
+fetch decides who sees the fetching.
 
 Each address is ``https://``, or ``http://`` to an onion address (Tor encrypts and
 authenticates those). The list grants nothing over *what* is installed: every file must
@@ -59,10 +66,14 @@ class Sources:
     files: tuple[str, ...] = (GITHUB,)
     index: tuple[str, ...] = (PYPI,)
     updated: str = ""                     # "" - the built-in list, older than any posted
+    moved_to: str | None = None           # a list council keeps the sources from now on
 
     def to_dict(self) -> dict:
-        return {"v": 1, "files": list(self.files), "index": list(self.index),
-                "updated": self.updated}
+        out = {"v": 1, "files": list(self.files), "index": list(self.index),
+               "updated": self.updated}
+        if self.moved_to:
+            out["moved_to"] = self.moved_to
+        return out
 
     def file_urls(self, repo: str, tag: str, name: str) -> list[str]:
         """Where ``name`` of release ``tag`` in ``repo`` is, in order; GitHub last if the
@@ -101,8 +112,17 @@ def from_dict(data: dict) -> Sources:
         datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
     except ValueError as exc:
         raise SourcesError(f"updated: not a time: {updated!r}") from exc
+    moved_to = data.get("moved_to")
+    if moved_to is not None:
+        from .core.groups import split_group_id
+        try:
+            split_group_id(str(moved_to))
+        except Exception as exc:  # noqa: BLE001
+            raise SourcesError(f"moved_to: not a Group ID: {moved_to!r}") from exc
+        moved_to = str(moved_to)
     return Sources(tuple(_address(f, True) for f in files),
-                   tuple(_address(i, False).rstrip("/") + "/" for i in index), str(updated))
+                   tuple(_address(i, False).rstrip("/") + "/" for i in index), str(updated),
+                   moved_to)
 
 
 def _canonical(sources: Sources) -> bytes:
@@ -110,7 +130,8 @@ def _canonical(sources: Sources) -> bytes:
 
 
 def make_post(sources: Sources, identity) -> tuple[str, str]:
-    """(subject, body) of the post, signed by ``identity`` (the project key)."""
+    """(subject, body) of the post, signed by ``identity`` - one of the publisher's keys;
+    ``add_signature`` adds the next ones until the threshold is reached."""
     from . import update
     from_dict(sources.to_dict())                      # only a valid list is signed
     data = _canonical(sources)
@@ -118,18 +139,36 @@ def make_post(sources: Sources, identity) -> tuple[str, str]:
     return HEAD, f"{HEAD}\n\n{data.decode()}\n\n{sig}"
 
 
-def parse_post(body: str) -> Sources | None:
-    """The list in a post, if the project key signed it; None for anything else."""
-    from . import update
+def _split(body: str) -> tuple[bytes, str] | None:
     text = body.replace("\r\n", "\n")
     if not text.startswith(HEAD + "\n"):
         return None
     parts = text[len(HEAD):].strip("\n").split("\n\n", 1)
     if len(parts) != 2:
         return None
-    data, sig = parts[0].strip().encode(), parts[1]
+    return parts[0].strip().encode(), parts[1]
+
+
+def add_signature(body: str, identity) -> str:
+    """The post with this key's signature added (once): signers sign one after another."""
+    from . import update
+    parts = _split(body)
+    if parts is None:
+        raise SourcesError("not a post of release sources")
+    data, sig = parts
+    return f"{HEAD}\n\n{data.decode()}\n\n{update.add_signature(sig, DOMAIN + data, identity)}"
+
+
+def parse_post(body: str, keys=None) -> Sources | None:
+    """The list in a post, if enough of the publisher's keys signed it (``keys``: its key
+    list, UN-RFC 0062 section 3; by default the project's pinned one); None otherwise."""
+    from . import update
+    parts = _split(body)
+    if parts is None:
+        return None
+    data, sig = parts
     try:
-        update.check_signature(DOMAIN + data, sig, "stable")    # the project key only
+        update.check_signature(DOMAIN + data, sig, "stable", keys)
         sources = from_dict(json.loads(data))
     except (update.UpdateError, ValueError):
         return None
@@ -143,16 +182,22 @@ def _when(sources: Sources) -> datetime:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
-def newest(bodies: list[str], known: Sources | dict | None = None) -> Sources:
-    """The newest valid list among the posts and the one kept from before."""
+def newest(bodies: list[str], known: Sources | dict | None = None, keys=None) -> Sources:
+    """The newest valid list among the posts and the one kept from before - except that
+    the first list naming ``moved_to`` stays: after it, the publisher's lists are not
+    used (UN-RFC 0062 section 6.3), and the council's are (``moved_to``)."""
     best = BUILT_IN
     if isinstance(known, dict):
         try:
             known = from_dict(known)
         except SourcesError:
             known = None
-    for candidate in [known, *map(parse_post, bodies)]:
-        if candidate is not None and _when(candidate) > _when(best):
+    candidates = [c for c in [known, *(parse_post(b, keys) for b in bodies)] if c is not None]
+    moved = [c for c in candidates if c.moved_to]
+    if moved:
+        return min(moved, key=_when)
+    for candidate in candidates:
+        if _when(candidate) > _when(best):
             best = candidate
     return best
 
