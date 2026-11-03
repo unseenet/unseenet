@@ -418,7 +418,12 @@ one node at a time.
    of release sources (file addresses and package indexes). Servers and clients
    use the newest list and keep it, so post a new one before a source goes away
    when you can. It grants nothing over what is installed: every file must
-   still match the signed checksums.
+   still match the signed checksums. Once the key list is pinned, the list
+   needs two signatures as a release does: `post` writes `sources.post` after
+   the vault's, and `release_sources.py sign sources.post --seed-file <reserve
+   key>` adds the second and posts it. When the list council keeps the sources
+   (UN-RFC 0020 section 6.8), `post --moved-to <council> sources.json` is the
+   project's last list.
 6. `.github/workflows/announce.yml` posts the release notes to
    `unseenet.announce` on Unseenet itself, over Tor, once the release
    workflow has succeeded.

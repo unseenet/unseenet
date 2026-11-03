@@ -123,3 +123,37 @@ def test_servers_keep_the_newest_list(tmp_path, monkeypatch, project):
     monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: [])
     su.update_service("x", tmp_path, st, direct=True)         # the network is gone: kept
     assert seen[-1] == sources()
+
+
+def test_the_list_needs_the_key_lists_threshold(monkeypatch):
+    """UN-RFC 0062 6.3: signed like a release - two of three once the key list is pinned."""
+    from unseenet import release_keys as rk
+    keys = [crypto.Identity.generate() for _ in range(3)]
+    kl = rk.parse(rk.make_body(1, [k.key_text for k in keys], 2, {"dev": 1}))
+    monkeypatch.setattr(rk, "PROJECT_FIRST", kl.body)
+    _, body = rs.make_post(sources(), keys[0])
+    assert rs.parse_post(body) is None                       # one of two
+    both = rs.add_signature(body, keys[1])
+    assert rs.parse_post(both) == sources()
+    assert rs.add_signature(both, keys[1]) == both           # once per key
+    stranger = crypto.Identity.generate()
+    assert rs.parse_post(rs.add_signature(body, stranger)) is None
+    # a later key list, given, is the one checked against
+    later = rk.parse(rk.make_body(2, [stranger.key_text], 1, prev=kl))
+    assert rs.parse_post(rs.make_post(sources(), stranger)[1], later) == sources()
+    with pytest.raises(rs.SourcesError):
+        rs.add_signature("Unseenet 0.8.0, stable\n", keys[0])
+
+
+def test_the_last_list_moves_to_a_council(project):
+    """moved_to: from the first such list on, the publisher's later lists are not used."""
+    council = "unseenet.lists@" + "a" * 16
+    moved = rs.from_dict({**sources("2026-11-03T08:00:00Z").to_dict(), "moved_to": council})
+    assert moved.moved_to == council and moved.to_dict()["moved_to"] == council
+    later = sources("2026-12-01T00:00:00Z", files=("https://evil.example/{name}",))
+    bodies = [rs.make_post(sources(), project)[1], rs.make_post(moved, project)[1],
+              rs.make_post(later, project)[1]]
+    assert rs.newest(bodies) == moved
+    assert rs.newest([rs.make_post(later, project)[1]], moved.to_dict()) == moved   # kept
+    with pytest.raises(rs.SourcesError, match="moved_to"):
+        rs.from_dict({**sources().to_dict(), "moved_to": "no group"})

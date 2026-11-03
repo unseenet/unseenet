@@ -631,8 +631,12 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
                                       repo=repo, network=network, say=say,
                                       keys=state.data.setdefault("release_keys", {}))
             finally:     # the newest list of sources, kept for when the network is gone (#902)
-                machine.sources = rs.newest([b for b in (seen[0] if seen else [])
-                                             if isinstance(b, str)], state.data.get("sources"))
+                from . import release_keys as rk
+                got = seen[0] if seen else []
+                keys, _ = rk.newest(rk.votes_of(got),
+                                    (state.data.get("release_keys") or {}).get("body"))
+                machine.sources = rs.newest([b for b in got if isinstance(b, str)],
+                                            state.data.get("sources"), keys)
                 if machine.sources.updated:
                     state.data["sources"] = machine.sources.to_dict()
         return run(machine, state, find=find, say=say, at_once=at_once)
