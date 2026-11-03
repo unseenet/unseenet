@@ -810,15 +810,17 @@ def mirrors_with(onions: list[str], channel: str, version: str, socks_port: int)
 
 
 def find_stick() -> Path | None:
+    """The stick this runs from, or None - also when looking is not allowed here (a
+    computer's own /boot/efi, say): then there is no stick to update."""
     from .portable import portable_root
-    root = portable_root()
-    if root is not None:
-        return root
     try:
+        root = portable_root()
+        if root is not None:
+            return root
         from .boot import find_media
-    except ImportError:
+        return find_media()
+    except (ImportError, OSError):
         return None
-    return find_media()
 
 
 def _remount_rw(media: Path) -> None:

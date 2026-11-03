@@ -149,6 +149,20 @@ async def test_the_client_follows_the_sticks_publisher(keys, tmp_path, monkeypat
     assert await s.refresh_releases() is None
 
 
+def test_no_stick_where_looking_is_not_allowed(monkeypatch):
+    """On a computer whose /boot/efi the user cannot read, there is no stick: the client
+    follows the project, it does not fail (GitHub's runners are such computers)."""
+    import unseenet.boot as boot
+
+    def refused():
+        raise PermissionError(13, "Permission denied", "/boot/efi/unseenet.apkovl.tar.gz")
+    monkeypatch.setattr(boot, "find_media", refused)
+    import unseenet.portable as portable
+    monkeypatch.setattr(portable, "portable_root", lambda: None)
+    assert update.find_stick() is None
+    assert pb.followed(update.find_stick()) == pb.PROJECT
+
+
 def test_the_routes_are_there():
     from unseenet.client.localapi import server as srv
     routes = {(m, p) for m, p, _ in srv.ROUTES}
