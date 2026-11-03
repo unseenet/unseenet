@@ -218,6 +218,7 @@ The protocol is designed to be extended without breaking old software:
 | 0061 | Council Proposals, Hearings and Objections   | Standards Track |
 | 0062 | Update Channels                              | Standards Track |
 | 0063 | The UN-RFC Series in the Network             | Standards Track |
+| 0065 | Operator Channels                            | Standards Track |
 
 The moderation submission queue first reserved as 0009 is covered by
 UN-RFC 0009 section 3.
