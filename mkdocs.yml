@@ -84,7 +84,7 @@ nav:
       - Docker: node/docker.md
       - Your responsibility: node/responsibility.md
   - Running a replica: replica.md
-  - Operator channels: operator-channel.md
+  - The operator box: operator-channel.md
   - Specification: spec/index.md
   - Developers:
       - Write a client: developers/index.md

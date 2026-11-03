@@ -7,8 +7,22 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **One operator box for all your servers** (UN-RFC 0065 section 3.2, #876): servers
+  share one box, each with its own key and name (`unseenet-replica operator <box>
+  --name replica1`). An answer to a server's message goes to that server; a new message
+  goes to the server you pick - by key through the local API (`GET /api/teams` lists a
+  box's `servers`), by name with `unseenet operator say <box> <server> <text>` - and
+  `help`, `status` and `notices` to nobody in particular are answered by all. The box's
+  manifest lists its servers (`operator_servers`). A server that must stay apart can
+  still have a box of its own.
+
 ### Fixed
 
+- **Answering in a team inbox works** (#938): an answer to a server's hello failed with
+  "owner key does not match the inbox's group ID"; it is now sent to the box, on its
+  behalf. A server's hello is no longer posted twice when a try was cut off.
 - **A replica's operator channel never holds up its rounds** (#874): posting in the channel
   costs postage (26 bits for a team key, minutes on a small machine), and the round used
   to wait for it. The round now hands the channel its status; the channel's own task

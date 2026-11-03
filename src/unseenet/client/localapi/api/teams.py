@@ -15,8 +15,16 @@ from . import *  # noqa: F403  - the module's names, as when this was one file
 class Teams:
     def teams(self) -> dict:
         """``GET /api/teams``: ``{"teams": [{"group", "name", "reader"}]}`` - the team
-        inboxes you read; ``reader`` false once you were removed (offer to forget it)."""
-        return {"teams": self._ready().team_inboxes()}
+        inboxes you read; ``reader`` false once you were removed (offer to forget it).
+        An operator box (UN-RFC 0065) also has ``servers``: ``[{"name", "key"}]``, to
+        offer as whom a new message is for (``to_server`` in ``POST /api/private``)."""
+        from ...operator import box_servers
+        s = self._ready()
+        rows = s.team_inboxes()
+        for r in rows:
+            if s.manifest_data(r["group"]).get("operator_channel"):
+                r["servers"] = box_servers(s, r["group"])
+        return {"teams": rows}
 
     async def accept_team(self, body: dict) -> dict:
         """``POST /api/teams/accept`` ``{"id"}``: accept the invitation in that private

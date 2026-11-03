@@ -183,7 +183,8 @@ class Desk:
     """A server's side of its channel: its commands, and what it remembers - the
     Message-IDs it handled, the confirmations it waits for. ``state`` is a dict the
     server keeps (in its vault or state file) and is changed in place. ``mode`` is the
-    ``operator_channel`` setting (section 5.5). ``server`` names it in a shared channel."""
+    ``operator_channel`` setting (section 5.5). ``server``: its name, which a message in
+    a box several servers read starts with (section 3.2)."""
 
     def __init__(self, commands: list[Command], state: dict, *, mode: str = "notices",
                  server: str | None = None, now: Callable[[], float] = time.time,
@@ -220,34 +221,54 @@ class Desk:
         for who in [w for w, x in waiting.items() if now > x["until"]]:
             del waiting[who]
 
-    def _parse(self, text: str) -> tuple[str, Args] | None:
+    def _parse(self, text: str, others=frozenset()) -> tuple[str, Args, bool] | None:
+        """``(verb, args, addressed)``: ``addressed`` when it starts with this server's
+        name and a colon (section 3.2); None when it starts with another server's name
+        (``others``, lower case) or says nothing."""
         text = (text or "").strip()
-        if self.server is not None:
-            name, colon, rest = text.partition(":")
-            if not colon or "\n" in name or name.strip().lower() != self.server.lower():
-                return None                          # for another server (section 3.2)
+        name, colon, rest = text.partition(":")
+        head = name.strip().lower() if colon and "\n" not in name else ""
+        addressed = bool(self.server) and head == self.server.lower()
+        if addressed:
             text = rest.strip()
+        elif head and head in others:
+            return None                              # for another server (section 3.2)
         words = text.splitlines()[0].split() if text else []
         if not words:
             return None
         verb = words[0].rstrip(":").lower()          # "talk: hello" as "talk hello"
         rest = text[len(words[0]):].strip()
-        return verb, Args.of(words[1:], rest)
+        return verb, Args.of(words[1:], rest), addressed
 
     async def take(self, message_id: str, sender: str, date: datetime | None,
-                   text: str) -> Answer | None:
+                   text: str, *, to_me: bool | None = None, shared: bool = False,
+                   others=frozenset()) -> Answer | None:
         """A message from a reader of the channel (the caller has checked that, section
         3.3). The answer to post as its reply, or None when it is not for this server or
-        was handled before. ``date``: the message's Date."""
+        was handled before. ``date``: the message's Date.
+
+        In a box several servers read (``shared``, section 3.2) a message is for this
+        server when it starts with its name, or answers one of its messages (``to_me``
+        True; False: another server's). Anything else is for all of them: each answers
+        ``help``, ``status`` and ``notices``, and a ``yes`` with the code it waits for;
+        the rest is left to the server it names."""
         now = self.now()
         self._prune(now)
         if message_id in self.state["handled"]:
             return None                              # once only (section 5.3)
-        parsed = self._parse(text)
+        parsed = self._parse(text, others)
         if parsed is None:
             return None
+        verb, args, addressed = parsed
+        if not addressed and to_me is not True and shared:
+            if to_me is False:
+                return None                          # an answer to another server
+            waiting = self.state["waiting"].get(sender)
+            if verb == "yes" and not (waiting and list(args) == [waiting["code"]]):
+                return None
+            if verb not in READ_ONLY + ("yes",):
+                return None
         self.state["handled"][message_id] = now
-        verb, args = parsed
         waiting = self.state["waiting"].pop(sender, None)
         if date is not None and now - date.timestamp() > COMMAND_MAX_AGE:
             return Answer("refused", "This came too late (over an hour after it was written): "

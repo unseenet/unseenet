@@ -262,3 +262,103 @@ def test_any_inbox_takes_sealed_posts_from_unripe_one_time_keys(ripening_rules, 
     art = inbox_article(m.group, owner.public_key, from_name="x", subject="Report", body="spam\n",
                         sender=writer, readers=[reader.public_key] if extra else None, pow_bits=bits)
     n.accept(art.to_bytes())                               # no ripening asked of a one-time key
+
+
+async def test_an_answer_inside_a_team_inbox_through_the_local_api(net):
+    """An operator answers the server's hello in its channel (UN-RFC 0065): the answer goes
+    to the team inbox, whose owner is not the server's key, on the inbox's behalf - also
+    when the client does not say so."""
+    import asyncio
+
+    from unseenet.client import operator as oc
+    from unseenet.client.localapi import LocalAPI
+    project, andreas, server = net("project"), net("andreas"), net("server")
+    await andreas.ensure_inbox()
+    gid = await project.create_group("operator.replica1", "inbox")
+    await oc.add_server(project, gid, oc.make_channel_key(server, gid), "replica1")
+    await project.add_team_reader(gid, andreas.identity().key_text)
+    await andreas.fetch_group(andreas.my_inbox)
+    await andreas.accept_team_invitation(next(m for m in andreas.private_messages()
+                                              if andreas.team_invitation(m)))
+    chan = oc.OperatorChannel(server, gid)
+    assert await chan.ready()                                   # says hello
+    await chan.poll()
+    [hello] = [m for m in await andreas.fetch_group(gid) if m.readable]
+    assert andreas.reply_target(hello) == gid
+
+    api = LocalAPI(session=andreas)
+    events = []
+    api._job_event = lambda job, group, state, **kw: events.append((state, kw))
+    api.private({"key": hello.sender_key, "body": "status", "kind": "chat", "reply_to": hello.message_id})
+    for _ in range(400):
+        if any(s in ("reached", "failed") for s, _ in events):
+            break
+        await asyncio.sleep(0.05)
+    assert not [kw for s, kw in events if s == "failed"]
+    [(_, a)] = await chan.poll()                                # the server answers it
+    assert a.result == "done"
+
+    # a hello that was posted but cut off before it was noted (a restart) is not sent again
+    chan.state["greeted"] = []
+    chan.state["greeting"] = {"for": [andreas.team_key(gid).key_text], "after": 0}
+    assert await chan.ready()
+    assert chan.state["greeted"] == [andreas.team_key(gid).key_text] and "greeting" not in chan.state
+    assert len([m for m in await andreas.fetch_group(gid)
+                if m.operator and m.operator["notice"] == "hello"]) == 1
+
+
+async def test_one_operator_box_for_several_servers(net):
+    """UN-RFC 0065 section 3.2: one box, two servers. An answer to a server's message goes
+    to that server; a new message to the server picked by its key, as a contact."""
+    import asyncio
+
+    from unseenet.client import operator as oc
+    from unseenet.client.localapi import LocalAPI
+    from unseenet.core import operator as op
+    project, andreas, r1, r2 = net("project"), net("andreas"), net("r1"), net("r2")
+    await andreas.ensure_inbox()
+    gid = await project.create_group("operator", "inbox")
+    for srv in (r1, r2):
+        await oc.add_server(project, gid, oc.make_channel_key(srv, gid), "My servers")
+    await project.add_team_reader(gid, andreas.identity().key_text)
+    await andreas.fetch_group(andreas.my_inbox)
+    await andreas.accept_team_invitation(next(m for m in andreas.private_messages()
+                                              if andreas.team_invitation(m)))
+    status = {"replica1": "one is fine", "replica2": "two is fine"}
+    chans = [oc.OperatorChannel(srv, gid, [op.Command("ping", "pong", run=lambda a, n=n: _pong(n))],
+                                server=n, mode="commands", status=lambda n=n: status[n])
+             for srv, n in ((r1, "replica1"), (r2, "replica2"))]
+    for c in chans:
+        assert await c.ready()
+        await c.poll()
+    hellos = {m.operator["server"]: m for m in await andreas.fetch_group(gid)
+              if m.operator and m.operator["notice"] == "hello"}
+    assert set(hellos) == {"replica1", "replica2"}
+    assert "replica2:" in hellos["replica2"].body                 # tells how to name it
+    api = LocalAPI(session=andreas)
+    [box] = api.teams()["teams"]
+    assert {r["name"] for r in box["servers"]} == {"replica1", "replica2"}
+    key2 = next(r["key"] for r in box["servers"] if r["name"] == "replica2")
+
+    async def send(**data):
+        done = asyncio.Event()
+        api._job_event = lambda job, group, state, **kw: (state in ("reached", "failed")
+                                                          and done.set())
+        api.private({"kind": "chat", **data})
+        await asyncio.wait_for(done.wait(), 20)
+
+    async def answers():
+        return {c.server: [a.text for _, a in await c.poll()] for c in chans}
+
+    await send(key=hellos["replica1"].sender_key, body="ping", reply_to=hellos["replica1"].message_id)
+    assert await answers() == {"replica1": ["pong replica1"], "replica2": []}
+    await send(key=key2, body="ping", as_team=gid)                # a new message, for replica2
+    assert await answers() == {"replica1": [], "replica2": ["pong replica2"]}
+    await andreas.send_private(gid, "", "status\n", kind="chat", as_team=gid)
+    assert await answers() == {"replica1": ["one is fine"], "replica2": ["two is fine"]}
+    await andreas.send_private(gid, "", "ping\n", kind="chat", as_team=gid)   # for whom?
+    assert await answers() == {"replica1": [], "replica2": []}
+
+
+async def _pong(name):
+    return f"pong {name}"

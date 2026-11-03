@@ -44,10 +44,16 @@ def operators_parsers(sub) -> None:
     s = sub.add_parser("operator", help="operator channels: a server tells its operators what "
                                         "happens and takes their commands (UN-RFC 0065)")
     t = s.add_subparsers(dest="what")
-    t.add_parser("channels", help="the operator channels you own or read")
-    p = t.add_parser("create", help="owner: a new channel for one server (a team inbox)")
-    p.add_argument("name", help="the inbox's name, e.g. operator.replica2")
-    p.add_argument("--server-name", help="what the channel answers as, e.g. replica2")
+    t.add_parser("channels", help="the operator boxes you own or read")
+    p = t.add_parser("create", help="owner: a new operator box (a team inbox) for your servers")
+    p.add_argument("name", help="the inbox's name, e.g. operator")
+    p.add_argument("--server-name", help="what the box answers as, e.g. 'My servers'")
+    p = t.add_parser("servers", help="the servers in a box, by name")
+    p.add_argument("channel")
+    p = t.add_parser("say", help="a message for one server in a box")
+    p.add_argument("channel")
+    p.add_argument("server", help="its name, as `operator servers` lists it")
+    p.add_argument("text", help="the command, e.g. status; - reads it from stdin")
     p = t.add_parser("add-server", help="owner: list the server's channel key as a reader")
     p.add_argument("channel")
     p.add_argument("key", help="the channel key the server showed")
@@ -97,6 +103,21 @@ async def c_operator(app: App, args) -> None:
                                  **({"team_name": args.server_name} if args.server_name else {}))
             emit(args, f"Made {gid}.\nOn the server, make its channel key for it and give the "
                        f"key to `unseenet operator add-server {gid} <key>`.", {"group": gid})
+        elif what == "servers":
+            from ..client.operator import box_servers
+            await s.fetch_group(args.channel)
+            rows = box_servers(s, args.channel)
+            emit(args, "\n".join(f"{r['name'] or '(not heard from yet)'}  {r['key']}" for r in rows)
+                 or "No servers in that box yet.", rows)
+        elif what == "say":
+            from ..client.operator import address
+            from ..client.session import KIND_CHAT
+            if s.team_key(args.channel) is None:
+                sys.exit("you read no such box: accept its invitation first")
+            text = sys.stdin.read() if args.text == "-" else args.text
+            mid = await s.send_private(args.channel, "", address(args.server, text).rstrip() + "\n",
+                                       kind=KIND_CHAT, as_team=args.channel)
+            emit(args, f"Sent to {args.server}: {mid}", {"id": mid})
         elif what == "add-server":
             await add_server(s, args.channel, args.key)
             emit(args, f"The server reads {args.channel} now.", {"group": args.channel})
@@ -171,8 +192,10 @@ async def c_team(app: App, args) -> None:
             if target is None:
                 sys.exit("it was sent anonymously: there is nobody to answer")
             text = sys.stdin.read() if args.text == "-" else args.text + "\n"
+            sender = crypto.key_from_text(msg.sender_key)
+            mine = sender if target == personal_inbox_id(sender) else None   # or a team inbox
             mid = await s.send_private(target, "Re: " + (msg.subject or ""), text,
-                                       owner_key=crypto.key_from_text(msg.sender_key),
+                                       owner_key=mine,
                                        references=[msg.message_id], as_team=args.group)
             emit(args, f"Answered as {s.team_name(args.group)}: {mid}", {"id": mid})
     except (SessionError, ValueError, crypto.CryptoError) as exc:

@@ -115,11 +115,22 @@ def test_notices_mode_takes_only_help_status_and_notices():
     assert done == []
 
 
-def test_a_shared_channel_names_the_server():
+def test_a_shared_box_names_the_server():
+    """Section 3.2: in a box several servers read, a message is for this server when it
+    starts with its name or answers one of its messages; help, status and notices go to
+    all; the rest is left to the server it names."""
     desk, _, clock = _desk(server="replica2")
-    assert run(desk.take("<1>", "a", now_of(clock), "ping")) is None           # not for it
-    assert run(desk.take("<2>", "a", now_of(clock), "node3: ping")) is None
-    assert run(desk.take("<3>", "a", now_of(clock), "Replica2: ping")).text == "pong"
+    t = now_of(clock)
+    shared = {"shared": True, "others": {"node3"}}
+    assert run(desk.take("<1>", "a", t, "ping", **shared)) is None              # for whom?
+    assert run(desk.take("<2>", "a", t, "node3: ping", **shared)) is None
+    assert run(desk.take("<3>", "a", t, "Replica2: ping", **shared)).text == "pong"
+    assert run(desk.take("<4>", "a", t, "ping", to_me=True, **shared)).text == "pong"
+    assert run(desk.take("<5>", "a", t, "ping", to_me=False, **shared)) is None  # node3's
+    assert run(desk.take("<6>", "a", t, "status", **shared)).text == "pong"     # to all
+    assert run(desk.take("<7>", "a", t, "yes 1234", **shared)) is None          # not waiting
+    assert run(desk.take("<8>", "a", t, "ping")).text == "pong"                 # alone in it
+    assert run(desk.take("<9>", "a", t, "talk: hej")) is not None               # not a name
 
 
 def test_offers_and_inner_headers():
@@ -205,7 +216,7 @@ async def test_a_channel_from_start_to_end(net):
     assert await chan.ready()
     [hello] = [m for m in await andreas.fetch_group(gid)
                if m.operator and m.operator["notice"] == "hello"]
-    assert "replica2 reads this channel now" in hello.body
+    assert "replica2 reads this box now" in hello.body
     assert [o["reply"] for o in hello.operator["offers"]] == ["help", "status"]
     assert andreas.reply_target(hello) == gid                          # an answer goes there
     await andreas.send_private(andreas.reply_target(hello), "", "status\n", kind="chat",

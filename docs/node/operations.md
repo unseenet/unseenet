@@ -102,7 +102,7 @@ Answers go out as the team's name, never as the person who wrote them.
 
 **An operator channel for the node** - the node telling you about warnings, a full
 disk or new messages in its contact inbox, and taking commands - is planned for 0.9.
-Replicas have one from 0.8.0; see [Operator channels](../operator-channel.md).
+Replicas have one from 0.8.0; see [The operator box](../operator-channel.md).
 
 **Several nodes.** Run several nodes and you have a local inbox on each, with
 the same group ID: create it on each node (`node-add` each, then
