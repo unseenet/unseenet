@@ -61,9 +61,10 @@ def council_parsers(sub) -> None:
     p = t.add_parser("add-list", help="a list council keeps one more list (UN-RFC 0020): the "
                                       "draft of its group and the change to propose")
     p.add_argument("council", help="the list council, e.g. unseenet.lists@<fp>")
-    p.add_argument("kind", choices=("root", "entrances", "scribes"))
+    p.add_argument("kind", choices=("root", "entrances", "scribes", "sources"))
     p.add_argument("--import", dest="import_file", default=None, metavar="FILE",
-                   help="the list it starts from (for root: a hierarchies.json)")
+                   help="the list it starts from (for root: a hierarchies.json; for sources: "
+                        "{\"files\": [...], \"index\": [...]}, by default the built-in ones)")
     p.add_argument("--out", default=None, help="the draft file (default: <name>.council.json)")
     p = t.add_parser("add-directory", help="a list council keeps an open directory, where "
                                            "gateways announce themselves (UN-RFC 0038 6.1): "
@@ -270,9 +271,22 @@ async def c_council(app: App, args) -> None:
                                            min_level=cur.min_level)
                 draft["also"] = [{"group": ag, "body": ab}]
                 fields["announce"] = {**lc.announce, "entrances": ag}
-            if getattr(args, "import_file", None):
-                imp = ls.import_body({args.kind: json.loads(
-                    Path(args.import_file).read_text(encoding="utf-8"))})
+            start = (json.loads(Path(args.import_file).read_text(encoding="utf-8"))
+                     if getattr(args, "import_file", None) else None)
+            if args.kind == "sources":                   # section 6.8
+                from .. import release_sources as rs
+                from ..known_nodes import RELEASES_GROUP
+                if start is None:                        # the built-in sources, as they are
+                    start = {"files": list(rs.BUILT_IN.files), "index": list(rs.BUILT_IN.index)}
+                try:
+                    start = ls.check_sources({"files": start.get("files"),
+                                              "index": start.get("index")})
+                except (ls.ListProblem, AttributeError) as exc:
+                    raise SessionError(f"not a list of sources: {exc}") from exc
+                if not lc.publishers:                    # whose releases it says where to find
+                    fields["publishers"] = [RELEASES_GROUP]
+            if start is not None:
+                imp = ls.import_body({args.kind: start})
                 fields["imports"] = {**lc.imports, args.kind: ls.import_hash(imp)}
                 draft["posts"] = [{"group": args.council, "subject": ls.IMPORT_SUBJECT,
                                    "body": imp}]

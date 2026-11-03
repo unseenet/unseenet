@@ -272,6 +272,48 @@ async def test_a_list_council_adds_the_entrance_list(net, tmp_path, capsys):
     assert set(lc.lists) == {"nodes", "entrances"} and lc.announce["entrances"] == also["group"]
 
 
+async def test_a_list_council_adds_the_sources_list(net, tmp_path, capsys):
+    """``council add-list <council> sources``: starts from the built-in sources, and
+    names the project's releases channel as the publisher (UN-RFC 0020 section 6.8)."""
+    from unseenet import release_sources as rs
+    from unseenet.core import lists as ls
+    from unseenet.core import proposals as pr
+    from unseenet.known_nodes import RELEASES_GROUP
+    a, b = net("a"), net("b")
+    draft = tmp_path / "unseenet.lists.council.json"
+    await cli.c_council(App(a), Namespace(
+        json=True, identity=None, what="create", name="unseenet.lists", type="channel",
+        member=[b.identity().key_text], title="", description="", min_pow=None,
+        retention_days=None, min_level=3, sponsors=None, out=str(draft), sign=True,
+        groups=True, lists="nodes", import_file=None))
+    await cli.c_council(App(b), Namespace(json=True, identity=None, what="sign",
+                                          draft=str(draft), yes=True))
+    gid = json.loads(draft.read_text())["group"]
+    out = tmp_path / "unseenet.sources.council.json"
+    await cli.c_council(App(a), Namespace(json=True, identity=None, what="add-list",
+                                          council=gid, kind="sources", import_file=None,
+                                          out=str(out)))
+    capsys.readouterr()
+    d = json.loads(out.read_text())
+    assert d["group"].startswith("unseenet.sources@")
+    (post,) = d["posts"]
+    assert ls.imported_sources(post["body"]) == {"files": list(rs.BUILT_IN.files),
+                                                 "index": list(rs.BUILT_IN.index)}
+    fields = json.loads(out.with_name("unseenet.sources.change.json").read_text()
+                        )["manifest"]["fields"]
+    assert fields["publishers"] == [RELEASES_GROUP]
+    assert fields["imports"]["sources"] == ls.import_hash(post["body"])
+    pr.make_proposal(gid, 1, {"manifest": {"fields": fields}}, "the council keeps the sources")
+    cur = (await a.council_chain(gid)).current
+    assert "sources" in ls.list_council({**cur.data, **fields}).lists
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"files": ["ftp://x/{name}"], "index": []}')
+    with pytest.raises(SystemExit, match="not a list of sources"):
+        await cli.c_council(App(a), Namespace(json=True, identity=None, what="add-list",
+                                              council=gid, kind="sources",
+                                              import_file=str(bad), out=str(out)))
+
+
 async def test_a_list_council_created_with_entrances(net, tmp_path, capsys):
     from unseenet.core import lists as ls
     a, b = net("a"), net("b")

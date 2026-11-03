@@ -246,3 +246,30 @@ def test_canaries_and_connection_verdicts():
     assert ls.connection_verdicts(readings, {a, b, c, d})[1] == set()
     # nothing posted yesterday: no verdict
     assert ls.connection_verdicts(readings, set()) == (set(), set())
+
+
+def test_the_sources_list_is_the_import_and_the_decisions():
+    """UN-RFC 0020 section 6.8: nothing is measured; a passed ``sources`` replaces it."""
+    start = {"files": ["https://github.com/unseenet/{repo}/releases/download/{tag}/{name}"],
+             "index": ["https://pypi.org/simple/"]}
+    body = ls.import_body({"sources": start})
+    assert ls.imported_sources(body) == start
+    day = date(2026, 11, 20)
+    got = ls.sources_list(day=day, seq=3, imported=start, decisions=ls.DecisionState())
+    updated, sources = ls.parse_sources_list(got)
+    assert updated == "council 3 day 2026-11-20" and list(sources.files) == start["files"]
+    new = {"files": ["https://codeberg.org/unseenet/{repo}/releases/download/{tag}/{name}",
+                     start["files"][0]], "index": start["index"]}
+    ls.check_list_change({"sources": new})
+    dec = ls.decisions_until([ls.Decision(date(2026, 11, 18), "abcd", {"sources": new})], day)
+    _, sources = ls.parse_sources_list(ls.sources_list(day=day, seq=3, imported=start,
+                                                       decisions=dec))
+    assert sources.files[0].startswith("https://codeberg.org/")
+    assert ls.sources_list(day=day, seq=1, imported=None, decisions=ls.DecisionState()) is None
+    for bad in ({"files": ["ftp://x/{name}"], "index": start["index"]},
+                {"files": start["files"]}, {"files": [], "index": start["index"]}):
+        with pytest.raises(ls.ListProblem):
+            ls.check_list_change({"sources": bad})
+    with pytest.raises(ls.ListProblem, match="publishers"):
+        ls.list_council({"lists": {"sources": "unseenet.sources@" + "a" * 16},
+                         "claims": "c@" + "b" * 16, "reports": "r@" + "c" * 16})

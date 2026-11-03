@@ -25,7 +25,7 @@ from . import transport
 from .announcements import Announcement
 from .groups import canonical_json, parse_canonical_json, split_group_id
 
-LIST_KINDS = ("nodes", "root", "entrances", "scribes")
+LIST_KINDS = ("nodes", "root", "entrances", "scribes", "sources")
 ANNOUNCE_KINDS = {"entrances", "gateways"}   # 5.1; gateways: the directory (UN-RFC 0038 6.1)
 REPORT_PREFIX = "report "
 MAX_NODES = 200                              # UN-RFC 0010 section 2
@@ -95,8 +95,9 @@ def list_council(data: dict) -> ListCouncil | None:
     pubs = data.get("publishers", [])
     if not isinstance(pubs, list):
         raise ListProblem("publishers is a list of Group IDs")
-    if "scribes" in lists and not pubs:
-        raise ListProblem("a council with a scribe list names its publishers")
+    for kind in ("scribes", "sources"):
+        if kind in lists and not pubs:
+            raise ListProblem(f"a council with a {kind} list names its publishers")
     imp = data.get("import")
     if imp is not None and not (isinstance(imp, str) and _HASH.fullmatch(imp)):
         raise ListProblem("import is sha256:<hex> of the import's body")
@@ -128,7 +129,7 @@ def import_for(lc: ListCouncil, kind: str) -> str | None:
 
 IMPORT_SUBJECT = "import"
 LIST_LABELS = {"nodes": "nodes", "root": "hierarchies", "entrances": "entrances",
-               "scribes": "scribes"}
+               "scribes": "scribes", "sources": "sources"}
 
 
 def import_body(lists: dict) -> str:
@@ -376,8 +377,23 @@ def check_list_change(c) -> None:
             lo, hi = PARAM_LIMITS[k]
             if not isinstance(v, int) or isinstance(v, bool) or not lo <= v <= hi:
                 raise ListProblem(f"{k} is a number from {lo} to {hi}")
+    elif op == "sources":
+        check_sources(arg)
     else:
-        raise ListProblem("a list change is one of remove, restore, reserve, unreserve, set")
+        raise ListProblem("a list change is one of remove, restore, reserve, unreserve, set, "
+                          "sources")
+
+
+def check_sources(arg) -> dict:
+    """``{"files": [...], "index": [...]}`` as UN-RFC 0062 section 6.3 says (section 6.8)."""
+    from .. import release_sources as rs
+    if not isinstance(arg, dict) or set(arg) != {"files", "index"}:
+        raise ListProblem('sources is {"files": [...], "index": [...]}')
+    try:
+        got = rs.from_dict({"v": 1, "updated": "2000-01-01T00:00:00Z", **arg})
+    except rs.SourcesError as exc:
+        raise ListProblem(f"sources: {exc}") from exc
+    return {"files": list(got.files), "index": list(got.index)}
 
 
 @dataclass(frozen=True)
@@ -393,6 +409,7 @@ class DecisionState:
     removed: dict[str, set[str]] = field(default_factory=lambda: {k: set() for k in LIST_KINDS})
     reserved: set[str] = field(default_factory=set)
     params: dict[str, int] = field(default_factory=lambda: dict(PARAMS))
+    sources: dict | None = None            # the newest passed ``sources`` (section 6.8)
 
 
 def decisions_until(decisions, day: date) -> DecisionState:
@@ -413,7 +430,42 @@ def decisions_until(decisions, day: date) -> DecisionState:
             st.reserved.discard(arg)
         elif op == "set":
             st.params.update(arg)
+        elif op == "sources":
+            st.sources = check_sources(arg)
     return st
+
+
+# --- the sources list (section 6.8) -----------------------------------------------
+
+def imported_sources(body: str) -> dict | None:
+    """The ``sources`` of an import (``{"files", "index"}``), or None."""
+    try:
+        return check_sources(parse_canonical_json(body)["sources"])
+    except Exception:  # noqa: BLE001 - none to start from
+        return None
+
+
+def sources_list(*, day: date, seq: int, imported: dict | None,
+                 decisions: "DecisionState") -> str | None:
+    """The sources list for ``day``: the import with the passed ``sources`` decisions
+    applied, the newest last (section 6.8). Nothing is measured. None when there is
+    neither an import nor a decision."""
+    got = decisions.sources or imported
+    if got is None:
+        return None
+    return canonical_json({"v": 1, "updated": f"council {seq} day {day.isoformat()}",
+                           "files": got["files"], "index": got["index"]}) + "\n"
+
+
+def parse_sources_list(body: str):
+    """(updated, Sources) of a sources list a council's member posted."""
+    from .. import release_sources as rs
+    d = parse_canonical_json(body.rstrip("\n"))
+    if not isinstance(d, dict) or d.get("v") != 1 or updated_day(str(d.get("updated"))) is None:
+        raise ValueError("not a sources list of a council")
+    got = check_sources({"files": d.get("files"), "index": d.get("index")})
+    return str(d["updated"]), rs.Sources(tuple(got["files"]), tuple(got["index"]),
+                                         str(d["updated"]))
 
 
 # --- the node list (section 6.1) -------------------------------------------------

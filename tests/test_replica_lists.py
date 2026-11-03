@@ -63,7 +63,8 @@ async def world(tmp_path, monkeypatch):
     server.close()
 
 
-async def found_lists(sessions, when, public=False, imported=None, root=None, entrances=False):
+async def found_lists(sessions, when, public=False, imported=None, root=None, entrances=False,
+                      sources=None):
     keys = [s.identity().key_text for s in sessions]
     a = sessions[0]
     groups = {}
@@ -72,6 +73,8 @@ async def found_lists(sessions, when, public=False, imported=None, root=None, en
         parts.append(("hierarchies", "channel"))
     if entrances:                                        # section 6.3
         parts += [("entrances", "channel"), ("entrances.announce", "open")]
+    if sources is not None:                              # section 6.8
+        parts.append(("sources", "channel"))
     if public:                                           # UN-RFC 0061 section 3
         parts += [("proposals", "open"), ("talk", "open"), ("log", "channel")]
     for part, kind in parts:
@@ -85,13 +88,17 @@ async def found_lists(sessions, when, public=False, imported=None, root=None, en
         lists["root"] = groups["hierarchies"]
     fields = {"min_pow": 0, "lists": lists, "claims": groups["claims"],
               "reports": groups["reports"], "min_software": {"unseenet": "0.1.0"}}
+    if sources is not None:
+        lists["sources"] = groups["sources"]
+        fields["publishers"] = ["unseenet.releases@ph5fc5hop5232qsz"]
     if entrances:
         lists["entrances"] = groups["entrances"]
         fields["announce"] = {"entrances": groups["entrances.announce"]}
     fields.update({k: groups[k] for k in ("proposals", "talk", "log") if k in groups})
     imp = None
-    if imported is not None or root is not None:         # section 9
-        imp = ls.import_body({k: v for k, v in (("nodes", imported), ("root", root)) if v})
+    if imported is not None or root is not None or sources is not None:   # section 9
+        imp = ls.import_body({k: v for k, v in (("nodes", imported), ("root", root),
+                                                 ("sources", sources)) if v})
         fields["import"] = ls.import_hash(imp)
     gid, body = a.council_genesis("unseenet.lists", "channel", keys, fields=fields, date=when)
     for s in sessions:
@@ -299,6 +306,33 @@ async def test_dns_answers_are_decided_by_the_replicas_together(world, tmp_path)
     assert got["dk"].maintainer == me.key_text
     assert all(r.st["lists"]["root"]["tld_grants"] == {"dk": me.key_text} for r in reps)
     await user.close()
+
+
+async def test_the_replicas_keep_the_sources_list(world, tmp_path):
+    """UN-RFC 0020 section 6.8: the sources list is the import, with the passed ``sources``
+    decisions applied; the replicas post it alike, and a client reads it."""
+    node, ann, addr, clock, sessions = world
+    start = {"files": ["https://github.com/unseenet/{repo}/releases/download/{tag}/{name}"],
+             "index": ["https://pypi.org/simple/"]}
+    gid, groups = await found_lists(sessions, clock[0] - timedelta(hours=21), sources=start)
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for _ in range(3):
+        for r in reps:
+            status = await r.run_once()
+        clock[0] += timedelta(days=1)
+    posted = [m for m in await sessions[0].fetch_group(groups["sources"]) if m.readable]
+    by_day = {}
+    for m in posted:
+        by_day.setdefault(json.loads(m.body)["updated"], set()).add(m.body)
+    assert posted and all(len(b) == 1 for b in by_day.values())   # the same from all three
+    _, got = ls.parse_sources_list(posted[-1].body)
+    assert list(got.files) == start["files"] and list(got.index) == start["index"]
+    assert status["lists"]["sources"]
+    day, shown = await sessions[0].council_sources(gid)
+    assert shown.files == got.files and day == posted[-1].date
 
 
 async def test_the_replicas_list_an_entrance_serving_its_publishers_release(world, monkeypatch):

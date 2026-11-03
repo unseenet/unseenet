@@ -31,6 +31,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   post` signs with the vault, `sign --seed-file` adds a reserve key's), and `post --moved-to
   <council>` makes the project's last list - after it, its later lists are not used, and the list
   council's sources list takes their place.
+- **The list council keeps where releases are found** (#917, UN-RFC 0020 section 6.8): a `sources`
+  list - the release files' sites and the package indexes for the council's publishers - from
+  its import (`unseenet council add-list <council> sources`, the built-in sources by default)
+  with the passed `sources` decisions applied; a site is added or taken away only by a proposal
+  with a hearing. The replicas post it, and `Session.council_sources` reads it.
 - **A council member's work from the command line** (#874, part 1): `unseenet-replica members`
   (members and candidates: reports, agreeing days, level, sponsors, objections), `hearings`
   (with their counts, and proposals waiting to be seconded), `read talk|log`, `reply <id>`, and

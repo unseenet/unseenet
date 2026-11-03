@@ -108,13 +108,15 @@ class ListDuties:
         await self._compute_and_post(lc, chain, members, announcements, today, now)
         await self._root_round(lc, chain, members, today, now)
         await self._entrances_round(lc, chain, members, today - timedelta(days=LIST_LAG), now)
+        await self._sources_round(lc, chain, members, today - timedelta(days=LIST_LAG), now)
         out.update({"members": len(members), "announced": len({a.key for a in announcements}),
                     "measured": st["measured"], "computed": st["computed"],
                     "listed": st.get("listed", 0),
                     "root": (st.get("root") or {}).get("computed"),
                     "granted": (st.get("root") or {}).get("granted"),
                     "entrances": (st.get("entrances") or {}).get("listed"),
-                    "entrances_day": (st.get("entrances") or {}).get("computed")})
+                    "entrances_day": (st.get("entrances") or {}).get("computed"),
+                    "sources": (st.get("sources") or {}).get("computed")})
 
     async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict) -> None:
         """The list council's proposals, hearings and log (UN-RFC 0061), by the same code
@@ -352,6 +354,31 @@ class ListDuties:
                     and ls.import_hash(m.body) == want):
                 return m.body
         return None
+
+    # --- the sources list (section 6.8) ---------------------------------------------------
+
+    async def _sources_round(self, lc: ls.ListCouncil, chain: cn.Chain, members: set[str],
+                             day: date, now: datetime) -> None:
+        """Post where the publishers' releases are found: the import with the passed
+        ``sources`` decisions applied. Nothing is measured."""
+        if "sources" not in lc.lists:
+            return
+        st = self._lists_state().setdefault("sources", {})
+        if st.get("computed") == day.isoformat():
+            return
+        imp = await self._import_body(chain, lc, "sources")
+        body = ls.sources_list(day=day, seq=chain.current.seq,
+                               imported=ls.imported_sources(imp) if imp else None,
+                               decisions=self._list_decisions(day))
+        if body is None:
+            self.status.setdefault("lists", {})["sources_note"] = \
+                "the sources list has no import yet"
+            return
+        posted = await self._read_lists(lc.lists["sources"], members, kind="sources")
+        if await self._maybe_post(lc.lists["sources"], "sources list", day, body, posted, now):
+            log.info("list council: posted the sources list for %s", day)
+        st["computed"] = day.isoformat()
+        self.s.save()
 
     # --- the root list (sections 5.2, 6.2) -------------------------------------------------
 
