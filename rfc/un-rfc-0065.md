@@ -220,13 +220,13 @@ server answers with what it would do, in words, and a **confirmation
 code**:
 
 > Second proposal ABCD (the council keeps the gateway directory)?
-> Answer *yes 4821* within 10 minutes.
+> Answer *yes 4821* within 30 minutes.
 
 with the inner headers `Confirm-Code: 4821` and `Confirm-For:` the
 Message-ID of the command. The code:
 
 - is 4 random digits, new for each command;
-- is valid for 10 minutes, for one answer, and only from the reader
+- is valid for 30 minutes, for one answer, and only from the reader
   who gave the command (the same `Sender-Key`);
 - is answered by `yes <code>`; anything else from that reader, a wrong
   code included, cancels the command, and the server says so.
@@ -242,9 +242,17 @@ A server:
 
 - MUST carry out each command at most once, keeping the Message-IDs it
   has handled, at least for the channel's `retention_days`;
-- MUST NOT carry out a command dated more than 15 minutes before it
+- MUST NOT carry out a command dated more than an hour before it
   first saw it, nor a confirmation after its code expired; it answers
-  that the command came too late.
+  that the command came too late, and the operator sends it again.
+
+Carrying out each command once is what keeps an old message from
+acting twice; the hour only keeps a server that was down for a day
+from acting on what its operators have since forgotten. Articles take
+up to a minute at each node before they are forwarded (UN-RFC 0005
+section 5.5), and a command with its confirmation travels there and
+back twice, so the limits leave room for a slow network and an
+operator who is interrupted.
 
 ## 5.4 Answers
 
@@ -277,9 +285,14 @@ server's documentation and of its `help`.
 The server's setting `operator_channel`:
 
 - `off`: no channel;
-- `notices` (the RECOMMENDED default when a channel is set up): notices,
-  and only `help`, `status` and `notices`;
+- `notices` (the default): notices, and only `help`, `status` and
+  `notices`;
 - `commands`: all of section 5.
+
+Letting chat act is a choice, so it is not made by default. The tool
+that sets up a channel (section 3.1) SHOULD ask once whether the
+operators may also give commands, and say that anything that changes
+something still needs a confirmation code.
 
 # 6. Offers
 
