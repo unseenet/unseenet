@@ -442,9 +442,49 @@ class GroupsMixin:
         self._moderation_done(msg)
 
     def is_data_group(self, group_id: str) -> bool:
-        """A group for programs, not people (UN-RFC 0008 section 3.1.1)."""
+        """A group for programs, not people (UN-RFC 0008 section 3.1.1): one the project
+        lists, one whose manifest says ``"view": "data"``, or a council's own machine
+        group (#928)."""
         from ...known_nodes import DATA_GROUPS
-        return group_id in DATA_GROUPS or self.manifest_data(group_id).get("view") == "data"
+        return (group_id in DATA_GROUPS or self.manifest_data(group_id).get("view") == "data"
+                or group_id in self.council_machine_groups())
+
+    # The groups a council keeps for programs (UN-RFC 0054 section 8, 0020, 0061 section 3):
+    # what its manifest names under these fields. talk and room are for people.
+    COUNCIL_MACHINE_FIELDS = ("claims", "proposals", "log", "reports")
+    COUNCIL_MACHINE_MAPS = ("lists", "announce")
+
+    def council_machine_groups(self) -> set[str]:
+        """Every council you have the manifest of, and the groups it keeps for programs -
+        claims, proposals, log, reports, its lists and announcement groups - whatever
+        view their own manifests give them (#928). A group counts only when its name is
+        under the council's hierarchy, and, when its manifest is known, it is a council's
+        too: a manifest cannot hide somebody else's group."""
+        groups = self.data.get("groups", {})
+        out: set[str] = set()
+        for gid, entry in groups.items():
+            m = (entry or {}).get("manifest") or {}
+            if not isinstance(m.get("council"), dict):
+                continue
+            refs = [m.get(f) for f in self.COUNCIL_MACHINE_FIELDS]
+            for f in self.COUNCIL_MACHINE_MAPS:
+                if isinstance(m.get(f), dict):
+                    refs += list(m[f].values())
+            refs = [r for r in refs if isinstance(r, str) and "@" in r]
+            if not refs:
+                continue                                 # talk, room, or a council of nothing
+            name = gid.partition("@")[0]
+            top = name.rsplit(".", 1)[0] if "." in name else name
+            out.add(gid)
+            for r in refs:
+                rname = r.partition("@")[0]
+                if not (rname.startswith(name + ".") or rname.startswith(top + ".")):
+                    continue
+                own = (groups.get(r) or {}).get("manifest")
+                if own and not isinstance(own.get("council"), dict):
+                    continue
+                out.add(r)
+        return out
 
     def manifest_data(self, group_id: str) -> dict:
         """The newest manifest seen for a group ({} if none yet), with its charter under
