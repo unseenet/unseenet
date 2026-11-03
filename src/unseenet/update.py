@@ -336,7 +336,8 @@ def release_urls(channel: str, name: str, version: str | None = None,
         tag = "dev" if channel == "dev" else f"v{version}"
         for repo in RELEASE_REPOS:
             out += sources.file_urls(urlsplit(repo).path.rsplit("/", 1)[1], tag, name)
-    out += [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
+    if sources is None or not sources.updated:     # built in: only until a list is known
+        out += [release_url(channel, name, version, repo) for repo in RELEASE_REPOS]
     return list(dict.fromkeys(out))
 
 
@@ -353,12 +354,24 @@ def kept_sources(media: Path):
         return rs.BUILT_IN
 
 
-def keep_sources(media: Path, sources) -> None:
+def kept_council(media: Path) -> str | None:
+    """The council's sources list kept on the stick (UN-RFC 0020 section 6.8), if any."""
+    try:
+        got = json.loads((media / SOURCES_FILE).read_text()).get("council")
+        return got if isinstance(got, str) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def keep_sources(media: Path, sources, council: str | None = None) -> None:
     if not sources.updated:
         return
+    data = sources.to_dict()
+    if council:
+        data["council"] = council
     try:
         (media / SOURCES_FILE).parent.mkdir(parents=True, exist_ok=True)
-        (media / SOURCES_FILE).write_text(json.dumps(sources.to_dict(), indent=1))
+        (media / SOURCES_FILE).write_text(json.dumps(data, indent=1))
     except OSError:
         pass
 
@@ -739,6 +752,11 @@ async def from_network(socks_port: int) -> tuple[list[str], list[str]]:
             releases = await _newest_bodies(c, RELEASES_GROUP, 30)
             from . import release_keys as rk     # the key list's chain (UN-RFC 0062 3)
             releases += await rk.read_votes(c, RELEASES_GROUP)
+            from . import release_sources as rs  # a council keeps the sources (UN-RFC 0020 6.8)
+            for council in sorted(rs.moved_to_in(releases))[:3]:
+                got = await rs.read_council(c, council, RELEASES_GROUP)
+                if got is not None:
+                    releases.append(got)
             try:                         # and the newest lists of release sources (#902)
                 from . import release_sources as rs
                 releases += (await rs.read_group(c, RELEASES_GROUP, (rs.HEAD,), limit=3))[rs.HEAD]
@@ -857,10 +875,11 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
         found += on_github
         problems += [f"GitHub {m}" for m in missed]
         if socks_port:
-            bodies = [b for b in bodies if isinstance(b, str)]
             from . import release_sources as rs
+            councils = {b.council: b.body for b in bodies if isinstance(b, rs.CouncilList)}
+            bodies = [b for b in bodies if isinstance(b, str)]
             sources = rs.newest(bodies, kept_sources(media).to_dict(), keys)
-            keep_sources(media, sources)
+            keep_sources(media, sources, councils.get(sources.moved_to) or kept_council(media))
             for body in bodies:
                 post = parse_release_post(body)
                 if post and post[0] == args.channel:
@@ -889,7 +908,9 @@ def run(args: argparse.Namespace, socks_port: int | None) -> int:
     with tempfile.TemporaryDirectory(prefix="unseenet-update-") as tmp:
         zip_path = args.zip or Path(tmp) / rel.zip_name
         if not args.zip:
-            sources = release_urls(args.channel, rel.zip_name, rel.version, kept_sources(media))
+            from . import release_sources as rs
+            sources = release_urls(args.channel, rel.zip_name, rel.version,
+                                   rs.effective(kept_sources(media), kept_council(media)))
             if socks_port and onions:
                 sources += [base + MIRROR_PATH.format(channel=args.channel, name=rel.zip_name)
                             for base in mirrors_with(onions, args.channel, rel.release or rel.version,

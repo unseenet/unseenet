@@ -58,14 +58,20 @@ def test_the_newest_list_wins_and_is_kept(project):
     assert rs.newest([], {"v": 1, "files": "x"}) == rs.BUILT_IN
 
 
-def test_file_addresses_end_with_github():
+def test_a_known_list_alone_says_where():
+    """UN-RFC 0062 6.3 (#917): the built-in sources (GitHub) are only where a new client
+    starts; once a list is known, it alone says where - so a council can take GitHub
+    off the list when it is gone or used against the network."""
     urls = sources(files=(MIRROR,)).file_urls("unseenet-portable", "v0.8.0", "x.zip")
-    assert urls == [f"http://{ONION}/releases/unseenet-portable/v0.8.0/x.zip",
-                    "https://github.com/unseenet/unseenet-portable/releases/download/v0.8.0/x.zip"]
+    assert urls == [f"http://{ONION}/releases/unseenet-portable/v0.8.0/x.zip"]
     clients = up.release_urls("stable", "x.zip", "0.8.0", sources(files=(MIRROR,)))
-    assert clients[0].startswith(f"http://{ONION}/") and any("github.com" in u for u in clients)
+    assert clients[0].startswith(f"http://{ONION}/") and not any("github.com" in u for u in clients)
+    both = up.release_urls("stable", "x.zip", "0.8.0", sources())
+    assert both[0].startswith(f"http://{ONION}/") and "github.com" in both[-1]
     assert up.release_urls("stable", "x.zip", "0.8.0") == [
         up.release_url("stable", "x.zip", "0.8.0", r) for r in up.RELEASE_REPOS]
+    assert up.release_urls("stable", "x.zip", "0.8.0", rs.BUILT_IN)[-1].startswith(
+        "https://github.com/")
 
 
 def test_clients_keep_the_newest_list_on_the_stick(tmp_path):
@@ -75,6 +81,9 @@ def test_clients_keep_the_newest_list_on_the_stick(tmp_path):
     assert up.kept_sources(media) == sources()
     up.keep_sources(media, rs.BUILT_IN)                      # never replaced by the built-in
     assert up.kept_sources(media) == sources()
+    assert up.kept_council(media) is None
+    up.keep_sources(media, sources(), "{\"v\":1}")                # and the council's list beside
+    assert up.kept_council(media) == "{\"v\":1}" and up.kept_sources(media) == sources()
 
 
 def test_pip_gets_the_indexes():
@@ -157,3 +166,108 @@ def test_the_last_list_moves_to_a_council(project):
     assert rs.newest([rs.make_post(later, project)[1]], moved.to_dict()) == moved   # kept
     with pytest.raises(rs.SourcesError, match="moved_to"):
         rs.from_dict({**sources().to_dict(), "moved_to": "no group"})
+
+
+async def test_the_council_keeps_the_sources(tmp_path, monkeypatch, project):
+    """UN-RFC 0020 6.8 / 0062 6.3: once the project's list names ``moved_to``, sticks and
+    servers read the council's sources list through a node - signatures, members and
+    publishers checked there - and go by it; a list a non-member posts does not count."""
+    from datetime import date
+
+    import unseenet.client.session as sess
+    from unseenet.client.session import Session
+    from unseenet.core import lists as ls
+    from unseenet.core.store import Store
+    from unseenet.core.vault import Vault
+    from unseenet.known_nodes import RELEASES_GROUP
+    from unseenet.nntp import Client
+    from unseenet.node.server import Node, NodeConfig
+    monkeypatch.setattr(sess, "DEFAULT_POW", 8)
+    node = Node(Store(), NodeConfig(min_pow=6, forward_delay=(0, 0)))
+    server = await node.serve("127.0.0.1", 0)
+    addr = f"127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    made = []
+    for name in ("a", "b", "stranger"):
+        s = Session(Vault.open(tmp_path / f"{name}.vault", "pw", ops=1, mem=8192 * 1024),
+                    status=lambda *_: None)
+        s.new_identity(name, name)
+        s.add_node(addr)
+        made.append(s)
+    a, b, stranger = made
+    keys = [a.identity().key_text, b.identity().key_text]
+    groups = {}
+    for part, kind in (("claims", "open"), ("reports", "channel"), ("sources", "channel")):
+        g, body = a.council_genesis(f"unseenet.lists.{part}", kind, keys, fields={"min_pow": 0})
+        for s in (a, b):
+            await s.council_sign(g, body)
+        groups[part] = g
+    gid, body = a.council_genesis("unseenet.lists", "channel", keys, fields={
+        "min_pow": 0, "lists": {"sources": groups["sources"]}, "claims": groups["claims"],
+        "reports": groups["reports"], "publishers": [RELEASES_GROUP]})
+    for s in (a, b):
+        await s.council_sign(gid, body)
+    codeberg = {"files": ["https://codeberg.org/unseenet/{repo}/releases/download/{tag}/{name}"],
+                "index": [rs.PYPI]}
+    listed = ls.sources_list(day=date(2026, 11, 20), seq=1, imported=codeberg,
+                             decisions=ls.DecisionState())
+    await a.post(groups["sources"], "sources list 2026-11-20", listed,
+                 content_type="application/json")
+    c = await Client.connect(addr)
+    try:
+        got = await rs.read_council(c, gid, RELEASES_GROUP)
+        assert got is not None and got.body.rstrip("\n") == listed.rstrip("\n")
+        assert await rs.read_council(c, gid, "other.releases@" + "a" * 16) is None
+    finally:
+        await c.quit()
+    # the project's last list points there; the council's list is what counts then
+    moved = rs.from_dict({**sources().to_dict(), "moved_to": gid})
+    body_moved = rs.make_post(moved, project)[1]
+    assert rs.moved_to_in([body_moved, "x", got]) == {gid}
+    used = rs.effective(rs.newest([body_moved]), got.body)
+    assert used.files[0].startswith("https://codeberg.org/")
+    assert rs.effective(sources(), got.body) == sources()           # not moved: its own
+    assert rs.effective(moved, None) == moved                       # no council list yet
+    urls = up.release_urls("stable", "x.zip", "0.8.0", used)
+    assert urls and all(u.startswith("https://codeberg.org/") for u in urls)
+    # a list posted by somebody who is not a member does not count
+    fake = ls.sources_list(day=date(2026, 11, 21), seq=1,
+                           imported={"files": ["https://evil.example/{name}"], "index": [rs.PYPI]},
+                           decisions=ls.DecisionState())
+    with pytest.raises(Exception):                  # a channel: the node refuses it already
+        await stranger.post(groups["sources"], "sources list 2026-11-21", fake,
+                            content_type="application/json")
+    c = await Client.connect(addr)
+    try:
+        assert (await rs.read_council(c, gid, RELEASES_GROUP)).body == got.body
+    finally:
+        await c.quit()
+    for s in made:
+        await s.close()
+    server.close()
+
+
+def test_servers_go_by_the_councils_list(tmp_path, monkeypatch, project):
+    """A server takes the council's list once its publisher moved there, and keeps it
+    for when the network is gone."""
+    from datetime import date
+
+    from unseenet.core import lists as ls
+    council = "unseenet.lists@" + "b" * 16
+    moved = rs.from_dict({**sources().to_dict(), "moved_to": council})
+    listed = ls.sources_list(day=date(2026, 11, 20), seq=1, imported={
+        "files": ["https://codeberg.org/{repo}/{tag}/{name}"], "index": [rs.PYPI]},
+        decisions=ls.DecisionState())
+    got = [rs.make_post(moved, project)[1], rs.CouncilList(council, listed)]
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: got)
+    monkeypatch.setattr(su, "newest_release", lambda *a, network=None, **k: network() and
+                        su.Release("0.0.1", b""))
+    seen = []
+    monkeypatch.setattr(su, "run", lambda machine, state, find, **kw: find() and
+                        seen.append(machine.sources) or "current")
+    st = su.State.load(tmp_path / "state.json")
+    su.update_service("x", tmp_path, st, direct=True)
+    assert seen[-1].files == ("https://codeberg.org/{repo}/{tag}/{name}",)
+    assert st.data["sources"]["moved_to"] == council and st.data["sources_council"] == listed
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: [])
+    su.update_service("x", tmp_path, st, direct=True)          # the network is gone: kept
+    assert seen[-1].files == ("https://codeberg.org/{repo}/{tag}/{name}",)

@@ -34,10 +34,12 @@ server release - its signed checksums and requirements - in `unseenet.releases`,
 and the updater reads it from the node itself. It asks GitHub only when the
 network has none.
 
-Where it downloads from is set in the network too (#902): the project posts a
-signed list of release sources (mirrors and package indexes), and the updater
-keeps the newest one it saw. If GitHub or PyPI goes away, a new list is enough,
-with no new version needed. GitHub stays the last resort.
+Where it downloads from is set in the network too (#902): a signed list of
+release sources (sites and package indexes), and the updater keeps the newest
+one it saw. The list is kept by the list council (UN-RFC 0020 section 6.8), so
+no single key decides it: if GitHub or PyPI goes away, the council adds another
+site by a proposal, with no new version needed. The built-in GitHub and PyPI
+are only where a new install starts, until it has read a list.
 
 Turned off, it still looks, and writes a warning in its log when a newer
 release has been out for 30 days. To update by hand then:
