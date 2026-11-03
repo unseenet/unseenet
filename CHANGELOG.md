@@ -7,6 +7,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A replica's operator channel never holds up its rounds** (#874): posting in the channel
+  costs postage (26 bits for a team key, minutes on a small machine), and the round used
+  to wait for it. The round now hands the channel its status; the channel's own task
+  tells and answers beside the rounds.
+
 ### Added
 
 - **A server says hello in its operator channel** (UN-RFC 0065): when it becomes a reader,

@@ -668,8 +668,9 @@ async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float 
 
 async def _channel_round(rep, channel, task, stop: asyncio.Event):
     """After a round: the operator channel the configuration names - set up when it first
-    does, dropped when it no longer does - told the round's news and read. A failure
-    here never stops the replica."""
+    does, dropped when it no longer does - handed the round's news, which its own task
+    tells and answers beside the rounds. Nothing here waits for the network: a channel
+    never holds up the council, and a failure here never stops the replica."""
     from . import operator as ro
     cfg = rep._read_config()
     want = (cfg.get("operator_group"), cfg.get("operator_channel", "notices"))
@@ -689,14 +690,8 @@ async def _channel_round(rep, channel, task, stop: asyncio.Event):
     key = channel.chan.key
     rep.status["operator"] = {"group": channel.chan.group, "mode": channel.chan.desk.mode,
                              "key": key.key_text if key else None}
-    try:
-        ready = await channel.chan.ready()
-        rep.status["operator"]["reader"] = ready
-        if ready:
-            await channel.tell(rep.status)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("operator channel not told now: %s", exc)
-        rep.status["operator"]["error"] = str(exc)
+    rep.status["operator"].update({k: v for k, v in channel.info.items() if v is not None})
+    channel.hand(rep.status)
     rep._write_status()
     return channel, task
 
