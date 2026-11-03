@@ -157,3 +157,38 @@ async def test_the_configuration_names_the_channel(net, tmp_path, capsys):
     rcli.operator(Namespace(dir=str(d), group=None, mode=None))
     out = capsys.readouterr().out
     assert "ed25519:k" in out and "unseenet operator add-server operator@x ed25519:k" in out
+
+
+async def test_the_channel_never_holds_up_a_round(net, tmp_path):
+    """Posting in the channel costs postage - minutes on a small machine - so the round
+    only hands it the status; the channel's own task tells and answers."""
+    import asyncio
+    from unseenet.replica import run as rrun
+    replica = net("replica")
+    d = tmp_path / "state"
+    d.mkdir()
+    (d / "config.json").write_text(json.dumps({"operator_group": "operator@x"}))
+
+    class Rep(FakeReplica):
+        state_dir = d
+
+        def _read_config(self):
+            return json.loads((d / "config.json").read_text())
+
+        def _write_status(self):
+            (d / "status.json").write_text(json.dumps(self.status))
+    rep = Rep(replica, d)
+    rep.status = {"held": {}}
+    stop = asyncio.Event()
+    slow = asyncio.Event()
+
+    async def ready():                         # the network takes for ever
+        await slow.wait()
+        return True
+    channel, task = await asyncio.wait_for(rrun._channel_round(rep, None, None, stop), 2)
+    channel.chan.ready = ready
+    channel, task = await asyncio.wait_for(rrun._channel_round(rep, channel, task, stop), 2)
+    assert channel.latest == rep.status        # handed, not told yet
+    assert json.loads((d / "status.json").read_text())["operator"]["group"] == "operator@x"
+    stop.set()
+    task.cancel()

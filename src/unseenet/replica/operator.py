@@ -45,6 +45,8 @@ class ReplicaChannel:
 
     def __init__(self, rep, group_id: str, mode: str, state_dir: Path, **kw):
         self.rep, self.d = rep, Path(state_dir)
+        self.latest: dict | None = None      # the newest round's status, not told yet
+        self.info: dict = {"reader": None, "error": None}
         self.chan = oc.OperatorChannel(rep.s, group_id, self._commands(), mode=mode,
                                        status=self._status, **kw)
 
@@ -268,15 +270,30 @@ class ReplicaChannel:
         await self.tell(st)
         await self.chan.poll()
 
+    def hand(self, st: dict) -> None:
+        """The status of the round just done, to tell from at the channel's next turn.
+        Never waits: posting in the channel costs postage, minutes on a small machine,
+        and must not hold up the council's rounds."""
+        self.latest = dict(st)
+
     async def loop(self, stop: asyncio.Event, seconds: float = POLL_SECONDS) -> None:
-        """Read the channel every ``seconds`` between rounds, so an answer comes in a
-        minute, not at the next round."""
+        """The channel's own work, beside the replica's rounds: every ``seconds``, tell
+        what the newest round found (``hand``) and answer what came - an answer in a
+        minute, not at the next round, and the rounds never wait for it."""
         while not stop.is_set():
             try:
-                if await self.chan.ready():
+                ready = await self.chan.ready()
+                self.info.update(reader=ready, error=None)
+                if ready:
+                    st, self.latest = self.latest, None
+                    if st is not None:
+                        await self.tell(st)
                     await self.chan.poll()
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:  # noqa: BLE001 - the replica goes on without it
                 log.warning("operator channel not read now: %s", exc)
+                self.info["error"] = str(exc)
             try:
                 await asyncio.wait_for(stop.wait(), seconds)
             except asyncio.TimeoutError:
