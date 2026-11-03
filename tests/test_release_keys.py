@@ -86,7 +86,7 @@ def test_votes_are_checked_articles(keys):
     other = new_article(RELEASES_GROUP, "Unseenet 0.9.0", "x\n").finalize(keys[0], 4)
     forged = good.to_bytes().replace(b'"threshold":2', b'"threshold":1')
     votes = rk.votes_in([good.to_bytes(), other.to_bytes(), forged])
-    assert votes == [(keys[0].key_text, kl.body)]
+    assert votes == [rk.Vote(keys[0].key_text, kl.body)]
 
 
 def test_a_release_needs_the_threshold_of_signatures(keys, monkeypatch):
@@ -166,3 +166,57 @@ def test_the_project_key_list_is_pinned(monkeypatch):
     assert kl.seq == 1 and kl.threshold == 2 and kl.threshold_for("dev") == 1
     assert kl.keys[0] == PROJECT_KEY and len(kl.keys) == 3
     assert kl.body == rk.make_body(1, list(kl.keys), 2, {"dev": 1})
+
+
+def test_votes_inside_the_body_count_whoever_posts_them(keys):
+    """Section 3.1: a vote is a signature on the list, carried in the body; who posted
+    the article does not matter, and a forged or misplaced signature is no vote."""
+    kl = first(keys)
+    new = Identity.generate()
+    two = rk.make_body(2, [keys[0].key_text, new.key_text], 1, prev=kl)
+    text = rk.add_vote(two, keys[0])
+    assert rk.add_vote(text, keys[0]) == text                      # once per key
+    text = rk.add_vote(text, keys[1])
+    carrier = Identity.generate().key_text                         # not a signer at all
+    votes = rk.votes_from(carrier, "release-keys 2", text)
+    assert {v.author for v in votes} == {keys[0].key_text, keys[1].key_text}
+    assert rk.count(kl, votes)[0].seq == 2
+    # a signature from one list does not vote for another
+    other = rk.make_body(2, [new.key_text], 1, prev=kl)
+    moved = rk.signed_text(other, rk.split_signed(text)[1])
+    assert rk.votes_from(carrier, "release-keys 2", moved) == []
+    # a release signature is not a vote (its own purpose, UN-RFC 0062 section 9)
+    rel = update.signature_blocks(update.signature_text(rk._signed(two), keys[0]))
+    assert rk.votes_from(carrier, "release-keys 2", rk.signed_text(two, rel)) == []
+    # a bare list still counts as its author's vote, and only its author's
+    assert rk.votes_from(keys[2].key_text, "release-keys 2", two) == [
+        rk.Vote(keys[2].key_text, rk.parse(two).body)]
+    assert rk.votes_from(keys[2].key_text, "something else", text) == []
+
+
+def test_the_chain_carries_every_later_list(keys, monkeypatch):
+    """Section 3.2: the chain post holds every list from seq 2 with its votes, anybody
+    can post it, and a client counts on from the pinned list with it alone."""
+    kl = first(keys)
+    monkeypatch.setattr(rk, "PROJECT_FIRST", kl.body)
+    new = Identity.generate()
+    two = rk.parse(rk.make_body(2, [keys[0].key_text, new.key_text], 1, prev=kl))
+    three = rk.parse(rk.make_body(3, [new.key_text], 1, prev=two))
+    votes = (rk.votes_from(None, "release-keys chain", "")
+             + rk.votes_from("x", "release-keys 2", rk.add_vote(rk.add_vote(two.body, keys[0]),
+                                                                 keys[2]))
+             + rk.votes_from("x", "release-keys 3", rk.add_vote(three.body, new)))
+    assert rk.chain_text([]) == ""
+    chain = rk.chain_text(votes)
+    assert chain.count("\n--\n") == 1
+    got = rk.votes_from(Identity.generate().key_text, rk.CHAIN_SUBJECT, chain)
+    assert rk.newest(got)[0] == three
+    # and shipped with the client, it counts without the channel
+    monkeypatch.setattr(rk, "PROJECT_CHAIN", chain)
+    assert rk.newest([])[0] == three
+    # not for another publisher, whose chain is its own
+    assert rk.newest([], start=kl)[0] == kl
+    # a list that did not count is left out
+    stray = rk.make_body(4, [keys[1].key_text], 1, prev=three)
+    assert rk.chain_text(votes + rk.votes_from("x", "release-keys 4",
+                                                rk.add_vote(stray, keys[1]))) == chain

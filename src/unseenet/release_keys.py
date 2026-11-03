@@ -24,14 +24,22 @@ from .core.groups import canonical_json, parse_canonical_json
 from .known_nodes import PROJECT_KEY
 
 DOMAIN = "UNSEENET-RELEASE-KEYS-1"
+VOTE_PURPOSE = "UNSEENET-RELEASE-KEYS-VOTE-1"     # a vote for a list (section 3.1)
 SUBJECT = "release-keys"
+CHAIN_SUBJECT = "release-keys chain"              # every list from seq 2 (section 3.2)
+VOTE_HEAD = "Unseenet key list vote"
 MAX_KEYS = 8
-_SUBJECT = re.compile(r"^release-keys ([1-9][0-9]{0,8})$")
+_SUBJECT = re.compile(r"^release-keys ([1-9][0-9]{0,8}|chain)$")
 
 # The project's first key list (section 5): the project key and two reserve keys,
 # threshold 2, {"dev": 1} - made with tools/project/release_keys.py make on 3 Nov 2026
 # and posted in unseenet.releases as release-keys 1. A stable release needs two of the
 # three; a later list counts once two of them posted it.
+# The project's later lists with their votes (section 3.2), as `chain_text` writes them:
+# shipped with the client so that it counts them without the channel, and posted every
+# month by CI (tools/announce.py keys). Empty while there is only the first list.
+PROJECT_CHAIN: str = ""
+
 PROJECT_FIRST: str | None = (
     '{"channels":{"dev":1},"keys":["ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",'
     '"ed25519:nvisp5te3fezpln7nq576yeq64lfd3jdhtlhxcxmylwgm23omlcq",'
@@ -130,7 +138,8 @@ def count(start: KeyList, votes) -> tuple[KeyList, bool]:
     if start.seq == 0:                            # nothing pinned: nothing to follow
         return start, False
     by_body: dict[str, set[str]] = {}
-    for author, body in votes:
+    for v in votes:
+        author, body = (v.author, v.body) if isinstance(v, Vote) else v
         try:
             kl = parse(body)
         except KeyListProblem:
@@ -151,9 +160,9 @@ def count(start: KeyList, votes) -> tuple[KeyList, bool]:
         cur = nxt[0]
 
 
-def votes_in(raws) -> list[tuple[str, str]]:
-    """(author key, body) of the key-list articles among raw articles, each signature
-    checked here: a node's word is not taken."""
+def votes_in(raws) -> list[Vote]:
+    """The votes in the key-list articles among raw articles (``votes_from``), each
+    article's signature checked here: a node's word is not taken."""
     from .core.article import Article
     from .nntp import strip_reader_headers
     out = []
@@ -163,17 +172,121 @@ def votes_in(raws) -> list[tuple[str, str]]:
             art.verify_signature()
         except Exception:  # noqa: BLE001 - not a valid article: no vote
             continue
-        if _SUBJECT.match(art.get("Subject", "") or ""):
-            out.append((crypto.key_to_text(art.author_key), art.body))
+        out += votes_from(crypto.key_to_text(art.author_key), art.get("Subject", "") or "",
+                          art.body)
     return out
 
 
 @dataclass(frozen=True)
 class Vote:
-    """A key-list article read from a channel, its signature checked: carried among
-    the bodies of release posts (``update.from_network``, ``service_update``)."""
+    """A vote for a key list (section 3.1): the signer, the list's body, and its
+    signature when it was signed inside a body (None: the signer posted the bare list).
+    Carried among the bodies of release posts (``update.from_network``,
+    ``service_update``)."""
     author: str
     body: str
+    sig: str | None = field(default=None, compare=False)
+
+
+def _signed(body: str) -> bytes:
+    return body.rstrip("\n").encode("utf-8")
+
+
+def split_signed(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """A signed list (section 3.1): the list's body (first line) and its (key, signature)
+    blocks. A bare list has none."""
+    text = (text or "").replace("\r\n", "\n").strip("\n")
+    first_line, _, rest = text.partition("\n")
+    blocks = []
+    for block in re.split(r"\n\s*\n", rest):
+        lines = [x for x in block.splitlines() if x.strip()]
+        if not lines or lines[0].strip() != VOTE_HEAD:
+            continue
+        f = dict(x.split(": ", 1) for x in lines[1:] if ": " in x)
+        if f.get("key") and f.get("signature"):
+            blocks.append((f["key"].strip(), f["signature"].strip()))
+    return first_line + "\n", blocks
+
+
+def signed_text(body: str, blocks) -> str:
+    """A list and its votes, as a ``release-keys <seq>`` article's body (section 3.1)."""
+    out = body.rstrip("\n") + "\n"
+    for key, sig in blocks:
+        out += f"\n{VOTE_HEAD}\nkey: {key}\nsignature: {sig}\n"
+    return out
+
+
+def add_vote(text: str, identity: crypto.Identity) -> str:
+    """``text`` (a bare or signed list) with this key's vote added, once."""
+    body, blocks = split_signed(text)
+    body = parse(body).body
+    if not any(k == identity.key_text for k, _ in blocks):
+        blocks = blocks + [(identity.key_text, identity.sign_text(VOTE_PURPOSE, _signed(body)))]
+    return signed_text(body, blocks)
+
+
+def _check(key: str, sig: str, body: str) -> bool:
+    try:
+        return crypto.verify(crypto.key_from_text(key), VOTE_PURPOSE, _signed(body),
+                             crypto.sig_from_text(sig))
+    except Exception:  # noqa: BLE001 - not a key or not a signature: no vote
+        return False
+
+
+def votes_from(author: str | None, subject: str, text: str) -> list[Vote]:
+    """The votes an article carries (sections 3.1, 3.2): each signature inside it that
+    checks out, whoever posted it, and - for a bare list - its author's own vote."""
+    m = _SUBJECT.match((subject or "").strip())
+    if not m:
+        return []
+    chain = m.group(1) == "chain"
+    parts = re.split(r"\n--\n", (text or "").replace("\r\n", "\n")) if chain else [text]
+    out = []
+    for part in parts:
+        body, blocks = split_signed(part)
+        try:
+            body = parse(body).body
+        except KeyListProblem:
+            continue
+        if not blocks and author and not chain:
+            out.append(Vote(author, body))
+        out += [Vote(k, body, sig) for k, sig in blocks if _check(k, sig, body)]
+    return out
+
+
+def counted_chain(start: KeyList, votes) -> list[KeyList]:
+    """The lists after ``start`` that count, oldest first (it stops before a fork)."""
+    by_body: dict[str, set[str]] = {}
+    for v in votes:
+        a, b = (v.author, v.body) if isinstance(v, Vote) else v
+        try:
+            by_body.setdefault(parse(b).body, set()).add(a)
+        except KeyListProblem:
+            continue
+    out, cur = [], start
+    while cur.seq:
+        nxt = [kl for kl in (parse(b) for b in by_body)
+               if kl.seq == cur.seq + 1 and kl.prev == cur.hash
+               and len(by_body[kl.body] & set(cur.keys)) >= cur.threshold]
+        if len(nxt) != 1:
+            return out
+        cur = nxt[0]
+        out.append(cur)
+    return out
+
+
+def chain_text(votes, start: KeyList | None = None) -> str:
+    """The body of a ``release-keys chain`` post (section 3.2): every list counted after
+    the first, oldest first, each with the votes signed inside a body; "" when there is
+    none. A vote that was only an article by its signer cannot be carried."""
+    start = start or first()
+    sigs: dict[str, dict[str, str]] = {}
+    for v in votes:
+        if isinstance(v, Vote) and v.sig:
+            sigs.setdefault(v.body, {}).setdefault(v.author, v.sig)
+    parts = [signed_text(kl.body, sorted(sigs.get(kl.body, {}).items())).rstrip("\n")
+             for kl in counted_chain(start, votes)]
+    return ("\n--\n".join(parts) + "\n") if parts else ""
 
 
 async def read_votes(c, group: str, scan: int = 400, limit: int = 50) -> list[Vote]:
@@ -191,7 +304,7 @@ async def read_votes(c, group: str, scan: int = 400, limit: int = 50) -> list[Vo
         if _SUBJECT.match(subject.strip()):
             numbers.append(number)
     raws = [r for r in [await c.article(n) for n in numbers[-limit:]] if r]
-    return [Vote(a, b) for a, b in votes_in(raws)]
+    return votes_in(raws)
 
 
 def votes_of(bodies) -> list[Vote]:
@@ -204,6 +317,9 @@ def newest(votes, kept: str | None = None, start: KeyList | None = None) -> tupl
     the pinned first one - the project's, or ``start``, another publisher's (UN-RFC 0062
     section 6). A kept list that does not parse, or is older than the pinned one, is not
     used."""
+    votes = list(votes)
+    if start is None and PROJECT_CHAIN:           # the project's chain, shipped (3.2)
+        votes += votes_from(None, CHAIN_SUBJECT, PROJECT_CHAIN)
     start = start or first()
     if kept:
         try:

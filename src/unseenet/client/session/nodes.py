@@ -504,9 +504,8 @@ class NodesMixin:
             self.data.pop("releases", None)
         messages = await self._read_releases(group)
         from ... import release_keys as rk         # the key list's chain (UN-RFC 0062 3)
-        votes = [(m.author_key, m.body) for m in messages
-                 if m.readable and getattr(m, "author_key", None)
-                 and (getattr(m, "subject", "") or "").startswith(rk.SUBJECT + " ")]
+        votes = [v for m in messages if m.readable and getattr(m, "author_key", None)
+                 for v in rk.votes_from(m.author_key, getattr(m, "subject", "") or "", m.body)]
         keys, fork = rk.newest(votes, (self.data.get("release_keys") or {}).get("body"),
                                pub.first_list())
         if fork:
