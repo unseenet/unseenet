@@ -9,6 +9,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **A council's machine groups no longer fill the group tree** (#928): the groups a
+  council keeps for programs - its claims, proposals, log, reports, lists and
+  announcement groups, and the council group itself - are data groups (UN-RFC 0008
+  section 3.1.1), learnt from the councils' manifests (`Session.council_machine_groups`)
+  and, for the project's councils, known before them. `talk` and `room` stay for people.
+  A reference counts only for a group under the council's name whose own manifest, when
+  known, is a council's, so a manifest cannot hide somebody else's group.
 - **Reading a group over Tor is no longer slow** (#916): the articles of each turn of a
   read (`FETCH_BATCH`) are now asked for at once, pipelined as RFC 3977 section 3.5
   allows - one round trip over Tor instead of one per article, so a new reader no longer

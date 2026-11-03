@@ -48,6 +48,20 @@ DATA_GROUPS = frozenset({
     "unseenet.checkgroups@ph5fc5hop5232qsz",
     "unseenet.names@ph5fc5hop5232qsz",
     "unseenet.gateways@ph5fc5hop5232qsz",
+    # the project's councils and the groups they keep (UN-RFC 0054, 0020, 0061; #928) -
+    # a client also learns these from the councils' manifests (Session.is_data_group)
+    "unseenet.names@xvchjwehdhfptpza",
+    "unseenet.names.claims@cpphmdeq57oz4omb",
+    "unseenet.names.proposals@kbxsj7hfmpusksot",
+    "unseenet.names.log@l3r7ievzehgxtz3c",
+    "unseenet.lists@727td54rrn4glwoh",
+    "unseenet.nodes@gjv472lkhc375x4h",
+    "unseenet.lists.reports@27hi42lyuil34u7n",
+    "unseenet.lists.claims@gxxnmizpk4r5jl35",
+    "unseenet.lists.proposals@oekxy7cbxvezla4f",
+    "unseenet.lists.log@n2yigha5ahdg76o2",
+    "unseenet.sources@33adc73r3fncuznp",
+    "unseenet.gateways@fzfnyoi7woukrk4k",
 })
 
 # The project's groups a new client starts with, so there is something to read.
