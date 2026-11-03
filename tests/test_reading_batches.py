@@ -38,12 +38,12 @@ async def _net(tmp_path, monkeypatch, posts: int):
 async def test_the_node_is_free_between_turns(tmp_path, monkeypatch):
     server, owner, reader, gid = await _net(tmp_path, monkeypatch, 8)
     monkeypatch.setattr(Session, "NEW_GROUP_WINDOW", 100)       # everything in one read
-    article = Client.article
+    articles = Client.articles
 
-    async def slow(self, n):
-        await asyncio.sleep(0.02)
-        return await article(self, n)
-    monkeypatch.setattr(Client, "article", slow)
+    async def slow(self, idents):                # a turn takes a while (a round trip over Tor)
+        await asyncio.sleep(0.05)
+        return await articles(self, idents)
+    monkeypatch.setattr(Client, "articles", slow)
 
     reader.subscribe(gid)
     done = []

@@ -716,11 +716,13 @@ class GroupsMixin:
         if high < low:
             return None
         best = None
-        for line in await c.multiline(f"HDR Control {low}-{high}", 225):
-            number, _, value = line.partition(" ")
-            if value.strip().lower() != "manifest":
+        numbers = [number for number, _, value in
+                   (line.partition(" ") for line in
+                    await c.multiline(f"HDR Control {low}-{high}", 225))
+                   if value.strip().lower() == "manifest"]
+        for raw in await c.articles(numbers):                # pipelined (#916)
+            if raw is None:
                 continue
-            raw = await c.article(number)
             if self._is_council_raw(raw):           # counted from all its copies (0054)
                 return await self._council_current_on(c, group_id)
             m = self._checked_manifest(raw, group_id)

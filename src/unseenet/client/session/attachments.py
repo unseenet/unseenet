@@ -129,15 +129,6 @@ class AttachmentsMixin:
             cache.move_to_end(blob_id)
             return cache[blob_id]
 
-        async def run(c: Client):
-            if c.capability("UNSEENET-BLOB") is None:
-                return "none"
-            try:
-                return await c.blob(blob_id)
-            except NNTPError as exc:
-                if exc.code == 436:
-                    return "later"
-                raise
         # the group's node first; if it has not got the file (it may not carry files, or not
         # for this group), your other nodes - a file is the same wherever it comes from, and
         # is checked against its ID below (UN-RFC 0027 section 9.2)
@@ -147,7 +138,7 @@ class AttachmentsMixin:
         got = None
         for node in order:
             try:
-                got = await self._call(run, node)
+                got = await self._blob_from(node, blob_id)
             except (SessionError, OSError, ConnectionError, NNTPError, asyncio.IncompleteReadError,
                     asyncio.TimeoutError):
                 got = "unreachable" if node != first else "unreachable-first"
@@ -186,6 +177,80 @@ class AttachmentsMixin:
             cache.popitem(last=False)
         return got
 
+    # Files asked for together - the pictures of a group just opened - are asked of a node
+    # together (#916): each waits for the node's connection anyway, and those that come
+    # while one waits go with it, pipelined, one round trip over Tor for them all.
+    BLOB_BATCH = 16
+
+    async def _blob_from(self, node: str, blob_id: str):
+        """One blob from ``node``: its octets, None (the node has not got it), ``"none"``
+        (the node carries no files) or ``"later"`` (436, still fetching it); raises what
+        asking raised, or the ``NNTPError`` of its own answer."""
+        waiting = self.__dict__.setdefault("_blob_waiting", {})
+        batch = waiting.get(node)
+        if batch is None:
+            batch = waiting[node] = {}
+            asyncio.ensure_future(self._blob_flush(node, batch))
+        fut = batch.get(blob_id)
+        if fut is None:
+            fut = batch[blob_id] = asyncio.get_running_loop().create_future()
+        got = await asyncio.shield(fut)        # others may wait for the same file
+        if isinstance(got, NNTPError):
+            if got.code == 436:
+                return "later"
+            raise got
+        return got
+
+    async def _blob_flush(self, node: str, batch: dict) -> None:
+        """Ask ``node`` for the blobs waiting in ``batch``, taken when the connection is
+        free - so what came meanwhile goes too - at most BLOB_BATCH; the rest wait for the
+        next turn."""
+        waiting = self.__dict__.setdefault("_blob_waiting", {})
+        taken: dict = {}
+
+        async def run(c: Client):
+            if not taken:                               # (not again on a reconnect)
+                if waiting.get(node) is batch:          # from now on others start a new one
+                    del waiting[node]
+                for b in list(batch)[:self.BLOB_BATCH]:
+                    taken[b] = batch.pop(b)
+                if batch:                               # more than one turn: the rest next
+                    nxt = waiting.get(node)
+                    if nxt is None:
+                        nxt = waiting[node] = {}
+                        asyncio.ensure_future(self._blob_flush(node, nxt))
+                    for b, fut in list(batch.items()):
+                        del batch[b]
+                        if b in nxt:
+                            _follow(nxt[b], fut)
+                        else:
+                            nxt[b] = fut
+            if c.capability("UNSEENET-BLOB") is None:
+                return ["none"] * len(taken)
+            if len(taken) == 1:                         # alone: as ever
+                try:
+                    return [await c.blob(next(iter(taken)))]
+                except NNTPError as exc:
+                    if exc.code == 400:
+                        raise
+                    return [exc]
+            return await c.blobs(list(taken))
+        try:
+            answers = await self._call(run, node)
+        except BaseException as exc:  # noqa: BLE001 - each one waiting is told
+            if waiting.get(node) is batch:
+                del waiting[node]
+            for fut in [*taken.values(), *batch.values()]:
+                if not fut.done():
+                    fut.set_exception(exc if isinstance(exc, Exception)
+                                      else SessionError("not asked"))
+            if not isinstance(exc, Exception):
+                raise
+            return
+        for fut, got in zip(taken.values(), answers):
+            if not fut.done():
+                fut.set_result(got)
+
     async def picture(self, group_id: str, blob_id: str, *, asked: bool = False):
         """A picture a post in this group carries, made safe to show: fetched and
         checked (``fetch_blob``), then decoded and saved again in a separate, limited
@@ -200,3 +265,17 @@ class AttachmentsMixin:
             return await decode.picture_async(octets, att["type"])
         except decode.DecodeError as exc:
             raise SessionError(str(exc)) from exc
+
+
+def _follow(src: "asyncio.Future", dst: "asyncio.Future") -> None:
+    """``dst`` gets what ``src`` gets (two who wait for the same file)."""
+    def done(f):
+        if dst.done():
+            return
+        if f.cancelled():
+            dst.cancel()
+        elif f.exception() is not None:
+            dst.set_exception(f.exception())
+        else:
+            dst.set_result(f.result())
+    src.add_done_callback(done)

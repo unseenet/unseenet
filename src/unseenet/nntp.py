@@ -137,10 +137,18 @@ class Client:
         fetching it from a peer. Checking the octets against the ID is the caller's
         (section 9.2): until then they are nothing."""
         code, text = await self.command(f"BLOB {blob_id}")
+        got = await self._blob_answer(code, text)
+        if isinstance(got, NNTPError):
+            raise got
+        return got
+
+    async def _blob_answer(self, code: int, text: str):
+        """The rest of one answer to ``BLOB``: the octets (226), None (430), or the
+        ``NNTPError`` for any other one-line answer, returned, not raised."""
         if code == 430:
             return None
         if code != 226:
-            raise NNTPError(code, text)
+            return NNTPError(code, text)
         try:
             size = int(text.split()[0])
         except (IndexError, ValueError):
@@ -148,6 +156,67 @@ class Client:
         if not 0 < size <= BLOB_MAX_BYTES:
             raise ConnectionError(f"a blob of {size} octets is not possible")
         return await self.reader.readexactly(size)
+
+    # --- pipelining (RFC 3977 section 3.5; #916) ---
+    # Over Tor a round trip takes a second or more; fifty ARTICLE commands one after the
+    # other took a minute. Sent together, they take one round trip and the time to read.
+    async def pipeline(self, lines: list[str], read) -> list:
+        """Send ``lines`` at once, then read each answer in turn with ``await read(code,
+        text)``; a list of what ``read`` gave, in order. If anything goes wrong part-way
+        (the node closes, an answer out of step, cancelled), the rest of the answers may
+        still be on their way: the connection is closed and cannot be used again, and
+        ``ConnectionError`` raised (``NNTPError`` 400, full, and a cancel as they are)."""
+        if not lines:
+            return []
+        out: list = []
+        try:
+            self.writer.write(b"".join(line.encode() + b"\r\n" for line in lines))
+            await self.writer.drain()
+            for _ in lines:
+                code, text = await self._response()
+                out.append(await read(code, text))
+        except BaseException as exc:
+            try:
+                self.writer.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if isinstance(exc, (ConnectionError, OSError, asyncio.IncompleteReadError,
+                                asyncio.CancelledError)) or (
+                    isinstance(exc, NNTPError) and exc.code == 400):
+                raise
+            raise ConnectionError(f"answers broken off after {len(out)} of {len(lines)}: "
+                                  f"{exc}") from exc
+        return out
+
+    async def articles(self, idents: list[str]) -> list[bytes | None]:
+        """``ARTICLE`` for each of ``idents`` (numbers or Message-IDs), pipelined: each
+        article, or None where the node has none (430, 423)."""
+        async def read(code: int, text: str):
+            if code == 400:
+                raise NNTPError(code, text)
+            return await read_block(self.reader) if code == 220 else None
+        return await self.pipeline([f"ARTICLE {i}" for i in idents], read)
+
+    async def heads(self, idents: list[str]) -> list[list[str] | None]:
+        """``HEAD`` for each of ``idents``, pipelined: each article's header lines, or
+        None where the node has none."""
+        async def read(code: int, text: str):
+            if code == 400:
+                raise NNTPError(code, text)
+            if code != 221:
+                return None
+            return (await read_block(self.reader)).decode("utf-8", "replace").splitlines()
+        return await self.pipeline([f"HEAD {i}" for i in idents], read)
+
+    async def blobs(self, blob_ids: list[str]) -> list:
+        """``BLOB`` for each of ``blob_ids``, pipelined: each one's octets, None (430),
+        or the ``NNTPError`` of its answer (436 still fetching, ...), returned in its
+        place, not raised. The octets are nothing until checked against the ID."""
+        async def read(code: int, text: str):
+            if code == 400:
+                raise NNTPError(code, text)
+            return await self._blob_answer(code, text)
+        return await self.pipeline([f"BLOB {b}" for b in blob_ids], read)
 
     async def post(self, raw: bytes) -> tuple[int, str]:
         await self.command("POST", (340,))

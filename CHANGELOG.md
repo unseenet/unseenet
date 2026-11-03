@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **Reading a group over Tor is no longer slow** (#916): the articles of each turn of a
+  read (`FETCH_BATCH`) are now asked for at once, pipelined as RFC 3977 section 3.5
+  allows - one round trip over Tor instead of one per article, so a new reader no longer
+  sees `unseenet.help`, `.chat` and `.announce` empty for a minute or more. The same goes
+  for older articles, a group read from several nodes, headers when browsing a group,
+  council and key-update articles, and files: pictures asked for while the node is busy
+  go together (at most `BLOB_BATCH`, 16). An answer broken off part-way closes the
+  connection, which is never used again. The group a client has open is fetched first
+  by a refresh (`Session.reading_now`, set by `GET /api/groups/{gid}`).
 - **A council proposal can no longer undo another** (UN-RFC 0061): a passed manifest change
   replaces each field whole, so two open proposals that set one field - `lists`, say -
   left only the one that applied last. `unseenet-replica propose` now refuses a change

@@ -190,8 +190,14 @@ class ClientRuntime:
             asyncio.ensure_future(self.refresh())
 
     async def _fetch(self, group_ids) -> set[str]:
+        """Fetch ``group_ids`` one by one, the group the reader has open
+        (``Session.reading_now``) first whenever it is still to come (#916): a new reader
+        on a slow connection sees the group they look at, not the others, fill first."""
         done = set()
-        for gid in list(group_ids):
+        todo = list(group_ids)
+        while todo:
+            now = getattr(self.session, "reading_now", None)
+            gid = todo.pop(todo.index(now)) if now in todo else todo.pop(0)
             if self.session.is_slow(self.session.node_for(gid)):
                 continue                          # read when its node answers (#704)
             try:

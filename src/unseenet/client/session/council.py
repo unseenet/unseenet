@@ -38,12 +38,15 @@ class CouncilMixin:
         if high < low:
             return []
         out = []
-        for line in await c.multiline(f"HDR Control {low}-{high}", 225):
-            number, _, value = line.partition(" ")
-            if value.strip().lower() != "manifest":
+        numbers = [number for number, _, value in
+                   (line.partition(" ") for line in
+                    await c.multiline(f"HDR Control {low}-{high}", 225))
+                   if value.strip().lower() == "manifest"]
+        for got in await c.articles(numbers):                # pipelined (#916)
+            if got is None:
                 continue
             try:
-                raw = strip_reader_headers(await c.article(number))
+                raw = strip_reader_headers(got)
                 art = Article.from_bytes(raw)
                 validate_structure(art, raw_size=len(raw))
             except (ArticleError, NNTPError, ValueError, TypeError):
@@ -280,13 +283,18 @@ class CouncilMixin:
             if high < low:
                 return []
             out = []
+            wanted = []
             for line in await c.multiline(f"HDR Control {low}-{high}", 225):
                 number, _, value = line.partition(" ")
                 parts = value.split()
-                if not parts or parts[0] not in ("key-update", "key-grant"):
+                if parts and parts[0] in ("key-update", "key-grant"):
+                    wanted.append((number, parts))
+            got = await c.articles([number for number, _ in wanted])   # pipelined (#916)
+            for (number, parts), fetched in zip(wanted, got):
+                if fetched is None:
                     continue
                 try:
-                    raw = strip_reader_headers(await c.article(number))
+                    raw = strip_reader_headers(fetched)
                     art = Article.from_bytes(raw)
                     epoch, member_key, envelopes = parse_key_update(art)
                     closes = json.loads(art.body).get("closes_previous") is True
