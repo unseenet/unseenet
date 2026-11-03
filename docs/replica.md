@@ -247,6 +247,18 @@ sudo unseenet-replica second --lists <id>      # on the other replicas
 `--lists` on `propose`, `second`, `talk` and `object` speaks in the list
 council instead of the registrar's.
 
+Where the project's releases are fetched from - GitHub, PyPI, and any other
+site the council adds - is a list too ([UN-RFC 0020](https://unseenet.org/spec/un-rfc-0020/) section 6.8).
+`add-list ... sources` starts it from the built-in sources (or `--import
+sources.json`, `{"files": [...], "index": [...]}`). Nothing is measured: a site is
+added or taken away only by a proposal with a hearing, urgently within three days
+when one is taken down:
+
+```bash
+sudo unseenet-replica propose --lists --reason "GitHub is gone; Codeberg has the releases" \
+    --change-file sources-change.json   # {"list": {"sources": {"files": [...], "index": [...]}}}
+```
+
 The entrance list is added the same way (`add-list ... entrances --import
 entrances.json`). Its draft has a second group beside the list: an open group
 where entrances announce themselves. An operator announces an entrance with an

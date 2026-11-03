@@ -439,6 +439,13 @@ class NodesMixin:
         got = await self._council_list(council, "nodes", parse_node_list)
         return None if got is None else (got[0], got[1][0], got[1][1])
 
+    async def council_sources(self, council: str):
+        """(Date, Sources) of the newest sources list a list council's members posted
+        (UN-RFC 0020 section 6.8), or None: where its publishers' releases are found."""
+        from ...core import lists as ls
+        got = await self._council_list(council, "sources", ls.parse_sources_list)
+        return None if got is None else (got[0], got[1][1])
+
     async def _council_list(self, council: str, kind: str, parse):
         """(Date, parsed, body) of the newest ``kind`` list (``nodes``, ``root``) that a
         list council's members posted (UN-RFC 0020 section 8), or None while the council
