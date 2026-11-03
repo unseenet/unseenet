@@ -101,11 +101,25 @@ learn it from the first notice.
 
 ## 3.2 One Server, One Channel
 
-A server SHOULD have a channel of its own. An operator MAY let several
-servers share one channel; each then has its own channel key, adds a
-`Server-Name` inner header (at most 32 characters, letters, digits,
-`-`) to everything it posts, and takes only commands addressed to it
-(section 5.1).
+Each server SHOULD have a channel of its own, also when one operator
+runs several. A channel shared by several servers:
+
+- **links them**: anyone who sees the channel's manifest or its traffic
+  sees one inbox serving all of them, so a hidden server (a replica)
+  is tied to a public one (a node whose operator is named in UN-RFC
+  0011);
+- **exposes them together**: every server's channel key opens every
+  message in the channel, so whoever seizes one server reads what the
+  others were told;
+- **gives them one team**, where servers often have different
+  operators.
+
+An operator MAY still let servers that are linked anyway share one
+channel (several nodes of one public operator, say). Each server then
+has its own channel key, adds a `Server-Name` inner header (at most 32
+characters, letters, digits, `-`) to everything it posts, and takes
+only commands addressed to it (section 5.1). Tools that set up a shared
+channel MUST say what it links.
 
 ## 3.3 Who May Give Commands
 
@@ -123,6 +137,31 @@ Anything else in the channel is ignored, with a line in the server's
 log. The readers are the only list of who may steer a server, and only
 the owner key changes it: removing a reader (UN-RFC 0047 section 9)
 removes their say at once.
+
+## 3.4 Several Operators
+
+Each operator is a reader of the channel with a team key of their own
+(UN-RFC 0047 section 6): up to 15 operators, the sixteenth reader
+being the server. All of them see every notice and every answer
+(section 5.4); a confirmation is accepted only from the operator who
+gave the command (section 5.2). Different servers may have different
+operators, and an operator removed from one channel keeps their place
+in the others.
+
+The owner is trusted by everyone in the channel (UN-RFC 0047 section
+11). A team that runs a server together SHOULD let the owner key be
+held by whoever the team trusts with that, not by the server.
+
+Because each server has its own channel, adding or removing an
+operator means one manifest per channel. The owner's tools SHOULD do
+this for several channels in one go - one team key, one manifest and
+one invitation per channel, with the owner key at hand once - for
+example:
+
+```
+unseenet operator add <person> --servers node3,replica2
+unseenet operator remove <team key or nickname> --servers all
+```
 
 # 4. Notices
 
@@ -277,11 +316,15 @@ for example from the help bot or a game bot.
 
 # 7. Clients
 
-A client that reads a team inbox which is an operator channel (section
-3.1, or because it has notices):
+A client that reads team inboxes which are operator channels (section
+3.1, or because they have notices):
 
-- shows it as the server's channel, labelled with `team_name`, beside
-  the user's own inbox and other team inboxes, never mixed in;
+- shows them **together**, as the user's servers - one entry per
+  channel, labelled with `team_name`, with each server's open matters
+  and its newest `alarm` first - beside the user's own inbox and other
+  team inboxes, never mixed in. An operator of many servers so sees
+  them in one place although each has a channel of its own (section
+  3.2);
 - shows notices by level - `alarm` marked so it is not missed, `info`
   quietly - and an open matter until a notice says it is over;
 - shows answers with their `Command-Result`, and a confirmation's
@@ -340,7 +383,9 @@ them alike.
   answered where all readers see it. The owner removes the key
   (UN-RFC 0047 section 9).
 - **A seized server** gives its channel key: whoever has it can read
-  what was sent to the channel while it was a reader, and post notices.
+  what was sent to the channel while it was a reader, and post notices;
+  in a shared channel, what was sent to every server in it (section
+  3.2).
   Short `retention_days` limit what is still there. The owner removes
   the channel key and makes the server a new one.
 - **The owner is trusted**, as in UN-RFC 0047: it can add a key of its
@@ -353,6 +398,11 @@ them alike.
 
 # 10. Rationale
 
+- **A channel per server, not per operator.** One channel for all of
+  an operator's servers would tie a hidden server to a public one and
+  let one seized server read the others' notices. Clients show the
+  channels together instead (section 7), and tools change many at once
+  (section 3.4).
 - **A team inbox, not a group.** The channel must be readable only by
   operators and must not show who they are. UN-RFC 0047 gives exactly
   that, with an owner that can stay offline.
