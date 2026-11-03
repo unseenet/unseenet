@@ -9,6 +9,10 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **A server says hello in its operator channel** (UN-RFC 0065): when it becomes a reader,
+  and again when an operator is added, it posts one message with `help` and `status` as
+  offers - something every client can answer, also one that cannot start a message in a
+  team inbox.
 - **Council work from your everyday client** (UN-RFC 0065 section 8, #874 part 2): a
   replica tells its operators in its channel what waits for them - changes held for
   them, a twin alarm, a disputed council, hearings closing within two days, failed
