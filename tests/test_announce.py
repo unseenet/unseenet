@@ -102,3 +102,25 @@ def test_other_release_post_has_the_same_frame_and_links_its_own_issues():
     tree = markup.body(body, markup.MARKDOWN_TYPE, "post")
     assert "https://github.com/unseenet/unseenet-gui/issues/12" in json.dumps(tree)
     assert [n["n"] for n in tree if n.get("t") == "h"] == [1, 2]
+
+
+def test_the_key_chain_is_posted_only_as_it_counts(monkeypatch):
+    """``announce.py keys`` (UN-RFC 0062 section 3.2): nothing while there is only the
+    first list; the chain as clients count it; never a chain with a list that does not."""
+    import pytest
+
+    from unseenet import release_keys as rk
+    from unseenet.core.crypto import Identity
+    keys = [Identity.generate() for _ in range(3)]
+    kl = rk.parse(rk.make_body(1, [k.key_text for k in keys], 2))
+    monkeypatch.setattr(rk, "PROJECT_FIRST", kl.body)
+    monkeypatch.setattr(rk, "PROJECT_CHAIN", "")
+    assert announce.keys_post() == ""
+    two = rk.make_body(2, [keys[0].key_text], 1, prev=kl)
+    signed = rk.add_vote(rk.add_vote(two, keys[0]), keys[1])
+    chain = rk.chain_text(rk.votes_from(None, "release-keys 2", signed))
+    monkeypatch.setattr(rk, "PROJECT_CHAIN", chain)
+    assert announce.keys_post() == chain
+    monkeypatch.setattr(rk, "PROJECT_CHAIN", rk.chain_text([]) or rk.add_vote(two, keys[0]))
+    with pytest.raises(SystemExit, match="does not count"):
+        announce.keys_post()

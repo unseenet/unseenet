@@ -8,6 +8,8 @@ name: announce
 #   - unseenet.hierarchies: the root list (src/unseenet/hierarchies.json), and
 #     unseenet.checkgroups: the project's groups (src/unseenet/checkgroups.json),
 #     the same way (UN-RFC 0018)
+#   - unseenet.releases: the chain of the project's key lists (release_keys.PROJECT_CHAIN),
+#     with each release and every month, so it never expires (UN-RFC 0062 section 3.2)
 #   - either, by hand
 # The key is the repository secret UNSEENET_ANNOUNCE_SEED; it is a poster in
 # all these channels, which the project key owns (see tools/announce.py).
@@ -25,7 +27,7 @@ on:
       what:
         description: "nodes, hierarchies, checkgroups, release (give the tag) or message"
         type: choice
-        options: [nodes, entrances, hierarchies, checkgroups, release, message]
+        options: [nodes, entrances, hierarchies, checkgroups, release, message, keys]
         default: nodes
       tag:
         description: "release: the tag, e.g. v0.2.0"
@@ -72,12 +74,14 @@ jobs:
           BODY: ${{ inputs.body }}
         run: |
           case "$WHAT" in
-            release) python tools/announce.py release "$TAG" ;;
+            release) python tools/announce.py release "$TAG"
+                     python tools/announce.py keys ;;      # the key lists, with each release
             message) printf '%s\n' "$BODY" > body.txt
                      python tools/announce.py message --subject "$SUBJECT" --body-file body.txt ;;
-            nodes|entrances|hierarchies|checkgroups) python tools/announce.py "$WHAT" ;;
+            nodes|entrances|hierarchies|checkgroups|keys) python tools/announce.py "$WHAT" ;;
             *)       python tools/announce.py nodes
                      python tools/announce.py entrances
                      python tools/announce.py hierarchies
-                     python tools/announce.py checkgroups ;;
+                     python tools/announce.py checkgroups
+                     python tools/announce.py keys ;;     # every month: UN-RFC 0062 3.2
           esac

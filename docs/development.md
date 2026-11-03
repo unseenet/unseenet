@@ -409,9 +409,14 @@ one node at a time.
    keys, each kept offline on its own removable medium. A stable release needs two
    signatures of the three: run `sign_release.py <tag>` with the vault, then
    `sign_release.py --seed-file <reserve key> <tag>` with a reserve key; it is posted
-   once both are on. Development builds need one. The reserve keys are posters of
-   `unseenet.releases`, so a later list (`release_keys.py make --seq 2 --prev ...`)
-   can be voted in by two of them with `release_keys.py post --seed-file`.
+   once both are on. Development builds need one. A later list (`release_keys.py make
+   --seq 2 --prev keys-1.json > keys-2.json`) counts once two of the three keys voted
+   for it: `release_keys.py post keys-2.json` (the vault's vote), then `release_keys.py
+   post keys-2.signed --seed-file <reserve key>`. The votes are signatures inside the
+   post (UN-RFC 0062 section 3.1), so they count whoever carries them. Once it counts,
+   put `release_keys.py chain` in `PROJECT_CHAIN` in `src/unseenet/release_keys.py` by
+   pull request: clients count it without the channel, and the *announce* workflow posts
+   it every month and with each release, so it never expires on the nodes (3.2).
 
    Where releases are fetched from is set in the network too (#902):
    `tools/project/release_sources.py post sources.json` signs and posts a list

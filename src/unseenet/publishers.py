@@ -152,16 +152,10 @@ def preview(group: str, items) -> Preview:
     is the ``release-keys 1`` that one of its own keys posted; there must be exactly one."""
     from . import update
     firsts = set()
-    votes = []
-    for author, subject, body in items:
-        if not (subject or "").startswith(rk.SUBJECT + " "):
-            continue
-        votes.append((author, body))
-        try:
-            kl = rk.parse(body)
-        except rk.KeyListProblem:
-            continue
-        if kl.seq == 1 and author in kl.keys:
+    votes = [v for author, subject, body in items for v in rk.votes_from(author, subject, body)]
+    for v in votes:                      # posted, or signed inside, by one of its own keys
+        kl = rk.parse(v.body)
+        if kl.seq == 1 and v.author in kl.keys:
             firsts.add(kl.body)
     if not firsts:
         raise PublisherProblem("this channel holds no first key list (release-keys 1) posted "

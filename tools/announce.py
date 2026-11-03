@@ -15,6 +15,10 @@
         post the stable releases of the clients, builds and services (OTHER_REPOS) that
         came since the last successful hourly run to unseenet.announce, one post each,
         with the same frame as the core's (announce-repos.yml)
+    python tools/announce.py keys
+        post the project's chain of key lists (release_keys.PROJECT_CHAIN) to
+        unseenet.releases, so that it never expires on the nodes (UN-RFC 0062 section 3.2);
+        nothing while there is only the first list
     python tools/announce.py message --subject "..." --body-file text.md
         post anything to unseenet.announce, as Markdown
     python tools/announce.py client-release dev SHA256SUMS.txt SHA256SUMS.txt.sig
@@ -207,6 +211,20 @@ def checkgroups_post() -> tuple[str, str]:
     return f"Groups of unseenet, {lst.updated} ({len(lst.groups)})", text if text.endswith("\n") else text + "\n"
 
 
+def keys_post() -> str:
+    """The project's chain of key lists, checked as clients will count it: "" when
+    there is only the first list."""
+    from unseenet import release_keys as rk
+    if not rk.PROJECT_CHAIN:
+        return ""
+    votes = rk.votes_from(None, rk.CHAIN_SUBJECT, rk.PROJECT_CHAIN)
+    text = rk.chain_text(votes)
+    if text != rk.PROJECT_CHAIN:          # never post a chain clients would count otherwise
+        raise SystemExit("PROJECT_CHAIN holds a list that does not count, or is not as "
+                         "chain_text writes it")
+    return text
+
+
 # what people read is Markdown (#611); lists and release checksums are read by programs
 MARKDOWN_POSTS = ("release", "message")
 
@@ -229,7 +247,7 @@ async def post_everywhere(group: str, subject: str, body: str, key: crypto.Ident
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("what", choices=["nodes", "entrances", "hierarchies", "checkgroups", "release", "message",
-                                    "client-release", "repos"])
+                                    "client-release", "repos", "keys"])
     p.add_argument("tag", nargs="?", help="release: the tag, e.g. v0.2.0; client-release: the channel")
     p.add_argument("files", nargs="*", type=Path, help="client-release: SHA256SUMS.txt and its .sig")
     p.add_argument("--subject")
@@ -251,6 +269,12 @@ def main() -> None:
         group, (subject, body) = HIERARCHIES_GROUP, hierarchies_post()
     elif args.what == "checkgroups":
         group, (subject, body) = CHECKGROUPS_GROUP, checkgroups_post()
+    elif args.what == "keys":
+        from unseenet import release_keys as rk
+        group, subject, body = RELEASES_GROUP, rk.CHAIN_SUBJECT, keys_post()
+        if not body:
+            print("No key list after the first: no chain to post.")
+            return
     elif args.what == "release":
         if not args.tag:
             sys.exit("release needs the tag")

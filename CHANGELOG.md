@@ -24,6 +24,13 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Security
 
+- **Votes for a new key list outlive the nodes' retention** (UN-RFC 0062 sections 3.1-3.2):
+  a vote is now a signature on the list, carried in the post, so it counts whoever posts it.
+  The project's chain of lists is shipped with the client (`PROJECT_CHAIN`) and posted by CI
+  every month and with each release (`tools/announce.py keys`), so a stick that was offline
+  longer than unseenet.releases keeps its posts still finds every key list. `release_keys.py
+  post` writes the votes so far to `keys-N.signed` for the next signer; `release_keys.py
+  chain` prints the chain. A bare list posted by a signer still counts as its vote.
 - **Stable releases need two of the project's three keys** (#822, UN-RFC 0062 section 5):
   the project's first key list is pinned - the project key and two reserve keys kept
   offline, threshold 2, 1 for development builds. One stolen key releases nothing, one lost
