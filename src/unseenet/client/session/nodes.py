@@ -493,27 +493,28 @@ class NodesMixin:
         update_offer(). The posts only carry a release's checksums and their
         signature; the signature is checked against the keys the channel trusts
         (unseenet.update), whoever posted it."""
+        from ... import publishers as pb
         from ... import update
-        from ...known_nodes import RELEASES_GROUP
-        subscribed = RELEASES_GROUP in self.data["subscribed"]
-        try:
-            messages = await self.fetch_group(RELEASES_GROUP)
-        finally:
-            if not subscribed:          # read it, but do not keep it around
-                self.cache.pop(RELEASES_GROUP, None)
-                self._raw.pop(RELEASES_GROUP, None)
-                self._high.pop(RELEASES_GROUP, None)
+        pub = pb.followed(update.find_stick())   # the stick's publisher (#822)
+        if pub is None:
+            return None
+        group = pub.group
+        if (self.data.get("release_keys") or {}).get("group", pb.RELEASES_GROUP) != group:
+            self.data.pop("release_keys", None)  # what was counted for another publisher
+            self.data.pop("releases", None)
+        messages = await self._read_releases(group)
         from ... import release_keys as rk         # the key list's chain (UN-RFC 0062 3)
         votes = [(m.author_key, m.body) for m in messages
                  if m.readable and getattr(m, "author_key", None)
                  and (getattr(m, "subject", "") or "").startswith(rk.SUBJECT + " ")]
-        keys, fork = rk.newest(votes, (self.data.get("release_keys") or {}).get("body"))
+        keys, fork = rk.newest(votes, (self.data.get("release_keys") or {}).get("body"),
+                               pub.first_list())
         if fork:
             self.data["release_keys_fork"] = True
             self.save()
             return None                  # no update from a forked publisher
         if keys.seq and keys.body != (self.data.get("release_keys") or {}).get("body"):
-            self.data["release_keys"] = {"body": keys.body}
+            self.data["release_keys"] = {"body": keys.body, "group": group}
         best = dict(self.data.get("releases") or {})
         for m in messages:
             post = update.parse_release_post(m.body) if m.readable else None
@@ -538,6 +539,85 @@ class NodesMixin:
             self.data["releases"] = best
             self.save()
         return self.update_offer()
+
+    async def _read_releases(self, group: str) -> list:
+        """The messages in a releases channel, read without keeping it around unless the
+        user subscribed to it."""
+        subscribed = group in self.data["subscribed"]
+        try:
+            return await self.fetch_group(group)
+        finally:
+            if not subscribed:
+                self.cache.pop(group, None)
+                self._raw.pop(group, None)
+                self._high.pop(group, None)
+
+    async def publisher_preview(self, group: str):
+        """What a releases channel shows before it is added (UN-RFC 0062 section 6): its
+        first key list, the key list now, and its newest releases (``publishers.preview``)."""
+        from ... import publishers as pb
+        from ...core.groups import split_group_id
+        group = _releases_group(group)
+        try:
+            split_group_id(group)
+        except ValueError as exc:
+            raise SessionError(f"not a channel's Group ID: {group}") from exc
+        messages = await self._read_releases(group)
+        items = [(m.author_key, getattr(m, "subject", "") or "", m.body) for m in messages
+                 if m.readable and getattr(m, "author_key", None)]
+        try:
+            return pb.preview(group, items)
+        except pb.PublisherProblem as exc:
+            raise SessionError(str(exc)) from exc
+
+    def publishers(self) -> dict:
+        """The stick's publishers, and which one it follows."""
+        from ... import publishers as pb
+        from ... import update
+        media = update.find_stick()
+        pubs = pb.load(media)
+        return {"stick": media is not None, "follow": pubs.follow,
+                "publishers": [{"group": p.group, "name": p.name, "project": p.is_project,
+                                "fingerprint": p.fingerprint,
+                                "followed": p.group == pubs.follow} for p in pubs.known]}
+
+    async def add_publisher(self, group: str, fingerprint: str, name: str = "",
+                            follow: bool = False) -> dict:
+        """Pin a publisher's first key list - only when ``fingerprint`` is the one the
+        preview shows, which the user compared with what the publisher says elsewhere."""
+        from ... import publishers as pb
+        from ... import update
+        media = update.find_stick()
+        if media is None:
+            raise SessionError("publishers are chosen on the stick: no stick found")
+        group = _releases_group(group)
+        got = await self.publisher_preview(group)
+        if got.fork:
+            raise SessionError("its key list has forked: do not add it until its publisher "
+                               "says which list is theirs")
+        if fingerprint.strip().lower() != got.fingerprint:
+            raise SessionError(f"the fingerprint is {got.fingerprint}, not "
+                               f"{fingerprint.strip()}: compare it with the publisher's")
+        try:
+            pb.add(media, got, name, follow)
+        except pb.PublisherProblem as exc:
+            raise SessionError(str(exc)) from exc
+        return self.publishers()
+
+    def change_publisher(self, action: str, group: str) -> dict:
+        """``follow`` or ``remove`` a publisher on the stick."""
+        from ... import publishers as pb
+        from ... import update
+        media = update.find_stick()
+        if media is None:
+            raise SessionError("publishers are chosen on the stick: no stick found")
+        if action not in ("follow", "remove"):
+            raise SessionError("action is follow or remove")
+        try:
+            (pb.follow if action == "follow" else pb.remove)(media, _releases_group(group))
+        except pb.PublisherProblem as exc:
+            raise SessionError(str(exc)) from exc
+        return self.publishers()
 
     def update_offer(self, product: str = "unseenet", running: str | None = None) -> dict | None:
         """A signed release newer than this program, on its channel (a development
@@ -818,3 +898,19 @@ class NodesMixin:
                 pass                                  # a node that will not list: unknown
             return info
         return await self._call(run, node)
+
+
+def _releases_group(text: str) -> str:
+    """A releases channel given as its Group ID or as an ``unseenet:`` address of it
+    (UN-RFC 0062 section 6)."""
+    from ...core import addresses
+    text = (text or "").strip()
+    if not text.startswith("unseenet:"):
+        return text
+    try:
+        a = addresses.parse(text)
+    except addresses.AddressError as exc:
+        raise SessionError(f"not an address: {exc}") from exc
+    if a.kind != "group":
+        raise SessionError("give the address of the publisher's releases channel")
+    return a.group_id

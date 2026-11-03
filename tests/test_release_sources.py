@@ -120,7 +120,7 @@ def test_a_wheel_not_on_pypi_comes_from_the_sources(tmp_path, monkeypatch):
 
 def test_servers_keep_the_newest_list(tmp_path, monkeypatch, project):
     body = rs.make_post(sources(), project)[1]
-    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: [body])
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None, group=None: [body])
     monkeypatch.setattr(su, "newest_release", lambda *a, network=None, **k: network() and
                         su.Release("0.0.1", b""))
     seen = []
@@ -129,7 +129,7 @@ def test_servers_keep_the_newest_list(tmp_path, monkeypatch, project):
     st = su.State.load(tmp_path / "state.json")
     su.update_service("x", tmp_path, st, direct=True)
     assert seen == [sources()] and st.data["sources"] == sources().to_dict()
-    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: [])
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None, group=None: [])
     su.update_service("x", tmp_path, st, direct=True)         # the network is gone: kept
     assert seen[-1] == sources()
 
@@ -258,7 +258,7 @@ def test_servers_go_by_the_councils_list(tmp_path, monkeypatch, project):
         "files": ["https://codeberg.org/{repo}/{tag}/{name}"], "index": [rs.PYPI]},
         decisions=ls.DecisionState())
     got = [rs.make_post(moved, project)[1], rs.CouncilList(council, listed)]
-    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: got)
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None, group=None: got)
     monkeypatch.setattr(su, "newest_release", lambda *a, network=None, **k: network() and
                         su.Release("0.0.1", b""))
     seen = []
@@ -268,6 +268,6 @@ def test_servers_go_by_the_councils_list(tmp_path, monkeypatch, project):
     su.update_service("x", tmp_path, st, direct=True)
     assert seen[-1].files == ("https://codeberg.org/{repo}/{tag}/{name}",)
     assert st.data["sources"]["moved_to"] == council and st.data["sources_council"] == listed
-    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None: [])
+    monkeypatch.setattr(su, "posts_in_network", lambda package, socks, node=None, group=None: [])
     su.update_service("x", tmp_path, st, direct=True)          # the network is gone: kept
     assert seen[-1].files == ("https://codeberg.org/{repo}/{tag}/{name}",)

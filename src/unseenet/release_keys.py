@@ -195,11 +195,12 @@ def votes_of(bodies) -> list[Vote]:
     return [b for b in bodies if isinstance(b, Vote)]
 
 
-def newest(votes, kept: str | None = None) -> tuple[KeyList, bool]:
+def newest(votes, kept: str | None = None, start: KeyList | None = None) -> tuple[KeyList, bool]:
     """The list to go by: counted from the newest list kept (counted before), else from
-    the pinned first one. A kept list that does not parse, or is older than the pinned
-    one, is not used."""
-    start = first()
+    the pinned first one - the project's, or ``start``, another publisher's (UN-RFC 0062
+    section 6). A kept list that does not parse, or is older than the pinned one, is not
+    used."""
+    start = start or first()
     if kept:
         try:
             k = parse(kept)

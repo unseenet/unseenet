@@ -3,6 +3,7 @@
     unseenet-service-update run    --service unseenet-node [--check tcp:127.0.0.1:1119]
     unseenet-service-update status --service unseenet-node
     unseenet-service-update off    --service unseenet-node      (and ``on``)
+    unseenet-service-update publisher --service unseenet-node --group G --first-keys F
     unseenet-service-update run    --service unseenet-gateway --package unseenet-gateway
 
 What the update timer of a node, a replica, a registrar - or any other Unseenet
@@ -178,30 +179,34 @@ def from_posts(bodies: list[str], package: str, base: str, keys=None) -> Release
     return best
 
 
-async def _posts_from(address: str, socks: int | None, package: str) -> list[str]:
-    """The server posts for ``package`` and the lists of release sources (#902) in
-    unseenet.releases, newest first, through one node."""
+async def _posts_from(address: str, socks: int | None, package: str,
+                      group: str | None = None) -> list[str]:
+    """The server posts for ``package`` and the lists of release sources (#902) in the
+    publisher's releases channel (the project's by default), newest first, through one
+    node."""
     from . import release_sources as rs
     from .known_nodes import RELEASES_GROUP
     from .nntp import Client
+    group = group or RELEASES_GROUP
     c = await asyncio.wait_for(Client.connect(address, socks), 120)
     try:
-        found = await rs.read_group(c, RELEASES_GROUP,
+        found = await rs.read_group(c, group,
                                     (f"Unseenet server {package} ", rs.HEAD), scan=SCAN)
         from . import release_keys as rk     # and the key list's chain (UN-RFC 0062 3)
         bodies = [body for bodies in found.values() for body in bodies]
         councils = []                        # and a council's sources (UN-RFC 0020 6.8)
         for council in sorted(rs.moved_to_in(bodies))[:3]:
-            got = await rs.read_council(c, council, RELEASES_GROUP)
+            got = await rs.read_council(c, council, group)
             if got is not None:
                 councils.append(got)
-        return bodies + await rk.read_votes(c, RELEASES_GROUP, scan=SCAN) + councils
+        return bodies + await rk.read_votes(c, group, scan=SCAN) + councils
     finally:
         with contextlib.suppress(Exception):
             await c.quit()
 
 
-def posts_in_network(package: str, socks: int | None, node: str | None = None) -> list[str]:
+def posts_in_network(package: str, socks: int | None, node: str | None = None,
+                     group: str | None = None) -> list[str]:
     """The posts for ``package`` in unseenet.releases, through ``node``, else the node on
     this machine, else the known nodes (over Tor only: without Tor, none)."""
     if node:
@@ -216,7 +221,7 @@ def posts_in_network(package: str, socks: int | None, node: str | None = None) -
         return []
     for address in nodes:
         try:
-            return asyncio.run(_posts_from(address, socks, package))
+            return asyncio.run(_posts_from(address, socks, package, group))
         except Exception:  # noqa: BLE001 - the next node; GitHub after the last
             continue
     return []
@@ -226,14 +231,16 @@ def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
                    package: str = CORE, repo: str | None = None,
                    network: Callable[[], list[str]] | None = None,
                    say: Callable[[str], None] = lambda _: None,
-                   keys: dict | None = None) -> Release:
+                   keys: dict | None = None, start=None) -> Release:
     """The newest stable release of ``package`` that servers can take: signed by the
-    project key, and with a server requirements file matching its checksums. From the
-    posts in the network when ``network`` gives any (#901), else from GitHub."""
+    publisher's keys, and with a server requirements file matching its checksums. From
+    the posts in the network when ``network`` gives any (#901), else from GitHub - for
+    the project only: another publisher (``start``, its pinned first key list, UN-RFC
+    0062 section 6) says itself where its files are."""
     from . import release_keys as rk
     base = repo_url(repo or package)
     kl, fork = rk.newest(rk.votes_of(network() if network is not None else []),
-                         (keys or {}).get("body"))
+                         (keys or {}).get("body"), start)
     if fork:
         raise Problem("the publisher's key list has forked (two lists with one number): no "
                       "update until the operator acts (UN-RFC 0062 section 3)")
@@ -244,6 +251,8 @@ def newest_release(fetch: Callable[[str], bytes] = lambda u: up.fetch(u, None),
         if found is not None:
             say(f"found {package} {found.version} in the network")
             return found
+        if start is not None:
+            raise Problem(f"no release of {package} from this publisher in the network")
         say(f"no release of {package} in the network; asking GitHub")
     sums = fetch(up.release_url("stable", up.SUMS, repo=base))
     sig = fetch(up.release_url("stable", up.SIG, repo=base)).decode("utf-8", "replace")
@@ -539,6 +548,8 @@ def run(machine: Machine, state: State, find: Callable[[], Release] = newest_rel
 def explain(state: State) -> list[str]:
     d = state.data
     out = [f"Self-updating: {'off' if d['off'] else 'on'}"]
+    if d.get("publisher"):
+        out.append(f"Publisher: {d['publisher']['group']} (not the project's)")
     if d.get("installed"):
         out.append(f"Runs {d['installed']}; newest stable release {d.get('newest', '?')}")
     if d.get("checked"):
@@ -609,6 +620,33 @@ def _with_tor(socks: int | None, direct: bool, work: Callable[[int | None], str]
     return asyncio.run(own())
 
 
+def set_publisher(state: State, group: str | None, first: str | None) -> None:
+    """Follow another publisher (UN-RFC 0062 section 6): its releases channel and its
+    first key list, pinned; ``group`` None goes back to the project. What was kept of
+    the publisher before - its key list, its sources - is dropped."""
+    from . import release_keys as rk
+    from .core.groups import split_group_id
+    from .known_nodes import RELEASES_GROUP
+    if group in (None, RELEASES_GROUP):
+        new = None
+    else:
+        split_group_id(group)
+        if not first:
+            raise Problem("another publisher needs its first key list (--first-keys)")
+        try:
+            rk.parse(first)
+        except rk.KeyListProblem as exc:
+            raise Problem(f"not a key list: {exc}") from exc
+        new = {"group": group, "first": first}
+    if new != state.data.get("publisher"):
+        for k in ("release_keys", "sources", "sources_council"):
+            state.data.pop(k, None)
+    if new is None:
+        state.data.pop("publisher", None)
+    else:
+        state.data["publisher"] = new
+
+
 def direct_by_env() -> bool:
     return os.environ.get(DIRECT_ENV, "").strip().lower() in ("1", "yes", "true", "on")
 
@@ -619,7 +657,13 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
                    node: str | None = None,
                    at_once: bool = False, say: Callable[[str], None] = print) -> str:
     """One run, over Tor unless ``direct`` (or the environment) says otherwise: what the
-    update timers of nodes, replicas, registrars and the other services run."""
+    update timers of nodes, replicas, registrars and the other services run. The
+    publisher followed is the state's (``set_publisher``); the project's by default."""
+    from . import release_keys as rk
+    pub = state.data.get("publisher") or {}
+    group = pub.get("group")
+    start = rk.parse(pub["first"]) if pub.get("first") else None
+
     def work(socks_port: int | None) -> str:
         from . import release_sources as rs
         machine = Machine(service, venv, check, package, oneshot, busy, socks_port)
@@ -627,19 +671,19 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
 
         def network() -> list[str]:
             if not seen:
-                seen.append(posts_in_network(package, socks_port, node))
+                seen.append(posts_in_network(package, socks_port, node, group))
             return seen[0]
 
         def find() -> Release:
             try:
                 return newest_release(lambda u: up.fetch(u, socks_port), package=package,
                                       repo=repo, network=network, say=say,
-                                      keys=state.data.setdefault("release_keys", {}))
+                                      keys=state.data.setdefault("release_keys", {}),
+                                      start=start)
             finally:     # the newest list of sources, kept for when the network is gone (#902)
-                from . import release_keys as rk
                 got = seen[0] if seen else []
                 keys, _ = rk.newest(rk.votes_of(got),
-                                    (state.data.get("release_keys") or {}).get("body"))
+                                    (state.data.get("release_keys") or {}).get("body"), start)
                 publisher = rs.newest([b for b in got if isinstance(b, str)],
                                       state.data.get("sources"), keys)
                 council = next((b.body for b in got if isinstance(b, rs.CouncilList)
@@ -655,7 +699,7 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="unseenet-service-update", description=__doc__.split("\n\n")[0])
-    p.add_argument("action", choices=("run", "status", "on", "off"))
+    p.add_argument("action", choices=("run", "status", "on", "off", "publisher"))
     p.add_argument("--service", required=True, help="the systemd service, e.g. unseenet-node")
     p.add_argument("--package", default=CORE,
                    help="the service's package, e.g. unseenet-gateway (default: unseenet)")
@@ -677,6 +721,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--node", help="read the releases in the network through this node "
                    f"(default: {LOCAL_NODE} if a node runs here, else the known nodes over Tor)")
     p.add_argument("--now", action="store_true", help="do not wait the random delay")
+    p.add_argument("--group", help="publisher: the releases channel of the publisher to follow "
+                   "(leave out to go back to the project's)")
+    p.add_argument("--first-keys", type=Path,
+                   help="publisher: a file with its first key list (release-keys 1), as the "
+                        "publisher gave it to you")
     p.add_argument("--state", default=None, help=f"state folder (default {STATE_ROOT}/<service>)")
     a = p.parse_args(argv)
     state = State.load(Path(a.state or STATE_ROOT / a.service) / "state.json")
@@ -687,6 +736,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.action == "status":
         print("\n".join(explain(state)))
+        return 0
+    if a.action == "publisher":
+        try:
+            set_publisher(state, a.group,
+                          a.first_keys.read_text() if a.first_keys else None)
+        except (Problem, ValueError, OSError) as exc:
+            print(f"could not set the publisher: {exc}")
+            return 1
+        state.save()
+        print(f"{a.service} follows {a.group or 'the project'} from its next run.")
         return 0
     if not PACKAGE.fullmatch(a.package):
         print(f"not an Unseenet package: {a.package}")
