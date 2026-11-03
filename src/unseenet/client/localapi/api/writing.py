@@ -172,7 +172,8 @@ class Writing:
 
     def private(self, data: dict) -> dict:
         """``POST /api/private`` (section 4.4): a private post or chat line to a key's
-        inbox (UN-RFC 0009), as a job."""
+        inbox (UN-RFC 0009), as a job. With ``as_team`` an operator box and ``key`` one of
+        its servers (``GET /api/teams``), it goes into the box, for that server."""
         s = self._ready()
         key = _key(data.get("key"))
         if key == s.identity().key_text:
@@ -206,6 +207,15 @@ class Writing:
             raise SessionError("you hold no team key for that inbox")
         if not as_team and refs and s.team_key(inbox) is not None:
             as_team = inbox          # an answer inside a team inbox is on its behalf (0047, 0065)
+        if as_team and s.manifest_data(as_team).get("operator_channel"):
+            # a server in an operator box is written to like a contact: by its key, in
+            # the box, with its name first when it starts something (UN-RFC 0065 3.2)
+            from ...operator import address, box_servers
+            servers = {r["key"]: r["name"] for r in box_servers(s, as_team)}
+            if key in servers:
+                inbox, group = as_team, as_team
+                if not refs:
+                    body = address(servers[key], body)
 
         async def send() -> str:
             if shared is not None:

@@ -300,6 +300,18 @@ class ReplicaChannel:
                 pass
 
 
+def server_name(cfg: dict) -> str:
+    """The replica's name in its operator box (``operator_name``), else its host's name:
+    what its notices carry and a message for it starts with (UN-RFC 0065 section 3.2)."""
+    import re
+    import socket
+    for name in (cfg.get("operator_name"), socket.gethostname().split(".")[0], "replica"):
+        name = re.sub(r"[^A-Za-z0-9-]", "-", str(name or ""))[:32].strip("-")
+        if name:
+            return name
+    return "replica"
+
+
 def setup_channel(rep, cfg: dict, state_dir) -> ReplicaChannel | None:
     """The channel the replica's configuration names (``operator_group``, and
     ``operator_channel`` for the mode), with its key made now if it has none; None when
@@ -313,5 +325,6 @@ def setup_channel(rep, cfg: dict, state_dir) -> ReplicaChannel | None:
     if not group or mode == "off" or state_dir is None:
         return None
     key = oc.make_channel_key(rep.s, group)
-    rep.status["operator"] = {"group": group, "key": key, "mode": mode}
-    return ReplicaChannel(rep, group, mode, Path(state_dir))
+    name = server_name(cfg)
+    rep.status["operator"] = {"group": group, "key": key, "mode": mode, "name": name}
+    return ReplicaChannel(rep, group, mode, Path(state_dir), server=name)

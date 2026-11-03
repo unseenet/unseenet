@@ -673,8 +673,10 @@ async def _channel_round(rep, channel, task, stop: asyncio.Event):
     never holds up the council, and a failure here never stops the replica."""
     from . import operator as ro
     cfg = rep._read_config()
-    want = (cfg.get("operator_group"), cfg.get("operator_channel", "notices"))
-    have = (channel.chan.group, channel.chan.desk.mode) if channel else (None, None)
+    want = (cfg.get("operator_group"), cfg.get("operator_channel", "notices"),
+            ro.server_name(cfg))
+    have = ((channel.chan.group, channel.chan.desk.mode, channel.chan.server) if channel
+            else (None, None, None))
     if want != have:
         if task is not None:
             task.cancel()
@@ -689,7 +691,7 @@ async def _channel_round(rep, channel, task, stop: asyncio.Event):
         return None, None
     key = channel.chan.key
     rep.status["operator"] = {"group": channel.chan.group, "mode": channel.chan.desk.mode,
-                             "key": key.key_text if key else None}
+                             "name": channel.chan.server, "key": key.key_text if key else None}
     rep.status["operator"].update({k: v for k, v in channel.info.items() if v is not None})
     channel.hand(rep.status)
     rep._write_status()

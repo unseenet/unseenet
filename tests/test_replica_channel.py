@@ -145,6 +145,9 @@ async def test_the_configuration_names_the_channel(net, tmp_path, capsys):
     rc = ro.setup_channel(rep, {"operator_group": "operator@x", "channel": "main"}, d)
     assert rc.chan.desk.mode == "notices"                      # the default
     assert rep.status["operator"]["key"] == replica.team_key("operator@x").key_text
+    assert rc.chan.server == ro.server_name({}) and rc.chan.server            # the host's name
+    rc = ro.setup_channel(rep, {"operator_group": "operator@x", "operator_name": "replica 2!"}, d)
+    assert rc.chan.server == "replica-2" == rep.status["operator"]["name"]
 
     from argparse import Namespace
     (d / "config.json").write_text(json.dumps({"channel": "main"}))

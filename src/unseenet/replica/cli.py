@@ -880,7 +880,9 @@ def operator(args) -> int:
         cfg["operator_group"] = args.group
     if args.mode:
         cfg["operator_channel"] = args.mode
-    if args.group or args.mode:
+    if getattr(args, "name", None):
+        cfg["operator_name"] = args.name
+    if args.group or args.mode or getattr(args, "name", None):
         write_config(d, cfg)
     if not cfg.get("operator_group") or cfg.get("operator_channel") == "off":
         print("No operator channel. Name one: unseenet-replica operator <group> "
@@ -888,7 +890,9 @@ def operator(args) -> int:
         return 0
     ch = read_status(d).get("operator") or {}
     mode = cfg.get("operator_channel", "notices")
-    print(f"Operator channel: {cfg['operator_group']}")
+    from .operator import server_name
+    print(f"Operator box: {cfg['operator_group']}")
+    print(f"Name in the box: {server_name(cfg)}  (--name to change it)")
     print(f"Mode: {mode}" + ("  (only help, status and notices from chat; "
                              "--commands lets the operators act)" if mode == "notices" else ""))
     if ch.get("group") != cfg["operator_group"] or not ch.get("key"):
@@ -951,7 +955,8 @@ def main(argv=None) -> int:
                    help="a file (mode 600) with the token clients must give first")
     s = sub.add_parser("operator", help="the operator channel: notices and commands from "
                                         "your everyday client (UN-RFC 0065)")
-    s.add_argument("group", nargs="?", help="the channel's Group ID, from its owner")
+    s.add_argument("group", nargs="?", help="the box's Group ID, from its owner")
+    s.add_argument("--name", help="the replica's name in the box (default: the host's name)")
     m = s.add_mutually_exclusive_group()
     m.add_argument("--commands", dest="mode", action="store_const", const="commands",
                    help="operators may act from chat (each change asks for a code)")

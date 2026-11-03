@@ -346,46 +346,41 @@ unseenet council hearings unseenet.names@...
 unseenet council object unseenet.names@... <id> "why"
 ```
 
-## From your everyday client: the operator channel
+## From your everyday client: the operator box
 
 Instead of a terminal on the replica's machine, you can do a member's work from your
 everyday client, also a phone through a web entrance: the replica tells you what
-waits for you, and takes your commands, in its **operator channel** - a team inbox
-only you and the replica read. How channels work, and the owner's side, is on
-[Operator channels](operator-channel.md).
+waits for you, and takes your commands, in your **operator box** - a team inbox only
+you and your servers read. One box serves all your servers. How it works, and how to
+make the box, is on [The operator box](operator-channel.md).
 
-**1. The channel (you, as its owner).** In a vault of its own, kept for this:
+**1. Make the box** (once, for all your servers): see
+[Setting it up](operator-channel.md#setting-it-up). You get its Group ID, like
+`operator@4pqu54rxy3hl4zh5`.
 
-```bash
-V="--vault $HOME/operator.vault"
-unseenet $V id-new operator --display "My replicas"
-unseenet $V node-add <a node's onion address>
-unseenet $V operator create operator.replica1 --server-name replica1
-```
-
-**2. The replica.** Give it the Group ID that `create` printed:
+**2. Give it to the replica,** with the replica's name in the box:
 
 ```bash
-sudo unseenet-replica operator <group> --commands     # or leave out --commands: notices only
+sudo unseenet-replica operator operator@4pqu54rxy3hl4zh5 --name replica1
+# add --commands to act from chat; without it: notices, help and status only
 ```
 
-At its next round (a few minutes) it makes its channel key; then
+**3. A few minutes later** (its next round), run it again:
 
 ```bash
 sudo unseenet-replica operator
 ```
 
-shows the key, and the line to list it.
-
-**3. List the replica, and add yourself (you, as owner):**
+It shows the replica's key and the line to run on your own computer, with the operator
+vault:
 
 ```bash
-unseenet $V operator add-server <group> <the replica's channel key>
-unseenet $V operator add <your everyday key> --channels all
+unseenet --vault $HOME/operator.vault operator add-server operator@4pqu54rxy3hl4zh5 ed25519:...
 ```
 
-Accept the invitation in your everyday client. From then on the replica reads the
-channel every minute.
+**4. If you are not in the box yet,** add yourself and accept the invitation in your
+client (see [Add yourself](operator-channel.md#3-add-yourself)). The replica says hello
+in the box within a minute; answer it with `status`.
 
 **What it tells you.** A change held for you (with the `agree` to send), a twin alarm,
 a disputed council, a hearing that closes within two days, a round that failed - each
@@ -405,13 +400,16 @@ the same code; what it queues is posted at once, not at the next round:
 | `talk: <text>` | post in talk (several lines are fine) |
 | `reply <id>: <text>` | answer a post in talk |
 
+Answer one of the replica's messages to give it a command, or start a new message
+to it (pick it as recipient, or write `replica1: status`).
+
 Put `lists` first for the list council (`hearings lists`, `talk lists: ...`); `second`
 and `object` find the proposal in either council. Each command that changes something
 answers with a code to send back (`yes 4821`), valid for 30 minutes. With
 `--notices` (the default) only `help`, `status` and `notices` work from chat.
 
 **Only on the machine:** `resign`, `sign` and `twin-gone`. `sudo unseenet-replica
-operator --off` turns the channel off; `--notices` and `--commands` switch the mode.
+operator --off` turns the box off; `--notices` and `--commands` switch the mode.
 In Docker: `docker compose exec replica unseenet-replica operator ...`.
 
 ## The council's room
@@ -469,8 +467,8 @@ then run the `twin-gone` command that `status` shows.
 - Updates are fetched over Tor (#900), from the network first and from GitHub and
   PyPI only as a last resort, so the downloads do not show which machines run a
   replica. `UNSEENET_UPDATE_DIRECT=1` downloads without Tor.
-- The operator channel, if you set one up, is posted to when something happens to
-  the replica; see [Operator channels](operator-channel.md#privacy).
+- The operator box, if you set one up, is posted to when something happens to
+  the replica; see [The operator box](operator-channel.md#when-a-server-should-have-a-box-of-its-own).
 - Name claims are public by design: anybody can see which key claimed which
   name. Your replica sees nothing that others cannot.
 

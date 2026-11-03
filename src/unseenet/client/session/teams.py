@@ -93,7 +93,10 @@ class TeamsMixin:
         readers = [k for k in data.get("readers", []) if k != team_key]
         if len(readers) == len(data.get("readers", [])):
             raise SessionError("that key is not a reader of this inbox")
-        await self.update_group(group_id, readers=readers or None)
+        changes = {"readers": readers or None}
+        if team_key in data.get("operator_servers", []):          # UN-RFC 0065 section 3.1
+            changes["operator_servers"] = [k for k in data["operator_servers"] if k != team_key] or None
+        await self.update_group(group_id, **changes)
 
     async def _own_inbox(self, group_id: str) -> dict:
         m = await self.fetch_manifest(group_id)

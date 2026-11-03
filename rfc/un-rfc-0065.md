@@ -59,9 +59,9 @@ Server
 Operator
 : A person who looks after a server.
 
-Operator channel
-: A team inbox (UN-RFC 0047) whose readers are the server's channel
-  key and the operators' team keys.
+Operator channel, operator box
+: A team inbox (UN-RFC 0047) whose readers are the channel keys of one
+  or more servers and the operators' team keys.
 
 Channel key
 : The team key the server reads and posts with in its channel. Made by
@@ -84,13 +84,15 @@ Command
 2. The operator, with the key that is to own the channel (SHOULD be a
    key that stays offline, such as the operator key of UN-RFC 0011),
    creates a team inbox and lists as `readers` the channel key and a
-   team key for each operator (UN-RFC 0047 section 6). It SHOULD set
-   `team_name` to a name for the server, such as "node3" or
-   "replica2", and `retention_days` to 30 or less.
-3. The operator gives the server the channel's Group ID (`channel` in
-   its configuration). The server reads the channel's manifest and
-   starts only when its channel key is among the `readers`; until then
-   it says so on its console and in its status.
+   team key for each operator (UN-RFC 0047 section 6), and lists the
+   channel keys also in `operator_servers` (section 3.2). It SHOULD set
+   `team_name` to a name for the box, such as "My servers", and
+   `retention_days` to 30 or less.
+3. The operator gives the server the box's Group ID (`operator_group`
+   in its configuration) and, in a box several servers read, a name
+   for it (section 3.2). The server reads the manifest and starts only
+   when its channel key is among the `readers`; until then it says so
+   on its console and in its status.
 
 Unlike UN-RFC 0047 section 6, the owner never knows the channel key's
 seed: the server makes it and only its public key leaves the machine.
@@ -99,27 +101,40 @@ The manifest MAY have `"operator_channel": true`. Clients then show the
 inbox as a server's channel (section 7) from the start; without it they
 learn it from the first notice.
 
-## 3.2 One Server, One Channel
+## 3.2 One Box for Several Servers
 
-Each server SHOULD have a channel of its own, also when one operator
-runs several. A channel shared by several servers:
+An operator with several servers SHOULD keep them in **one box**: one
+place to read, one invitation per operator, one owner key. Each server
+reads it with a channel key of its own.
 
-- **links them**: anyone who sees the channel's manifest or its traffic
-  sees one inbox serving all of them, so a hidden server (a replica)
-  is tied to a public one (a node whose operator is named in UN-RFC
-  0011);
-- **exposes them together**: every server's channel key opens every
-  message in the channel, so whoever seizes one server reads what the
-  others were told;
-- **gives them one team**, where servers often have different
-  operators.
+- The manifest lists the servers' channel keys in `operator_servers`
+  (each also in `readers`), so servers and clients tell servers from
+  operators without waiting for a notice. Removing a reader removes it
+  from `operator_servers` too.
+- Each server has a **name** in the box (at most 32 characters,
+  letters, digits, `-`), unique in it, and adds it as a `Server-Name`
+  inner header to everything it posts.
+- A command is **for a server** when it answers one of that server's
+  messages (its last `References` entry is that server's), or when its
+  first line starts with the server's name and a colon (section 5.1).
+  A client offers the box's servers by name - from `operator_servers`
+  and their notices - as whom a new message is for, as it offers
+  contacts, so nobody has to remember the names.
+- A command for no server in particular is answered by every server
+  when it is `help`, `status` or `notices`, and by the server waiting
+  for it when it is `yes <code>` (section 5.2); anything else is left
+  alone.
+- A server alone in its box takes every command, with or without its
+  name.
 
-An operator MAY still let servers that are linked anyway share one
-channel (several nodes of one public operator, say). Each server then
-has its own channel key, adds a `Server-Name` inner header (at most 32
-characters, letters, digits, `-`) to everything it posts, and takes
-only commands addressed to it (section 5.1). Tools that set up a shared
-channel MUST say what it links.
+A box shared by several servers **links** them and **exposes them
+together**: whoever sees its manifest or traffic sees one inbox serving
+all of them, and whoever seizes one server reads what the others were
+told and learns who runs them all. That is nothing for servers already
+known to be run by the same operator (UN-RFC 0011, a project's own
+servers). A server that has to stay apart - a hidden replica of an
+anonymous operator, a server with other operators - SHOULD have a box
+of its own. Tools that set up a box MUST say what sharing it links.
 
 ## 3.3 Who May Give Commands
 
@@ -129,8 +144,8 @@ A server takes a command only when:
 - its inner headers have `Sender-Team` naming the channel and a
   `Sender-Key` that is in the channel's current `readers` (UN-RFC 0047
   section 8), checked against the manifest as the server reads it now;
-- `Sender-Key` is not the server's own channel key, nor, in a shared
-  channel, another server's (which it knows from their notices);
+- `Sender-Key` is not the server's own channel key, nor another
+  server's (`operator_servers`, or a key it has seen post notices);
 - its `Sender-Signature` verifies.
 
 Anything else in the channel is ignored, with a line in the server's
@@ -152,15 +167,14 @@ The owner is trusted by everyone in the channel (UN-RFC 0047 section
 11). A team that runs a server together SHOULD let the owner key be
 held by whoever the team trusts with that, not by the server.
 
-Because each server has its own channel, adding or removing an
-operator means one manifest per channel. The owner's tools SHOULD do
-this for several channels in one go - one team key, one manifest and
-one invitation per channel, with the owner key at hand once - for
-example:
+Where servers have boxes of their own, adding or removing an operator
+means one manifest per box. The owner's tools SHOULD do this for
+several boxes in one go - one team key, one manifest and one invitation
+per box, with the owner key at hand once - for example:
 
 ```
-unseenet operator add <person> --servers node3,replica2
-unseenet operator remove <team key or nickname> --servers all
+unseenet operator add <person> --channels all
+unseenet operator remove <team key> --channels all
 ```
 
 # 4. Notices
@@ -198,9 +212,10 @@ A server:
 A command is a reply in the channel (UN-RFC 0009 section 2.5, UN-RFC
 0047 section 8), of kind `chat` or `post` (UN-RFC 0028). Its first line
 is the command: a verb, then arguments, separated by spaces, matched
-without regard to case. In a shared channel (section 3.2) the first
-word is the server's name and a colon, e.g. `replica2: second ABCD`;
-a server in a shared channel ignores commands without its name.
+without regard to case. A new message for one server in a box several
+servers read starts with the server's name and a colon, e.g.
+`replica2: second ABCD`; an answer to a server's message needs no name
+(section 3.2).
 
 Every server understands:
 
@@ -335,12 +350,13 @@ for example from the help bot or a game bot.
 A client that reads team inboxes which are operator channels (section
 3.1, or because they have notices):
 
-- shows them **together**, as the user's servers - one entry per
-  channel, labelled with `team_name`, with each server's open matters
-  and its newest `alarm` first - beside the user's own inbox and other
-  team inboxes, never mixed in. An operator of many servers so sees
-  them in one place although each has a channel of its own (section
-  3.2);
+- shows them **together**, as the user's servers - labelled with
+  `team_name`, each message with its `Server-Name`, open matters and
+  the newest `alarm` first - beside the user's own inbox and other
+  team inboxes, never mixed in;
+- lets the user write a new message to one server of a box by picking
+  it from the box's servers, as a contact, and adds its name (section
+  3.2); an answer goes to the server whose message it answers;
 - shows notices by level - `alarm` marked so it is not missed, `info`
   quietly - and an open matter until a notice says it is over;
 - shows answers with their `Command-Result`, and a confirmation's
@@ -400,8 +416,8 @@ them alike.
   (UN-RFC 0047 section 9).
 - **A seized server** gives its channel key: whoever has it can read
   what was sent to the channel while it was a reader, and post notices;
-  in a shared channel, what was sent to every server in it (section
-  3.2).
+  in a box several servers read, what was sent to every server in it
+  (section 3.2).
   Short `retention_days` limit what is still there. The owner removes
   the channel key and makes the server a new one.
 - **The owner is trusted**, as in UN-RFC 0047: it can add a key of its
@@ -414,11 +430,12 @@ them alike.
 
 # 10. Rationale
 
-- **A channel per server, not per operator.** One channel for all of
-  an operator's servers would tie a hidden server to a public one and
-  let one seized server read the others' notices. Clients show the
-  channels together instead (section 7), and tools change many at once
-  (section 3.4).
+- **One box for an operator's servers, a box of its own where that
+  matters.** Many boxes are hard to keep an eye on, and most servers
+  of one operator are known to be theirs anyway. Where they must not
+  be linked - a hidden server, other operators - a box of its own
+  keeps one seized server from reading the others' notices (section
+  3.2).
 - **A team inbox, not a group.** The channel must be readable only by
   operators and must not show who they are. UN-RFC 0047 gives exactly
   that, with an owner that can stay offline.
@@ -437,7 +454,8 @@ them alike.
 # 11. Changes to Other Documents
 
 - UN-RFC 0047 section 3: an inbox manifest MAY have
-  `"operator_channel": true` (section 3.1).
+  `"operator_channel": true` (section 3.1) and `operator_servers`, a
+  list of its readers (section 3.2).
 - UN-RFC 0047 section 12, shared state: answers in an operator channel
   are seen by every reader (section 5.4).
 - UN-RFC 0028: a message in a private chat MAY carry `Offer-<n>` inner
