@@ -633,6 +633,7 @@ async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float 
     stop = asyncio.Event()
     ripening = None
     stats = None
+    channel, channel_task = None, None             # the operator channel (UN-RFC 0065, #874)
     if stats_listen:
         try:
             stats = await serve_stats(rep, stats_listen, stats_token)
@@ -646,6 +647,7 @@ async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float 
                 want = ripen_to if ripen_to is not None else status.get("min_level")
                 if want is not None and ripening is None and (rep._own_level() or -1) < want:
                     ripening = asyncio.create_task(rep.ripen_until(want, stop))
+                channel, channel_task = await _channel_round(rep, channel, channel_task, stop)
             except (SessionError, OSError, ConnectionError, asyncio.IncompleteReadError) as exc:
                 log.warning("round failed: %s", exc)
                 rep.status.update({"error": str(exc), "time": nm.rfc3339(rep.now())})
@@ -657,6 +659,44 @@ async def run(session: Session, *, group: str = nm.NAMES_GROUP, interval: float 
         stop.set()
         if ripening is not None:
             ripening.cancel()
+        if channel_task is not None:
+            channel_task.cancel()
         if stats is not None:
             stats.close()
         await session.close()
+
+
+async def _channel_round(rep, channel, task, stop: asyncio.Event):
+    """After a round: the operator channel the configuration names - set up when it first
+    does, dropped when it no longer does - told the round's news and read. A failure
+    here never stops the replica."""
+    from . import operator as ro
+    cfg = rep._read_config()
+    want = (cfg.get("channel"), cfg.get("operator_channel", "notices"))
+    have = (channel.chan.group, channel.chan.desk.mode) if channel else (None, None)
+    if want != have:
+        if task is not None:
+            task.cancel()
+        channel, task = None, None
+        try:
+            channel = ro.setup_channel(rep, cfg, rep.state_dir)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("operator channel not set up: %s", exc)
+        if channel is not None:
+            task = asyncio.create_task(channel.loop(stop))
+    if channel is None:
+        return None, None
+    key = channel.chan.key
+    rep.status["channel"] = {"group": channel.chan.group, "mode": channel.chan.desk.mode,
+                             "key": key.key_text if key else None}
+    try:
+        ready = await channel.chan.ready()
+        rep.status["channel"]["reader"] = ready
+        if ready:
+            await channel.tell(rep.status)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("operator channel not told now: %s", exc)
+        rep.status["channel"]["error"] = str(exc)
+    rep._write_status()
+    return channel, task
+

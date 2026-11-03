@@ -136,6 +136,18 @@ def _common(server: str | None, offers) -> list[tuple[str, str]]:
 
 
 # --- commands (section 5) ---
+class Args(list):
+    """A command's words after the verb (``args[0]`` ...), and ``text``: all it said after
+    the verb, also on later lines - for ``talk: <text>``."""
+    text: str = ""
+
+    @classmethod
+    def of(cls, words: list[str], text: str) -> "Args":
+        a = cls(words)
+        a.text = text
+        return a
+
+
 @dataclass
 class Command:
     """One of a server's commands. ``run(args)`` does it and says in words what happened.
@@ -208,17 +220,19 @@ class Desk:
         for who in [w for w, x in waiting.items() if now > x["until"]]:
             del waiting[who]
 
-    def _parse(self, text: str) -> tuple[str, list[str]] | None:
-        first = (text or "").strip().splitlines()[0].strip() if (text or "").strip() else ""
+    def _parse(self, text: str) -> tuple[str, Args] | None:
+        text = (text or "").strip()
         if self.server is not None:
-            name, colon, rest = first.partition(":")
-            if not colon or name.strip().lower() != self.server.lower():
+            name, colon, rest = text.partition(":")
+            if not colon or "\n" in name or name.strip().lower() != self.server.lower():
                 return None                          # for another server (section 3.2)
-            first = rest.strip()
-        words = first.split()
+            text = rest.strip()
+        words = text.splitlines()[0].split() if text else []
         if not words:
             return None
-        return words[0].lower(), words[1:]
+        verb = words[0].rstrip(":").lower()          # "talk: hello" as "talk hello"
+        rest = text[len(words[0]):].strip()
+        return verb, Args.of(words[1:], rest)
 
     async def take(self, message_id: str, sender: str, date: datetime | None,
                    text: str) -> Answer | None:
@@ -257,7 +271,7 @@ class Desk:
         if self.mode != "commands":
             return Answer("refused", "Commands from here are off (operator_channel = notices).")
         cmd = self.commands.get(waiting["verb"])
-        return await self._run(cmd, waiting["args"])
+        return await self._run(cmd, Args.of(waiting["args"], waiting.get("text", "")))
 
     async def _command(self, message_id: str, sender: str, verb: str, args: list[str]) -> Answer:
         if verb == "help":
@@ -281,8 +295,8 @@ class Desk:
         code = self._code()
         assert _CODE.match(code)
         self.state["waiting"][sender] = {"code": code, "verb": verb, "args": list(args),
-                                         "what": what, "until": self.now() + CODE_SECONDS,
-                                         "for": message_id}
+                                         "text": getattr(args, "text", ""), "what": what,
+                                         "until": self.now() + CODE_SECONDS, "for": message_id}
         minutes = CODE_SECONDS // 60
         return Answer("asked", f"{what}?\nAnswer *yes {code}* within {minutes} minutes. "
                                "Anything else cancels it.", code=code,

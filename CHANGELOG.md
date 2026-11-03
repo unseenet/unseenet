@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **Council work from your everyday client** (UN-RFC 0065 section 8, #874 part 2): a
+  replica tells its operators in its channel what waits for them - changes held for
+  them, a twin alarm, a disputed council, hearings closing within two days, failed
+  rounds - and takes `agree`, `hold`, `second`, `object`, `talk:` and `reply` (each
+  asking for a code), `hearings`, `members` and `read`, through the same functions as
+  `unseenet-replica`; what they queue is posted at once. `resign`, `sign` and
+  `twin-gone` stay on the server. `unseenet-replica channel <group> [--commands]` names
+  the channel and shows the channel key the replica made for it; the channel is read
+  every minute.
 - **Operator channels, the building block** (UN-RFC 0065, #876): a server tells its
   operators what happens and takes their commands, in a team inbox (UN-RFC 0047) whose
   readers are the server's own channel key and its operators.
