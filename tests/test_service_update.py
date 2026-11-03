@@ -313,7 +313,7 @@ def test_the_newest_post_wins(monkeypatch):
 def test_which_node_is_read(monkeypatch):
     asked = []
 
-    async def posts_from(address, socks, package):
+    async def posts_from(address, socks, package, group=None):
         asked.append(address)
         return ["x"]
     monkeypatch.setattr(su, "_posts_from", posts_from)

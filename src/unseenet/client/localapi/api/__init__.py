@@ -146,11 +146,12 @@ from .content_labels import ContentLabels  # noqa: E402
 from .group_emoji import GroupEmoji  # noqa: E402
 from .shares import Shares  # noqa: E402
 from .councils import Councils  # noqa: E402
+from .publishers import Publishers  # noqa: E402
 
 
 class LocalAPI(ApiBase, Events, Setup, DeviceUnlock, State, Groups, Writing, People, Running, Identity, Articles,
                Files, Pictures, Addresses, Feeds, Pages, Nodes, AnnouncedNodes, Recovery, Copying, Rules,
-               Reports, Teams, ContentLabels, GroupEmoji, Shares, Councils):
+               Reports, Teams, ContentLabels, GroupEmoji, Shares, Councils, Publishers):
     """One runtime for UN-RFC 0046. Give it a vault path (a person's client) or
     a session made with ``Session.from_key`` and ``service=True`` (a bot or
     gateway, section 3.2).

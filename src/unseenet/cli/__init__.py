@@ -227,6 +227,7 @@ from .content_labels import *  # noqa: E402,F401,F403
 from .foryou import *  # noqa: E402,F401,F403
 from .teams import *  # noqa: E402,F401,F403
 from .council import *  # noqa: E402,F401,F403
+from .publishers import *  # noqa: E402,F401,F403
 from .main import *  # noqa: E402,F401,F403
 from . import node, basics, groups, messages, network, services, kept, following, names, reports, teams, main  # noqa: E402
 

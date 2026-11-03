@@ -477,6 +477,12 @@ async def council_hearings(request):
     return _json(await _api(request).council_hearings(request.query.get("group", "")))
 
 
+async def publishers(request):
+    if request.method == "GET":
+        return _json(await _api(request).publishers())
+    return _json(await _api(request).publishers_post(await _body(request)))
+
+
 async def show_reported(request):
     return _json(_api(request).show_reported(_gid(request), await _body(request)))
 
@@ -761,6 +767,7 @@ ROUTES = [
     ("GET", "/api/teams/readers", teams_readers), ("POST", "/api/teams/readers", teams_readers),
     ("GET", "/api/council", council), ("POST", "/api/council", council),          # 0054
     ("GET", "/api/council/hearings", council_hearings),
+    ("GET", "/api/publishers", publishers), ("POST", "/api/publishers", publishers),  # 0062 6
     ("POST", "/api/groups/{gid}/settings", group_settings),
     ("GET", "/api/groups/{gid}/emoji", group_emoji), ("POST", "/api/groups/{gid}/emoji", group_emoji),
     ("POST", "/api/groups/{gid}/remove", remove_group),

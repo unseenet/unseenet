@@ -42,6 +42,16 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   post` signs with the vault, `sign --seed-file` adds a reserve key's), and `post --moved-to
   <council>` makes the project's last list - after it, its later lists are not used, and the list
   council's sources list takes their place.
+- **Choose whom your stick takes updates from** (#822, UN-RFC 0062 section 6): a stick keeps
+  its publishers in `data/publishers.json` - the project from the start - and follows one.
+  `unseenet publishers show <channel>` shows another publisher's first key list, as a
+  fingerprint to compare with what they say elsewhere, its keys and its newest releases;
+  `add --fingerprint` pins it, `follow` and `remove` choose (the project can be removed
+  too). The updater and the client's update offer follow the stick's publisher, its key
+  list and its sources are kept apart from the project's, and the project's GitHub is only
+  asked for the project's releases. In the local API: `GET`/`POST /api/publishers`.
+  Servers follow another publisher with `unseenet-service-update publisher --group
+  --first-keys`. Nothing changes for a stick that does not choose.
 - **Sticks and servers fetch where the council says** (#917, UN-RFC 0062 section 6.3): once the
   project's list of release sources names `moved_to`, they read the list council's sources list
   through a node (the council counted from its copies, the list posted by a member, every

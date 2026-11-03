@@ -41,6 +41,19 @@ no single key decides it: if GitHub or PyPI goes away, the council adds another
 site by a proposal, with no new version needed. The built-in GitHub and PyPI
 are only where a new install starts, until it has read a list.
 
+It follows the project's releases unless you choose another publisher (UN-RFC 0062
+section 6) - someone who builds and signs releases of their own. Ask them for their
+releases channel and their first key list (`release-keys 1`), check its fingerprint
+with them, then:
+
+```bash
+sudo /home/unseenet/unseenet/.venv/bin/unseenet-service-update publisher --service unseenet-node \
+    --group <their releases channel> --first-keys release-keys-1.json
+```
+
+Leave out `--group` to go back to the project. What was kept of the publisher before
+(its key list, its sources) is dropped; `status` shows the publisher followed.
+
 Turned off, it still looks, and writes a warning in its log when a newer
 release has been out for 30 days. To update by hand then:
 
