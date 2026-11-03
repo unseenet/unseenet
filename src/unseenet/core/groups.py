@@ -473,6 +473,7 @@ def make_manifest(owner: crypto.Identity, name: str, gtype: str, *, serial: int 
 EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reactions",
                 "policy", "contact", "automatic",       # reports@ (UN-RFC 0045)
                 "readers", "team_name",                 # team inboxes (UN-RFC 0047)
+                "operator_channel",                     # a server's channel (UN-RFC 0065)
                 "report_issuers",                       # a group's own (UN-RFC 0045, 7.5)
                 "tags", "languages",                    # the group's tags, languages (0052)
                 "labellers", "topics",                  # UN-RFC 0053 sections 3, 5
@@ -482,6 +483,9 @@ EXTRA_FIELDS = ("attachments", "max_pins", "max_pages", "home", "index", "reacti
 def check_team_fields(data: dict) -> None:
     """ValueError if ``readers`` or ``team_name`` are not as UN-RFC 0047 section 3 says:
     an inbox's, 1 to 16 keys, each once, never the owner; a name of at most 64."""
+    if "operator_channel" in data and (data["operator_channel"] is not True
+                                       or data.get("type") != "inbox"):
+        raise ValueError("operator_channel is true, and only for an inbox (UN-RFC 0065)")
     if "readers" not in data and "team_name" not in data:
         return
     if data.get("type") != "inbox":

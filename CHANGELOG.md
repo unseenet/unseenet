@@ -7,6 +7,24 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ## [Unreleased]
 
+### Added
+
+- **Operator channels, the building block** (UN-RFC 0065, #876): a server tells its
+  operators what happens and takes their commands, in a team inbox (UN-RFC 0047) whose
+  readers are the server's own channel key and its operators.
+  - `core/operator.py`: `Desk` takes a command - a confirmation code for anything that
+    changes something, valid 30 minutes and only for the reader who asked; each command
+    once, none over an hour old; `help`, `status` and `notices` everywhere; commands only
+    the server's own command line takes; `operator_channel = off | notices | commands`.
+    Offers (buttons) as `Offer-1` .. `Offer-6`.
+  - `client/operator.py`: the server makes its channel key itself (`make_channel_key`),
+    knows when it is a reader, posts notices (once per matter, `info` in digests, `warn`
+    a little late, `alarm` at once) and answers commands (`OperatorChannel.poll`).
+  - `unseenet operator create | add-server | add | remove | channels`: the owner makes a
+    channel per server and adds or removes an operator on many at once.
+  - Messages in a channel carry `operator` (notice, level, code, result, offers); an
+    inbox manifest may have `operator_channel: true`. A reader writing to a team inbox
+    no longer needs to have fetched it first.
 ### Fixed
 
 - **A council's machine groups no longer fill the group tree** (#928): the groups a

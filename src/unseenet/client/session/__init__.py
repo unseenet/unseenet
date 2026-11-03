@@ -254,6 +254,8 @@ class Message:
     # Session.team_sender. And a team key handed to you: {"group", "seed"} (section 6)
     team: dict | None = None
     team_invite: dict | None = field(default=None, repr=False)
+    # in an operator channel (UN-RFC 0065): a notice, an answer, a code, offers (buttons)
+    operator: dict | None = None
     # hidden by a spam report from an issuer you follow (UN-RFC 0045 section 7.3): who,
     # why and which report - set by ``Session.visible``; clients show it in its place
     reported: dict | None = None
@@ -327,6 +329,7 @@ class Message:
             "labels": self.labels,                     # warnings, topics, action (UN-RFC 0053)
             "team": dict(self.team) if self.team else None,    # on an inbox's behalf (0047)
             "team_invite": ({"group": self.team_invite["group"]} if self.team_invite else None),
+            "operator": self.operator,                 # notices, answers, offers (UN-RFC 0065)
         }
 
 

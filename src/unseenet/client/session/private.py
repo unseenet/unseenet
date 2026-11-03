@@ -151,6 +151,10 @@ class PrivateMixin:
     async def inbox_owner(self, group_id: str) -> bytes:
         """The owner key of an inbox, from its manifest on the node."""
         entry = self.group_entry(group_id)
+        held = self.manifest_data(group_id)
+        if not entry.get("owner_key") and held.get("owner") and held.get("type") == "inbox":
+            entry["owner_key"] = held["owner"]       # a team inbox you read (UN-RFC 0047, 0065)
+            entry.setdefault("type", "inbox")
         if not entry.get("owner_key"):
             subscribed = group_id in self.data["subscribed"]
             await self.fetch_group(group_id)        # reads the manifest
@@ -623,6 +627,9 @@ class PrivateMixin:
         msg.reply_inbox = inner.get("Reply-Inbox")
         if inner.get("Sender-Team") and sender is not None:        # on an inbox's behalf (0047, 8)
             msg.team = {"group": inner["Sender-Team"].strip()}
+        if msg.team is not None or group_id in self._team_keys():   # operator channels (0065)
+            from ...core.operator import operator_fields
+            msg.operator = operator_fields(inner.headers)
         if inner.get("Team-Inbox") and inner.get("Team-Key") and sender is not None:
             msg.team_invite = {"group": inner["Team-Inbox"].strip(), "seed": inner["Team-Key"].strip()}
         self._encrypted_files(msg, art, inner, group_id)    # UN-RFC 0027, 3.3 and 4.4

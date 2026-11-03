@@ -39,6 +39,86 @@ def teams_parsers(sub) -> None:
     p.add_argument("text", help="the answer; - reads it from stdin")
 
 
+def operators_parsers(sub) -> None:
+    """The parser of ``unseenet operator``: a server's operator channel (UN-RFC 0065)."""
+    s = sub.add_parser("operator", help="operator channels: a server tells its operators what "
+                                        "happens and takes their commands (UN-RFC 0065)")
+    t = s.add_subparsers(dest="what")
+    t.add_parser("channels", help="the operator channels you own or read")
+    p = t.add_parser("create", help="owner: a new channel for one server (a team inbox)")
+    p.add_argument("name", help="the inbox's name, e.g. operator.replica2")
+    p.add_argument("--server-name", help="what the channel answers as, e.g. replica2")
+    p = t.add_parser("add-server", help="owner: list the server's channel key as a reader")
+    p.add_argument("channel")
+    p.add_argument("key", help="the channel key the server showed")
+    p = t.add_parser("add", help="owner: add an operator to one or more channels")
+    p.add_argument("key", help="the person's own key")
+    p.add_argument("--channels", required=True,
+                   help="channels, separated by commas, or all (every channel you own)")
+    p = t.add_parser("remove", help="owner: remove an operator's team key from channels")
+    p.add_argument("key", help="the team key, as `team readers` lists it")
+    p.add_argument("--channels", default="all", help="channels, separated by commas, or all")
+
+
+def _own_channels(s) -> list[str]:
+    return sorted(g for g, e in s.data.get("groups", {}).items()
+                  if e.get("owner") and (e.get("manifest") or {}).get("operator_channel"))
+
+
+def _channels(s, text: str) -> list[str]:
+    if text.strip() == "all":
+        found = _own_channels(s)
+        if not found:
+            sys.exit("you own no operator channels")
+        return found
+    return [c.strip() for c in text.split(",") if c.strip()]
+
+
+async def c_operator(app: App, args) -> None:
+    """``unseenet operator ...``: see ``unseenet operator -h``. Each server has a channel
+    of its own (UN-RFC 0065 section 3.2); adding or removing an operator works on many
+    at once (section 3.4)."""
+    from ..client.operator import add_server
+    from ..client.session import SessionError
+    s = _session(app, args)
+    what = getattr(args, "what", None) or "channels"
+    try:
+        if what == "channels":
+            own = _own_channels(s)
+            read = [t["group"] for t in s.team_inboxes()
+                    if s.manifest_data(t["group"]).get("operator_channel")]
+            rows = [{"group": g, "name": s.team_name(g), "owner": g in own}
+                    for g in sorted(set(own) | set(read))]
+            emit(args, "\n".join(f"{r['group']}  {r['name']}" + ("  (yours)" if r["owner"] else "")
+                                 for r in rows) or "No operator channels.", rows)
+        elif what == "create":
+            gid = await s.create_group(args.name, "inbox")
+            await s.update_group(gid, operator_channel=True,
+                                 **({"team_name": args.server_name} if args.server_name else {}))
+            emit(args, f"Made {gid}.\nOn the server, make its channel key for it and give the "
+                       f"key to `unseenet operator add-server {gid} <key>`.", {"group": gid})
+        elif what == "add-server":
+            await add_server(s, args.channel, args.key)
+            emit(args, f"The server reads {args.channel} now.", {"group": args.channel})
+        elif what == "add":
+            done = {}
+            for gid in _channels(s, args.channels):
+                done[gid] = await s.add_team_reader(gid, args.key)
+            emit(args, "\n".join(f"{g}: team key {k}" for g, k in done.items())
+                 + "\nThe invitations are in their inbox to accept.", {"added": done})
+        elif what == "remove":
+            done = []
+            for gid in _channels(s, args.channels):
+                data = await s._own_inbox(gid)
+                if args.key in data.get("readers", []):
+                    await s.remove_team_reader(gid, args.key)
+                    done.append(gid)
+            emit(args, ("Removed from " + ", ".join(done)) if done else
+                 "That team key reads none of those channels.", {"removed": done})
+    except (SessionError, ValueError, crypto.CryptoError) as exc:
+        sys.exit(str(exc))
+
+
 def _mid(text: str) -> str:
     return text if text.startswith("<") else f"<{text}>"
 
@@ -99,4 +179,4 @@ async def c_team(app: App, args) -> None:
         sys.exit(str(exc))
 
 
-__all__ = ["c_team", "teams_parsers"]
+__all__ = ["c_team", "teams_parsers", "c_operator", "operators_parsers"]
