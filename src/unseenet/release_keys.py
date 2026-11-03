@@ -29,10 +29,14 @@ MAX_KEYS = 8
 _SUBJECT = re.compile(r"^release-keys ([1-9][0-9]{0,8})$")
 
 # The project's first key list (section 5): the project key and two reserve keys,
-# threshold 2, {"dev": 1}. Pinned here once the maintainer made the reserve keys
-# (tools/project/release_keys.py make); until then releases are checked as before -
-# the project key alone, and the development keys for development builds.
-PROJECT_FIRST: str | None = None
+# threshold 2, {"dev": 1} - made with tools/project/release_keys.py make on 3 Nov 2026
+# and posted in unseenet.releases as release-keys 1. A stable release needs two of the
+# three; a later list counts once two of them posted it.
+PROJECT_FIRST: str | None = (
+    '{"channels":{"dev":1},"keys":["ed25519:det5dxevwbk36eds2indrzlazyri3fq3bgdzw6kx4ems3o267sya",'
+    '"ed25519:nvisp5te3fezpln7nq576yeq64lfd3jdhtlhxcxmylwgm23omlcq",'
+    '"ed25519:et42lnxa66ctqk3aq5cmireslpgzj3hygg7wvo2k6ozrfmp43mcq"],'
+    '"seq":1,"threshold":2,"v":1}\n')
 
 
 class KeyListProblem(ValueError):

@@ -154,3 +154,15 @@ def test_servers_go_by_the_counted_list(keys, monkeypatch):
                     rk.Vote(keys[2].key_text, rk.make_body(2, [keys[1].key_text], 1, prev=kl))]
     with pytest.raises(su.Problem, match="forked"):
         su.newest_release(lambda u: b"", package="unseenet-gateway", network=lambda: fork)
+
+
+def test_the_project_key_list_is_pinned(monkeypatch):
+    """The first list as made and posted on 3 Nov 2026: the project key and two reserve
+    keys, two of three for stable releases, one for development builds."""
+    from unseenet.known_nodes import PROJECT_KEY
+    monkeypatch.undo()                     # the list as shipped, not the tests' patch
+    assert rk.PROJECT_FIRST
+    kl = rk.first()
+    assert kl.seq == 1 and kl.threshold == 2 and kl.threshold_for("dev") == 1
+    assert kl.keys[0] == PROJECT_KEY and len(kl.keys) == 3
+    assert kl.body == rk.make_body(1, list(kl.keys), 2, {"dev": 1})
