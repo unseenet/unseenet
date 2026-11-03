@@ -869,6 +869,41 @@ def _update_main(d: Path) -> int:
     return 0
 
 
+def channel(args) -> int:
+    """The operator channel (UN-RFC 0065): name it, turn commands on or off, show the
+    channel key the replica made for it (#874)."""
+    d = Path(args.dir)
+    cfg = read_config(d)
+    if args.group:
+        cfg["channel"] = args.group
+    if args.mode:
+        cfg["operator_channel"] = args.mode
+    if args.group or args.mode:
+        write_config(d, cfg)
+    if not cfg.get("channel") or cfg.get("operator_channel") == "off":
+        print("No operator channel. Name one: unseenet-replica channel <group> "
+              "(the owner makes it with: unseenet operator create operator.<name>)")
+        return 0
+    ch = read_status(d).get("channel") or {}
+    mode = cfg.get("operator_channel", "notices")
+    print(f"Channel: {cfg['channel']}")
+    print(f"Mode: {mode}" + ("  (only help, status and notices from chat; "
+                             "--commands lets the operators act)" if mode == "notices" else ""))
+    if ch.get("group") != cfg["channel"] or not ch.get("key"):
+        print("The replica makes its channel key at its next round (within a few minutes);")
+        print("run this again then to see it.")
+        return 0
+    print(f"Channel key: {ch['key']}")
+    if ch.get("reader"):
+        print("The channel lists it: the replica tells its operators there and reads them.")
+    else:
+        print("Not a reader yet. The channel's owner adds it with:")
+        print(f"  unseenet operator add-server {cfg['channel']} {ch['key']}")
+    if ch.get("error"):
+        print(f"Last error: {ch['error']}")
+    return 0
+
+
 def status(args) -> int:
     d = Path(args.dir)
     st, cfg = read_status(d), read_config(d)
@@ -912,6 +947,15 @@ def main(argv=None) -> int:
                         "address other than this computer's needs --stats-token-file")
     s.add_argument("--stats-token-file", metavar="FILE",
                    help="a file (mode 600) with the token clients must give first")
+    s = sub.add_parser("channel", help="the operator channel: notices and commands from "
+                                       "your everyday client (UN-RFC 0065)")
+    s.add_argument("group", nargs="?", help="the channel's Group ID, from its owner")
+    m = s.add_mutually_exclusive_group()
+    m.add_argument("--commands", dest="mode", action="store_const", const="commands",
+                   help="operators may act from chat (each change asks for a code)")
+    m.add_argument("--notices", dest="mode", action="store_const", const="notices",
+                   help="only notices, and help, status and notices from chat (the default)")
+    m.add_argument("--off", dest="mode", action="store_const", const="off", help="no channel")
     s = sub.add_parser("status", help="how the replica is doing, in plain words")
     s.add_argument("--json", action="store_true")
     s = sub.add_parser("agree", help="let a held change go ahead")
@@ -985,7 +1029,7 @@ def main(argv=None) -> int:
         c.add_argument("--dir", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    return {"setup": setup, "run": run_service, "status": status, "agree": agree,
+    return {"setup": setup, "run": run_service, "status": status, "channel": channel, "agree": agree,
             "hold": hold, "resign": resign, "update": update, "propose": propose,
             "second": second, "talk": talk, "object": object_, "sign": sign,
             "twin-gone": twin_gone, "members": members, "hearings": hearings,
