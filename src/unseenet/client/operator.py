@@ -107,6 +107,21 @@ class OperatorChannel:
         greeted = set(self.state.get("greeted", []))
         if not others or set(others) <= greeted:
             return
+        pending = self.state.get("greeting")
+        if pending and set(pending["for"]) == set(others):
+            # tried before and cut off (a restart, a timeout after the node took it):
+            # posted already if the channel shows it - one hello, not two
+            since = pending["at"] - 300
+            if any(m.sender_key == me and m.operator and m.operator.get("notice") == "hello"
+                   and m.date is not None and m.date.timestamp() >= since
+                   for m in await self.s.fetch_group(self.group)):
+                self.state["greeted"] = others
+                self.state.pop("greeting", None)
+                self.s.save()
+                return
+        else:
+            self.state["greeting"] = {"for": others, "at": self.now()}
+            self.s.save()
         name = manifest.get("team_name") or self.server or "This server"
         text = (f"{name} reads this channel now. Answer help for what it can do here, "
                 "or status for how it is.")
@@ -116,6 +131,7 @@ class OperatorChannel:
         await self._post(text, op.notice_headers("hello", "info", server=self.server,
                                                  offers=[op.offer("help"), op.offer("status")]))
         self.state["greeted"] = others
+        self.state.pop("greeting", None)
         self.s.save()
 
     # --- notices (section 4) ---

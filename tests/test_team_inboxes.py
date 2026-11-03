@@ -262,3 +262,46 @@ def test_any_inbox_takes_sealed_posts_from_unripe_one_time_keys(ripening_rules, 
     art = inbox_article(m.group, owner.public_key, from_name="x", subject="Report", body="spam\n",
                         sender=writer, readers=[reader.public_key] if extra else None, pow_bits=bits)
     n.accept(art.to_bytes())                               # no ripening asked of a one-time key
+
+
+async def test_an_answer_inside_a_team_inbox_through_the_local_api(net):
+    """An operator answers the server's hello in its channel (UN-RFC 0065): the answer goes
+    to the team inbox, whose owner is not the server's key, on the inbox's behalf - also
+    when the client does not say so."""
+    import asyncio
+
+    from unseenet.client import operator as oc
+    from unseenet.client.localapi import LocalAPI
+    project, andreas, server = net("project"), net("andreas"), net("server")
+    await andreas.ensure_inbox()
+    gid = await project.create_group("operator.replica1", "inbox")
+    await oc.add_server(project, gid, oc.make_channel_key(server, gid), "replica1")
+    await project.add_team_reader(gid, andreas.identity().key_text)
+    await andreas.fetch_group(andreas.my_inbox)
+    await andreas.accept_team_invitation(next(m for m in andreas.private_messages()
+                                              if andreas.team_invitation(m)))
+    chan = oc.OperatorChannel(server, gid)
+    assert await chan.ready()                                   # says hello
+    await chan.poll()
+    [hello] = [m for m in await andreas.fetch_group(gid) if m.readable]
+    assert andreas.reply_target(hello) == gid
+
+    api = LocalAPI(session=andreas)
+    events = []
+    api._job_event = lambda job, group, state, **kw: events.append((state, kw))
+    api.private({"key": hello.sender_key, "body": "status", "kind": "chat", "reply_to": hello.message_id})
+    for _ in range(400):
+        if any(s in ("reached", "failed") for s, _ in events):
+            break
+        await asyncio.sleep(0.05)
+    assert not [kw for s, kw in events if s == "failed"]
+    [(_, a)] = await chan.poll()                                # the server answers it
+    assert a.result == "done"
+
+    # a hello that was posted but cut off before it was noted (a restart) is not sent again
+    chan.state["greeted"] = []
+    chan.state["greeting"] = {"for": [andreas.team_key(gid).key_text], "at": chan.now()}
+    assert await chan.ready()
+    assert chan.state["greeted"] == [andreas.team_key(gid).key_text] and "greeting" not in chan.state
+    assert len([m for m in await andreas.fetch_group(gid)
+                if m.operator and m.operator["notice"] == "hello"]) == 1

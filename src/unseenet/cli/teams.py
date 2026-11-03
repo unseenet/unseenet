@@ -171,8 +171,10 @@ async def c_team(app: App, args) -> None:
             if target is None:
                 sys.exit("it was sent anonymously: there is nobody to answer")
             text = sys.stdin.read() if args.text == "-" else args.text + "\n"
+            sender = crypto.key_from_text(msg.sender_key)
+            mine = sender if target == personal_inbox_id(sender) else None   # or a team inbox
             mid = await s.send_private(target, "Re: " + (msg.subject or ""), text,
-                                       owner_key=crypto.key_from_text(msg.sender_key),
+                                       owner_key=mine,
                                        references=[msg.message_id], as_team=args.group)
             emit(args, f"Answered as {s.team_name(args.group)}: {mid}", {"id": mid})
     except (SessionError, ValueError, crypto.CryptoError) as exc:

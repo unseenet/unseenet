@@ -204,6 +204,8 @@ class Writing:
         as_team = str(data.get("as_team") or "") or None     # on a team inbox's behalf (0047)
         if as_team and s.team_key(as_team) is None:
             raise SessionError("you hold no team key for that inbox")
+        if not as_team and refs and s.team_key(inbox) is not None:
+            as_team = inbox          # an answer inside a team inbox is on its behalf (0047, 0065)
 
         async def send() -> str:
             if shared is not None:
@@ -211,7 +213,9 @@ class Writing:
                                           subject=subject, files=files or None, card=card)
             if kind == KIND_CHAT and not refs and inbox == personal_inbox_id(owner) and not as_team:
                 return await s.send_chat(CONTACT + key, body, files=files or None, card=card)
-            return await s.send_private(inbox, subject, body, owner_key=owner,
+            # a reply can go to a team inbox (UN-RFC 0047): its owner is not this key
+            mine = owner if inbox == personal_inbox_id(owner) else None
+            return await s.send_private(inbox, subject, body, owner_key=mine,
                                         references=refs or None, kind=kind, files=files or None,
                                         as_team=as_team, card=card)
 
