@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **A council proposal can no longer undo another** (UN-RFC 0061): a passed manifest change
+  replaces each field whole, so two open proposals that set one field - `lists`, say -
+  left only the one that applied last. `unseenet-replica propose` now refuses a change
+  that sets a field an open, passed-but-not-applied or waiting proposal sets too, and says
+  which; `--anyway` proposes it all the same. `hearings` and the status show the fields
+  each proposal sets.
 - **Pictures where no process can be started** (the client in a browser, UN-RFC 0027
   section 9.2): `client.decode` now takes the platform's own way to decode apart from the
   client (`decode.elsewhere`, the web client's picture worker), held to the same time and

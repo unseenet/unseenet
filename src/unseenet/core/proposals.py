@@ -297,6 +297,16 @@ def _day(t: datetime) -> datetime:
     return t.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def touched(change: dict) -> set[str]:
+    """The manifest fields and council parameters a ``manifest`` change sets. A passed
+    change replaces each one whole, so two open proposals that set one field overwrite
+    each other: whichever applies last wins."""
+    m = change.get("manifest") if isinstance(change, dict) else None
+    if not isinstance(m, dict):
+        return set()
+    return set(m.get("fields") or {}) | set(m.get("council") or {})
+
+
 def applied_body(cur: cn.CouncilManifest, p: Proposal, date: datetime) -> str:
     """The council manifest a passed ``manifest`` proposal makes after ``cur``, dated
     ``date``: the same members, with the proposed fields and parameters."""
