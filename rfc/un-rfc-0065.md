@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0065                                             November 2026
 Category: Standards Track
 Status: Draft
-Implemented: -
+Implemented: unseenet main (unreleased); partly - the building block (sections 3 to 6), not yet a server that uses it
 Updates: 0047
 
                     Unseenet: Operator Channels
@@ -174,7 +174,7 @@ UN-RFC 0047 section 8:
 | `Operator-Notice` | A kind: one word, `[a-z0-9-]`, at most 32 characters, e.g. `disk-low`, `held`, `hearing-closing` |
 | `Notice-Level`    | `info`, `warn` or `alarm`                                  |
 | `Notice-Key`      | Optional. A short key for the matter, so a later notice can say it is over (`Notice-Over: yes`) |
-| `Offer`           | Optional, repeated: buttons (section 6)                    |
+| `Offer-<n>`       | Optional, `<n>` from 1 to 6: buttons (section 6)           |
 
 The body is text for people, in the server's configured language, and
 MUST say in words what can be done, with each command written out, so
@@ -296,10 +296,13 @@ something still needs a confirmation code.
 
 # 6. Offers
 
-A message MAY carry up to six `Offer` inner headers. Each is a button:
+A message MAY carry up to six offers, in the inner headers `Offer-1` to
+`Offer-6`, numbered as UN-RFC 0027 numbers `Attachment-<n>` so that
+each is a header of its own. Each is a button, shown in the order of
+its number:
 
 ```
-Offer: <reply> | <label>
+Offer-<n>: <reply> | <label>
 ```
 
 `<reply>` is the exact text the button sends; `<label>` (optional) is
@@ -307,8 +310,8 @@ what the button says, at most 40 characters; without it the reply is
 the label. For example:
 
 ```
-Offer: yes 4821 | Second it
-Offer: no | Cancel
+Offer-1: yes 4821 | Second it
+Offer-2: no | Cancel
 ```
 
 A client that shows offers:
@@ -437,7 +440,7 @@ them alike.
   `"operator_channel": true` (section 3.1).
 - UN-RFC 0047 section 12, shared state: answers in an operator channel
   are seen by every reader (section 5.4).
-- UN-RFC 0028: a message in a private chat MAY carry `Offer` inner
+- UN-RFC 0028: a message in a private chat MAY carry `Offer-<n>` inner
   headers (section 6).
 
 # Copyright Notice
