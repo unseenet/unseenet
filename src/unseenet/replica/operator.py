@@ -284,12 +284,17 @@ class ReplicaChannel:
 
 
 def setup_channel(rep, cfg: dict, state_dir) -> ReplicaChannel | None:
-    """The channel the replica's configuration names (``channel``, ``operator_channel``),
-    with its key made now if it has none; None when it names none or turns it off."""
-    group = cfg.get("channel")
+    """The channel the replica's configuration names (``operator_group``, and
+    ``operator_channel`` for the mode), with its key made now if it has none; None when
+    it names none or turns it off. (``channel`` in the configuration is the update
+    channel, ``stable`` or ``main`` - another thing.)"""
+    group = cfg.get("operator_group")
+    if group and "@" not in group:
+        log.warning("operator_group %r is not a Group ID: no operator channel", group)
+        return None
     mode = cfg.get("operator_channel", "notices")
     if not group or mode == "off" or state_dir is None:
         return None
     key = oc.make_channel_key(rep.s, group)
-    rep.status["channel"] = {"group": group, "key": key, "mode": mode}
+    rep.status["operator"] = {"group": group, "key": key, "mode": mode}
     return ReplicaChannel(rep, group, mode, Path(state_dir))

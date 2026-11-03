@@ -15,8 +15,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   rounds - and takes `agree`, `hold`, `second`, `object`, `talk:` and `reply` (each
   asking for a code), `hearings`, `members` and `read`, through the same functions as
   `unseenet-replica`; what they queue is posted at once. `resign`, `sign` and
-  `twin-gone` stay on the server. `unseenet-replica channel <group> [--commands]` names
-  the channel and shows the channel key the replica made for it; the channel is read
+  `twin-gone` stay on the server. `unseenet-replica operator <group> [--commands]` names
+  the channel (`operator_group` in its configuration; `channel` stays the update
+  channel) and shows the channel key the replica made for it; the channel is read
   every minute.
 - **Operator channels, the building block** (UN-RFC 0065, #876): a server tells its
   operators what happens and takes their commands, in a team inbox (UN-RFC 0047) whose

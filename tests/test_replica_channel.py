@@ -140,18 +140,20 @@ async def test_the_configuration_names_the_channel(net, tmp_path, capsys):
     rep = FakeReplica(replica, d)
     rep.status = {}
     assert ro.setup_channel(rep, {}, d) is None
-    assert ro.setup_channel(rep, {"channel": "operator@x", "operator_channel": "off"}, d) is None
-    rc = ro.setup_channel(rep, {"channel": "operator@x"}, d)
+    assert ro.setup_channel(rep, {"operator_group": "operator@x", "operator_channel": "off"}, d) is None
+    assert ro.setup_channel(rep, {"channel": "main"}, d) is None              # the update channel
+    rc = ro.setup_channel(rep, {"operator_group": "operator@x", "channel": "main"}, d)
     assert rc.chan.desk.mode == "notices"                      # the default
-    assert rep.status["channel"]["key"] == replica.team_key("operator@x").key_text
+    assert rep.status["operator"]["key"] == replica.team_key("operator@x").key_text
 
     from argparse import Namespace
-    rcli.channel(Namespace(dir=str(d), group="operator@x", mode="commands"))
+    (d / "config.json").write_text(json.dumps({"channel": "main"}))
+    rcli.operator(Namespace(dir=str(d), group="operator@x", mode="commands"))
     cfg = json.loads((d / "config.json").read_text())
-    assert cfg == {"channel": "operator@x", "operator_channel": "commands"}
+    assert cfg == {"channel": "main", "operator_group": "operator@x", "operator_channel": "commands"}
     assert "next round" in capsys.readouterr().out
-    (d / "status.json").write_text(json.dumps({"channel": {"group": "operator@x",
+    (d / "status.json").write_text(json.dumps({"operator": {"group": "operator@x",
                                                            "key": "ed25519:k", "reader": False}}))
-    rcli.channel(Namespace(dir=str(d), group=None, mode=None))
+    rcli.operator(Namespace(dir=str(d), group=None, mode=None))
     out = capsys.readouterr().out
     assert "ed25519:k" in out and "unseenet operator add-server operator@x ed25519:k" in out
