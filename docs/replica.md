@@ -346,6 +346,74 @@ unseenet council hearings unseenet.names@...
 unseenet council object unseenet.names@... <id> "why"
 ```
 
+## From your everyday client: the operator channel
+
+Instead of a terminal on the replica's machine, you can do a member's work from your
+everyday client, also a phone through a web entrance: the replica tells you what
+waits for you, and takes your commands, in its **operator channel** - a team inbox
+only you and the replica read. How channels work, and the owner's side, is on
+[Operator channels](operator-channel.md).
+
+**1. The channel (you, as its owner).** In a vault of its own, kept for this:
+
+```bash
+V="--vault $HOME/operator.vault"
+unseenet $V id-new operator --display "My replicas"
+unseenet $V node-add <a node's onion address>
+unseenet $V operator create operator.replica1 --server-name replica1
+```
+
+**2. The replica.** Give it the Group ID that `create` printed:
+
+```bash
+sudo unseenet-replica operator <group> --commands     # or leave out --commands: notices only
+```
+
+At its next round (a few minutes) it makes its channel key; then
+
+```bash
+sudo unseenet-replica operator
+```
+
+shows the key, and the line to list it.
+
+**3. List the replica, and add yourself (you, as owner):**
+
+```bash
+unseenet $V operator add-server <group> <the replica's channel key>
+unseenet $V operator add <your everyday key> --channels all
+```
+
+Accept the invitation in your everyday client. From then on the replica reads the
+channel every minute.
+
+**What it tells you.** A change held for you (with the `agree` to send), a twin alarm,
+a disputed council, a hearing that closes within two days, a round that failed - each
+once, and again when it is over.
+
+**What you can do from chat.** The same as `unseenet-replica` on the machine, through
+the same code; what it queues is posted at once, not at the next round:
+
+| Command | |
+|---------|---|
+| `help` | the list |
+| `status` | what `unseenet-replica status` says |
+| `hearings`, `members` | proposals and their counts; members and candidates |
+| `read talk`, `read log` | the newest posts |
+| `agree <label>`, `hold <kinds>\|none` | held changes |
+| `second <id>`, `object <id> <reason>` | proposals |
+| `talk: <text>` | post in talk (several lines are fine) |
+| `reply <id>: <text>` | answer a post in talk |
+
+Put `lists` first for the list council (`hearings lists`, `talk lists: ...`); `second`
+and `object` find the proposal in either council. Each command that changes something
+answers with a code to send back (`yes 4821`), valid for 30 minutes. With
+`--notices` (the default) only `help`, `status` and `notices` work from chat.
+
+**Only on the machine:** `resign`, `sign` and `twin-gone`. `sudo unseenet-replica
+operator --off` turns the channel off; `--notices` and `--commands` switch the mode.
+In Docker: `docker compose exec replica unseenet-replica operator ...`.
+
 ## The council's room
 
 A council can have a closed **room** where the members talk. Nobody hands its key
@@ -374,6 +442,7 @@ replica that is simply switched off is removed after 90 days of silence;
 | Restart | `sudo systemctl restart unseenet-replica` |
 | Update now | `sudo systemctl start unseenet-replica-update` |
 | What the update did | `/opt/unseenet-replica/bin/unseenet-service-update status --service unseenet-replica` |
+| Its operator channel | `unseenet-replica operator` |
 | Stop updating by itself | `--channel off` at setup; it then only warns in its log when a release has been out 30 days |
 
 An update downloads everything over Tor (#900), so the downloads after a release
@@ -397,10 +466,11 @@ then run the `twin-gone` command that `status` shows.
 - The replica reaches the network only over Tor. Nobody learns from the network
   where it runs or who runs it; a member is just a key. Its signs of life are
   posted at random times, so they mark no schedule.
-- Updates are fetched from GitHub and PyPI (only GitHub with `UNSEENET_CHANNEL=main`)
-  over the ordinary internet. That shows the machine's address installs Unseenet, not that
-  it runs a replica. If that matters to you, turn the timer off and update by
-  hand over Tor.
+- Updates are fetched over Tor (#900), from the network first and from GitHub and
+  PyPI only as a last resort, so the downloads do not show which machines run a
+  replica. `UNSEENET_UPDATE_DIRECT=1` downloads without Tor.
+- The operator channel, if you set one up, is posted to when something happens to
+  the replica; see [Operator channels](operator-channel.md#privacy).
 - Name claims are public by design: anybody can see which key claimed which
   name. Your replica sees nothing that others cannot.
 
