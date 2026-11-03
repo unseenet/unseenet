@@ -201,10 +201,22 @@ async def test_a_channel_from_start_to_end(net):
     assert await chan.ready()
     assert await chan.poll() == []                                      # nothing before it
 
+    # it says hello once, a message any client can answer (UN-RFC 0065 section 7)
+    assert await chan.ready()
+    [hello] = [m for m in await andreas.fetch_group(gid)
+               if m.operator and m.operator["notice"] == "hello"]
+    assert "replica2 reads this channel now" in hello.body
+    assert [o["reply"] for o in hello.operator["offers"]] == ["help", "status"]
+    assert andreas.reply_target(hello) == gid                          # an answer goes there
+    await andreas.send_private(andreas.reply_target(hello), "", "status\n", kind="chat",
+                               references=[hello.message_id], as_team=gid)
+    [(_, st)] = await chan.poll()
+    assert st.result == "done" and st.text == "All rounds fine."
+
     # a notice: once per matter, its end once
     assert await chan.notice("twin", "Twin alarm: the key is used elsewhere.", "alarm", key="twin")
     assert await chan.notice("twin", "again", "alarm", key="twin") is None
-    [n] = [m for m in await andreas.fetch_group(gid) if m.operator and m.operator["notice"]]
+    [n] = [m for m in await andreas.fetch_group(gid) if m.operator and m.operator["notice"] == "twin"]
     assert n.operator["level"] == "alarm" and andreas.team_sender(n)["name"] == "replica2"
     assert (await chan._open_text([])).startswith("- [alarm] Twin alarm")
 
@@ -223,7 +235,7 @@ async def test_a_channel_from_start_to_end(net):
     assert yes.result == "done" and done == [["ABCD"]]
     results = [m.operator["result"] for m in await helper.fetch_group(gid)
                if m.operator and m.operator["result"]]
-    assert results == ["asked", "refused", "done"]                      # all readers see all
+    assert results == ["done", "asked", "refused", "done"]              # all readers see all
     assert await chan.poll() == []                                      # once only
 
     # someone who is not a reader writes to the channel: ignored
