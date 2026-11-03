@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; a list of sources is signed with the key list's threshold and may name `moved_to` (6.3); choosing publishers (section 6) and the order of sources (6.3) follow
+Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; a list of sources is signed with the key list's threshold and may name `moved_to` (6.3); sticks and servers take the list council's sources once the list names it, and the built-in sources only until a list is known (6.3); scribes as a source and choosing publishers (section 6) follow
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures

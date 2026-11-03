@@ -20,6 +20,13 @@ from ...core.encoding import b64
 from ...core.groups import parse_key_update
 
 
+async def council_copies_on(c: Client, group_id: str) -> list[tuple[bytes, str, bytes]]:
+    """(author, body, raw) of every valid council manifest copy the node ``c`` holds for
+    ``group_id``. Each is a signed article, checked here; nothing else is trusted. Also
+    for programs without a session (a stick's updater, a server's)."""
+    return await CouncilMixin._council_copies_on(None, c, group_id)
+
+
 class CouncilMixin:
     async def _council_copies_on(self, c: Client, group_id: str) -> list[tuple[bytes, str, bytes]]:
         """(author, body, raw) of every valid council manifest copy the node holds for

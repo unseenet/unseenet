@@ -31,6 +31,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
   post` signs with the vault, `sign --seed-file` adds a reserve key's), and `post --moved-to
   <council>` makes the project's last list - after it, its later lists are not used, and the list
   council's sources list takes their place.
+- **Sticks and servers fetch where the council says** (#917, UN-RFC 0062 section 6.3): once the
+  project's list of release sources names `moved_to`, they read the list council's sources list
+  through a node (the council counted from its copies, the list posted by a member, every
+  signature checked), go by it and keep it. The built-in GitHub and PyPI are only where a new
+  install starts: a known list alone says where, so the council can take a site off when it is
+  gone or used against the network. Mirroring entrances still come after it.
 - **The list council keeps where releases are found** (#917, UN-RFC 0020 section 6.8): a `sources`
   list - the release files' sites and the package indexes for the council's publishers - from
   its import (`unseenet council add-list <council> sources`, the built-in sources by default)

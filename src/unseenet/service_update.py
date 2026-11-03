@@ -189,8 +189,13 @@ async def _posts_from(address: str, socks: int | None, package: str) -> list[str
         found = await rs.read_group(c, RELEASES_GROUP,
                                     (f"Unseenet server {package} ", rs.HEAD), scan=SCAN)
         from . import release_keys as rk     # and the key list's chain (UN-RFC 0062 3)
-        return ([body for bodies in found.values() for body in bodies]
-                + await rk.read_votes(c, RELEASES_GROUP, scan=SCAN))
+        bodies = [body for bodies in found.values() for body in bodies]
+        councils = []                        # and a council's sources (UN-RFC 0020 6.8)
+        for council in sorted(rs.moved_to_in(bodies))[:3]:
+            got = await rs.read_council(c, council, RELEASES_GROUP)
+            if got is not None:
+                councils.append(got)
+        return bodies + await rk.read_votes(c, RELEASES_GROUP, scan=SCAN) + councils
     finally:
         with contextlib.suppress(Exception):
             await c.quit()
@@ -635,10 +640,15 @@ def update_service(service: str, venv: Path, state: State, *, check: str | None 
                 got = seen[0] if seen else []
                 keys, _ = rk.newest(rk.votes_of(got),
                                     (state.data.get("release_keys") or {}).get("body"))
-                machine.sources = rs.newest([b for b in got if isinstance(b, str)],
-                                            state.data.get("sources"), keys)
-                if machine.sources.updated:
-                    state.data["sources"] = machine.sources.to_dict()
+                publisher = rs.newest([b for b in got if isinstance(b, str)],
+                                      state.data.get("sources"), keys)
+                council = next((b.body for b in got if isinstance(b, rs.CouncilList)
+                                and b.council == publisher.moved_to), None)
+                if council:
+                    state.data["sources_council"] = council
+                machine.sources = rs.effective(publisher, state.data.get("sources_council"))
+                if publisher.updated:
+                    state.data["sources"] = publisher.to_dict()
         return run(machine, state, find=find, say=say, at_once=at_once)
     return _with_tor(socks, direct or direct_by_env(), work)
 

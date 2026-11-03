@@ -31,9 +31,11 @@ fetch decides who sees the fetching.
 
 Each address is ``https://``, or ``http://`` to an onion address (Tor encrypts and
 authenticates those). The list grants nothing over *what* is installed: every file must
-still match the checksums the project key signed, so a false or stale list can only send
-a server or client looking in the wrong place - and the built-in sources stay the last
-resort. Clients keep the newest list they saw, servers too (in their updater's state),
+still match the checksums the publisher's keys signed, so a false or stale list can only
+send a server or client looking in the wrong place. The built-in sources are only where a
+new client starts: once a list is known, it alone says where - the publisher's, or the
+list council's once the publisher's list names it in ``moved_to`` (UN-RFC 0020 section
+6.8, ``read_council``, ``effective``). Clients keep the newest list they saw, servers too (in their updater's state),
 so a list posted while the network works is still there when GitHub is not.
 
 Belongs here: the list, its post, its checks. Not here: using it (``update.py`` for
@@ -76,11 +78,11 @@ class Sources:
         return out
 
     def file_urls(self, repo: str, tag: str, name: str) -> list[str]:
-        """Where ``name`` of release ``tag`` in ``repo`` is, in order; GitHub last if the
-        list does not name it (the built-in source, never dropped)."""
-        out = [t.format(repo=repo, tag=tag, name=name) for t in self.files]
-        github = GITHUB.format(repo=repo, tag=tag, name=name)
-        return list(dict.fromkeys(out + [github]))
+        """Where ``name`` of release ``tag`` in ``repo`` is, in order. The built-in
+        sources are only where a new client starts: once a list is known - the
+        publisher's or its council's - that list alone says where (UN-RFC 0062 6.3);
+        scribes and mirrors come after it, from elsewhere."""
+        return list(dict.fromkeys(t.format(repo=repo, tag=tag, name=name) for t in self.files))
 
 
 BUILT_IN = Sources()
@@ -200,6 +202,101 @@ def newest(bodies: list[str], known: Sources | dict | None = None, keys=None) ->
         if _when(candidate) > _when(best):
             best = candidate
     return best
+
+
+# --- the list council's sources (UN-RFC 0020 section 6.8) -------------------------
+
+@dataclass(frozen=True)
+class CouncilList:
+    """The newest sources list a council's member posted, read from a node: carried among
+    the bodies of release posts (``update.from_network``, ``service_update``)."""
+    council: str
+    body: str
+
+
+def council_sources(body: str | None) -> Sources | None:
+    """The Sources of a council's sources list, or None."""
+    from .core import lists as ls
+    if not body:
+        return None
+    try:
+        return ls.parse_sources_list(body)[1]
+    except (ValueError, ls.ListProblem):
+        return None
+
+
+def effective(publisher: Sources, council_body: str | None) -> Sources:
+    """What to fetch from: the council's list once the publisher's list moved to it
+    (``moved_to``), else the publisher's own (UN-RFC 0062 section 6.3). While the
+    council has no list yet, the publisher's last one still applies."""
+    if publisher.moved_to:
+        got = council_sources(council_body)
+        if got is not None:
+            return got
+    return publisher
+
+
+def moved_to_in(bodies) -> set[str]:
+    """The councils that any post among ``bodies`` names as ``moved_to`` - to read their
+    lists too; which one counts is decided later, with the key list (``effective``)."""
+    out = set()
+    for b in bodies:
+        parts = _split(b) if isinstance(b, str) else None
+        if parts is None:
+            continue
+        try:
+            got = json.loads(parts[0]).get("moved_to")
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(got, str) and len(got) < 100:
+            out.add(got)
+    return out
+
+
+async def read_council(c, council: str, publisher: str) -> CouncilList | None:
+    """The newest sources list that the list council ``council`` keeps for
+    ``publisher``, read through the node ``c``: the council counted from its manifest
+    copies, the list posted by one of its members, every signature checked here."""
+    from .client.session.council import council_copies_on
+    from .core import council as cn
+    from .core import crypto
+    from .core import lists as ls
+    from .core.article import Article
+    from .nntp import strip_reader_headers
+    chain = cn.count_chain(council, [(a, b) for a, b, _ in await council_copies_on(c, council)])
+    cur = chain.current
+    if cur is None or chain.disputed:
+        return None
+    try:
+        lc = ls.list_council(cur.data)
+    except ls.ListProblem:
+        return None
+    if lc is None or "sources" not in lc.lists or publisher not in lc.publishers:
+        return None
+    members = {crypto.key_to_text(k) for k in cur.keys}
+    group = lc.lists["sources"]
+    try:
+        _, low, high = await c.group(group)
+    except Exception:  # noqa: BLE001 - the node does not carry it
+        return None
+    best = None
+    for number in range(high, max(low, high - 40) - 1, -1):
+        raw = await c.article(str(number))
+        if not raw:
+            continue
+        try:
+            art = Article.from_bytes(strip_reader_headers(raw))
+            art.verify_signature()
+            updated, _ = ls.parse_sources_list(art.body)
+        except Exception:  # noqa: BLE001 - not a list a member posted
+            continue
+        if art.group != group or crypto.key_to_text(art.author_key) not in members:
+            continue
+        seq, day = ls.updated_day(updated)
+        rank = (day, seq)
+        if best is None or rank > best[0]:
+            best = (rank, art.body)
+    return None if best is None else CouncilList(council, best[1])
 
 
 async def read_group(c, group: str, subject_prefixes: tuple[str, ...], scan: int = 400,
