@@ -128,7 +128,8 @@ class PublicDuties:
             shown.append({"id": p.id, "kind": p.kind, "reason": p.reason[:300],
                           "state": out.state, "objections": out.objections,
                           "active": out.active, "closes": nm.rfc3339(out.closes),
-                          "urgent": p.urgent})
+                          "urgent": p.urgent, "fields": sorted(pr.touched(p.change)),
+                          "applied": p.id in done})
             if out.state == "passed" and p.kind == "list" and out.applies <= now:
                 self._record_list_decision(out.applies, p)    # every member computes lists
             if not full:

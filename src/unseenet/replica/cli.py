@@ -599,6 +599,13 @@ def propose(args) -> int:
                                      days=args.days, urgent=args.urgent)
     except pr.ProposalProblem as exc:
         raise SystemExit(f"Not a proposal: {exc}")
+    clash = _overlapping(st, change)
+    if clash and not getattr(args, "anyway", False):
+        raise SystemExit(
+            "Not proposed: " + "; ".join(clash) + ".\nA passed change replaces each field "
+            "whole, so whichever applies last would undo the other. Wait until it is "
+            "applied and make the change again from the council as it is then, or include "
+            "its values in this change and pass --anyway.")
     print(f"Proposal {pid}:")
     print(f"  change  {json.dumps(change, sort_keys=True)}")
     print(f"  reason  {args.reason}")
@@ -609,6 +616,30 @@ def propose(args) -> int:
                "content_type": "application/json"})
     print("Queued: the replica posts it at its next round.")
     return 0
+
+
+def _overlapping(st: dict, change: dict) -> list[str]:
+    """The open proposals - in their hearing, passed but not applied yet, or waiting to be
+    seconded - that set a field this change sets too."""
+    from ..core import proposals as pr
+    mine = pr.touched(change)
+    if not mine:
+        return []
+    out = []
+    for h in st.get("hearings") or []:
+        if h.get("state") == "failed" or h.get("applied"):
+            continue
+        both = mine & set(h.get("fields") or ())
+        if both:
+            out.append(f"proposal {h['id']} ({h.get('state')}) sets {', '.join(sorted(both))} too")
+    for pid, p in (st.get("proposals_pending") or {}).items():
+        try:
+            both = mine & pr.touched(pr.parse_proposal(p["body"]).change)
+        except pr.ProposalProblem:
+            continue
+        if both:
+            out.append(f"proposal {pid} (waiting) sets {', '.join(sorted(both))} too")
+    return out
 
 
 def second(args) -> int:
@@ -906,6 +937,8 @@ def main(argv=None) -> int:
     s.add_argument("--reason", required=True, help="why - everybody sees it")
     s.add_argument("--days", type=int, default=None, help="the hearing, 14 to 60 days")
     s.add_argument("--urgent", action="store_true", help="a 3-day hearing; needs two thirds")
+    s.add_argument("--anyway", action="store_true",
+                   help="propose even though an open proposal sets one of its fields")
     s = sub.add_parser("second", help="as a member: post a waiting proposal too")
     s.add_argument("--lists", action="store_true",
                    help="in the list council (UN-RFC 0020) instead of the registrar's")
