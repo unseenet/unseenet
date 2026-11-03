@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0062                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; until the project's first list (section 5) is pinned, its releases are checked against the project key alone, as a list with threshold 1; a list of sources is signed with the key list's threshold and may name `moved_to` (6.3); sticks and servers take the list council's sources once the list names it, and the built-in sources only until a list is known (6.3); a stick keeps its publishers in `data/publishers.json` and follows one, added by its first key list's fingerprint (`unseenet publishers`, `/api/publishers`), and a server follows one with `unseenet-service-update publisher` (section 6); scribes as a source follow
+Implemented: unseenet 0.7.0, unseenet main (unreleased), unseenet-gateway main (unreleased), unseenet-entrance main (unreleased), unseenet-watchman main (unreleased), unseenet-bots main (unreleased), unseenet-helpbot main (unreleased); partly - sections 3, 4 and 6.1 to 6.3: key lists, thresholds and signatures added one after another are checked everywhere releases are; the project's first list (section 5) is pinned - the project key and two reserve keys, threshold 2, 1 for `dev`; a list of sources is signed with the key list's threshold and may name `moved_to` (6.3); sticks and servers take the list council's sources once the list names it, and the built-in sources only until a list is known (6.3); a stick keeps its publishers in `data/publishers.json` and follows one, added by its first key list's fingerprint (`unseenet publishers`, `/api/publishers`), and a server follows one with `unseenet-service-update publisher` (section 6); scribes as a source follow
 Updates: 0043
 
         Unseenet: Update Channels, Publishers and Signatures
@@ -70,14 +70,62 @@ application/json` and a canonical JSON body:
 The list with `seq` 1 is pinned by the client that trusts the publisher
 (section 6). A later list **counts** when the one before it counts, its
 `prev` is that list's hash, and at least that list's `threshold`
-different signers of it have each posted an article with exactly its
-body. This is the pattern of UN-RFC 0054 section 5 and of TUF's root
-keys: the old keys vote the new ones in. The owner of the releases
-channel cannot change the key list; the channel only carries it.
+different signers of it have each signed exactly its body (section 3.1).
+This is the pattern of UN-RFC 0054 section 5 and of TUF's root keys:
+the old keys vote the new ones in. The owner of the releases channel
+cannot change the key list; the channel only carries it.
 
 Two counting lists with the same `seq` are a **fork**. A client that sees
 one MUST NOT take updates from that publisher until the user acts, and
 SHOULD tell the user.
+
+## 3.1 Votes
+
+A signer votes for a list by signing its body with the purpose
+`UNSEENET-RELEASE-KEYS-VOTE-1`. The votes travel with the list, in the
+body of a `release-keys <seq>` article: the list's canonical JSON on its
+first line, an empty line, then one block per vote, separated by empty
+lines, in the form of section 4:
+
+```
+{"keys":[...],"prev":"...","seq":2,"threshold":2,"v":1}
+
+Unseenet key list vote
+key: ed25519:...
+signature: ...
+
+Unseenet key list vote
+key: ed25519:...
+signature: ...
+```
+
+A client counts the votes inside the body and does not care who posted
+the article: anybody who may post in the channel can carry a list,
+and posting it grants nothing. Signers vote one after another, each
+adding a block, as with releases.
+
+An article by a signer whose body is exactly the list, with no blocks,
+also counts as that signer's vote (the form before this section).
+
+## 3.2 Carrying the Chain
+
+Nodes keep a channel's articles only for its `retention_days`
+(UN-RFC 0004), but a client that was offline longer still needs every
+list after the last one it counted. So the lists are reposted:
+
+- Somebody who may post in the channel SHOULD post the **chain** at
+  least every 30 days, whether or not anything was released: an article
+  `Subject: release-keys chain` whose body holds every list from `seq` 2
+  to the newest, oldest first, each with its votes as in section 3.1,
+  separated by a line holding only `--`. For the project it is a
+  scheduled job of its CI, posting with its poster key; when that is
+  gone, any poster of the channel can, from the chain any client keeps.
+- The publisher's tool SHOULD post the chain with each release.
+- A client MUST keep the newest list it counted, and counts on from it.
+
+While a publisher has only its first list, there is no chain to post.
+The retention of the channel SHOULD be at least three times the
+interval of reposting.
 
 # 4. Signing a Release
 
@@ -299,7 +347,10 @@ the bundles first.
 # 9. Domain Separations
 
 UN-RFC 0003 section 3 is extended with `UNSEENET-RELEASE-KEYS-1`, which
-hashes a key list into the next one's `prev`. A list of release sources
+hashes a key list into the next one's `prev`, and with
+`UNSEENET-RELEASE-KEYS-VOTE-1`, the purpose of a vote for a list
+(section 3.1): a signature on a release cannot be taken for a vote, nor
+the other way round. A list of release sources
 (section 6.3) is signed with the release purpose, over a body that
 begins `Unseenet release sources\n`; no `SHA256SUMS.txt` begins so, and
 neither parses as the other.
@@ -313,6 +364,11 @@ neither parses as the other.
 - **Why two of three, not two of two?** Two of two turns one lost key
   into a publisher that can never release again. Two of three survives
   one loss and one theft, not both at once.
+- **Why votes inside the body?** A vote that is an article by the signer
+  lives only as long as nodes keep the article, and only the signer can
+  post it again - and reserve keys are kept offline. A signature inside
+  the body can be carried by anybody, for as long as needed, at no risk:
+  it is checked, not trusted.
 - **Why chosen publishers?** A network nobody controls should not have
   one place its software must come from. Choosing is also the way out
   when a publisher's keys are lost or misused.
@@ -346,7 +402,8 @@ section 8 is the next step.
 
 # 13. Changes to Other Documents
 
-- UN-RFC 0003 section 3: the label `UNSEENET-RELEASE-KEYS-1` is added.
+- UN-RFC 0003 section 3: the labels `UNSEENET-RELEASE-KEYS-1` and
+  `UNSEENET-RELEASE-KEYS-VOTE-1` are added.
 - UN-RFC 0043 section 7: an entrance's installer asks its operator to
   turn on self-updating of the server software (section 6.1).
 - UN-RFC 0043: a release in a releases channel is valid with the

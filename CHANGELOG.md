@@ -9,6 +9,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **A council proposal can no longer undo another** (UN-RFC 0061): a passed manifest change
+  replaces each field whole, so two open proposals that set one field - `lists`, say -
+  left only the one that applied last. `unseenet-replica propose` now refuses a change
+  that sets a field an open, passed-but-not-applied or waiting proposal sets too, and says
+  which; `--anyway` proposes it all the same. `hearings` and the status show the fields
+  each proposal sets.
 - **Pictures where no process can be started** (the client in a browser, UN-RFC 0027
   section 9.2): `client.decode` now takes the platform's own way to decode apart from the
   client (`decode.elsewhere`, the web client's picture worker), held to the same time and
@@ -18,6 +24,11 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Security
 
+- **Stable releases need two of the project's three keys** (#822, UN-RFC 0062 section 5):
+  the project's first key list is pinned - the project key and two reserve keys kept
+  offline, threshold 2, 1 for development builds. One stolen key releases nothing, one lost
+  key stops nothing; a new list counts only once two of the keys posted it. Releases from
+  0.7.1 on carry two signatures.
 - **Nodes turn on Tor's proof-of-work defence for their onion service** (#869, UN-RFC 0005):
   under a flood of connections Tor asks new clients for a small proof of work and serves those
   who pay first, so the node stays reachable. On by default (`pow_defense` in `node.toml`); it

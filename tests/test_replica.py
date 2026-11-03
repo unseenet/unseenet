@@ -728,3 +728,39 @@ def test_the_member_commands(tmp_path, capsys):
     (tmp_path / "status.json").write_text(json.dumps(st))
     with pytest.raises(SystemExit, match="full members"):
         rc.main(d + ["sponsor", key, "--yes"])
+
+
+def test_a_proposal_that_would_undo_another_is_refused(tmp_path, monkeypatch):
+    """A passed manifest change replaces each field whole: a second open proposal that
+    sets the same field would undo the first, so ``propose`` refuses it (#924)."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from unseenet.core import proposals as pr
+    from unseenet.replica import cli as rcli
+    root = {"manifest": {"fields": {"lists": {"nodes": "a@b", "root": "c@d"}}}}
+    assert pr.touched(root) == {"lists"}
+    assert pr.touched({"manifest": {"council": {"min_level": 4}}}) == {"min_level"}
+    assert pr.touched({"list": {"root": {}}}) == set()
+    st = {"hearings": [{"id": "p1", "state": "open", "fields": ["imports", "lists"],
+                        "applied": False},
+                       {"id": "p0", "state": "passed", "fields": ["lists"], "applied": True},
+                       {"id": "p9", "state": "failed", "fields": ["lists"], "applied": True}],
+          "proposals_pending": {}}
+    sources = {"manifest": {"fields": {"lists": {"nodes": "a@b", "sources": "e@f"}}}}
+    assert rcli._overlapping(st, sources) == ["proposal p1 (open) sets lists too"]
+    assert rcli._overlapping(st, {"manifest": {"fields": {"announce": {}}}}) == []
+
+    monkeypatch.setattr(rcli, "_groups", lambda d, lists=False: (
+        {**st, "group": "unseenet.lists@" + "a" * 16, "seq": 3}, {"proposals": "x@y"}))
+    queued = []
+    monkeypatch.setattr(rcli, "_queue", lambda d, item: queued.append(item))
+    f = tmp_path / "change.json"
+    f.write_text(_json.dumps(sources))
+    args = SimpleNamespace(dir=str(tmp_path), lists=True, change_file=str(f), reason="r",
+                           days=None, urgent=False, anyway=False)
+    with pytest.raises(SystemExit, match="p1 .open. sets lists"):
+        rcli.propose(args)
+    assert not queued
+    args.anyway = True
+    assert rcli.propose(args) == 0 and len(queued) == 1
