@@ -21,6 +21,15 @@ def fast_ripening():
     ripening.scale_for_tests(0)
 
 
+@pytest.fixture(autouse=True)
+def no_pinned_key_list(monkeypatch):
+    """Releases in tests are signed by test keys (``update.TRUSTED`` patched), so the
+    project's pinned key list (UN-RFC 0062 section 5) is set aside; tests of key lists
+    pin their own. ``test_the_project_key_list_is_pinned`` checks the real one."""
+    from unseenet import release_keys
+    monkeypatch.setattr(release_keys, "PROJECT_FIRST", None)
+
+
 @pytest.fixture
 def ripening_rules():
     """The real rules (surcharges, floor, nodes requiring level 0), fast thresholds."""
