@@ -23,6 +23,12 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Fixed
 
+- **A list council's groups follow its members** (UN-RFC 0020 section 4, #56): the list
+  groups, the reports and claims groups and the announcement groups (the gateway
+  directory among them) are now brought in step when the council's members change, as
+  the names council's claims group is. Before, a member admitted to the list council
+  could not post the lists, since those groups still had the founding members only.
+
 - **Answering in a team inbox works** (#938): an answer to a server's hello failed with
   "owner key does not match the inbox's group ID"; it is now sent to the box, on its
   behalf. A server's hello is no longer posted twice when a try was cut off.

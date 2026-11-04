@@ -64,6 +64,13 @@ def network_groups():
     return ca.network_groups(hz.builtin_checkgroups().groups.values())
 
 
+def own_groups(lc: ls.ListCouncil) -> list[str]:
+    """The council groups a list council keeps with its own members (UN-RFC 0020
+    section 4): every list group, the reports and claims groups, and the announcement
+    groups (the gateway directory among them). Sorted, each once."""
+    return sorted({*lc.lists.values(), lc.reports, lc.claims, *lc.announce.values()} - {""})
+
+
 class ListDuties:
     """Mixed into ``Replica``: ``self.s`` (the Session), ``self.me``, ``self.st``,
     ``self.now``, ``self.rng``, ``self.status``."""
@@ -100,7 +107,7 @@ class ListDuties:
             out["note"] = "the council keeps no lists"
             return
         st = self._lists_state()
-        await self._lists_public(chain, cfg, now, out)
+        await self._lists_public(chain, cfg, now, out, lc)
         members = {crypto.key_to_text(k) for k in cur.keys}
         announcements = await self._read_announcements()
         today = _day(now)
@@ -118,10 +125,14 @@ class ListDuties:
                     "entrances_day": (st.get("entrances") or {}).get("computed"),
                     "sources": (st.get("sources") or {}).get("computed")})
 
-    async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict) -> None:
+    async def _lists_public(self, chain: cn.Chain, cfg: dict, now: datetime, out: dict,
+                            lc: ls.ListCouncil | None = None) -> None:
         """The list council's proposals, hearings and log (UN-RFC 0061), by the same code
         as the registrar's, on this council's own part of the state: what it signed,
-        held, logged and decided is kept apart from the registrar's."""
+        held, logged and decided is kept apart from the registrar's. Then its own groups
+        - the list groups, reports, claims and announcement groups - are brought in step
+        with its members (UN-RFC 0020 section 4), so that a member admitted to the
+        council can post in them too."""
         sub = self._lists_state().setdefault("public", {})
         for k, empty in (("signed", []), ("held", {}), ("logged", []), ("hearings_done", []),
                          ("applying", None), ("list_decisions", [])):
@@ -131,6 +142,8 @@ class ListDuties:
         self.st, self.status = sub, out
         try:
             await self._public(chain, now, agreed)
+            for g in own_groups(lc) if lc is not None else ():
+                await self._keep_in_step(chain, g)
         finally:
             self.st, self.status = st, status
         out["decisions"] = len(sub["list_decisions"])

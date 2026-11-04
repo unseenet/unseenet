@@ -402,3 +402,40 @@ async def test_the_replicas_list_an_entrance_serving_its_publishers_release(worl
     assert status["lists"]["entrances"] == 1
     from unseenet.replica.cli import explain
     assert "entrance list it computed last" in "\n".join(explain(status, {"lists": gid}))
+
+
+async def test_the_list_groups_follow_the_councils_members(world, tmp_path):
+    """UN-RFC 0020 section 4: each list group is a council group with the same council.
+    When the council admits a member, the replicas bring the list, reports, claims and
+    announcement groups in step, so that the new member can post there too."""
+    from unseenet.core import council as cn
+    node, ann, addr, clock, sessions = world
+    start = clock[0] - timedelta(days=35)
+    gid, groups = await found_lists(sessions, start, entrances=True)
+    reps = [Replica(s, "unseenet.none@abcdefghijklmnop", now=lambda: clock[0],
+                    rng=random.Random(k), levels=lambda k: 4, ripen=False,
+                    config=lambda: {"lists": gid})
+            for k, s in enumerate(sessions)]
+    for r in reps:                               # all in step already: nothing is posted
+        await r.run_once()
+    for part in ("nodes", "reports", "claims", "entrances", "entrances.announce"):
+        assert (await sessions[0].council_chain(groups[part])).current.seq == 1, part
+    # the council admits a fourth member, on probation (UN-RFC 0054 section 11)
+    newcomer = crypto.Identity.generate()
+    cur = (await sessions[0].council_chain(gid)).current
+    body = cn.next_body(cur, date=clock[0], members=[
+        *cur.members, cn.Member(newcomer.public_key, clock[0], False, None)])
+    for r in reps[:2]:
+        await r._post_manifest(gid, body)
+    assert len((await sessions[0].council_chain(gid)).current.keys) == 4
+    for r in reps:
+        await r.run_once()
+    want = [m.as_json() for m in (await sessions[0].council_chain(gid)).current.members]
+    for part in ("nodes", "reports", "claims", "entrances", "entrances.announce"):
+        chain = await sessions[0].council_chain(groups[part])
+        assert not chain.disputed, part
+        assert chain.current.seq == 2, part
+        assert [m.as_json() for m in chain.current.members] == want, part
+    for r in reps:                               # and once in step, it stays put
+        await r.run_once()
+    assert (await sessions[0].council_chain(groups["nodes"])).current.seq == 2
