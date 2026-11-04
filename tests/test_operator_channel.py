@@ -216,7 +216,7 @@ async def test_a_channel_from_start_to_end(net):
     assert await chan.ready()
     [hello] = [m for m in await andreas.fetch_group(gid)
                if m.operator and m.operator["notice"] == "hello"]
-    assert "replica2 reads this box now" in hello.body
+    assert "**replica2** reads this box now" in hello.body
     assert [o["reply"] for o in hello.operator["offers"]] == ["help", "status"]
     assert andreas.reply_target(hello) == gid                          # an answer goes there
     await andreas.send_private(andreas.reply_target(hello), "", "status\n", kind="chat",
@@ -229,7 +229,7 @@ async def test_a_channel_from_start_to_end(net):
     assert await chan.notice("twin", "again", "alarm", key="twin") is None
     [n] = [m for m in await andreas.fetch_group(gid) if m.operator and m.operator["notice"] == "twin"]
     assert n.operator["level"] == "alarm" and andreas.team_sender(n)["name"] == "replica2"
-    assert (await chan._open_text([])).startswith("- [alarm] Twin alarm")
+    assert (await chan._open_text([])).startswith("- **alarm** Twin alarm")
 
     # a command, its code, the answer every reader sees
     await andreas.send_private(gid, "", "second ABCD\n", kind="chat", as_team=gid)
@@ -293,3 +293,22 @@ async def test_the_owner_sets_up_channels_from_the_command_line(net, capsys):
     assert json.loads(capsys.readouterr().out)["removed"] == [one]
     assert added[one] not in owner.manifest_data(one)["readers"]
     assert added[made["operator.replica2"]] in owner.manifest_data(made["operator.replica2"])["readers"]
+
+
+def test_quoted_text_is_not_read():
+    """An answer quotes what it answers; the server reads only the operator's own words."""
+    desk, _, clock = _desk()
+    t = now_of(clock)
+    quoted = "replica1 wrote:\n> **replica1** reads this box now. Answer help\n\nping"
+    assert run(desk.take("<1>", "a", t, quoted)).text == "pong"
+    assert run(desk.take("<2>", "a", t, "> status\n> help\n")) is None          # only quotes
+    assert op.own_words("ping\n\n> old line\nmore") == "ping\n\nmore"
+
+
+def test_help_and_answers_are_markdown():
+    desk, _, clock = _desk(server="replica2")
+    text = desk.help()
+    assert text.startswith("**replica2**") and "`replica2: status`" in text
+    assert "\n- `help` - this list" in text
+    assert op.as_markdown("one\ntwo") == "one  \ntwo"                       # lines kept
+    assert op.as_markdown("ID    STATE\nAB    open").startswith("```text\n")  # columns

@@ -135,6 +135,38 @@ def _common(server: str | None, offers) -> list[tuple[str, str]]:
     return out + [(f"{H_OFFER}-{i}", o.header()) for i, o in enumerate(offers, 1)]
 
 
+# --- the text of a message (sections 5.1, 5.4) ---
+def own_words(text: str) -> str:
+    """What an operator wrote, without what their client quoted when they answered: the
+    ``>`` lines, and the attribution line ("replica1 wrote:") over them."""
+    from .markup import _ATTRIB
+    lines = (text or "").split("\n")
+    out = []
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith(">"):
+            continue
+        nxt = next((x for x in lines[i + 1:] if x.strip()), "")
+        if _ATTRIB.match(line.strip()) and nxt.lstrip().startswith(">"):
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+FENCE = "`" * 3
+
+
+def as_markdown(text: str) -> str:
+    """A server's plain output as Markdown (UN-RFC 0031), laid out as it was: in a code
+    block when it lines things up in columns, else each line kept on its own."""
+    text = (text or "").strip("\n")
+    if not text:
+        return text
+    lines = text.split("\n")
+    if any("  " in line.strip() or line.startswith((" ", "\t")) for line in lines):
+        return f"{FENCE}text\n{text.replace(FENCE, '~~~')}\n{FENCE}"
+    return "  \n".join(line.rstrip() for line in lines)
+
+
 # --- commands (section 5) ---
 class Args(list):
     """A command's words after the verb (``args[0]`` ...), and ``text``: all it said after
@@ -162,6 +194,7 @@ class Command:
     cli_only: bool = False
     usage: str = ""
     label: str = ""                    # the confirmation offer's label ("Second it")
+    example: str = ""                  # what help shows as an example: "second ABCD"
 
 
 @dataclass
@@ -200,17 +233,34 @@ class Desk:
         state.setdefault("waiting", {})
 
     def help(self) -> str:
-        lines = ["help - this list", "status - how the server is", "notices - what is still open"]
+        """The commands, in Markdown (UN-RFC 0031), with an example for each that has one."""
+        intro = (f"**{self.server}** - answer one of its messages, or start a new one with "
+                 f"its name: `{self.server}: status`." if self.server else
+                 "**This server** - answer one of its messages with a command, e.g. `status`.")
+        lines = [intro, "",
+                 "- `help` - this list",
+                 "- `status` - how the server is",
+                 "- `notices` - what is still open"]
+        later = []
         for c in sorted(self.commands.values(), key=lambda c: c.name):
             if c.name in READ_ONLY:
                 continue
-            what = c.help + (" (only on the server itself)" if c.cli_only else
-                             " (asks you to confirm)" if c.changes else "")
-            lines.append(f"{c.name}{' ' + c.usage if c.usage else ''} - {what}")
+            usage = f"{c.name} {c.usage}".strip()
+            if c.cli_only:
+                later.append(f"- `{usage}` - {c.help}")
+                continue
+            line = f"- `{usage}` - {c.help}" + (" *(asks you to confirm)*" if c.changes else "")
+            if c.example:
+                line += f"  \n  Example: `{c.example}`"
+            lines.append(line)
+        if later:
+            lines += ["", "These are done only on the server itself, never from here:", ""] + later
+        if any(c.changes for c in self.commands.values()):
+            lines += ["", "A command that changes something is answered with a code: send "
+                          "`yes` and the code within 30 minutes to go ahead."]
         if self.mode != "commands":
-            lines.append("")
-            lines.append("Commands from here are off: this server takes only help, status and "
-                         "notices (operator_channel = notices).")
+            lines += ["", "**Commands from here are off:** this server takes only `help`, "
+                          "`status` and `notices` (operator_channel = notices)."]
         return "\n".join(lines)
 
     def _prune(self, now: float) -> None:
@@ -256,7 +306,7 @@ class Desk:
         self._prune(now)
         if message_id in self.state["handled"]:
             return None                              # once only (section 5.3)
-        parsed = self._parse(text, others)
+        parsed = self._parse(own_words(text), others)
         if parsed is None:
             return None
         verb, args, addressed = parsed
@@ -299,10 +349,10 @@ class Desk:
             return Answer("done", self.help())
         cmd = self.commands.get(verb)
         if cmd is None:
-            return Answer("refused", f"Unknown command: {verb}. Answer help for the list.",
+            return Answer("refused", f"Unknown command: `{verb}`. Answer `help` for the list.",
                           offers=[Offer("help")])
         if cmd.cli_only:
-            return Answer("refused", f"{verb} is done only on the server itself, from its "
+            return Answer("refused", f"`{verb}` is done only on the server itself, from its "
                                      "command line - never from here.")
         if self.mode != "commands" and verb not in READ_ONLY:
             return Answer("refused", "Commands from here are off: this server takes only help, "
@@ -312,14 +362,15 @@ class Desk:
         try:
             what = cmd.describe(args) if cmd.describe else f"{verb} {' '.join(args)}".strip()
         except ValueError as exc:
-            return Answer("refused", f"{exc}\nUsage: {verb} {cmd.usage}".rstrip())
+            return Answer("refused", f"{exc}\n\nUsage: `{(verb + ' ' + cmd.usage).strip()}`"
+                          + (f"  \nExample: `{cmd.example}`" if cmd.example else ""))
         code = self._code()
         assert _CODE.match(code)
         self.state["waiting"][sender] = {"code": code, "verb": verb, "args": list(args),
                                          "text": getattr(args, "text", ""), "what": what,
                                          "until": self.now() + CODE_SECONDS, "for": message_id}
         minutes = CODE_SECONDS // 60
-        return Answer("asked", f"{what}?\nAnswer *yes {code}* within {minutes} minutes. "
+        return Answer("asked", f"{what}?\n\nAnswer `yes {code}` within {minutes} minutes. "
                                "Anything else cancels it.", code=code,
                       offers=[Offer(f"yes {code}", cmd.label or "Yes"), Offer("no", "Cancel")])
 
