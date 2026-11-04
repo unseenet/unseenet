@@ -3,7 +3,7 @@ Unseenet Working Group                                     A. Lorensen
 UN-RFC: 0020                                              October 2026
 Category: Standards Track
 Status: Draft
-Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`, and DNS answers are decided by the replicas together (6.2, 7); entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), the sources list (6.8): replicas post it from its import and the passed `sources` decisions, a list is added with `unseenet council add-list ... sources`, and clients read it; the list groups kept in step with the council's members (4); the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
+Implemented: unseenet main (unreleased); partly - the node list (sections 5.1, 5.3, 6.1, 7, 8): replicas measure, report and post it, and apply `list` decisions (6.7); a list council and its import are made with `unseenet council create --lists` (9), and clients follow the node list's `moved_to` (10); hierarchy claims and the root list (5.2, 6.2): replicas keep it, a list is added with `unseenet council add-list` and clients and nodes follow the root list's `moved_to`; the entrance list (5.1, 6.3): replicas fetch entrances over Tor, check their files against the publisher's signed release and post the list, a list is added with `unseenet council add-list ... entrances` and an entrance announced with `unseenet council announce-entrance`, and DNS answers are decided by the replicas together (6.2, 7); entrances naming their key (UN-RFC 0043 4.3, in unseenet-entrance), the sources list (6.8): replicas post it from its import and the passed `sources` decisions, a list is added with `unseenet council add-list ... sources`, and clients read it; the list groups kept in step with the council's members (4), and the project's list council sharing the names council's members (4.1); the council as maintainer of `unseenet` and scribes (6.4) follow (#56, #861)
 Updates: 0010, 0018, 0043, 0055
 
                Unseenet: Lists Kept by Councils
@@ -116,6 +116,30 @@ the rules use is public: announcements, claims, measurements, passed
 proposals and the council itself. A replica holds no secret but its own
 key, and anybody can repeat its work - and, as a shadow, prove it can
 (UN-RFC 0054 section 10).
+
+## 4.1 Members
+
+A list council MAY share its members with another council, its
+**leader**: then it never admits, promotes or removes anybody of its own
+accord, and its members' replicas keep it in step with the leader as the
+claims group is kept (UN-RFC 0054 section 8) - one change at a time,
+comparing keys and whether each is full, not the dates they joined. A
+founder admission stays one where the list council's own founding
+period lasts, and is an ordinary admission elsewhere.
+
+The leader then judges its shadows on the lists too. A shadow computes
+every list as the members do (sections 6 and 8), without measuring and
+without posting, and its daily report (UN-RFC 0054 section 10) holds,
+besides its decisions on claims, one item per list it computed for that
+day: `["list:<kind>", "sha256:<hex of the list's body>"]`, where `kind`
+is the list's key in `lists`. A day agrees when every list a member
+computed for it is in the report with the same hash. So a shadow is
+admitted to both councils, or to neither, and a member silent in all of
+their groups for 90 days is removed from both.
+
+The project's list council shares its members with the project's names
+council: one replica, one key, one membership for all the project's
+councils. A council the project founds later does the same.
 
 # 5. Inputs
 
