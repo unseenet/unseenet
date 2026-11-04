@@ -154,8 +154,9 @@ Nothing more is needed from you. In order:
    other work. To level 4, the usual minimum, this takes weeks on a Raspberry
    Pi. `status` shows how far it is.
 2. **Shadow.** From the first day, the replica reads every public name claim,
-   decides it by the same rules as the council, and posts a short report each
-   day - a hash of each decision, never the reasons. A report for a day is
+   decides it by the same rules as the council, computes every list the list
+   council keeps (without measuring or posting), and posts a short report each
+   day - a hash of each decision and each list, never the reasons. A report for a day is
    posted 8 days later, once every claim of that day is settled, and only then.
    A day the replica was offline is lost; 5 lost days in 60 are allowed.
 3. **Admission.** When the replica has reported on 55 of the last 60 settled
@@ -169,7 +170,14 @@ Nothing more is needed from you. In order:
    admitting the next shadow, promoting, and removing members that sign
    certificates no claim explains, fall silent for 90 days, or step down.
 
-If your replica disagrees with the council on a decision, it is not admitted
+**One membership for all the project's councils.** A replica of the project's
+names council is a replica of its list council too, with the same key - you set
+up one replica, not one per council. The councils share their members: a shadow
+is admitted to both at once, and a member silent in all their groups for 90
+days is removed from both. The list council follows the names council's
+members, and the list groups follow the list council, a round or two later.
+
+If your replica disagrees with the council on a decision or a list, it is not admitted
 until 60 days without disagreement have passed. Decisions on domain names
 (`andlo@lorensen.dk`) depend on DNS answers, which may differ from place to
 place, and are not held against anybody.
@@ -220,6 +228,11 @@ unseenet council create unseenet.lists --without-me --groups --lists nodes \
     --member ed25519:<replica 1> --member ed25519:<replica 2> --member ed25519:<replica 3> \
     --founding 3 --founder ed25519:<founder> --min-level 3
 ```
+
+Its members are the names council's, and stay so: the replicas keep it in step
+([UN-RFC 0020](https://unseenet.org/spec/un-rfc-0020/) section 4.1). A replica of the
+project's names council follows the project's list council by itself; set `lists`
+in its config only for another list council, or `"lists": ""` for none.
 
 `--lists` names the lists it keeps and adds the groups for them, for the
 replicas' daily reports and for hierarchy claims. `--import` is the list it

@@ -46,6 +46,9 @@ REPOST_AFTER = timedelta(days=30)  # section 8: at least monthly
 REACH_TIMEOUT = 240.0              # one node, over Tor
 MEASURE_BETWEEN = (1 * 3600, 20 * 3600)   # seconds into the UTC day: a random time within
 FROM = "Unseenet list council"
+LIST_KINDS = {"node list": "nodes", "root list": "root", "entrance list": "entrances",
+              "sources list": "sources"}
+OUTCOME_DAYS = 120                 # days of computed lists kept for shadow reports
 
 
 def _day(t: datetime) -> date:
@@ -83,7 +86,7 @@ class ListDuties:
         return st
 
     async def _lists_round(self, cfg: dict, now: datetime) -> None:
-        group = cfg.get("lists")
+        group = self.lists_group(cfg)
         if not group:
             return
         out = self.status.setdefault("lists", {"group": group})
@@ -92,9 +95,9 @@ class ListDuties:
         if cur is None:
             out["note"] = "the list council does not count yet (its genesis is not signed by all)"
             return
-        if cur.member(self.me.public_key) is None:
-            out["note"] = "this replica is not a member of the list council"
-            return
+        # a shadow computes the lists as the members do, posts nothing, and shows what it
+        # computed in its shadow report to the names council (one membership, #943)
+        out["role"] = self.role(cur)
         if chain.disputed:
             out["note"] = "the list council's manifests disagree: nothing is posted"
             return
@@ -107,15 +110,19 @@ class ListDuties:
             out["note"] = "the council keeps no lists"
             return
         st = self._lists_state()
+        self._list_shadow = not await self._member_of_all(cur, lc)
+        out["shadow"] = self._list_shadow
         await self._lists_public(chain, cfg, now, out, lc)
         members = {crypto.key_to_text(k) for k in cur.keys}
         announcements = await self._read_announcements()
         today = _day(now)
-        await self._measure(lc, members, announcements, today, now)
+        if not self._list_shadow:
+            await self._measure(lc, members, announcements, today, now)
         await self._compute_and_post(lc, chain, members, announcements, today, now)
         await self._root_round(lc, chain, members, today, now)
         await self._entrances_round(lc, chain, members, today - timedelta(days=LIST_LAG), now)
         await self._sources_round(lc, chain, members, today - timedelta(days=LIST_LAG), now)
+        self._list_activity = await self._activity(chain, lc, members)
         out.update({"members": len(members), "announced": len({a.key for a in announcements}),
                     "measured": st["measured"], "computed": st["computed"],
                     "listed": st.get("listed", 0),
@@ -147,6 +154,59 @@ class ListDuties:
         finally:
             self.st, self.status = st, status
         out["decisions"] = len(sub["list_decisions"])
+
+    # --- one membership for all the project's councils (#943) ------------------------------
+
+    async def _member_of_all(self, cur: cn.CouncilManifest, lc: ls.ListCouncil) -> bool:
+        """Whether this replica may post for the list council: a member of it and of every
+        group it keeps. A member just admitted waits, computing as a shadow, until those
+        groups have been brought in step (a round or two)."""
+        if cur.member(self.me.public_key) is None:
+            return False
+        for g in own_groups(lc):
+            chain = await self.s.council_chain(g)
+            if chain.current is not None and chain.current.member(self.me.public_key) is None:
+                return False
+        return True
+
+    def _note_outcome(self, what: str, day: date, body: str) -> None:
+        kind = LIST_KINDS.get(what, what)
+        out = self._lists_state().setdefault("outcomes", {})
+        out.setdefault(day.isoformat(), {})[kind] = ls.import_hash(body)
+        for d in sorted(out)[:-OUTCOME_DAYS]:
+            del out[d]
+
+    def list_outcomes(self) -> list:
+        """The lists this replica computed, as decisions of UN-RFC 0054 section 10 for the
+        names council's shadow reports and its judge: ``list:<kind>`` and the list's hash,
+        on the list's day."""
+        from . import rules
+        out = []
+        for d, kinds in sorted((self.st.get("lists") or {}).get("outcomes", {}).items()):
+            day = datetime.combine(date.fromisoformat(d), time(), timezone.utc)
+            for kind, h in sorted(kinds.items()):
+                out.append(rules.Decision(f"list:{kind}", day, h, False))
+        return out
+
+    async def _activity(self, chain: cn.Chain, lc: ls.ListCouncil, members: set[str]) -> dict:
+        """Each member's newest post in the list council's groups - its reports, lists,
+        claims, proposals, talk and log - so that silence counts across all the councils
+        (UN-RFC 0054 section 12, item 3)."""
+        cur = chain.current
+        groups = {cur.group_id, *own_groups(lc)} | {
+            g for g in (cur.data.get(k) for k in ("proposals", "talk", "log")) if g}
+        last: dict[str, datetime] = {}
+        for g in sorted(groups):
+            try:
+                messages = await self.s.fetch_group(g)
+            except Exception as exc:  # noqa: BLE001 - one group unread counts nothing
+                log.info("list council: %s not read: %s", g, exc)
+                continue
+            for m in messages:
+                if m.author_key in members and m.date and (
+                        m.author_key not in last or m.date > last[m.author_key]):
+                    last[m.author_key] = m.date
+        return last
 
     def _list_decisions(self, day: date) -> ls.DecisionState:
         sub = self._lists_state().get("public", {})
@@ -344,7 +404,12 @@ class ListDuties:
     async def _maybe_post(self, group: str, what: str, day: date, body: str, posted: list,
                           now: datetime) -> bool:
         """Post a computed list when it differs from the newest posted, or that one is a
-        month old; post it again when the newest for the same day differs (section 8)."""
+        month old; post it again when the newest for the same day differs (section 8).
+        Every list computed is noted by its hash for the shadow report (#943); a shadow
+        posts nothing."""
+        self._note_outcome(what, day, body)
+        if getattr(self, "_list_shadow", False):
+            return False
         newest = posted[-1] if posted else None
         if newest is not None and not (newest[2] != body and newest[0] <= day or (
                 newest[2] == body and now - newest[4] > REPOST_AFTER)):

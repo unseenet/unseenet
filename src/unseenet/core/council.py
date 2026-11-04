@@ -362,6 +362,48 @@ def _founding_change(prev: CouncilManifest, m: CouncilManifest, members_change: 
     return "the founding period changes only by renouncing or extending"
 
 
+def step_toward(target: CouncilManifest, source: CouncilManifest) -> str | None:
+    """The next manifest of ``target`` that brings its members one change closer to
+    ``source``'s, or None when they are in step (sections 8 and 21: a council group kept
+    with another council's members). Members are the same when their keys and whether
+    they are full are the same; ``joined`` is each group's own, since a group founded
+    on another day has other dates. One change at a time, as section 5 allows: a key
+    ``source`` has not is removed first, then a key it has is admitted on probation,
+    then a member it has as full is promoted once its probation in ``target`` is over.
+    A founder admission stays one only where ``target``'s own founding period lasts;
+    elsewhere it is an ordinary admission, under ``target``'s own limits.
+    A renunciation or extension of the founding period is carried over when both
+    groups have one.
+    The caller still checks the body with ``change_ok``."""
+    src = {m.key: m for m in source.members}
+    tgt = {m.key: m for m in target.members}
+    d = max(target.date, source.date)
+    gone = sorted(k for k in tgt if k not in src)
+    if gone:
+        return next_body(target, date=d, members=[m for m in target.members if m.key != gone[0]])
+    new = sorted(k for k in src if k not in tgt)
+    if new:
+        k = new[0]
+        # a founder admission is one only where the group's own founding period lasts
+        by = src[k].by if src[k].by == FOUNDER and target.founding_lasts(d) else None
+        return next_body(target, date=d, members=[*target.members, Member(k, d, False, by)])
+    for m in sorted(target.members, key=lambda x: (x.joined, x.key)):
+        if m.full or not src[m.key].full:
+            continue
+        if d < m.joined + (FOUNDER_PROBATION if m.by == FOUNDER else PROBATION):
+            continue
+        return next_body(target, date=d, members=[
+            Member(x.key, x.joined, True, x.by) if x.key == m.key else x
+            for x in target.members])
+    a, b = target.founding, source.founding
+    if a is not None and b is not None and not a.renounced and a.founder == b.founder:
+        if b.renounced or b.until != a.until:          # a renunciation, or an extension
+            return next_body(target, date=d, founding=Founding(
+                a.founder, a.until if b.renounced else b.until, a.size, a.max_probation,
+                b.renounced))
+    return None
+
+
 def quorum(eligible: int) -> int:
     """Section 5, item 4: the larger of 2 and a majority of ``eligible``."""
     return max(2, eligible // 2 + 1)

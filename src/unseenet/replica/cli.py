@@ -125,9 +125,10 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
         out.append("The council does not exist yet: its first manifest is not signed by every")
         out.append("founding member. The replica checks again every few minutes.")
     elif role == "shadow":
-        out.append("It runs as a SHADOW: it decides every name claim like the council, issues")
-        out.append("nothing, and posts what it decided once a day. After 60 days of agreeing,")
-        out.append("the members' replicas let it in by themselves.")
+        out.append("It runs as a SHADOW: it decides every name claim and computes every list like")
+        out.append("the councils, issues and posts nothing of it, and reports what it decided once")
+        out.append("a day. After 60 days of agreeing, the members' replicas let it in by themselves")
+        out.append("- to all the project's councils at once, which share one membership.")
         out.append(f"Reports in the last 60 settled days: {st.get('reports_60', 0)} "
                    f"(55 are needed).")
     elif role == "member on probation":
@@ -165,7 +166,11 @@ def explain(st: dict, cfg: dict, now: datetime | None = None) -> list[str]:
                    f"sudo unseenet-replica second {pid}")
     lst = st.get("lists")
     if lst:
-        out.append(f"It also works for the list council {lst.get('group', cfg.get('lists', '?'))}.")
+        out.append(f"It also works for the list council {lst.get('group', cfg.get('lists', '?'))}, "
+                   "which has the same members.")
+        if role in ("member on probation", "full member") and lst.get("shadow"):
+            out.append("  Its groups take this replica in within a round or two; until then it "
+                       "computes the lists without posting them.")
         if lst.get("note"):
             out.append(f"  {lst['note'][0].upper()}{lst['note'][1:]}.")
         if lst.get("members"):

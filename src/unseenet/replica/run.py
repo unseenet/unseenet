@@ -24,6 +24,7 @@ from typing import Callable
 
 from .. import __version__
 from .. import names as nm
+from ..known_nodes import LISTS_COUNCIL, NAMES_COUNCIL
 from ..client.session import Session, SessionError
 from ..core import council as cn
 from ..core import crypto
@@ -125,6 +126,16 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
 
     # --- what the replica is -----------------------------------------------------------
 
+    def lists_group(self, cfg: dict) -> str | None:
+        """The list council this replica also keeps (UN-RFC 0020): ``lists`` in the
+        config, or else, for the project's names council, the project's list council -
+        one replica for all the project's councils (#943). ``"lists": ""`` keeps none."""
+        if "lists" in cfg:
+            return cfg["lists"] or None
+        if self.group in (nm.NAMES_GROUP, NAMES_COUNCIL):
+            return LISTS_COUNCIL
+        return None
+
     def role(self, cur: cn.CouncilManifest | None) -> str:
         if cur is None:
             return "waiting"
@@ -220,6 +231,7 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             return self.status
         decisions = [rules.Decision(x[0], datetime.strptime(x[1], "%Y-%m-%d").replace(
             tzinfo=timezone.utc), x[2], bool(x[3])) for x in self.reg.st["decisions"]]
+        decisions += self.list_outcomes()       # one membership for all councils (#943)
         members = {crypto.key_to_text(k) for k in cur.keys}
         candidates = set(rules.reports_by_key(posts)) | {
             p.subject[len(rules.ADMIT) + 1:].strip() for p in council_posts
@@ -247,6 +259,7 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             self.st["held"] = {}                 # nothing is due: nothing waits
         await self._keep_in_step(chain, self.reg.claims_group)
         await self._keep_in_step(chain, cur.room)
+        await self._keep_in_step(chain, self.lists_group(cfg))   # one membership (#943)
         await self._room_keys(chain, now)
         await self._public(chain, now, self.agreed(cfg), busy=change is not None)  # UN-RFC 0061
         self.status["held"] = dict(self.st["held"])
@@ -333,21 +346,18 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         full = {crypto.key_to_text(k) for k in cur.full}
         known_from = rules.day_of(nm.parse_rfc3339(self.st["started"]))
         reports = rules.reports_by_key(posts)
-        certs, last_post, resigned, admits, renounced = [], {}, {}, [], None
         founder = crypto.key_to_text(cur.founding.founder) if cur.founding else None
+        last_post, resigned, admits, renounced = rules.council_acts(council_posts, members, founder)
+        for k, t in getattr(self, "_list_activity", {}).items():   # silent everywhere (#943)
+            if k not in last_post or t > last_post[k]:
+                last_post[k] = t
+        certs = []
         for p in sorted(council_posts, key=lambda p: (p.date, p.message_id)):
-            last_post[p.author] = p.date
             if p.subject.startswith("name "):
                 try:
                     certs.append(rules.Cert(nm.parse_certificate(p.body), p.date))
                 except nm.NameProblem:
                     pass
-            elif p.subject.strip() == rules.RESIGN and p.author in members:
-                resigned.setdefault(p.author, p.date)
-            elif p.subject.startswith(rules.ADMIT + " ") and p.author == founder:
-                admits.append((p.date, p.subject[len(rules.ADMIT) + 1:].strip()))
-            elif p.subject.strip() == rules.RENOUNCE and p.author == founder and renounced is None:
-                renounced = p.date
         by_commit = {}
         for x in self.reg.st["decisions"]:
             o = x[4] if len(x) > 4 else ""
@@ -367,9 +377,11 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         self.st["resigned"] = nm.rfc3339(self.now())
         log.warning("posted resign: the other members' replicas will remove this key")
 
-    async def _sign(self, change: rules.Change, chain: cn.Chain, agreed: set[str] = frozenset()) -> None:
-        """Post this member's copy of ``change``, unless held or already posted. A
-        renunciation is never held: it is the founder's to make (section 19)."""
+    async def _sign(self, change: rules.Change, chain: cn.Chain, agreed: set[str] = frozenset(),
+                    group: str | None = None) -> None:
+        """Post this member's copy of ``change`` in the council ``group`` (by default the
+        registrar's), unless held or already posted. A renunciation is never held: it is
+        the founder's to make (section 19)."""
         if change.body in self.st["signed"]:
             return
         if change.kind in self.hold and change.label not in agreed:
@@ -379,15 +391,16 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
             self.st["held"] = {change.label: {"kind": change.kind, "key": change.key,
                                               "date": nm.rfc3339(change.date), "why": change.why}}
             return
-        await self._post_manifest(self.group, change.body)
+        await self._post_manifest(group or self.group, change.body)
         self.st["signed"] = (self.st["signed"] + [change.body])[-50:]
         self.st["held"].pop(change.label, None)
         log.info("signed the council's %s of %s: %s", change.kind, change.key or "-", change.why)
 
     async def _keep_in_step(self, chain: cn.Chain, group_id: str | None) -> None:
-        """Sections 8 and 21: the claims group's council, and the room's, are kept the
-        same as the registrar's. A full member posts there the change that brings it in
-        step."""
+        """Sections 8 and 21: a council group kept with this council's members (the
+        claims group, the room, a list council's groups, the list council itself). A
+        full member posts there the next change that brings it in step - one at a time,
+        so a group that is several changes behind catches up over a few rounds."""
         cur = chain.current
         if not group_id or cur is None or self.role(cur) != "full member":
             return
@@ -395,18 +408,13 @@ class Replica(PublicDuties, ListDuties, EntranceDuties):
         oc = other.current
         if oc is None or other.disputed:
             return
-        # a group founded without a founding period keeps none (section 19)
-        founding = cur.founding if oc.founding is not None else None
-        if [m.as_json() for m in oc.members] == [m.as_json() for m in cur.members] \
-                and oc.founding == founding:
-            return
-        body = cn.next_body(oc, date=max(cur.date, oc.date), members=cur.members,
-                            founding=founding)
-        if body in self.st["signed"]:
+        body = cn.step_toward(oc, cur)
+        if body is None or body in self.st["signed"]:
             return
         m = cn.CouncilManifest.from_body(group_id, body)
-        if cn.change_ok(oc, m, other.last_admission or other.counted[0].date) is not None:
-            log.warning("%s cannot be brought in step with the council in one change", group_id)
+        why = cn.change_ok(oc, m, other.last_admission or other.counted[0].date)
+        if why is not None:
+            log.info("%s cannot be brought in step with the council yet: %s", group_id, why)
             return
         await self._post_manifest(group_id, body)
         self.st["signed"] = (self.st["signed"] + [body])[-50:]

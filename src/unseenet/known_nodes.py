@@ -64,6 +64,12 @@ DATA_GROUPS = frozenset({
     "unseenet.gateways@fzfnyoi7woukrk4k",
 })
 
+# The project's councils (UN-RFC 0054, 0020). They share one membership (#943): the
+# names council's members keep the list council in step, and a replica of one is a
+# replica of both. A new council joins this chain with a release.
+NAMES_COUNCIL = "unseenet.names@xvchjwehdhfptpza"
+LISTS_COUNCIL = "unseenet.lists@727td54rrn4glwoh"
+
 # The project's groups a new client starts with, so there is something to read.
 HELP_GROUP = "unseenet.help@ph5fc5hop5232qsz"
 # The groups a new client follows, in versions: a vault takes each version's groups

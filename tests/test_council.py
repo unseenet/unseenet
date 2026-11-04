@@ -257,3 +257,77 @@ def test_renouncing_and_extending():
     assert count_chain(gid, copies + signed(ids, ext)).current.seq == 2
     too_far = next_body(g, date=over, founding=replace(g.founding, until=over + timedelta(days=400)))
     assert count_chain(gid, copies + signed(ids, too_far)).current.seq == 1
+
+
+# --- keeping a council group in step with another council (sections 8, 21; #943) ----------
+
+def _cm(name, ids, date, *, founding=None, probation=()):
+    from unseenet.core.council import Member as M
+    members = [M(i.public_key, date, i not in probation) for i in ids]
+    body = council_body(name, "channel", seq=1, date=date, members=members, founding=founding)
+    return CouncilManifest.from_body(make_council_group_id(name, body), body)
+
+
+def test_in_step_goes_by_keys_and_full_not_by_the_day_a_group_was_founded():
+    from unseenet.core.council import step_toward
+    ids = keys(3)
+    names = _cm("unseenet.names", ids, T0)
+    sources = _cm("unseenet.sources", ids, T0 + timedelta(days=1))
+    assert step_toward(sources, names) is None
+    assert step_toward(names, sources) is None
+
+
+def test_in_step_one_change_at_a_time():
+    from unseenet.core.council import PROBATION, step_toward
+    a, b, c, d = keys(4)
+    t = T0 + timedelta(days=40)
+    follower = _cm("unseenet.lists", [a, b, c], T0)
+    names = _cm("unseenet.names", [a, b, c], T0)
+    # the council lost c and admitted d: first c goes, then d comes on probation
+    leader = CouncilManifest.from_body(names.group_id, next_body(names, date=t, members=[
+        Member(a.public_key, T0, True), Member(b.public_key, T0, True),
+        Member(d.public_key, t, False)]))
+    m1 = CouncilManifest.from_body(follower.group_id, step_toward(follower, leader))
+    assert {x.key for x in m1.members} == {a.public_key, b.public_key} and m1.date == t
+    m2 = CouncilManifest.from_body(follower.group_id, step_toward(m1, leader))
+    new = m2.member(d.public_key)
+    assert new is not None and not new.full and new.joined == t == m2.date
+    assert step_toward(m2, leader) is None
+    # the council promotes d: the follower promotes it once its own probation is over
+    later = t + PROBATION
+    promoted = CouncilManifest.from_body(leader.group_id, next_body(leader, date=later, members=[
+        Member(a.public_key, T0, True), Member(b.public_key, T0, True),
+        Member(d.public_key, t, True)]))
+    m3 = CouncilManifest.from_body(follower.group_id, step_toward(m2, promoted))
+    assert m3.member(d.public_key).full and m3.member(d.public_key).joined == t
+    assert step_toward(m3, promoted) is None
+
+
+def test_in_step_carries_a_renunciation():
+    from unseenet.core.council import Founding, step_toward
+    ids = keys(3)
+    f = Founding(ids[0].public_key, T0 + timedelta(days=365), 9)
+    follower = _cm("unseenet.lists", ids, T0, founding=f)
+    names = _cm("unseenet.names", ids, T0, founding=f)
+    leader = CouncilManifest.from_body(names.group_id, next_body(
+        names, date=T0 + timedelta(days=5),
+        founding=Founding(f.founder, f.until, 9, f.max_probation, True)))
+    m = CouncilManifest.from_body(follower.group_id, step_toward(follower, leader))
+    assert m.founding.renounced and m.founding.until == f.until
+    assert step_toward(m, leader) is None
+
+
+def test_in_step_a_founder_admission_is_ordinary_where_no_founding_period_lasts():
+    from unseenet.core.council import FOUNDER, Founding, step_toward
+    a, b, c = keys(3)
+    f = Founding(a.public_key, T0 + timedelta(days=365), 9)
+    names = _cm("unseenet.names", [a, b], T0, founding=f)
+    t = T0 + timedelta(days=10)
+    leader = CouncilManifest.from_body(names.group_id, next_body(names, date=t, members=[
+        *names.members, Member(c.public_key, t, False, FOUNDER)]))
+    with_period = _cm("unseenet.lists", [a, b], T0, founding=f)
+    without = _cm("unseenet.sources", [a, b], T0)
+    got = CouncilManifest.from_body(with_period.group_id, step_toward(with_period, leader))
+    assert got.member(c.public_key).by == FOUNDER
+    got = CouncilManifest.from_body(without.group_id, step_toward(without, leader))
+    assert got.member(c.public_key).by is None
