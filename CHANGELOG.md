@@ -9,6 +9,9 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **The operator box speaks Markdown** (UN-RFC 0065): `help` is a list with an example for
+  each command, answers and notices are Markdown, output in columns comes in a code block,
+  and a server reads only the operator's own words - not the text their client quoted.
 - **One operator box for all your servers** (UN-RFC 0065 section 3.2, #876): servers
   share one box, each with its own key and name (`unseenet-replica operator <box>
   --name replica1`). An answer to a server's message goes to that server; a new message

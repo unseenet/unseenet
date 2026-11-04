@@ -217,6 +217,10 @@ servers read starts with the server's name and a colon, e.g.
 `replica2: second ABCD`; an answer to a server's message needs no name
 (section 3.2).
 
+Text the operator's client quoted when answering - lines starting with
+`>`, and an attribution line ("replica1 wrote:") over them - is not
+part of the command; the server reads only the rest.
+
 Every server understands:
 
 | Command   | Answer                                                        |
@@ -272,7 +276,9 @@ operator who is interrupted.
 ## 5.4 Answers
 
 The server answers every command it takes, as a reply to it, with the
-inner header `Command-Result`:
+inner header `Command-Result`. Answers and notices are Markdown (UN-RFC
+0031): output laid out in columns goes in a code block, and `help`
+shows an example for each command that has arguments.
 
 | Value     | Meaning                                                       |
 |-----------|---------------------------------------------------------------|

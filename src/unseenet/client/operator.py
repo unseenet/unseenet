@@ -21,6 +21,7 @@ import time
 
 from ..core import crypto
 from ..core import operator as op
+from ..core.markup import MARKDOWN_TYPE
 from .session import KIND_CHAT, Session, SessionError
 
 DIGEST_SECONDS = 3600         # info notices are gathered at most this long (section 4)
@@ -154,13 +155,13 @@ class OperatorChannel:
                                       "after": max((m.number for m in msgs), default=0)}
             self.s.save()
         name = self.server or manifest.get("team_name") or "This server"
-        text = (f"{name} reads this box now. Answer this message with help for what it "
-                "can do here, or status for how it is.")
+        text = (f"**{name}** reads this box now. Answer this message with `help` for what "
+                "it can do here, or `status` for how it is.")
         if self._server_keys(manifest):
             text += (f" Other servers read the box too: start a new message with "
-                     f"\"{name}:\" for this one.")
+                     f"`{name}:` for this one.")
         if self.desk.mode != "commands":
-            text += (" Commands that change something are off (operator_channel = "
+            text += ("\n\nCommands that change something are off (operator_channel = "
                      "notices); they are turned on on the server.")
         await self._post(text, op.notice_headers("hello", "info", server=self.server,
                                                  offers=[op.offer("help"), op.offer("status")]))
@@ -212,6 +213,7 @@ class OperatorChannel:
     async def _post(self, text: str, headers, references=None) -> str:
         return await self.s.send_private(self.group, "", text.rstrip() + "\n", kind=KIND_CHAT,
                                          as_team=self.group, extra=list(headers),
+                                         content_type=MARKDOWN_TYPE,
                                          references=references, remember=False)
 
     # --- commands (section 5) ---
@@ -263,10 +265,10 @@ class OperatorChannel:
         if self._status is None:
             return "Running."
         got = self._status()
-        return await got if asyncio.iscoroutine(got) else str(got)
+        return op.as_markdown(await got if asyncio.iscoroutine(got) else str(got))
 
     async def _open_text(self, args) -> str:
         opened = self.state["open"]
         if not opened:
             return "Nothing is open."
-        return "\n".join(f"- [{v['level']}] {v['text']} ({k})" for k, v in sorted(opened.items()))
+        return "\n".join(f"- **{v['level']}** {v['text']} (`{k}`)" for k, v in sorted(opened.items()))

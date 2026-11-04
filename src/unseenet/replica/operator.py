@@ -86,7 +86,7 @@ class ReplicaChannel:
     def _commands(self) -> list[op.Command]:
         from . import cli
 
-        def read_only(name, help_, fn, usage="", **fixed):
+        def read_only(name, help_, fn, usage="", example="", **fixed):
             async def run(args):
                 lists, rest = _lists_first(args)
                 extra = dict(fixed)
@@ -94,14 +94,14 @@ class ReplicaChannel:
                     if not rest or rest[0] not in ("talk", "log"):
                         raise ValueError("read talk or read log")
                     extra.update(group=rest[0], n=10)
-                return self._cli(fn, lists=lists, **extra)
-            return op.Command(name, help_, run=run, usage=usage)
+                return op.as_markdown(self._cli(fn, lists=lists, **extra))
+            return op.Command(name, help_, run=run, usage=usage, example=example)
 
-        def change(name, help_, fn, describe, usage, label, build):
+        def change(name, help_, fn, describe, usage, label, build, example=""):
             async def run(args):
-                return await self._queued(self._cli(fn, **build(args)))
+                return op.as_markdown(await self._queued(self._cli(fn, **build(args))))
             return op.Command(name, help_, run=run, changes=True, describe=describe,
-                              usage=usage, label=label)
+                              usage=usage, label=label, example=example)
 
         def need(args, n, what):
             if len(args) < n:
@@ -189,21 +189,24 @@ class ReplicaChannel:
 
         return [
             read_only("hearings", "proposals in their hearing, and those waiting", cli.hearings,
-                      "[lists]"),
-            read_only("members", "the council's members and candidates", cli.members, "[lists]"),
-            read_only("read", "the newest posts in talk or log", cli.read, "[lists] talk|log"),
+                      "[lists]", "hearings lists"),
+            read_only("members", "the council's members and candidates", cli.members, "[lists]",
+                      "members"),
+            read_only("read", "the newest posts in talk or log", cli.read, "[lists] talk|log",
+                      "read talk"),
             change("agree", "let a held change go ahead", cli.agree, agree_what, "<label>",
-                   "Agree", lambda a: dict(label=a[0])),
+                   "Agree", lambda a: dict(label=a[0]), "agree removal:ed25519:abcd..."),
             change("hold", "which changes wait for you", cli.hold, hold_what, "<kinds>|none",
-                   "Hold them", lambda a: dict(kinds=a[0])),
+                   "Hold them", lambda a: dict(kinds=a[0]), "hold removal,promotion"),
             change("second", "post a waiting proposal too", cli.second, second_what, "<id>",
-                   "Second it", lambda a: dict(id=proposal(a)[1], lists=proposal(a)[0])),
+                   "Second it", lambda a: dict(id=proposal(a)[1], lists=proposal(a)[0]),
+                   "second ABCD"),
             change("object", "object to a proposal (public)", cli.object_, object_what,
-                   "<id> <reason>", "Object", object_build),
+                   "<id> <reason>", "Object", object_build, "object ABCD it removes too much"),
             change("talk", "post in the council's talk group", cli.talk, talk_what,
-                   "[lists]: <text>", "Post it", talk_build),
+                   "[lists]: <text>", "Post it", talk_build, "talk: Hello, council"),
             change("reply", "answer a post in talk", cli.reply, reply_what, "[lists] <id>: <text>",
-                   "Post it", reply_build),
+                   "Post it", reply_build, "reply abc123@unseenet: Agreed"),
             op.Command("resign", "step down from the council", cli_only=True),
             op.Command("sign", "post this replica's copy of a new council's genesis",
                        cli_only=True),
@@ -223,9 +226,9 @@ class ReplicaChannel:
         if twin:
             await c.notice("twin", "TWIN ALARM: something else posts with this replica's key - "
                            "most likely a copy of it on another machine. It signs nothing until "
-                           f"you act. The article: {twin.get('subject')!r}.\nStop the other copy, "
-                           "then on the server: unseenet-replica twin-gone "
-                           f"{twin.get('message_id')}", "alarm", key="twin")
+                           f"you act. The article: {twin.get('subject')!r}.\n\nStop the other "
+                           "copy, then on the server: `unseenet-replica twin-gone "
+                           f"{twin.get('message_id')}`", "alarm", key="twin")
         else:
             await c.notice("twin", "The twin alarm is over: the replica signs again.", "alarm",
                            key="twin", over=True)
@@ -239,11 +242,12 @@ class ReplicaChannel:
         held = st.get("held") or {}
         for label, what in held.items():
             why = what.get("why") if isinstance(what, dict) else what
-            await c.notice("held", f"A change waits for you: {label}" + (f" - {why}" if why else "")
-                           + f"\nAnswer: agree {label}", "warn", key=f"held:{label}",
+            await c.notice("held", f"A change waits for you: `{label}`" + (f" - {why}" if why else "")
+                           + f"\n\nAnswer `agree {label}` to let it go ahead.", "warn",
+                           key=f"held:{label}",
                            offers=[op.offer(f"agree {label}", "Agree")])
         for key in [k for k in c.state["open"] if k.startswith("held:") and k[5:] not in held]:
-            await c.notice("held", f"{key[5:]} no longer waits for you.", "info", key=key,
+            await c.notice("held", f"`{key[5:]}` no longer waits for you.", "info", key=key,
                            over=True)
         if st.get("error"):
             await c.notice("round-failed", f"A round failed: {st['error']}", "warn", key="round")
