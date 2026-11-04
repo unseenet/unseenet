@@ -9,6 +9,15 @@ Protocol changes are made through the [UN-RFC series](rfc/), not here.
 
 ### Added
 
+- **One membership for all the project's councils** (#943, UN-RFC 0020 section 4.1): a
+  replica of the names council is a replica of the list council too, by itself. The list
+  council follows the names council's members; a shadow computes the lists as the
+  members do and its daily report holds their hashes, so it is admitted to both councils
+  at once - or to neither, if a list it computed differs. Silence counts across all the
+  councils' groups. Keeping a group in step now compares keys and whether each is full,
+  not the day it joined, and makes one change at a time, so a group founded on another
+  day (`unseenet.sources`) can be kept in step too.
+
 - **The operator box speaks Markdown** (UN-RFC 0065): `help` is a list with an example for
   each command, answers and notices are Markdown, output in columns comes in a code block,
   and a server reads only the operator's own words - not the text their client quoted.

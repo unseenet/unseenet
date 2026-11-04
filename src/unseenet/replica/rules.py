@@ -302,6 +302,27 @@ def removal_reason(member: bytes, cur: cn.CouncilManifest, *, certs: list[Cert],
     return min(found) if found else None
 
 
+# --- what members and the founder posted in the council group (sections 12, 19, 20) -----------
+
+def council_acts(council_posts: list[nm.Post], members: set[str], founder: str | None):
+    """(last post per key, each member's first ``resign``, the founder's ``admit``s,
+    the founder's ``renounce``) from the council group's posts, oldest first. The same
+    for every council (UN-RFC 0054 sections 12, 19, 20)."""
+    last_post: dict[str, datetime] = {}
+    resigned: dict[str, datetime] = {}
+    admits: list[tuple[datetime, str]] = []
+    renounced = None
+    for p in sorted(council_posts, key=lambda p: (p.date, p.message_id)):
+        last_post[p.author] = p.date
+        if p.subject.strip() == RESIGN and p.author in members:
+            resigned.setdefault(p.author, p.date)
+        elif p.subject.startswith(ADMIT + " ") and p.author == founder:
+            admits.append((p.date, p.subject[len(ADMIT) + 1:].strip()))
+        elif p.subject.strip() == RENOUNCE and p.author == founder and renounced is None:
+            renounced = p.date
+    return last_post, resigned, admits, renounced
+
+
 # --- the next council manifest (sections 11, 12, 19) --------------------------------------------
 
 @dataclass
